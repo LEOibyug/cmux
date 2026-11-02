@@ -12,8 +12,8 @@ struct CmuxSettingChangePlanner {
     }
 
     /// Top-level sections of cmux.json that hold hand-written structure
-    /// rather than settings. A setting change never writes into them; the
-    /// `settingPresets` a change reads from is one of them.
+    /// rather than settings. Only the Vault history-source selection is a
+    /// writable setting inside these sections; presets remain settings-only.
     static let nonSettingSections: Set<String> = [
         "$schema",
         "schemaVersion",
@@ -139,7 +139,9 @@ struct CmuxSettingChangePlanner {
         guard !components.contains(where: { $0.contains(".") }) else {
             throw CmuxSettingChangeError.keyContainsDot(display)
         }
-        guard !Self.nonSettingSections.contains(components[0]) else {
+        let isVaultSourceSelection = components.count == 2
+            && components[0] == "vault" && components[1] == "enabledAgents"
+        guard !Self.nonSettingSections.contains(components[0]) || isVaultSourceSelection else {
             throw CmuxSettingChangeError.notASetting(display)
         }
         guard schema.isDeclared(components) else {

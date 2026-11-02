@@ -16,12 +16,25 @@ extension SessionIndexStore {
     /// Instance wrapper used by the Vault UI: searches over the loaded index
     /// with the store's folder scope applied.
     func searchAllSessions(rawQuery: String) async -> SearchOutcome {
-        await Self.searchAllSessions(
+        let generation = historyConfigurationRevision
+        let registry = await registryProvider(scopeToCurrentDirectory ? currentDirectory : nil)
+        guard generation == historyConfigurationRevision, !Task.isCancelled,
+              registry.historyConfigurationIsCurrent else {
+            return SearchOutcome(entries: [], errors: [])
+        }
+        let outcome = await Self.searchAllSessions(
             rawQuery: rawQuery,
             entries: entries,
             scopedDirectory: scopeToCurrentDirectory ? currentDirectory : nil,
-            ampSessionRepository: ampSessionRepository
+            ampSessionRepository: ampSessionRepository,
+            registry: registry,
+            sourceReader: sourceReader
         )
+        guard generation == historyConfigurationRevision, !Task.isCancelled,
+              registry.historyConfigurationIsCurrent else {
+            return SearchOutcome(entries: [], errors: [])
+        }
+        return outcome
     }
 
     /// Loads a larger bounded recent-session slice for callers that have
@@ -32,10 +45,15 @@ extension SessionIndexStore {
         limitPerAgent: Int,
         offsetPerAgent: Int = 0
     ) async -> SearchOutcome {
+        let generation = historyConfigurationRevision
         let safeLimit = min(max(limitPerAgent, 1), Self.searchMaxFiles)
         let safeOffset = min(max(offsetPerAgent, 0), Self.searchMaxFiles)
         let bag = ErrorBag()
-        let order = await Self.defaultAgentOrder(workingDirectory: nil)
+        let order = Self.agentOrder(registry: await registryProvider(nil))
+        guard generation == historyConfigurationRevision, !Task.isCancelled,
+              order.registry.historyConfigurationIsCurrent else {
+            return SearchOutcome(entries: [], errors: [])
+        }
         let combined = await Self.loadAgents(
             order.agents,
             registry: order.registry,
@@ -44,9 +62,11 @@ extension SessionIndexStore {
             cwdFilter: nil,
             offset: safeOffset,
             limit: safeLimit,
-            errorBag: bag
+            errorBag: bag,
+            sourceReader: sourceReader
         )
-        guard !Task.isCancelled else {
+        guard !Task.isCancelled, generation == historyConfigurationRevision,
+              order.registry.historyConfigurationIsCurrent else {
             return SearchOutcome(entries: [], errors: [])
         }
         return SearchOutcome(
@@ -71,14 +91,24 @@ extension SessionIndexStore {
         rawQuery: String,
         entries: [SessionEntry],
         scopedDirectory: String?,
-        ampSessionRepository: any AmpHookSessionReading
+        ampSessionRepository: any AmpHookSessionReading,
+        registry suppliedRegistry: CmuxVaultAgentRegistry? = nil,
+        sourceReader: SourceReader? = nil
     ) async -> SearchOutcome {
         let query = VaultSessionSearchQuery.parse(rawQuery)
         guard !query.isEmpty else {
             return SearchOutcome(entries: [], errors: [])
         }
 
-        var merged = entries.filter { query.matchesMetadata($0) }
+        let registry: CmuxVaultAgentRegistry
+        if let suppliedRegistry { registry = suppliedRegistry }
+        else { registry = await vaultAgentRegistry(workingDirectory: scopedDirectory) }
+        guard !Task.isCancelled, registry.historyConfigurationIsCurrent else {
+            return SearchOutcome(entries: [], errors: [])
+        }
+        var merged = entries.filter {
+            registry.isHistoryEnabled(for: $0.agent.rawValue) && query.matchesMetadata($0)
+        }
         var errors: [String] = []
 
         // Transcript phase: the underlying per-agent search matches one
@@ -93,15 +123,16 @@ extension SessionIndexStore {
                 .prefix(Self.globalSearchMaxTranscriptTerms)
         )
         if !needleTerms.isEmpty {
-            let agents = globalSearchCandidateAgents(for: query, entries: entries)
-            let registry = await vaultAgentRegistry(workingDirectory: scopedDirectory)
+            let agents = globalSearchCandidateAgents(for: query, registry: registry)
             var perTermIDs: [Set<String>] = []
             var transcriptEntriesByID: [String: SessionEntry] = [:]
             for term in needleTerms {
                 // A cancelled search must not merge partial per-term results —
                 // an intersection over fewer terms admits entries that only
                 // match a subset of the query.
-                if Task.isCancelled { return SearchOutcome(entries: [], errors: []) }
+                guard !Task.isCancelled, registry.historyConfigurationIsCurrent else {
+                    return SearchOutcome(entries: [], errors: [])
+                }
                 let bag = ErrorBag()
                 let outcomes = await withTaskGroup(of: [SessionEntry].self) { group in
                     for agent in agents {
@@ -124,7 +155,8 @@ extension SessionIndexStore {
                                 limit: Self.globalSearchPerAgentLimit,
                                 errorBag: bag,
                                 registry: registry,
-                                ampSessionRepository: ampSessionRepository
+                                ampSessionRepository: ampSessionRepository,
+                                sourceReader: sourceReader
                             )
                         }
                     }
@@ -135,7 +167,7 @@ extension SessionIndexStore {
                 // A cancellation can arrive while the task group drains its
                 // children. Do not merge the completed subset into an
                 // intersection that no longer represents the full query.
-                guard !Task.isCancelled else {
+                guard !Task.isCancelled, registry.historyConfigurationIsCurrent else {
                     return SearchOutcome(entries: [], errors: [])
                 }
                 errors.append(contentsOf: bag.snapshot())
@@ -147,7 +179,7 @@ extension SessionIndexStore {
                     }
                 }
                 perTermIDs.append(termIDs)
-                guard !Task.isCancelled else {
+                guard !Task.isCancelled, registry.historyConfigurationIsCurrent else {
                     return SearchOutcome(entries: [], errors: [])
                 }
             }
@@ -165,26 +197,22 @@ extension SessionIndexStore {
         }
 
         let ranked = VaultSessionSearchRanking.rank(merged, query: query)
+        guard !Task.isCancelled, registry.historyConfigurationIsCurrent else {
+            return SearchOutcome(entries: [], errors: [])
+        }
         return SearchOutcome(
             entries: Array(ranked.prefix(Self.globalSearchResultCap)),
             errors: errors.sorted()
         )
     }
 
-    /// Agents worth fanning the transcript search across: all built-ins plus
-    /// any registered agents visible in the loaded index, narrowed by
+    /// Enabled agents worth fanning the transcript search across, narrowed by
     /// `agent:` operators when present.
     nonisolated private static func globalSearchCandidateAgents(
         for query: VaultSessionSearchQuery,
-        entries: [SessionEntry]
+        registry: CmuxVaultAgentRegistry
     ) -> [SessionAgent] {
-        var agents = SessionAgent.builtInCases
-        var seen = Set(agents.map(\.rawValue))
-        for entry in entries {
-            if case .registered = entry.agent, seen.insert(entry.agent.rawValue).inserted {
-                agents.append(entry.agent)
-            }
-        }
+        let agents = agentOrder(registry: registry).agents
         guard !query.agentTerms.isEmpty else { return agents }
         return agents.filter { agent in
             let rawValue = agent.rawValue.lowercased()

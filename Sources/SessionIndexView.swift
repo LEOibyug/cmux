@@ -346,8 +346,11 @@ struct SessionIndexView: View {
             VaultAllSessionsBar(
                 searchText: $searchText,
                 isCompactView: $isCompactView,
+                agentSourceOptions: store.historyAgentOptions,
+                enabledAgentIDs: store.enabledAgentIDs,
                 onPeekTopResult: { peekTopSearchResult() },
-                onResumeTopResult: { resumeTopSearchResult() }
+                onResumeTopResult: { resumeTopSearchResult() },
+                onSelectAgentSources: { try await store.setEnabledAgentIDs($0) }
             )
             if isShowingSearchResults && !searchErrors.isEmpty {
                 searchErrorBanner
@@ -371,6 +374,13 @@ struct SessionIndexView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task(id: searchTaskKey) {
             await runGlobalSearch()
+        }
+        .onChange(of: store.historyConfigurationRevision) { _, _ in
+            popoverIdentity = nil
+            expandedDaySections = []
+            searchResults = []
+            searchErrors = []
+            isSearchInFlight = !trimmedSearchText.isEmpty
         }
         .onChange(of: trimmedSearchText) { _, newValue in
             // Flip the presentation into its searching state in the same
@@ -611,7 +621,7 @@ struct SessionIndexView: View {
     /// metadata phase). Grouping and Recent filters only re-project the
     /// already-fetched matches, so they stay synchronous and stable.
     private var searchTaskKey: String {
-        "\(store.isLoading)|\(store.scopeToCurrentDirectory)|\(store.currentDirectory ?? "")|\(trimmedSearchText)"
+        "\(store.historyConfigurationRevision)|\(store.isLoading)|\(store.scopeToCurrentDirectory)|\(store.currentDirectory ?? "")|\(trimmedSearchText)"
     }
 
     @MainActor

@@ -2196,6 +2196,7 @@
       "exampleConfig": "예시 설정",
       "metaTitle": "설정",
       "schemaDescriptions": {
+        "vaultEnabledAgents": "Vault가 기록을 읽고 검색할 에이전트 ID로, 전역 설정 전용입니다. 생략하면 향후 추가될 에이전트까지 모두 활성화하며 []는 모든 기록을 비활성화합니다. ID는 대소문자를 구분합니다. 프로세스 감지, 훅, 인증은 변경하지 않습니다.",
         "root": "cmux 구성입니다. 전역 cmux.json은 앱 설정, 단축키, 작업, 사용자 지정 명령, 알림 훅, 워크스페이스 레이아웃을 지원합니다. 프로젝트 로컬 .cmux/cmux.json 또는 cmux.json은 작업, 명령, 알림 훅, UI 작업 연결, Agent Chat 재정의, vault 에이전트, 워크스페이스 그룹 재정의, 워크스페이스 시작 및 버튼 구성을 지원합니다.",
         "rightSidebar": "cmux.json에 보존되는 레거시 및 확장 프로그램 소유 오른쪽 사이드바 구성입니다.",
         "packs": {

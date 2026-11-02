@@ -3404,6 +3404,7 @@
       "settingsFileChords": "Use a string for a single shortcut or a two-item array for a chord. Example: [\"ctrl+b\", \"c\"] means press Ctrl+B, then C.",
       "exampleConfig": "Example config",
       "schemaDescriptions": {
+        "vaultEnabledAgents": "Global-only agent IDs whose history Vault reads and searches. Omit to enable all agents, including future agents; [] disables all history. IDs are case-sensitive. Does not change process detection, hooks, or authentication.",
         "root": "cmux configuration. Global cmux.json supports app settings, shortcuts, actions, custom commands, notification hooks, and workspace layouts. Project-local .cmux/cmux.json or cmux.json supports actions, commands, notification hooks, UI action wiring, Agent Chat overrides, vault agents, workspace-group overrides, and workspace launch/button configuration.",
         "rightSidebar": "Legacy and extension-owned right-sidebar configuration preserved in cmux.json.",
         "packs": {

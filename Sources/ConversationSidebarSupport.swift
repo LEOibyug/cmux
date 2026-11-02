@@ -334,10 +334,11 @@ struct ConversationSidebarLiveRefreshModifier: ViewModifier {
         guard !missingDirectoryKeys.isEmpty else { return }
 
         for directoryKey in missingDirectoryKeys.sorted() {
-            let loaded = await SessionIndexStore.defaultAgentOrder(
+            let registry = await SessionIndexStore.vaultAgentRegistry(
                 workingDirectory: directoryKey.isEmpty ? nil : directoryKey
             )
             guard !Task.isCancelled else { return }
+            let loaded = SessionIndexStore.presentationAgentOrder(registry: registry)
             presentationAgentsByDirectory[directoryKey] = projection.presentationAgentsByID(loaded.agents)
         }
     }

@@ -2840,6 +2840,10 @@ struct ContentView: View {
             await backgroundWorkspacePrimeCoordinator.primePendingBackgroundWorkspaces(tabManager: tabManager)
         })
 
+        view = AnyView(view.task(id: cmuxConfigStore.configRevision) {
+            await sessionIndexStore.refreshHistoryConfiguration()
+        })
+
         view = AnyView(view.onReceive(tabManager.$debugPinnedWorkspaceLoadIds) { _ in
             reconcileMountedWorkspaceIds()
         })

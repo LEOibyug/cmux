@@ -280,6 +280,19 @@ struct ConversationSidebarView: View {
             historyPerAgentLimit = SessionIndexStore.perAgentLimit
             canLoadMoreHistory = true
             recomputeHistorySource()
+            scheduleSearch(searchText)
+        }
+        .onChange(of: store.historyConfigurationRevision) { _, _ in
+            historySourceGeneration &+= 1
+            expandedHistory = []
+            paginatedProviderAgentsByID = [:]
+            historyErrors = []
+            historyPerAgentLimit = SessionIndexStore.perAgentLimit
+            canLoadMoreHistory = true
+            searchResults = []
+            searchErrors = []
+            recomputeHistorySource()
+            scheduleSearch(searchText)
         }
         .onChange(of: expandedHistory) { _, _ in recomputeHistorySource() }
         .onChange(of: searchResults) { _, _ in recomputeHistorySource() }

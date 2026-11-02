@@ -2196,6 +2196,7 @@
       "exampleConfig": "配置示例",
       "metaTitle": "配置",
       "schemaDescriptions": {
+        "vaultEnabledAgents": "仅限全局设置：Vault 读取和搜索其历史记录的代理 ID。省略时启用所有代理，包括未来新增的代理；[] 禁用所有历史记录。ID 区分大小写。不影响进程检测、钩子或身份验证。",
         "root": "cmux 配置。全局 cmux.json 支持应用设置、快捷键、操作、自定义命令、通知钩子和工作区布局。项目本地的 .cmux/cmux.json 或 cmux.json 支持操作、命令、通知钩子、UI 操作绑定、Agent Chat 覆盖、vault 代理、工作区组覆盖，以及工作区启动和按钮配置。",
         "rightSidebar": "保留在 cmux.json 中的旧版及扩展拥有的右侧边栏配置。",
         "packs": {

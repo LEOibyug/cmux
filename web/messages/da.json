@@ -2196,6 +2196,7 @@
       "exampleConfig": "Eksempelkonfiguration",
       "metaTitle": "Konfiguration",
       "schemaDescriptions": {
+        "vaultEnabledAgents": "Kun globalt: agent-ID’er, hvis historik Vault læser og søger i. Udelad for at aktivere alle, også fremtidige agenter; [] deaktiverer al historik. ID’er skelner mellem store og små bogstaver. Ændrer ikke procesregistrering, hooks eller godkendelse.",
         "root": "cmux-konfiguration. Den globale cmux.json understøtter appindstillinger, genveje, handlinger, brugerdefinerede kommandoer, notifikations-hooks og arbejdsområdelayouts. En projektspecifik .cmux/cmux.json eller cmux.json understøtter handlinger, kommandoer, notifikations-hooks, kobling af UI-handlinger, tilsidesættelser for Agent Chat, vault-agenter, tilsidesættelser for arbejdsområdegrupper samt konfiguration af opstart og knapper for arbejdsområder.",
         "rightSidebar": "Ældre og udvidelsesejet konfiguration af højre sidepanel, som bevares i cmux.json.",
         "packs": {

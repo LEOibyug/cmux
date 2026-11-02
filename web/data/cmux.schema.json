@@ -477,6 +477,19 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "enabledAgents": {
+          "x-cmux-scopes": ["global"],
+          "type": "array",
+          "uniqueItems": true,
+          "descriptionKey": "schemaDescriptions.vaultEnabledAgents",
+          "description": "Global-only agent IDs whose history Vault reads and searches. Omit to enable all agents, including future agents; [] disables all history. IDs are case-sensitive. Does not change process detection, hooks, or authentication.",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "maxLength": 64,
+            "not": { "enum": [".", ".."] }
+          }
+        },
         "agents": {
           "type": "array",
           "description": "Custom coding agents that Vault can detect, list, and resume.",

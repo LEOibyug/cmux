@@ -30,6 +30,26 @@ struct CmuxConfigSemanticValidatorTests {
         #expect(CmuxEmbeddedConfigSchema.data == source)
     }
 
+    @Test("Vault history selection accepts exact IDs and empty selection only globally")
+    func vaultHistorySelection() throws {
+        for ids in [[], ["omp"], ["My.Agent", "my.agent", "future-agent_2"]] as [[String]] {
+            let result = try issues(["vault": ["enabledAgents": ids]])
+            #expect(result.isEmpty)
+        }
+        let legacy = try issues(["vault": ["agents": []]])
+        #expect(legacy.isEmpty)
+        let project = try issues(["vault": ["enabledAgents": ["omp"]]], scope: .project)
+        #expect(!project.isEmpty)
+        for invalid in ["", ".", "..", "bad agent", "é", String(repeating: "a", count: 65)] {
+            let result = try issues(["vault": ["enabledAgents": [invalid]]])
+            #expect(!result.isEmpty)
+        }
+        let wrongType = try issues(["vault": ["enabledAgents": "omp"]])
+        #expect(!wrongType.isEmpty)
+        let wrongItem = try issues(["vault": ["enabledAgents": [42]]])
+        #expect(!wrongItem.isEmpty)
+    }
+
     @Test("accepts valid settings and preserved config sections")
     func acceptsValidConfig() throws {
         let result = try issues([

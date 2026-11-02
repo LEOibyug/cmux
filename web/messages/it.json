@@ -2196,6 +2196,7 @@
       "exampleConfig": "Esempio di configurazione",
       "metaTitle": "Configurazione",
       "schemaDescriptions": {
+        "vaultEnabledAgents": "Solo globale: ID degli agenti di cui Vault legge e cerca la cronologia. Se omesso, abilita tutti gli agenti, anche futuri; [] disabilita tutta la cronologia. Gli ID distinguono maiuscole e minuscole. Non modifica rilevamento dei processi, hook o autenticazione.",
         "root": "Configurazione di cmux. Il file cmux.json globale supporta impostazioni dell’app, scorciatoie, azioni, comandi personalizzati, hook di notifica e layout degli spazi di lavoro. Un file .cmux/cmux.json o cmux.json locale al progetto supporta azioni, comandi, hook di notifica, collegamenti delle azioni dell’interfaccia, override di Agent Chat, agenti del vault, override dei gruppi di spazi di lavoro e configurazione di avvio e pulsanti degli spazi di lavoro.",
         "rightSidebar": "Configurazione legacy e gestita dalle estensioni della barra laterale destra, conservata in cmux.json.",
         "packs": {

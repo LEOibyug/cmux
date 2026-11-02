@@ -1,4 +1,5 @@
 import CmuxAgentChat
+import CmuxAgentSessionStore
 import CMUXAgentLaunch
 import CmuxMobileHost
 import Foundation
@@ -90,6 +91,41 @@ struct ConversationSidebarRegressionTests {
         #expect(resolved == .registered(registered))
         #expect(resolved.displayName == "Pi")
         #expect(resolved.assetName == "AgentIcons/Pi")
+    }
+
+    @Test
+    func historyDisabledLiveAgentKeepsPresentationAndNameSearch() async throws {
+        var registration = CmuxVaultAgentRegistration.builtInOmp
+        registration.name = "Project Helper"
+        registration.iconAssetName = "AgentIcons/Pi"
+        let registry = CmuxVaultAgentRegistry(registrations: [registration], enabledAgentIDs: [])
+        let loaded = SessionIndexStore.presentationAgentOrder(registry: registry)
+        let record = AgentChatSessionRecord(
+            sessionID: "live-omp", agentKind: .other("omp"),
+            workspaceID: nil, surfaceID: nil, workingDirectory: "/repo/project",
+            transcriptPath: nil, state: .idle, lastActivityAt: Date.distantPast,
+            title: nil, pid: nil
+        )
+        let resolved = try #require(projection.presentationAgent(
+            for: record,
+            configuredAgentsByDirectory: ["": projection.presentationAgentsByID(loaded.agents)],
+            fallbackAgentsByID: [:]
+        ))
+        #expect(resolved.displayName == "Project Helper")
+        #expect(resolved.assetName == "AgentIcons/Pi")
+        #expect(projection.metadataMatches(
+            title: "Untitled", agent: resolved, id: "live-omp", directory: "/repo/project",
+            query: "Project Helper"
+        ))
+        #expect(SessionIndexStore.agentOrder(registry: registry).agents.isEmpty)
+        let history = await SessionIndexStore.loadInitialEntries(
+            ampSessionRepository: AmpHookSessionRepository(), registry: registry,
+            sourceReader: { _ in
+                Issue.record("A live agent disabled for history must never be read")
+                return []
+            }
+        )
+        #expect(history.isEmpty)
     }
 
     @Test

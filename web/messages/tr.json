@@ -2196,6 +2196,7 @@
       "exampleConfig": "Örnek yapılandırma",
       "metaTitle": "Yapılandırma",
       "schemaDescriptions": {
+        "vaultEnabledAgents": "Yalnızca genel: Vault’un geçmişini okuyup aradığı ajan kimlikleri. Atlanırsa gelecekteki ajanlar dahil tümü etkinleşir; [] tüm geçmişi devre dışı bırakır. Kimlikler büyük/küçük harfe duyarlıdır. Süreç algılamayı, hook’ları veya kimlik doğrulamayı değiştirmez.",
         "root": "cmux yapılandırması. Genel cmux.json; uygulama ayarlarını, kısayolları, eylemleri, özel komutları, bildirim hook'larını ve çalışma alanı düzenlerini destekler. Projeye özel .cmux/cmux.json veya cmux.json; eylemleri, komutları, bildirim hook'larını, UI eylem bağlantılarını, Agent Chat geçersiz kılmalarını, vault ajanlarını, çalışma alanı grubu geçersiz kılmalarını ve çalışma alanı başlatma ile düğme yapılandırmasını destekler.",
         "rightSidebar": "cmux.json içinde korunan eski ve uzantılara ait sağ kenar çubuğu yapılandırması.",
         "packs": {

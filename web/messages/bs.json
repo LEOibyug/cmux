@@ -2196,6 +2196,7 @@
       "exampleConfig": "Primjer konfiguracije",
       "metaTitle": "Konfiguracija",
       "schemaDescriptions": {
+        "vaultEnabledAgents": "Samo globalno: ID-jevi agenata čiju historiju Vault čita i pretražuje. Izostavljanje omogućava sve agente, uključujući buduće; [] onemogućava svu historiju. ID-jevi razlikuju velika i mala slova. Ne mijenja otkrivanje procesa, hookove ni autentifikaciju.",
         "root": "Konfiguracija za cmux. Globalni cmux.json podržava postavke aplikacije, prečice, radnje, prilagođene komande, hookove obavijesti i rasporede radnih prostora. Projektni .cmux/cmux.json ili cmux.json podržava radnje, komande, hookove obavijesti, povezivanje UI radnji, Agent Chat izmjene, vault agente, izmjene grupa radnih prostora te konfiguraciju pokretanja i dugmadi radnog prostora.",
         "rightSidebar": "Naslijeđena konfiguracija desne bočne trake kojom upravljaju ekstenzije i koja se čuva u cmux.json.",
         "packs": {

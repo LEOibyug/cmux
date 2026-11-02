@@ -2196,6 +2196,7 @@
       "exampleConfig": "Beispielkonfiguration",
       "metaTitle": "Konfiguration",
       "schemaDescriptions": {
+        "vaultEnabledAgents": "Nur global: Agenten-IDs, deren Verlauf Vault liest und durchsucht. Ohne Angabe sind alle, auch zukünftige Agenten aktiviert; [] deaktiviert den gesamten Verlauf. IDs unterscheiden Groß- und Kleinschreibung. Prozesserkennung, Hooks und Authentifizierung bleiben unverändert.",
         "root": "cmux-Konfiguration. Die globale cmux.json unterstützt App-Einstellungen, Tastenkürzel, Aktionen, benutzerdefinierte Befehle, Benachrichtigungs-Hooks und Workspace-Layouts. Eine projektlokale .cmux/cmux.json oder cmux.json unterstützt Aktionen, Befehle, Benachrichtigungs-Hooks, die Verknüpfung von UI-Aktionen, Agent-Chat-Überschreibungen, Vault-Agenten, Workspace-Gruppen-Überschreibungen sowie die Konfiguration von Workspace-Starts und -Schaltflächen.",
         "rightSidebar": "Veraltete und von Erweiterungen verwaltete Konfiguration der rechten Seitenleiste, die in cmux.json beibehalten wird.",
         "packs": {

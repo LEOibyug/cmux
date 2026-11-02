@@ -2196,6 +2196,7 @@
       "exampleConfig": "Exemple de configuration",
       "metaTitle": "Configuration",
       "schemaDescriptions": {
+        "vaultEnabledAgents": "Uniquement global : identifiants des agents dont Vault lit et recherche l’historique. Sans cette clé, tous les agents, même futurs, sont activés ; [] désactive tout l’historique. Les identifiants sont sensibles à la casse. Ne modifie ni la détection des processus, ni les hooks, ni l’authentification.",
         "root": "Configuration de cmux. Le fichier global cmux.json prend en charge les réglages de l’application, les raccourcis, les actions, les commandes personnalisées, les hooks de notification et les dispositions d’espaces de travail. Un fichier .cmux/cmux.json ou cmux.json local au projet prend en charge les actions, les commandes, les hooks de notification, le câblage des actions d’interface, les surcharges d’Agent Chat, les agents du coffre, les surcharges de groupes d’espaces de travail ainsi que la configuration du lancement et des boutons des espaces de travail.",
         "rightSidebar": "Configuration héritée et appartenant aux extensions de la barre latérale droite, conservée dans cmux.json.",
         "packs": {
