@@ -2,7 +2,7 @@ import CMUXMobileCore
 import CMUXAuthCore
 import CmuxAuthRuntime
 import Bonsplit
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxCore
 import CmuxIrohTransport
 import CmuxMobileRPC
@@ -17,7 +17,7 @@ import Testing
 
 @MainActor
 @Suite("Native Cloud layout projection preserves panels and focus")
-struct CloudNativeLayoutProjectionTests {
+struct TuiNativeLayoutProjectionTests {
     @Test("Sidebar closes match UUID case and reject missing targets or mismatched receipts",
           arguments: [true, false], [true, false])
     func sidebarCloseValidatesTarget(present: Bool, validReply: Bool) async throws {
@@ -55,7 +55,7 @@ struct CloudNativeLayoutProjectionTests {
     @Test("Closing a mirrored Mac terminal updates its owner, while teardown only detaches",
           arguments: [SurfaceProjectionEndReason.paneClosed, .workspaceTeardown, .replaced], [false, true])
     func closingDeviceProjectionUpdatesSource(reason: SurfaceProjectionEndReason, mixed: Bool) async throws {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let viewer = try #require(manager.selectedWorkspace)
         let pane = try #require(viewer.bonsplitController.allPaneIds.first)
         let first = try #require(viewer.focusedPanelId)
@@ -140,7 +140,7 @@ struct CloudNativeLayoutProjectionTests {
 
     @Test("A device split adopts its reserved pane before projecting the new terminal")
     func deviceSplitDoesNotPaintInTheFocusedPaneFirst() async throws {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let viewer = try #require(manager.selectedWorkspace)
         let sourcePane = try #require(viewer.bonsplitController.allPaneIds.first)
         let sourcePanel = try #require(viewer.focusedPanelId)
@@ -153,7 +153,7 @@ struct CloudNativeLayoutProjectionTests {
         let remoteB = "remote-b"
         let live = LiveWorkspaceFixture(); live.register(viewer)
         let catalog = SurfaceCatalog(live: live)
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let provider = TuiPlacementTestProvider(machine: machine)
         catalog.register(provider)
         let resourceA = SurfaceResource(id: .init(machine: machine, kind: .terminal, key: remoteA),
             title: remoteA, detail: nil, lifecycle: .running, agent: nil,
@@ -168,11 +168,11 @@ struct CloudNativeLayoutProjectionTests {
             panelID: sourcePanel, remoteWorkspaceID: remoteWorkspace.id, remoteTabID: remoteA))
 
         let requestID = UUID()
-        let reservation = try #require(viewer.reserveCloudTerminalPane(
+        let reservation = try #require(viewer.reserveTuiTerminalPane(
             machine: machine,
             at: .split(workspaceID: viewer.id, paneID: sourcePane.id.uuidString, direction: .right),
             focus: false,
-            sourcePlacement: CloudTerminalSourcePlacement(
+            sourcePlacement: TuiTerminalSourcePlacement(
                 machine: machine, resource: resourceA,
                 remoteWorkspaceID: remoteWorkspace.id, remoteTabID: remoteA
             ),
@@ -257,8 +257,8 @@ struct CloudNativeLayoutProjectionTests {
         let reservedPane = try #require(fixture.viewer.paneId(forPanelId: reservation.panelID))
         if creationFailed {
             // A failed create keeps its pane and reservation for Reconnect.
-            fixture.viewer.failReservedCloudTerminalPane(reservation, error: CloudDiagnosticFailure.placement)
-            #expect(fixture.viewer.cloudPendingCreations[reservation.panelID] === reservation)
+            fixture.viewer.failReservedTuiTerminalPane(reservation, error: CloudDiagnosticFailure.placement)
+            #expect(fixture.viewer.tuiPendingCreations[reservation.panelID] === reservation)
         }
         guard case .split(let reservedDirection, let reservedRatio, _, _)? = fixture.viewer.deviceWorkspaceLayoutSnapshot() else {
             Issue.record("The reservation must split the source pane")
@@ -314,7 +314,7 @@ struct CloudNativeLayoutProjectionTests {
         await coordinator.waitForIdle()
         #expect(fixture.requests.filter { $0.method == "mobile.terminal.close" }
             .compactMap { $0.params["surface_id"] as? String } == ["remote-foreign"])
-        #expect(fixture.viewer.cloudPendingCreations[reservation.panelID] === reservation)
+        #expect(fixture.viewer.tuiPendingCreations[reservation.panelID] === reservation)
     }
 
     @Test("A retried device create whose terminal is already mirrored keeps one pane and later layouts applying")
@@ -323,7 +323,7 @@ struct CloudNativeLayoutProjectionTests {
             let app = try VaultPaneAppFixture()
             let fixture = try DeviceSplitFixture(app: app)
             let viewer = fixture.viewer
-            let store = viewer.cloudPaneCreationFailureStore
+            let store = viewer.tuiPaneCreationFailureStore
             let coordinator = fixture.makeCoordinator()
             fixture.provider.onProjectionEnd = { coordinator.projectionDidEnd($0, reason: $1) }
             defer {
@@ -336,13 +336,13 @@ struct CloudNativeLayoutProjectionTests {
             let (reservation, _) = try fixture.reserve(.right, requestID: requestID)
             let created = fixture.addTerminal("remote-b")
             var attempts = 0
-            viewer.runOptimisticCloudTerminalCreation(
+            viewer.runOptimisticTuiTerminalCreation(
                 reservation: reservation, requestID: requestID,
                 destination: .split(workspaceID: viewer.id, paneID: fixture.sourcePane.id.uuidString, direction: .right),
                 create: {
                     attempts += 1
                     // The owner created the terminal, but the first receipt was lost.
-                    guard attempts > 1 else { throw CloudDiagnosticFailure.network }
+                    guard attempts > 1 else { throw TuiTransportError.connectionClosed }
                     // The owner answers the replayed request id with the same terminal.
                     _ = coordinator.bindCreatedTerminal(requestID: requestID,
                         remoteWorkspaceID: fixture.remoteWorkspace.id, resource: created)
@@ -364,8 +364,8 @@ struct CloudNativeLayoutProjectionTests {
             // gets the terminal already shown.
             viewer.focusPanel(reservation.panelID)
             #expect(viewer.focusedPanelId == reservation.panelID)
-            #expect(viewer.retryReservedCloudTerminalPane(surfaceId: reservation.panelID))
-            try await settled { viewer.cloudPendingCreations[reservation.panelID] == nil && !store.hasActiveRequests }
+            #expect(viewer.retryReservedTuiTerminalPane(surfaceId: reservation.panelID))
+            try await settled { viewer.tuiPendingCreations[reservation.panelID] == nil && !store.hasActiveRequests }
             #expect(attempts == 2)
             #expect(fixture.provider.adoptions.filter { $0.resource == created.id }.count == 1)
             #expect(fixture.catalog.projections(of: created.id).filter { $0.workspaceID == viewer.id }.map(\.panelID) == [mirrored])
@@ -397,22 +397,22 @@ struct CloudNativeLayoutProjectionTests {
         #expect(viewer.adoptPendingDeviceTerminalPane(reservation, machine: fixture.machine,
             remoteWorkspaceID: remoteID, resource: created) == nil,
             "An unbound reservation must wait for its create receipt")
-        #expect(viewer.cloudPendingCreations[reservation.panelID] === reservation)
+        #expect(viewer.tuiPendingCreations[reservation.panelID] === reservation)
 
         #expect(viewer.bindPendingDeviceTerminal(requestID: requestID, remoteWorkspaceID: remoteID, resource: created))
         #expect(viewer.adoptPendingDeviceTerminalPane(reservation, machine: fixture.machine,
             remoteWorkspaceID: remoteID, resource: foreign) == nil,
             "A terminal the request did not create must not take the pane")
-        #expect(viewer.cloudPendingCreations[reservation.panelID] === reservation)
+        #expect(viewer.tuiPendingCreations[reservation.panelID] === reservation)
 
         let adopted = try #require(viewer.adoptPendingDeviceTerminalPane(reservation, machine: fixture.machine,
             remoteWorkspaceID: remoteID, resource: created))
         #expect(adopted.workspaceID == viewer.id)
         #expect(adopted.panelID == reservation.panelID)
         // Adoption binds the pane; only the request's completion retires it.
-        #expect(viewer.cloudPendingCreations[reservation.panelID] === reservation)
-        viewer.completeReservedCloudTerminalPane(reservation, adoptedPanelID: adopted.panelID)
-        #expect(viewer.cloudPendingCreations[reservation.panelID] == nil)
+        #expect(viewer.tuiPendingCreations[reservation.panelID] === reservation)
+        viewer.completeReservedTuiTerminalPane(reservation, adoptedPanelID: adopted.panelID)
+        #expect(viewer.tuiPendingCreations[reservation.panelID] == nil)
         #expect(viewer.panels[reservation.panelID] != nil)
     }
 
@@ -459,7 +459,7 @@ struct CloudNativeLayoutProjectionTests {
     /// a broken adoption.
     private static func materializeDeviceTerminal(
         _ resource: SurfaceResource, view: SurfaceRemoteView?, at destination: SurfaceDestination,
-        in viewer: Workspace, adopting reservation: CloudTerminalPaneReservation?
+        in viewer: Workspace, adopting reservation: TuiTerminalPaneReservation?
     ) throws -> SurfaceProjection {
         let panelID: UUID
         if let reservation {
@@ -468,7 +468,7 @@ struct CloudNativeLayoutProjectionTests {
                 remoteWorkspaceID: remoteWorkspaceID, resource: resource)).panelID
         } else {
             let panel = try #require(viewer.makeRemoteTmuxPanePanel(onInput: { _ in }))
-            _ = try viewer.insertCloudManualMirrorPanel(panel, at: destination, focus: false, isLoading: false)
+            _ = try viewer.insertTuiManualMirrorPanel(panel, at: destination, focus: false, isLoading: false)
             panelID = panel.id
         }
         return SurfaceProjection(resource: resource.id, workspaceID: viewer.id, panelID: panelID,
@@ -478,14 +478,14 @@ struct CloudNativeLayoutProjectionTests {
     /// One device-mirrored workspace whose only projected terminal is the split source.
     @MainActor
     private final class DeviceSplitFixture {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let viewer: Workspace
         let sourcePane: PaneID
         let machine = SurfaceMachineID.device(.init(deviceID: "split-owner", tag: "test"))
         let remoteWorkspace = SurfaceRemoteWorkspace(id: UUID().uuidString, name: "Remote", index: 0, focused: true)
         let live = LiveWorkspaceFixture()
         let catalog: SurfaceCatalog
-        let provider: CloudPlacementTestProvider
+        let provider: TuiPlacementTestProvider
         let source: SurfaceResource
         let sourceLayout: DeviceWorkspaceLayoutNode = .pane(id: "source", surfaceIDs: ["remote-a"], selectedSurfaceID: "remote-a")
         /// The pane each projection request targeted, before materialization.
@@ -502,7 +502,7 @@ struct CloudNativeLayoutProjectionTests {
             let sourcePanel = try #require(viewer.focusedPanelId)
             live.register(viewer)
             catalog = app == nil ? SurfaceCatalog(live: live) : .shared
-            provider = CloudPlacementTestProvider(machine: machine)
+            provider = TuiPlacementTestProvider(machine: machine)
             catalog.register(provider)
             source = SurfaceResource(id: .init(machine: machine, kind: .terminal, key: "remote-a"),
                 title: "remote-a", detail: nil, lifecycle: .running, agent: nil,
@@ -514,7 +514,7 @@ struct CloudNativeLayoutProjectionTests {
             projectedPanels[source.id] = sourcePanel
             provider.materializeProjection = { [unowned self] resource, view, destination in
                 if case .tab(_, let paneID, _) = destination { self.destinationPanes[resource.id] = UUID(uuidString: paneID) }
-                let projection = try CloudNativeLayoutProjectionTests.materializeDeviceTerminal(
+                let projection = try TuiNativeLayoutProjectionTests.materializeDeviceTerminal(
                     resource, view: view, at: destination, in: self.viewer,
                     adopting: self.provider.adoptions.last { $0.resource == resource.id }?.reservation)
                 self.projectedPanels[resource.id] = projection.panelID
@@ -531,12 +531,12 @@ struct CloudNativeLayoutProjectionTests {
         /// Reserves a split of the source pane the way Cmd-D/Cmd-Shift-D does.
         func reserve(
             _ direction: SurfaceSplitDirection, requestID: UUID = UUID()
-        ) throws -> (CloudTerminalPaneReservation, UUID) {
-            let reservation = try #require(viewer.reserveCloudTerminalPane(
+        ) throws -> (TuiTerminalPaneReservation, UUID) {
+            let reservation = try #require(viewer.reserveTuiTerminalPane(
                 machine: machine,
                 at: .split(workspaceID: viewer.id, paneID: sourcePane.id.uuidString, direction: direction),
                 focus: false,
-                sourcePlacement: CloudTerminalSourcePlacement(
+                sourcePlacement: TuiTerminalSourcePlacement(
                     machine: machine, resource: source,
                     remoteWorkspaceID: remoteWorkspace.id, remoteTabID: "remote-a"
                 ),
@@ -578,7 +578,7 @@ struct CloudNativeLayoutProjectionTests {
                 revision: "after-\(sequence)", sequence: sequence)
         }
 
-        func adoption(of resource: SurfaceResourceID) -> CloudTerminalPaneReservation? {
+        func adoption(of resource: SurfaceResourceID) -> TuiTerminalPaneReservation? {
             provider.adoptions.first { $0.resource == resource }?.reservation
         }
     }
@@ -602,14 +602,14 @@ struct CloudNativeLayoutProjectionTests {
     }
 
     @Test func nativeMirrorTabInsertionHonorsTheSourceOrder() throws {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let workspace = try #require(manager.selectedWorkspace)
         let pane = try #require(workspace.bonsplitController.allPaneIds.first)
         defer { workspace.teardownAllPanels(); manager.tabs = [] }
         var ids: [String: UUID] = [:]
         for (name, index) in [("C", 0), ("A", 0), ("B", 1), ("D", 3)] {
             let panel = try #require(workspace.makeRemoteTmuxPanePanel(onInput: { _ in }, keyNameResolver: nil))
-            ids[name] = try workspace.insertCloudManualMirrorPanel(panel,
+            ids[name] = try workspace.insertTuiManualMirrorPanel(panel,
                 at: .tab(workspaceID: workspace.id, paneID: pane.id.uuidString, index: index),
                 focus: name == "C", isLoading: false)
         }
@@ -622,7 +622,7 @@ struct CloudNativeLayoutProjectionTests {
 
     @Test(.timeLimit(.minutes(1)))
     func deviceLayoutsRoundTripWithoutEchoAndPreserveTheNewestGesture() async throws {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let viewer = try #require(manager.selectedWorkspace)
         let pane = try #require(viewer.bonsplitController.allPaneIds.first)
         let first = try #require(viewer.focusedPanelId)
@@ -635,7 +635,7 @@ struct CloudNativeLayoutProjectionTests {
         let live = LiveWorkspaceFixture()
         live.register(viewer)
         let catalog = SurfaceCatalog(live: live)
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let provider = TuiPlacementTestProvider(machine: machine)
         catalog.register(provider)
         let remoteWorkspace = SurfaceRemoteWorkspace(id: remoteID.uuidString, name: "Remote", index: 0, focused: false)
         for (panel, remote) in [(first, remoteA), (second, remoteB)] {
@@ -745,7 +745,7 @@ struct CloudNativeLayoutProjectionTests {
     @Test(arguments: [false, true])
     func newWorkspaceActionKeepsTheSelectedDeviceContext(fromSidebar: Bool) async throws {
         let manager = TabManager(createInitialWorkspace: false)
-        let workspace = Workspace(title: "Other Mac", initialSurface: .cloudVMLoading)
+        let workspace = Workspace(title: "Other Mac", initialSurface: .remoteLoading)
         manager.tabs = [workspace]
         manager.selectedTabId = workspace.id
         defer { workspace.teardownAllPanels(); manager.tabs = [] }
@@ -825,16 +825,16 @@ struct CloudNativeLayoutProjectionTests {
     }
 
     @Test func deviceNamesFollowTheCatalogWithoutCreatingACloudBinding() throws {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let workspace = try #require(manager.selectedWorkspace)
         let panelID = try #require(workspace.focusedPanelId)
-        let service = CloudWorkspaceRenameService(environment: .init(
+        let service = TuiWorkspaceRenameService(environment: .init(
             workspace: { $0 == workspace.id ? workspace : nil },
             tabManager: { $0 == workspace.id ? manager : nil }, workspaces: { [workspace] }
         ))
-        let catalog = SurfaceCatalog(cloudWorkspaceRenameService: service)
+        let catalog = SurfaceCatalog(tuiWorkspaceRenameService: service)
         let machine = SurfaceMachineID.device(SurfaceDeviceInstanceID(deviceID: UUID().uuidString, tag: "default"))
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        catalog.register(TuiPlacementTestProvider(machine: machine))
         let remote = SurfaceRemoteWorkspace(id: "source-workspace", name: "Source project", index: 0, focused: true)
         var resource = SurfaceResource(id: SurfaceResourceID(machine: machine, kind: .terminal, key: "terminal"),
             title: "Build logs", detail: "/remote/project", lifecycle: .running, agent: nil, remoteWorkspace: remote,
@@ -845,7 +845,7 @@ struct CloudNativeLayoutProjectionTests {
         catalog.replaceResources([resource], on: machine)
         #expect(workspace.title == "Source project")
         #expect(workspace.panelTitle(panelId: panelID) == "Build logs")
-        #expect(workspace.cloudVMBinding == nil)
+        #expect(workspace.remoteWorkspaceBinding == nil)
         resource.title = "Tests"
         resource.remoteViews?[0].name = "Tests"
         resource.remoteViews?[0].workspace.name = "Renamed project"
@@ -853,7 +853,7 @@ struct CloudNativeLayoutProjectionTests {
         catalog.replaceResources([resource], on: machine)
         #expect(workspace.title == "Renamed project")
         #expect(workspace.panelTitle(panelId: panelID) == "Tests")
-        #expect(workspace.cloudVMBinding == nil)
+        #expect(workspace.remoteWorkspaceBinding == nil)
         for panel in workspace.panels.values { panel.close() }
         manager.tabs = []
     }
@@ -882,14 +882,14 @@ struct CloudNativeLayoutProjectionTests {
     }
 
     @Test func deviceLayoutCapturesNativeTabGroupsAndDividers() throws {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let workspace = try #require(manager.selectedWorkspace)
         defer { for panel in workspace.panels.values { panel.close() }; manager.tabs = [] }
         let pane = try #require(workspace.bonsplitController.allPaneIds.first)
         let first = try #require(workspace.focusedPanelId)
         var panels = [first]
         for _ in 0..<3 { panels.append(try #require(workspace.newTerminalSurface(inPane: pane, focus: false)?.id)) }
-        let machine = SurfaceMachineID.cloud("layout-capture")
+        let machine = SurfaceMachineID.ssh("9b49acd1f62464834e9b0fdd2cd2ccb54c688ceb9475602b48f15ed4b5ed828f")
         let projections = panels.enumerated().map { index, panel in
             SurfaceProjection(resource: SurfaceResourceID(machine: machine, kind: .terminal, key: "t\(index)"),
                 workspaceID: workspace.id, panelID: panel, remoteWorkspaceID: "remote", remoteTabID: "tab\(index)")
@@ -897,7 +897,7 @@ struct CloudNativeLayoutProjectionTests {
         let placements = projections.map {
             SurfaceResourcePlacement(resource: $0.resource, remoteWorkspaceID: $0.remoteWorkspaceID, remoteTabID: $0.remoteTabID)
         }
-        workspace.applyCloudWorkspaceLayout(.split(direction: .right, ratio: 0.65,
+        workspace.applyTuiWorkspaceLayout(.split(direction: .right, ratio: 0.65,
             first: .leaf(placements: Array(placements[0...1])),
             second: .split(direction: .down, ratio: 0.3,
                 first: .leaf(placements: [placements[2]]), second: .leaf(placements: [placements[3]]))), projections: projections)
@@ -926,7 +926,7 @@ struct CloudNativeLayoutProjectionTests {
         let first = try #require(workspace.focusedPanelId)
         let second = try #require(workspace.newTerminalSurface(inPane: pane, focus: false)?.id)
         let third = try #require(workspace.newTerminalSurface(inPane: pane, focus: false)?.id)
-        let machine = SurfaceMachineID.cloud("native-fixture")
+        let machine = SurfaceMachineID.ssh("3e4bbea917c3bae108e167b7e11d8b838753583b9148707091bcb1aee4a54331")
         let projections = [first, second, third].enumerated().map { index, panel in
             SurfaceProjection(resource: SurfaceResourceID(machine: machine, kind: .terminal, key: "term_\(index)"),
                               workspaceID: workspace.id, panelID: panel, remoteWorkspaceID: "remote", remoteTabID: "tab_\(index)")
@@ -940,7 +940,7 @@ struct CloudNativeLayoutProjectionTests {
         let layout = SurfaceProjectionLayout.split(direction: .right, ratio: 0.6,
             first: .leaf(placements: [placements[0]]), second: .split(direction: .down, ratio: 0.4,
                 first: .leaf(placements: [placements[1]]), second: .leaf(placements: [placements[2]])))
-        workspace.applyCloudWorkspaceLayout(layout, projections: projections)
+        workspace.applyTuiWorkspaceLayout(layout, projections: projections)
         #expect(Set(workspace.panels.keys) == originalPanels)
         #expect(workspace.bonsplitController.allPaneIds.count == 3)
         #expect(workspace.bonsplitController.focusedPaneId == workspace.paneId(forPanelId: second))
@@ -953,9 +953,9 @@ struct CloudNativeLayoutProjectionTests {
         #expect(root.orientation == "horizontal" && right.orientation == "vertical")
         #expect(abs(root.dividerPosition - 0.6) < 0.001)
         #expect(abs(right.dividerPosition - 0.4) < 0.001)
-        workspace.applyCloudWorkspaceLayout(layout, projections: projections)
+        workspace.applyTuiWorkspaceLayout(layout, projections: projections)
         #expect(workspace.bonsplitController.treeSnapshot() == tree, "repeated refresh is a geometry no-op")
-        workspace.applyCloudWorkspaceLayout(.leaf(placements: Array(placements.reversed())), projections: projections)
+        workspace.applyTuiWorkspaceLayout(.leaf(placements: Array(placements.reversed())), projections: projections)
         #expect(workspace.bonsplitController.allPaneIds.count == 1)
         let finalPane = try #require(workspace.bonsplitController.allPaneIds.first)
         #expect(workspace.bonsplitController.tabs(inPane: finalPane).map(\.id) == [third, second, first].compactMap { workspace.surfaceIdFromPanelId($0) })
@@ -964,7 +964,7 @@ struct CloudNativeLayoutProjectionTests {
 
     @Test("An incomplete Cloud layout cannot flatten an existing Bonsplit tree")
     func incompleteCloudLayoutPreservesExistingTree() throws {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let workspace = try #require(manager.selectedWorkspace)
         defer { for panel in workspace.panels.values { panel.close() }; manager.tabs = [] }
         let pane = try #require(workspace.bonsplitController.allPaneIds.first)
@@ -973,7 +973,7 @@ struct CloudNativeLayoutProjectionTests {
         for _ in 0..<3 {
             panels.append(try #require(workspace.newTerminalSurface(inPane: pane, focus: false)?.id))
         }
-        let machine = SurfaceMachineID.cloud("incomplete-layout")
+        let machine = SurfaceMachineID.ssh("56f9c7c6a1629b93581c94756eb9d773d5c7c48200d4b2aa0759b6e5e410becc")
         let projections = panels.enumerated().map { index, panel in
             SurfaceProjection(
                 resource: SurfaceResourceID(machine: machine, kind: .terminal, key: "term_\(index)"),
@@ -997,7 +997,7 @@ struct CloudNativeLayoutProjectionTests {
                 second: .leaf(placements: [placements[3]])
             )
         )
-        workspace.applyCloudWorkspaceLayout(complete, projections: projections)
+        workspace.applyTuiWorkspaceLayout(complete, projections: projections)
         let before = workspace.bonsplitController.treeSnapshot()
 
         // This models a daemon snapshot whose resource inventory has not caught
@@ -1008,7 +1008,7 @@ struct CloudNativeLayoutProjectionTests {
             first: .leaf(placements: Array(placements[0...1])),
             second: .leaf(placements: [placements[2]])
         )
-        workspace.applyCloudWorkspaceLayout(incomplete, projections: projections)
+        workspace.applyTuiWorkspaceLayout(incomplete, projections: projections)
         #expect(workspace.bonsplitController.treeSnapshot() == before)
         #expect(workspace.bonsplitController.allPaneIds.count == 3)
     }

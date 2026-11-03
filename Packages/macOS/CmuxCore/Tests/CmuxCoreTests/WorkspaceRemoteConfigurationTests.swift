@@ -111,7 +111,6 @@ struct WorkspaceRemoteConfigurationValueTests {
         relayPort: Int? = nil,
         preserveAfterTerminalExit: Bool = false,
         persistentDaemonSlot: String? = nil,
-        managedCloudVMID: String? = nil,
         skipDaemonBootstrap: Bool = false,
         ownerWorkspaceID: UUID? = nil
     ) -> WorkspaceRemoteConfiguration {
@@ -129,7 +128,6 @@ struct WorkspaceRemoteConfigurationValueTests {
             relayToken: nil,
             localSocketPath: nil,
             ownerWorkspaceID: ownerWorkspaceID,
-            managedCloudVMID: managedCloudVMID,
             terminalStartupCommand: nil,
             preserveAfterTerminalExit: preserveAfterTerminalExit,
             persistentDaemonSlot: persistentDaemonSlot,
@@ -145,12 +143,6 @@ struct WorkspaceRemoteConfigurationValueTests {
         #expect(
             WorkspaceRemoteTerminalTransport.mosh.isSupportedForRemoteConfiguration(
                 managementTransport: .ssh,
-                skipDaemonBootstrap: false
-            )
-        )
-        #expect(
-            !WorkspaceRemoteTerminalTransport.mosh.isSupportedForRemoteConfiguration(
-                managementTransport: .websocket,
                 skipDaemonBootstrap: false
             )
         )
@@ -215,26 +207,6 @@ struct WorkspaceRemoteConfigurationValueTests {
         #expect(makeConfiguration(port: 2222).displayTarget == "user@host:2222")
     }
 
-    @Test("displayTarget hides the provider hostname for the managed Cloud VM")
-    func managedCloudDisplayTarget() {
-        let configuration = makeConfiguration(
-            destination: "71smiccrg35sw9pydt8k+cmux@vm-ssh.freestyle.sh",
-            preserveAfterTerminalExit: true,
-            persistentDaemonSlot: "cmux-default-freestyle-sshd-v1",
-            managedCloudVMID: "71smiccrg35sw9pydt8k",
-            skipDaemonBootstrap: true
-        )
-
-        #expect(configuration.displayTarget == "cloud VM")
-        #expect(configuration.destination.contains("vm-ssh.freestyle.sh"))
-        let plainSSH = makeConfiguration(
-            destination: "71smiccrg35sw9pydt8k+cmux@vm-ssh.freestyle.sh",
-            preserveAfterTerminalExit: true,
-            persistentDaemonSlot: "cmux-default-freestyle-sshd-v1",
-            skipDaemonBootstrap: true
-        )
-        #expect(plainSSH.displayTarget == "71smiccrg35sw9pydt8k+cmux@vm-ssh.freestyle.sh")
-    }
 
     @Test("proxy broker transport key separates bootstrap modes and ignores transient options")
     func proxyBrokerTransportKey() {
@@ -242,9 +214,9 @@ struct WorkspaceRemoteConfigurationValueTests {
         let sameIdentity = makeConfiguration(sshOptions: ["ForwardAgent=yes", "ControlPath=/tmp/x"])
         #expect(base.proxyBrokerTransportKey == sameIdentity.proxyBrokerTransportKey)
 
-        let bakedVM = makeConfiguration(skipDaemonBootstrap: true)
-        #expect(base.proxyBrokerTransportKey != bakedVM.proxyBrokerTransportKey)
-        #expect(bakedVM.proxyBrokerTransportKey.contains("vm-baked"))
+        let preinstalledSSH = makeConfiguration(skipDaemonBootstrap: true)
+        #expect(base.proxyBrokerTransportKey != preinstalledSSH.proxyBrokerTransportKey)
+        #expect(preinstalledSSH.proxyBrokerTransportKey.contains("preinstalled"))
 
         let otherHost = makeConfiguration(destination: "user@other")
         #expect(base.proxyBrokerTransportKey != otherHost.proxyBrokerTransportKey)
@@ -276,8 +248,7 @@ struct WorkspaceRemoteConfigurationValueTests {
             sshOptions: ["ProxyJump=bastion-a"],
             relayPort: 7000,
             preserveAfterTerminalExit: true,
-            persistentDaemonSlot: "slot-a",
-            managedCloudVMID: "vm-a"
+            persistentDaemonSlot: "slot-a"
         )
         let conservativeMatch = makeConfiguration(
             destination: " user@host ",
@@ -286,75 +257,39 @@ struct WorkspaceRemoteConfigurationValueTests {
             sshOptions: ["ProxyJump=bastion-b"],
             relayPort: 7000,
             preserveAfterTerminalExit: true,
-            persistentDaemonSlot: "slot-b",
-            managedCloudVMID: "vm-a"
+            persistentDaemonSlot: "slot-b"
         )
 
         #expect(base.hasSameRemoteRelayNamespace(as: conservativeMatch))
         #expect(!base.hasSameRemoteRelayNamespace(as: makeConfiguration(
             destination: "user@host",
             port: 2222,
-            relayPort: 7001,
-            managedCloudVMID: "vm-a"
+            relayPort: 7001
         )))
         #expect(!base.hasSameRemoteRelayNamespace(as: makeConfiguration(
             destination: "user@other",
             port: 2222,
-            relayPort: 7000,
-            managedCloudVMID: "vm-a"
+            relayPort: 7000
         )))
         #expect(!base.hasSameRemoteRelayNamespace(as: makeConfiguration(
             destination: "user@host",
             port: 22,
-            relayPort: 7000,
-            managedCloudVMID: "vm-a"
-        )))
-        #expect(!base.hasSameRemoteRelayNamespace(as: makeConfiguration(
-            transport: .websocket,
-            destination: "user@host",
-            port: 2222,
-            relayPort: 7000,
-            managedCloudVMID: "vm-a"
-        )))
-        #expect(!base.hasSameRemoteRelayNamespace(as: makeConfiguration(
-            destination: "user@host",
-            port: 2222,
-            relayPort: 7000,
-            managedCloudVMID: "vm-b"
+            relayPort: 7000
         )))
         #expect(!makeConfiguration(relayPort: 0).hasSameRemoteRelayNamespace(
             as: makeConfiguration(relayPort: 0)
         ))
     }
 
-    @Test("managed Cloud VM persistent identity ignores local owner workspace")
-    func managedCloudPersistentIdentityIgnoresOwnerWorkspace() {
-        let ownerA = UUID()
-        let ownerB = UUID()
-        let a = makeConfiguration(
-            transport: .websocket,
-            destination: "cloud-vm",
-            preserveAfterTerminalExit: true,
-            persistentDaemonSlot: "cmux-default-freestyle-sshd-v1",
-            managedCloudVMID: "vm-base",
-            skipDaemonBootstrap: true,
-            ownerWorkspaceID: ownerA
-        )
-        let b = makeConfiguration(
-            transport: .websocket,
-            destination: "cloud-vm",
-            preserveAfterTerminalExit: true,
-            persistentDaemonSlot: "cmux-default-freestyle-sshd-v1",
-            managedCloudVMID: "vm-base",
-            skipDaemonBootstrap: true,
-            ownerWorkspaceID: ownerB
-        )
-
-        #expect(a.proxyBrokerTransportKey == b.proxyBrokerTransportKey)
-        #expect(a.hasSamePersistentPTYIdentity(as: b))
+    @Test("persistent SSH identity includes the exact local owner workspace")
+    func persistentSSHIdentityIncludesOwnerWorkspace() {
+        let a = makeConfiguration(preserveAfterTerminalExit: true, persistentDaemonSlot: "slot", ownerWorkspaceID: UUID())
+        let b = makeConfiguration(preserveAfterTerminalExit: true, persistentDaemonSlot: "slot", ownerWorkspaceID: UUID())
+        #expect(a.proxyBrokerTransportKey != b.proxyBrokerTransportKey)
+        #expect(!a.hasSamePersistentPTYIdentity(as: b))
     }
 
-    @Test("persistent PTY lookup keys cover exact and managed wildcard owners")
+    @Test("persistent PTY lookup keys retain the exact SSH owner")
     func persistentPTYLookupKeys() {
         let ownerID = UUID()
         let preserved = makeConfiguration(
@@ -365,22 +300,10 @@ struct WorkspaceRemoteConfigurationValueTests {
         #expect(preserved.persistentPTYIdentityLookupKeys.count == 1)
         #expect(preserved.persistentPTYIdentityLookupKeys.first?.hasSuffix(ownerID.uuidString.lowercased()) == true)
 
-        let managed = makeConfiguration(
-            transport: .websocket,
-            destination: "cloud-vm",
-            preserveAfterTerminalExit: true,
-            persistentDaemonSlot: "cmux-default-freestyle-sshd-v1",
-            managedCloudVMID: "vm-base",
-            skipDaemonBootstrap: true,
-            ownerWorkspaceID: ownerID
-        )
-        #expect(managed.persistentPTYIdentityLookupKeys.count == 2)
-        #expect(managed.persistentPTYIdentityLookupKeys.last?.hasSuffix("\u{1e}*") == true)
     }
 
     @Test("sessionSnapshot persists restorable transports with a non-empty destination")
     func sessionSnapshotGating() {
-        #expect(makeConfiguration(transport: .websocket).sessionSnapshot() == nil)
         #expect(makeConfiguration(destination: "   ").sessionSnapshot() == nil)
 
         let snapshot = makeConfiguration(
@@ -392,16 +315,6 @@ struct WorkspaceRemoteConfigurationValueTests {
         #expect(snapshot?.preserveAfterTerminalExit == nil)
         #expect(snapshot?.relayPort == nil)
 
-        let managedWebSocketSnapshot = makeConfiguration(
-            transport: .websocket,
-            destination: "cloud-vm",
-            managedCloudVMID: "vm-managed-websocket"
-        ).sessionSnapshot()
-        #expect(managedWebSocketSnapshot?.transport == .websocket)
-        #expect(managedWebSocketSnapshot?.destination == "cloud-vm")
-        #expect(managedWebSocketSnapshot?.managedCloudVMID == "vm-managed-websocket")
-        #expect(managedWebSocketSnapshot?.preserveAfterTerminalExit == true)
-        #expect(managedWebSocketSnapshot?.persistentDaemonSlot == "cmux-default-freestyle-sshd-v1")
     }
 
     @Test("sessionSnapshot keeps relay port and slot only for preserved sessions")

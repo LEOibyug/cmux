@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Foundation
 import CmuxTerminalCore
 
@@ -144,8 +144,8 @@ extension Workspace {
     /// tab label was reconciled, matching the pre-spinner-split contract.
     @discardableResult
     func updatePanelTitle(panelId: UUID, title: String, stableTitle: String? = nil) -> Bool {
-        let remote = cloudProjectedResource(forPanel: panelId).flatMap { $0.kind == .terminal ? $0 : nil }
-        let candidate = remote?.cloudProcessDisplayTitle ?? title
+        let remote = tuiProjectedResource(forPanel: panelId).flatMap { $0.kind == .terminal ? $0 : nil }
+        let candidate = remote?.tuiProcessDisplayTitle ?? title
         let admitted = panels[panelId]?.panelType == .terminal
             ? AutomaticTerminalTitle(candidate)?.value : candidate
         guard let admitted else { return false }

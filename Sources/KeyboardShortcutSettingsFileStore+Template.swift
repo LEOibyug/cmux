@@ -7,7 +7,6 @@ extension CmuxSettingsFileStore {
     static func defaultTemplate() -> String {
         var lines: [String] = [
             "{",
-            "  \"$schema\": \"\(schemaURLString)\",",
             "  \"schemaVersion\": \(currentSchemaVersion),",
             "",
             "  // This file uses JSON with comments (JSONC).",
@@ -83,7 +82,6 @@ extension CmuxSettingsFileStore {
                     "openMarkdownInCmuxViewer": AppCatalogSection().openMarkdownInCmuxViewer.defaultValue,
                     "reorderOnNotification": SettingCatalog().app.reorderOnNotification.defaultValue.encodeForJSON(),
                     "iMessageMode": IMessageModeSettings.defaultValue,
-                    "sendAnonymousTelemetry": AppCatalogSection().sendAnonymousTelemetry.defaultValue,
                     "confirmQuit": AppCatalogSection().confirmQuitMode.defaultValue.rawValue,
                     "warnBeforeClosingTab": AppCatalogSection().warnBeforeClosingTab.defaultValue,
                     "warnBeforeClosingTabXButton": AppCatalogSection().warnBeforeClosingTabXButton.defaultValue,
@@ -154,9 +152,6 @@ extension CmuxSettingsFileStore {
                     "showWorkspaceDescription": SettingCatalog().sidebar.showWorkspaceDescription.defaultValue,
                     "workspaceDescriptionColor": NSNull(),
                     "beta": [
-                        "conversations": [
-                            "enabled": SettingCatalog().betaFeatures.conversationSidebar.defaultValue,
-                        ],
                         "workspaceTodos": [
                             "controls": [
                                 "enabled": SettingCatalog().betaFeatures.workspaceTodoControls.defaultValue,
@@ -170,7 +165,6 @@ extension CmuxSettingsFileStore {
                     "showNotificationMessage": SettingCatalog().sidebar.showNotificationMessage.defaultValue,
                     "notificationMessageLineLimit": SettingCatalog().sidebar.notificationMessageLineLimit.defaultValue,
                     "showBranchDirectory": SidebarWorkspaceDetailDefaults.showBranchDirectory,
-                    "showCloudDeviceIcons": SidebarWorkspaceDetailDefaults.showCloudDeviceIcons,
                     "showPullRequests": SidebarWorkspaceDetailDefaults.showPullRequests,
                     "watchGitStatus": SidebarWorkspaceDetailDefaults.watchGitStatus,
                     "makePullRequestsClickable": SettingCatalog().sidebar.makePullRequestsClickable.defaultValue,
@@ -260,14 +254,6 @@ extension CmuxSettingsFileStore {
                     "urlAllowlist": BrowserURLAllowlistPolicy.defaultPatterns,
                     "showImportHintOnBlankTabs": BrowserImportHintSettings.defaultShowOnBlankTabs,
                     "reactGrabVersion": ReactGrabSettings.defaultVersion,
-                ],
-            ],
-            [
-                "mobile": [
-                    "artifactFolderAccess": SettingCatalog().mobile.artifactFolderAccess.defaultValue.rawValue,
-                    "browserTunnel": [
-                        "allowOtherHosts": SettingCatalog().mobile.browserTunnelAllowOtherHosts.defaultValue,
-                    ],
                 ],
             ],
             [

@@ -168,20 +168,6 @@ public struct CustomSidebarsSection: View {
                 .accessibilityIdentifier("SettingsCustomSidebarsOpenFolderButton")
             }
 
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                configurationReview: .action,
-                String(localized: "settings.settingsJSON.documentation", defaultValue: "Documentation")
-            ) {
-                Link(
-                    String(localized: "settings.settingsJSON.docsButton", defaultValue: "Open Docs"),
-                    destination: URL(string: "https://cmux.com/docs/custom-sidebars")!
-                )
-                .cmuxFont(.caption)
-                .accessibilityIdentifier("SettingsCustomSidebarsDocsLink")
-            }
-
             if let operationMessage {
                 SettingsCardDivider()
                 SettingsCardNote(operationMessage)

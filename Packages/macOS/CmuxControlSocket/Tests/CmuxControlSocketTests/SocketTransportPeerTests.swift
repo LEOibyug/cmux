@@ -31,19 +31,7 @@ struct SocketTransportPeerTests {
         #expect(transport.peerHasSameUID(a))
     }
 
-    @Test func peerAuditTokenIsAnImmutableExactProcessIdentity() throws {
-        let transport = SocketTransport()
-        let (a, b) = try makeSocketPair()
-        defer {
-            close(a)
-            close(b)
-        }
-        let token = try #require(transport.peerAuditToken(of: a))
-        #expect(token.bytes.count == SocketPeerAuditToken.byteCount)
-        #expect(token.processID == getpid())
-        #expect(token.processVersion != 0)
-        #expect(transport.peerAuditToken(of: a) == token)
-    }
+    
 
     @Test func peerProcessIDFailsOnNonSocketDescriptor() {
         let transport = SocketTransport()
@@ -51,7 +39,6 @@ struct SocketTransportPeerTests {
         defer { close(fd) }
         #expect(transport.peerProcessID(of: fd) == nil)
         #expect(!transport.peerHasSameUID(fd))
-        #expect(transport.peerAuditToken(of: fd) == nil)
     }
 
     @Test func processDescendantWalk() {
@@ -63,11 +50,5 @@ struct SocketTransportPeerTests {
         #expect(transport.isProcessDescendant(pid, of: 1))
     }
 
-    @Test func processStartTimeIsStableForCurrentProcess() throws {
-        let transport = SocketTransport()
-        let start = try #require(transport.processStartTime(of: getpid()))
-        #expect(start.absoluteTime > 0)
-        #expect(transport.processStartTime(of: getpid()) == start)
-        #expect(transport.processStartTime(of: -1) == nil)
-    }
+    
 }

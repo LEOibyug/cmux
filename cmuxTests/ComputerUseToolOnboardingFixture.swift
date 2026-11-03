@@ -21,7 +21,6 @@ final class ComputerUseToolOnboardingFixture {
     let runtime: ComputerUseRuntimeService
     let liveIndex: SharedLiveAgentIndex
     let usesProductionPresenter: Bool
-    var featureEnabled = true
     var presentations: [ComputerUseOnboardingWindowController.StartingPoint] = []
 
     lazy var coordinator: ComputerUseUXCoordinator = {
@@ -39,7 +38,6 @@ final class ComputerUseToolOnboardingFixture {
             runtimeService: runtime,
             userDefaults: persistence.defaults,
             workspaceTitle: { _ in "Synthetic workspace" },
-            featureEnabled: { [weak self] in self?.featureEnabled == true },
             onboardingCoordinator: usesProductionPresenter ? nil : ComputerUseOnboardingCoordinator(
                 runtimeService: runtime,
                 presenter: { [weak self] point, _ in self?.presentations.append(point) }

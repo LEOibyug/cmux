@@ -17,7 +17,6 @@ enum CmuxExtensionSidebarSelection {
     static let legacyDefaultsKey = "cmuxExtensionSidebar.providerId"
     static let selectedExtensionNameDefaultsKey = "cmuxExtensionSidebar.selectedExtensionName"
     static let defaultProviderId = CmuxSidebarProviderDescriptor.defaultWorkspacesID
-    static let conversationSidebarProviderId = "cmux.sidebar.conversations"
     static let hostedExtensionsProviderId = "cmux.sidebar.extensions"
 
     /// Synchronous read of the experimental Extensions flag for the on-demand
@@ -50,21 +49,6 @@ enum CmuxExtensionSidebarSelection {
     /// suffix after the prefix is the sidebar's file base name.
     static let customSidebarProviderPrefix = "cmux.sidebar.custom."
 
-    /// Synchronous read of the Conversations sidebar gate: the local beta
-    /// opt-in and the remote release flag must both be on.
-    static var conversationSidebarEnabled: Bool {
-        let key = BetaFeaturesCatalogSection().conversationSidebar
-        let localOptIn = Bool.decodeFromUserDefaults(
-            UserDefaults.standard.object(forKey: key.userDefaultsKey)
-        ) ?? key.defaultValue
-        // The beta toggle is intentionally subordinate to the remote release
-        // gate. This keeps the picker and persisted selection recoverable while
-        // allowing PostHog to roll the feature out or kill it without shipping.
-        let releaseEnabled = CmuxFeatureFlags.offMainEffectiveValue(
-            for: CmuxFeatureFlags.conversationSidebarFlag
-        )
-        return localOptIn && releaseEnabled
-    }
 
     /// Synchronous read of the experimental custom-sidebars flag, mirroring
     /// ``isEnabled`` for the AppKit/static paths (the picker menu).
@@ -153,22 +137,6 @@ enum CmuxExtensionSidebarSelection {
         return name == (name as NSString).lastPathComponent
     }
 
-    /// Picker descriptor for the built-in Conversations sidebar.
-    static var conversationSidebarDescriptor: CmuxSidebarProviderDescriptor {
-        CmuxSidebarProviderDescriptor(
-            id: conversationSidebarProviderId,
-            title: CmuxSidebarProviderLocalizedText(
-                key: "sidebar.provider.conversations.title",
-                defaultValue: "Conversations"
-            ),
-            subtitle: CmuxSidebarProviderLocalizedText(
-                key: "sidebar.provider.conversations.subtitle",
-                defaultValue: "Coding-agent sessions"
-            ),
-            systemImageName: "bubble.left.and.bubble.right",
-            isHostProvided: false
-        )
-    }
 
     /// The always-available built-in views: the default workspaces sidebar plus
     /// the bundled preset providers (Project Worktrees, Attention Queue, Dev
@@ -185,9 +153,6 @@ enum CmuxExtensionSidebarSelection {
     /// offered.
     static var descriptors: [CmuxSidebarProviderDescriptor] {
         var result = builtInDescriptors
-        if conversationSidebarEnabled {
-            result.insert(conversationSidebarDescriptor, at: min(1, result.count))
-        }
         if isEnabled { result.append(hostedExtensionsDescriptor) }
         if customSidebarsEnabled { result += customSidebarDescriptors }
         return result
@@ -197,7 +162,7 @@ enum CmuxExtensionSidebarSelection {
     /// to register command-palette handlers so a runtime flag flip always has a
     /// handler to invoke; what is *shown* uses ``descriptors``.
     static var allDescriptors: [CmuxSidebarProviderDescriptor] {
-        [.defaultWorkspaces, conversationSidebarDescriptor]
+        [.defaultWorkspaces]
             + providers.map { $0.descriptor }
             + [hostedExtensionsDescriptor]
             + customSidebarDescriptors
@@ -242,7 +207,6 @@ enum CmuxExtensionSidebarSelection {
     /// non-default view.
     static func resolvesToDefaultSidebar(effectiveProviderId id: String) -> Bool {
         if id == defaultProviderId { return true }
-        if id == conversationSidebarProviderId { return false }
         if id == hostedExtensionsProviderId { return false }
         if id.hasPrefix(customSidebarProviderPrefix) {
             // A custom selection survives only while its backing file exists;
@@ -276,12 +240,8 @@ enum CmuxExtensionSidebarSelection {
     static func effectiveProviderId(
         _ persistedProviderId: String,
         extensionsEnabled: Bool,
-        customSidebarsEnabled: Bool,
-        conversationSidebarEnabled: Bool = false
+        customSidebarsEnabled: Bool
     ) -> String {
-        if persistedProviderId == conversationSidebarProviderId, !conversationSidebarEnabled {
-            return defaultProviderId
-        }
         if persistedProviderId.hasPrefix(customSidebarProviderPrefix), !customSidebarsEnabled {
             return defaultProviderId
         }
@@ -363,8 +323,7 @@ enum CmuxExtensionSidebarSelection {
             for: effectiveProviderId(
                 persistedProviderId,
                 extensionsEnabled: isEnabled,
-                customSidebarsEnabled: customSidebarsEnabled,
-                conversationSidebarEnabled: conversationSidebarEnabled
+                customSidebarsEnabled: customSidebarsEnabled
             )
         ).id
         for descriptor in descriptors {

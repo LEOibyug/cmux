@@ -26,13 +26,8 @@ public final class WorkstreamStore {
     public private(set) var isLoadingOlderItems = false
 
     /// Monotonic change counter bumped on every item mutation (ingest,
-    /// resolve, expire, history load). Remote mirrors of the feed (the iOS
-    /// Feed tab) compare list responses against this revision to discard
-    /// stale snapshots, the same contract the notification feed uses.
+    /// resolve, expire, and history load), used to identify feed snapshots.
     public private(set) var revision: Int = 0
-    /// Fires on the main actor after each revision bump so the app layer can
-    /// broadcast a revision-only invalidation to subscribed phones.
-    public var onRevisionChange: ((Int) -> Void)?
 
     public var pending: [WorkstreamItem] {
         items.filter { $0.status.isPending }
@@ -262,7 +257,6 @@ public final class WorkstreamStore {
 
     private func bumpRevision() {
         revision += 1
-        onRevisionChange?(revision)
     }
 
     /// The latest append in the ordered write chain. Each append waits for

@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -6,10 +6,10 @@ extension SurfaceCatalog {
     /// Reconciles machine-summary workspace names with the accepted daemon graph.
     /// Resource rows may carry optimistic creation or rename overlays, but the
     /// authoritative snapshot must expose the last accepted name for identities
-    /// already present in `cloudStates`.
+    /// already present in `tuiStates`.
     private func authoritativeMachineInfo(_ info: SurfaceMachineInfo) -> SurfaceMachineInfo {
         guard info.id.tuiMachineID != nil,
-              let state = cloudStates[info.id],
+              let state = tuiStates[info.id],
               let workspaces = info.remoteWorkspaces else { return info }
         let accepted = Dictionary(uniqueKeysWithValues: state.workspaces.map { workspace in
             (workspace.id, SurfaceRemoteWorkspace(
@@ -28,14 +28,6 @@ extension SurfaceCatalog {
     /// enumerate destructive operations. Presentation still withholds a stale
     /// graph's cwd, and stale machines are flagged, exactly as `snapshot` does.
     var authoritativeSnapshot: SurfaceCatalogSnapshot {
-        let displayCreationMachines = Set(machines.keys.filter { machine in
-            guard let provider = provider(for: machine) as? CmuxTuiSurfaceProvider else { return false }
-            // Keep the action live after a failed or stale discovery. The
-            // provider retries the guest probe when the user clicks New
-            // Display, instead of converting a transient probe failure into a
-            // permanently disabled row.
-            return provider.supportsDisplayCreation
-        })
         return SurfaceCatalogSnapshot(
             machines: machines.values.map(authoritativeMachineInfo).sorted {
                 if $0.id.isLocal != $1.id.isLocal { return $0.id.isLocal }
@@ -43,10 +35,7 @@ extension SurfaceCatalog {
             },
             resources: resources.values.map(resourceForPresentation).sorted { $0.catalogPrecedes($1) },
             projections: projections.sorted { $0.panelID.uuidString < $1.panelID.uuidString },
-            staleMachineIDs: Set(cloudStateObservations.filter { $0.value.freshness != .current }.keys),
-            displayCreationMachines: displayCreationMachines.isEmpty ? nil : displayCreationMachines,
-            pendingDisplayCreations: activeDisplayCreations.isEmpty ? nil : activeDisplayCreations,
-            cloudDisplayMemberships: cloudDisplayMemberships()
+            staleMachineIDs: Set(tuiStateObservations.filter { $0.value.freshness != .current }.keys)
         )
     }
 
@@ -62,7 +51,7 @@ extension SurfaceCatalog {
 
     private func applyPendingWorkspaceCreations(to result: inout SurfaceCatalogSnapshot) {
         var pending: [SurfaceMachineID: [String: UUID]] = [:]
-        for operation in cloudWorkspaceCreationCoordinator.operations.values {
+        for operation in tuiWorkspaceCreationCoordinator.operations.values {
             guard let receipt = operation.receipt, let reservation = operation.reservation,
                   let index = result.machines.firstIndex(where: { $0.id == operation.machine }) else { continue }
             pending[operation.machine, default: [:]][receipt.workspace.id] = reservation.workspaceID
@@ -77,7 +66,7 @@ extension SurfaceCatalog {
     /// keep their other placements. Terminals are killed resource-wide by the
     /// established full-delete contract.
     private func applyPendingDeletions(to result: inout SurfaceCatalogSnapshot) {
-        let entries = cloudWorkspaceDeletionLedger.entries
+        let entries = tuiWorkspaceDeletionLedger.entries
         guard !entries.isEmpty else { return }
         func hidden(_ machine: SurfaceMachineID, _ workspace: String) -> Bool {
             entries[.init(machine: machine, workspaceID: workspace)] != nil
@@ -107,18 +96,18 @@ extension SurfaceCatalog {
             hiddenIDs.contains(projection.resource)
                 || projection.remoteWorkspaceID.map { hidden(projection.resource.machine, $0) } == true
         }
-        result.pendingWorkspaceDeletions = cloudWorkspaceDeletionLedger.pending
+        result.pendingWorkspaceDeletions = tuiWorkspaceDeletionLedger.pending
     }
 
     /// Names the person already chose, ahead of the daemon's accepted graph. The
     /// coordinator holds an intent until its RPC returns; the machine's
     /// observation holds an accepted receipt until the graph passes it. A failed
     /// intent drops out of both, so the row falls back to the authoritative name.
-    var pendingCloudRenames: [CloudRenameCoordinator.Key: String] {
-        var names = cloudRenameCoordinator.allPendingNames
-        for (machine, observation) in cloudStateObservations {
+    var pendingTuiRenames: [TuiRenameCoordinator.Key: String] {
+        var names = tuiRenameCoordinator.allPendingNames
+        for (machine, observation) in tuiStateObservations {
             for write in observation.pendingWrites ?? [] {
-                let key: CloudRenameCoordinator.Key
+                let key: TuiRenameCoordinator.Key
                 switch write.kind {
                 case .workspaceRename:
                     guard let id = write.remoteWorkspaceID else { continue }
@@ -142,7 +131,7 @@ extension SurfaceCatalog {
     /// An exact tab intent wins over a terminal-wide ("all views") intent; an
     /// empty tab name clears the custom label, as the daemon will.
     private func applyPendingRenames(to result: inout SurfaceCatalogSnapshot) {
-        let names = pendingCloudRenames
+        let names = pendingTuiRenames
         guard !names.isEmpty else { return }
         func renamed(_ workspace: SurfaceRemoteWorkspace, on machine: SurfaceMachineID) -> SurfaceRemoteWorkspace {
             guard let name = names[.workspace(machine: machine, id: workspace.id)] else { return workspace }
@@ -181,11 +170,11 @@ extension SurfaceCatalog {
     /// `snapshot` because sidebar redraws do not need to copy or hash the full
     /// remote daemon documents.
     var export: SurfaceCatalogExport {
-        let retainedObservations = cloudStateObservations.filter { cloudStates[$0.key] != nil }
+        let retainedObservations = tuiStateObservations.filter { tuiStates[$0.key] != nil }
         return SurfaceCatalogExport(
             catalog: snapshot,
-            cloudStates: cloudStates.values.sorted { $0.machine.rawValue < $1.machine.rawValue },
-            cloudStateObservations: retainedObservations
+            tuiStates: tuiStates.values.sorted { $0.machine.rawValue < $1.machine.rawValue },
+            tuiStateObservations: retainedObservations
         )
     }
 

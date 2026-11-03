@@ -15,7 +15,7 @@ final class CloudCatalogQueryTestProvider: SurfaceProvider {
     let machine: SurfaceMachineID
     let info: SurfaceMachineInfo
     private let catalog: SurfaceCatalog
-    private let state: CloudVMState
+    private let state: TuiState
     private(set) var forcedRefreshes: [Bool] = []
 
     init(machine: SurfaceMachineID, catalog: SurfaceCatalog) throws {
@@ -23,7 +23,7 @@ final class CloudCatalogQueryTestProvider: SurfaceProvider {
         self.catalog = catalog
         info = SurfaceMachineInfo(
             id: machine, name: machine.rawValue, status: "running", image: nil,
-            hasDesktop: false, memoryMb: nil, diskMb: nil, linkState: .connected,
+            memoryMb: nil, diskMb: nil, linkState: .connected,
             linkError: nil, cpuPercent: nil, memoryUsedMb: nil, diskUsedMb: nil
         )
         state = try #require(CmuxTuiSnapshotParser.state(fromSnapshot: [
@@ -48,7 +48,7 @@ final class CloudCatalogQueryTestProvider: SurfaceProvider {
 
     func refresh(force: Bool) async {
         forcedRefreshes.append(force)
-        catalog.replaceCloudState(state, resources: CmuxTuiSnapshotParser.resources(from: state), info: info)
+        catalog.replaceTuiState(state, resources: CmuxTuiSnapshotParser.resources(from: state), info: info)
     }
 
     func materialize(_ resource: SurfaceResource, at destination: SurfaceDestination, focus: Bool) async throws -> SurfaceProjection {

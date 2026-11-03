@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import AppKit
 import Bonsplit
 import CmuxCore
@@ -19,14 +19,14 @@ struct CloudSurfaceMoveOwnershipTests {
     func sameDockReorderKeepsSurfaceOnMachine() throws {
         let workspace = Workspace()
         defer { workspace.teardownAllPanels() }
-        workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "cloud-a", isBase: false)
+        workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: "cloud-a")
         let dock = workspace.requiredDockSplitForTesting
         let pane = try #require(dock.bonsplitController.allPaneIds.first)
         let panel = try #require(dock.newSurface(kind: .terminal, inPane: pane))
         let tab = try #require(dock.surfaceId(forPanelId: panel))
         let processID = Int32(ProcessInfo.processInfo.processIdentifier)
         let transfer = PaneDragTransfer(tabId: tab.uuid, sourcePaneId: pane.id, sourceProcessId: processID)
-        let policy = SurfaceOwnershipPolicy(cloudMachine: .cloud("cloud-a"))
+        let policy = SurfaceOwnershipPolicy(cloudMachine: .ssh("71e3052fe236cebbe784558adf20163961edf1c054b69857b9220099b533fd91"))
         #expect(dock.surfaceDropRejection(transfer, source: .surface, policy: policy) == nil)
         let unmappedTransfer = PaneDragTransfer(tabId: UUID(), sourcePaneId: pane.id, sourceProcessId: processID)
         #expect(dock.surfaceDropRejection(unmappedTransfer, source: .surface, policy: policy) == .cloudMachineMismatch)
@@ -47,7 +47,7 @@ struct CloudSurfaceMoveOwnershipTests {
             catalog.record(.init(resource: display.id, workspaceID: source.id, panelID: browser.id))
             defer { catalog.remove(display.id) }
             let target = fixture.manager.addWorkspace(title: "same label", select: false)
-            target.cloudVMBinding = WorkspaceCloudVMBinding(vmID: owner == "a" ? "b" : "a", isBase: false)
+            target.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: owner == "a" ? "b" : "a")
             let dock = target.requiredDockSplitForTesting
             let dockPane = try #require(dock.bonsplitController.allPaneIds.first)
             let tab = try #require(source.surfaceIdFromPanelId(browser.id))
@@ -57,13 +57,13 @@ struct CloudSurfaceMoveOwnershipTests {
                 destination: .insert(targetPane: dockPane, targetIndex: 0)))
             #expect(source.panels[browser.id] != nil)
             #expect(Set(dock.panels.keys) == before)
-            target.cloudVMBinding = WorkspaceCloudVMBinding(vmID: owner, isBase: false)
+            target.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: owner)
             let detached = try #require(source.detachSurface(panelId: browser.id))
             #expect(dock.attachDetachedSurface(detached, inPane: dockPane, focus: false) == browser.id)
             #expect(dock.machineOwningSurface(browser.id) == .cloud(owner))
             let captured = dock.sessionSnapshot(includeScrollback: false)
-            #expect(captured.panels.first(where: { $0.id == browser.id })?.browser?.cloudResource == display.id)
-            target.cloudVMBinding = WorkspaceCloudVMBinding(vmID: owner == "a" ? "b" : "a", isBase: false)
+            #expect(captured.panels.first(where: { $0.id == browser.id })?.browser?.remoteResource == display.id)
+            target.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: owner == "a" ? "b" : "a")
             #expect(dock.restoreSessionSnapshot(captured).isEmpty)
             #expect(dock.panels[browser.id] != nil)
         }
@@ -77,7 +77,7 @@ struct CloudSurfaceMoveOwnershipTests {
             let workspace = fixture.workspace
             let pane = try #require(workspace.bonsplitController.allPaneIds.first)
             let browser = try #require(workspace.newBrowserSurface(inPane: pane, focus: false))
-            workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "a", isBase: false)
+            workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: "a")
             let catalog = SurfaceCatalog.shared
             var display = resource(machine: "a", kind: .display)
             display.id.key = "display:1"
@@ -87,10 +87,10 @@ struct CloudSurfaceMoveOwnershipTests {
             let duplicate = try #require(workspace.duplicateBrowserToRight(panelId: browser.id, focus: false))
             #expect(duplicate.id != browser.id)
             #expect(catalog.projectionRecord(forPanel: duplicate.id)?.resource == display.id)
-            #expect(workspace.machineOwningSurface(duplicate.id) == .cloud("a"))
+            #expect(workspace.machineOwningSurface(duplicate.id) == .ssh("ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"))
             #expect(workspace.panels[browser.id] === browser)
             let foreign = fixture.manager.addWorkspace(title: "same name", select: false)
-            foreign.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "b", isBase: false)
+            foreign.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: "b")
             #expect(!fixture.appDelegate.moveSurface(panelId: duplicate.id, toWorkspace: foreign.id,
                 focus: false, focusWindow: false))
             #expect(workspace.panels[duplicate.id] != nil)
@@ -105,7 +105,7 @@ struct CloudSurfaceMoveOwnershipTests {
             let source = fixture.workspace
             let destination = fixture.manager.addWorkspace(title: "Cloud", select: false)
             defer { destination.teardownAllPanels() }
-            destination.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "browser-destination", isBase: false)
+            destination.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: "browser-destination")
             let pane = try #require(source.bonsplitController.allPaneIds.first)
             let browser = try #require(source.newBrowserSurface(inPane: pane, url: URL(string: "about:blank"), focus: false))
             let tab = try #require(source.surfaceIdFromPanelId(browser.id))
@@ -130,7 +130,7 @@ struct CloudSurfaceMoveOwnershipTests {
             let source = fixture.workspace
             let target = fixture.manager.addWorkspace(title: "same name", select: false)
             defer { target.teardownAllPanels() }
-            target.cloudVMBinding = WorkspaceCloudVMBinding(vmID: owner == "a" ? "b" : "a", isBase: false)
+            target.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: owner == "a" ? "b" : "a")
             let sourcePane = try #require(source.bonsplitController.allPaneIds.first)
             let panelID: UUID
             if kind == .terminal {
@@ -204,14 +204,14 @@ struct CloudSurfaceMoveOwnershipTests {
         try await AppContextSerialGate.withExclusiveAppContext {
             let fixture = try VaultPaneAppFixture()
             defer { fixture.tearDown() }
-            let otherManager = TabManager(autoWelcomeIfNeeded: false)
+            let otherManager = TabManager()
             let otherWindow = fixture.appDelegate.registerMainWindowContextForTesting(tabManager: otherManager)
             defer {
                 otherManager.tabs.forEach { $0.teardownAllPanels() }
                 fixture.appDelegate.unregisterMainWindowContextForTesting(windowId: otherWindow)
             }
             let target = try #require(otherManager.selectedWorkspace)
-            target.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "b", isBase: false)
+            target.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: "b")
             let panel = try #require(fixture.workspace.focusedPanelId)
             let tab = try #require(fixture.workspace.surfaceIdFromPanelId(panel))
             #expect(!fixture.appDelegate.canMoveBonsplitTab(tabId: tab.uuid, toWorkspace: target.id))
@@ -232,7 +232,7 @@ struct CloudSurfaceMoveOwnershipTests {
             let tabID = try #require(dock.surfaceId(forPanelId: panelID))
             let target = fixture.manager.addWorkspace(title: "Cloud", select: false)
             defer { target.teardownAllPanels() }
-            target.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "b", isBase: false)
+            target.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: "b")
             let pane = try #require(target.bonsplitController.allPaneIds.first)
             let panels = Set(target.panels.keys)
             let sourcePanels = Set(dock.panels.keys)
@@ -261,7 +261,7 @@ struct CloudSurfaceMoveOwnershipTests {
             let source = fixture.workspace
             let target = fixture.manager.addWorkspace(title: "Cloud", select: false)
             defer { target.teardownAllPanels() }
-            target.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "b", isBase: false)
+            target.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: "b")
             let pane = try #require(source.bonsplitController.allPaneIds.first)
             let panelID: UUID
             if kind == .terminal {
@@ -291,11 +291,11 @@ struct CloudSurfaceMoveOwnershipTests {
         let live = LiveWorkspaceFixture()
         live.register(workspace)
         let catalog = SurfaceCatalog(live: live)
-        let id = SurfaceResourceID(machine: .cloud("a"), kind: .display, key: "offline")
+        let id = SurfaceResourceID(machine: .ssh("ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"), kind: .display, key: "offline")
         catalog.restore([SurfaceProjectionRecord(panelID: panelID, resource: id)], workspaceID: workspace.id)
-        #expect(workspace.machineOwningSurface(panelID, catalog: catalog) == .cloud("a"))
-        #expect(SurfaceOwnershipPolicy(cloudMachine: .cloud("b")).rejection(for: catalog.machineOwningPanel(panelID)) == .cloudMachineMismatch)
-        #expect(SurfaceOwnershipPolicy(cloudMachine: .cloud("a")).rejection(for: catalog.machineOwningPanel(panelID)) == nil)
+        #expect(workspace.machineOwningSurface(panelID, catalog: catalog) == .ssh("ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"))
+        #expect(SurfaceOwnershipPolicy(cloudMachine: .ssh("3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d")).rejection(for: catalog.machineOwningPanel(panelID)) == .cloudMachineMismatch)
+        #expect(SurfaceOwnershipPolicy(cloudMachine: .ssh("ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb")).rejection(for: catalog.machineOwningPanel(panelID)) == nil)
     }
 
     @Test("A Dock sharing the target workspace ID is not a rollback into that workspace")
@@ -304,7 +304,7 @@ struct CloudSurfaceMoveOwnershipTests {
             let fixture = try VaultPaneAppFixture()
             defer { fixture.tearDown() }
             let workspace = fixture.workspace
-            workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "b", isBase: false)
+            workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: "b")
             let dock = workspace.requiredDockSplitForTesting
             let dockPane = try #require(dock.bonsplitController.allPaneIds.first)
             let targetPane = try #require(workspace.bonsplitController.allPaneIds.first)
@@ -338,7 +338,7 @@ struct CloudSurfaceMoveOwnershipTests {
             source.configureRemoteConnection(WorkspaceRemoteConfiguration(
                 destination: "fixture.invalid", port: 22, identityFile: nil, sshOptions: [],
                 localProxyPort: nil, relayPort: nil, relayID: nil, relayToken: nil, localSocketPath: nil,
-                managedCloudVMID: nil, terminalStartupCommand: nil, skipDaemonBootstrap: true
+                managedTuiID: nil, terminalStartupCommand: nil, skipDaemonBootstrap: true
             ), autoConnect: false)
             source.trackRemoteTerminalSurface(remote.id)
             #expect(TerminalRemoteMachineClassification.runsOnAnotherMachine(
@@ -375,17 +375,17 @@ struct CloudSurfaceMoveOwnershipTests {
             source.configureRemoteConnection(WorkspaceRemoteConfiguration(
                 destination: "fixture.invalid", port: 22, identityFile: nil, sshOptions: [],
                 localProxyPort: nil, relayPort: nil, relayID: nil, relayToken: nil, localSocketPath: nil,
-                managedCloudVMID: "legacy-a", terminalStartupCommand: nil, skipDaemonBootstrap: true
+                managedTuiID: "legacy-a", terminalStartupCommand: nil, skipDaemonBootstrap: true
             ), autoConnect: false)
             source.trackRemoteTerminalSurface(panel.id)
             let local = fixture.manager.addWorkspace(title: "Local", select: false)
             let foreign = fixture.manager.addWorkspace(title: "Cloud B", select: false)
-            foreign.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "b", isBase: false)
+            foreign.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: "b")
             defer { local.teardownAllPanels(); foreign.teardownAllPanels() }
-            #expect(source.machineOwningSurface(panel.id) == .cloud("legacy-a"))
+            #expect(source.machineOwningSurface(panel.id) == .ssh("655c53155857aae2c2ceae22976dbdb221d73745a28cd24dfb67e9a8b385d42f"))
             #expect(fixture.appDelegate.moveSurface(panelId: panel.id, toWorkspace: local.id, focus: false, focusWindow: false))
             #expect(local.remoteConfiguration == nil)
-            #expect(local.machineOwningSurface(panel.id) == .cloud("legacy-a"))
+            #expect(local.machineOwningSurface(panel.id) == .ssh("655c53155857aae2c2ceae22976dbdb221d73745a28cd24dfb67e9a8b385d42f"))
             #expect(!fixture.appDelegate.moveSurface(panelId: panel.id, toWorkspace: foreign.id, focus: false, focusWindow: false))
             let tab = try #require(local.surfaceIdFromPanelId(panel.id))
             let transfer = PaneDragTransfer(tabId: tab.uuid, sourcePaneId: try #require(local.paneId(forPanelId: panel.id)).id,

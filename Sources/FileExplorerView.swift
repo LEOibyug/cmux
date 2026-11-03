@@ -1467,7 +1467,7 @@ final class FileExplorerContainerView: NSView {
         currentResourceContextID = store.resourceContextID
         currentWorkspaceRootIdentity = nextWorkspaceRootIdentity; currentContentRevision = nextContentRevision
         headerView.update(displayPath: store.displayRootPath,
-            retry: store.provider is CloudVMFileExplorerProvider ? { [weak store] in store?.retryRemoteRoot() } : nil)
+            retry: store.provider is SSHFileExplorerProvider ? { [weak store] in store?.retryRemoteRoot() } : nil)
         if workspaceRootChanged { cancelPendingSearchRefresh(); pendingSearchRefreshAfterSettled = false; searchController.cancel(clear: true); searchField.stringValue = ""; applySearchSnapshot(.empty) }
         if searchScopeChanged {
             pendingSearchRefreshAfterSettled = false

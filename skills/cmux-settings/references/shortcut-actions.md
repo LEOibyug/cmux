@@ -17,10 +17,8 @@ Values for `shortcuts.bindings.<action>`:
 - `shortcuts.bindings.newWindow`
 - `shortcuts.bindings.openFolder`
 - `shortcuts.bindings.openSettings`
-- `shortcuts.bindings.openTeamPicker`
 - `shortcuts.bindings.quit`
 - `shortcuts.bindings.reloadConfiguration`
-- `shortcuts.bindings.sendFeedback`
 - `shortcuts.bindings.showHideAllWindows`
 - `shortcuts.bindings.toggleFullScreen`
 
@@ -44,8 +42,6 @@ Values for `shortcuts.bindings.<action>`:
 - `shortcuts.bindings.markWorkspaceDone`
 - `shortcuts.bindings.moveWorkspaceDown`
 - `shortcuts.bindings.moveWorkspaceUp`
-- `shortcuts.bindings.newCloudMachine`
-- `shortcuts.bindings.newCloudWorkspace`
 - `shortcuts.bindings.newWorkspaceGroup`
 - `shortcuts.bindings.renameWorkspace`
 - `shortcuts.bindings.reopenClosedBrowserPanel`
@@ -121,7 +117,6 @@ Values for `shortcuts.bindings.<action>`:
 
 ## Command palette
 
-- `shortcuts.bindings.agentInbox`
 - `shortcuts.bindings.commandPalette`
 - `shortcuts.bindings.commandPaletteNext`
 - `shortcuts.bindings.commandPalettePrevious`
@@ -151,7 +146,6 @@ Values for `shortcuts.bindings.<action>`:
 - `shortcuts.bindings.switchRightSidebarToFeed`
 - `shortcuts.bindings.switchRightSidebarToFiles`
 - `shortcuts.bindings.switchRightSidebarToFind`
-- `shortcuts.bindings.switchRightSidebarToMachines`
 - `shortcuts.bindings.switchRightSidebarToSessions`
 - `shortcuts.bindings.toggleSidebar`
 

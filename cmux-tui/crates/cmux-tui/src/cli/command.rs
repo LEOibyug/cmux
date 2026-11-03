@@ -3219,7 +3219,6 @@ mod tests {
         let expected = crate::localization::catalog().local_server.start_options_after_action;
         for option in [
             "--ephemeral",
-            "--cloud",
             "--headless",
             "--ws-insecure-bind",
             "--remote",

@@ -1,14 +1,13 @@
 import Foundation
 
 extension Workspace {
-    /// Restores a valid Cloud binding, normalizing its optional remote workspace identity.
-    nonisolated static func restoredCloudVMBinding(from snapshot: SessionCloudVMBindingSnapshot?) -> WorkspaceCloudVMBinding? {
-        guard let snapshot, let vmID = WorkspaceCloudVMBinding.normalizedVMID(snapshot.vmID) else { return nil }
+    /// Restores an SSH binding, normalizing its optional remote workspace identity.
+    nonisolated static func restoredRemoteWorkspaceBinding(from snapshot: SessionRemoteWorkspaceBindingSnapshot?) -> RemoteWorkspaceBinding? {
+        guard let snapshot, let machineID = RemoteWorkspaceBinding.normalizedMachineID(snapshot.machineID) else { return nil }
         let remote = snapshot.remoteWorkspaceID?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return WorkspaceCloudVMBinding(
-            vmID: vmID, isBase: snapshot.isBase,
-            remoteWorkspaceID: remote?.isEmpty == false ? remote : nil,
-            teamID: snapshot.teamID
+        return RemoteWorkspaceBinding(
+            machineID: machineID,
+            remoteWorkspaceID: remote?.isEmpty == false ? remote : nil
         )
     }
 

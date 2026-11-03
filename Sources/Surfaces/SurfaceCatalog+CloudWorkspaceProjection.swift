@@ -1,17 +1,17 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
 extension SurfaceCatalog {
-    func reconcileCloudRemoteState(machine: SurfaceMachineID, state: CloudVMState, observation: CloudVMStateObservation? = nil) {
-        guard cloudStates[machine] == state else { return }
-        cloudPlacementCoordinator.reconcileRemoteState(state, catalog: self)
-        cloudWorkspaceProjectionCoordinator.request(machine: machine, catalog: self)
-        cloudWorkspaceRenameService.reconcileRemoteState(
+    func reconcileTuiRemoteState(machine: SurfaceMachineID, state: TuiState, observation: TuiStateObservation? = nil) {
+        guard tuiStates[machine] == state else { return }
+        tuiPlacementCoordinator.reconcileRemoteState(state, catalog: self)
+        tuiWorkspaceProjectionCoordinator.request(machine: machine, catalog: self)
+        tuiWorkspaceRenameService.reconcileRemoteState(
             machine: machine,
             state: state,
             catalog: self,
-            observation: observation ?? cloudStateObservations[machine] ?? .current
+            observation: observation ?? tuiStateObservations[machine] ?? .current
         )
     }
 
@@ -19,9 +19,9 @@ extension SurfaceCatalog {
     /// Geometry is a projection of the installed graph, just like its catalog rows.
     /// A refresh or event must pass the provider's ordering fence before either
     /// consumer sees it. No network read is permitted at this projection boundary.
-    func cloudWorkspaceLayout(machine: SurfaceMachineID, workspaceID: String) -> SurfaceProjectionLayout? {
-        guard let state = cloudStates[machine], let document = state.snapshotObject() else { return nil }
-        return CloudWorkspaceLayoutTranslator.projectionLayout(
+    func tuiWorkspaceLayout(machine: SurfaceMachineID, workspaceID: String) -> SurfaceProjectionLayout? {
+        guard let state = tuiStates[machine], let document = state.snapshotObject() else { return nil }
+        return TuiWorkspaceLayoutTranslator.projectionLayout(
             snapshot: document, machine: machine, workspaceID: workspaceID,
             resources: snapshot.resources(on: machine)
         )
@@ -31,9 +31,9 @@ extension SurfaceCatalog {
     /// Resolve its identity again at the last synchronous point before opening,
     /// so a rename, move or close during refresh cannot resurrect captured members.
     /// Arbitrary groups and local workspaces retain their supplied membership.
-    func currentCloudWorkspace(_ group: SurfaceResourceGroup) throws -> (group: SurfaceResourceGroup, layout: SurfaceProjectionLayout?)? {
+    func currentTuiWorkspace(_ group: SurfaceResourceGroup) throws -> (group: SurfaceResourceGroup, layout: SurfaceProjectionLayout?)? {
         if let workspaceID = group.remoteWorkspaceID, let machine = group.placements.first?.resource.machine {
-            try checkCloudWorkspaceNavigation(machine: machine, workspaceID: workspaceID)
+            try checkTuiWorkspaceNavigation(machine: machine, workspaceID: workspaceID)
             // A resource can retain its last remote placement while the
             // machine graph has already removed the workspace. Never reopen
             // that stale identity from resource rows alone.
@@ -41,8 +41,8 @@ extension SurfaceCatalog {
                   info.remoteWorkspaces?.contains(where: { $0.id == workspaceID }) == true else {
                 return nil
             }
-            if let state = cloudStates[machine],
-               cloudStateObservations[machine]?.freshness == .current,
+            if let state = tuiStates[machine],
+               tuiStateObservations[machine]?.freshness == .current,
                !state.workspaceIDs.contains(workspaceID) {
                 return nil
             }
@@ -53,32 +53,26 @@ extension SurfaceCatalog {
               group.placements.allSatisfy({ $0.resource.machine == machine }) else { return nil }
         return (
             try remoteWorkspaceGroup(machine: machine, workspaceID: workspaceID),
-            cloudWorkspaceLayout(machine: machine, workspaceID: workspaceID)
+            tuiWorkspaceLayout(machine: machine, workspaceID: workspaceID)
         )
     }
 
-    /// Whether a workspace row on `machine` can be re-resolved from the
-    /// catalog's graph. A Cloud VM has one once its state is installed. Another
-    /// Mac never installs a Cloud state: its registered device provider mirrors
-    /// that Mac's workspaces straight into the catalog rows, and those rows are
-    /// the graph. Requiring a Cloud state here made every device workspace row
-    /// open resolve to nothing.
+    /// An SSH workspace row can be re-resolved once its daemon graph is installed.
     private func publishesRemoteWorkspaceGraph(_ machine: SurfaceMachineID) -> Bool {
         if machine.isLocal { return false }
-        if machine.isDevice { return provider(for: machine) != nil }
-        return cloudStates[machine] != nil
+        return tuiStates[machine] != nil
     }
 
     /// A newly opened/restored pane immediately receives the already accepted
     /// names. Waiting for the next event leaves quiet terminals stale indefinitely.
-    func reconcileCloudProjection(_ projection: SurfaceProjection) {
-        guard let state = cloudStates[projection.resource.machine],
-              cloudStateObservations[state.machine]?.freshness == .current else { return }
-        cloudWorkspaceRenameService.reconcileRemoteState(machine: state.machine, state: state, catalog: self, observation: cloudStateObservations[state.machine] ?? .current)
+    func reconcileTuiProjection(_ projection: SurfaceProjection) {
+        guard let state = tuiStates[projection.resource.machine],
+              tuiStateObservations[state.machine]?.freshness == .current else { return }
+        tuiWorkspaceRenameService.reconcileRemoteState(machine: state.machine, state: state, catalog: self, observation: tuiStateObservations[state.machine] ?? .current)
     }
     func beginProjectionMutation(for resources: [SurfaceResourceID]) -> [SurfaceMachineID: UUID] {
         Dictionary(uniqueKeysWithValues: Set(resources.map(\.machine)).filter { !$0.isLocal }.map { machine in
-            let token = cloudWorkspaceProjectionCoordinator.beginLocalMutation(on: machine)
+            let token = tuiWorkspaceProjectionCoordinator.beginLocalMutation(on: machine)
             (provider(for: machine) as? any SurfaceProjectionMutationObserving)?.beginProjectionMutation(token)
             return (machine, token)
         })
@@ -86,14 +80,15 @@ extension SurfaceCatalog {
 
     func endProjectionMutation(_ tokens: [SurfaceMachineID: UUID]) {
         for (machine, token) in tokens {
-            cloudWorkspaceProjectionCoordinator.endLocalMutation(token, on: machine, catalog: self)
+            tuiWorkspaceProjectionCoordinator.endLocalMutation(token, on: machine, catalog: self)
             (provider(for: machine) as? any SurfaceProjectionMutationObserving)?.endProjectionMutation(token)
         }
     }
 
-    func requestCloudWorkspaceProjection(_ workspaceID: UUID) {
-        guard let binding = cloudWorkspaceProjectionCoordinator.environment.bindings()[workspaceID] else { return }
-        cloudWorkspaceProjectionCoordinator.request(machine: SurfaceMachineID(rawValue: binding.vmID), catalog: self)
+    func requestTuiWorkspaceProjection(_ workspaceID: UUID) {
+        guard let binding = tuiWorkspaceProjectionCoordinator.environment.bindings()[workspaceID],
+              let machine = SurfaceMachineID(rawValue: binding.machineID) else { return }
+        tuiWorkspaceProjectionCoordinator.request(machine: machine, catalog: self)
     }
 
 }

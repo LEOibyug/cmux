@@ -483,10 +483,6 @@ final class FileSearchController: FileSearchControlling {
             emit(status: .noMatches, isSearching: false)
             return
         }
-        if case .remoteCloud(let provider) = scope {
-            startRemoteSearch(provider: provider, query: query, rootPath: rootPath)
-            return
-        }
         guard scope == .local else {
             emit(status: .unsupported, isSearching: false)
             return

@@ -11,7 +11,7 @@ import Foundation
 /// roster (hook > plugin > detected); the catalog carries each row as the
 /// terminal's `agent` badge. Completion and approval notifications already
 /// arrive through the daemon's notification ledger, and the tab icon through
-/// `syncCloudTerminalTabIcons`, so this covers only the sidebar status.
+/// `syncTuiTerminalTabIcons`, so this covers only the sidebar status.
 @MainActor
 final class SSHTuiAgentStatusProjector {
     private let catalog: SurfaceCatalog

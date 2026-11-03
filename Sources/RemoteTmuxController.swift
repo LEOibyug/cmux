@@ -509,7 +509,6 @@ final class RemoteTmuxController {
         guard let workspace = tabManager.addWorkspaceIfActive(
             title: sessionName, titleSource: .auto,
             select: select,
-            autoWelcomeIfNeeded: false,
             applyCreationTitleAsCustomTitle: false
         ) else { return nil }
         workspace.isRemoteTmuxMirror = true

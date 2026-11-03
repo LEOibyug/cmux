@@ -76,7 +76,6 @@ extension CmuxSettingsFileStore {
     private static func minimalBootstrapSettingsSource(socketMode: String) -> String {
         """
         {
-          "$schema": "\(schemaURLString)",
           "schemaVersion": \(currentSchemaVersion),
           "automation": { "socketControlMode": "\(socketMode)" }
         }

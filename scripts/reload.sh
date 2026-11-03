@@ -3,10 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RELOAD_ORIGINAL_ARGS=("$@")
-# shellcheck source=scripts/lib/mobile-attach.sh
-source "$SCRIPT_DIR/lib/mobile-attach.sh"
-# shellcheck source=scripts/lib/dev-secrets.sh
-source "$SCRIPT_DIR/lib/dev-secrets.sh"
 
 APP_NAME="cmux DEV"
 BUNDLE_ID="com.cmuxterm.app.debug"
@@ -22,22 +18,6 @@ TAG=""
 LAUNCH=0
 BUILD_ONLY=0
 CMUX_DEBUG_LOG=""
-CMUX_DEV_PORT=""
-CMUX_DEV_PORT_END=""
-CMUX_DEV_PORT_RANGE=""
-CMUX_DEV_ORIGIN=""
-CMUX_DEV_API_BASE_URL_VALUE=""
-CMUX_IROH_BROKER_BASE_URL_VALUE=""
-CMUX_IROH_V2_ENVIRONMENT_VALUE=""
-CMUX_IROH_V2_BASE_URL_VALUE=""
-CMUX_IROH_V2_FORCE_RELAY_VALUE="0"
-CMUX_AUTH_WWW_ORIGIN_VALUE=""
-CMUX_WWW_ORIGIN_VALUE=""
-PROD_AUTH=0
-AUTH_CREDENTIALS_FILE=""
-AUTH_PROFILE=""
-AUTH_EXPECTED_ACCOUNT=""
-CMUX_TUI_CLIENT_MANIFEST_URL_VALUE=""
 CLI_PATH=""
 NO_GLOBAL_CLI_LINKS="${CMUX_RELOAD_NO_GLOBAL_CLI_LINKS:-0}"
 # Matches CmuxStateDirectory (non-TCC ~/.local/state/cmux) where the app/CLI now
@@ -908,27 +888,9 @@ Options:
   --build-only           Build and validate a tagged app without replacing or
                          stopping the running tagged app, daemon, or tag state.
                          Cannot be combined with --launch.
-  --prod-auth            Point this tagged Debug build at production Stack auth,
-                         cmux APIs, and the production Iroh broker.
-                         Without it, tagged builds use the shared dev backend, which
-                         needs a cmuxterm-hq checkout. Outside one, set
-                         CMUX_DEV_BACKEND_MODE=local to use http://localhost:<port>.
   --release              Build the Release configuration (optimized, no DEBUG) of
                          this tagged app, for dogfooding real performance. The
                          debug.* socket commands are compiled out.
-  --credentials-file <path>
-                         Bake only the path to a current-user-owned 0600 auth file.
-                         The credential values never enter argv, Info.plist, or
-                         the long-lived Mac process environment.
-  --auth-profile <personal|agent>
-                         Select one identity class and replace any stale tagged
-                         session on launch. Without --credentials-file, resolve
-                         the selected profile from the standard secret files.
-  --expected-account <email>
-                         Fail before building unless the selected profile/file
-                         resolves to this normalized account.
-  --cmux-tui-manifest-url <url>
-                         Install the cmux-tui client from this immutable manifest.
   --name <app name>      Override app display/bundle name.
   --bundle-id <id>       Override bundle identifier.
   --derived-data <path>  Override derived data path.
@@ -949,18 +911,11 @@ EOF
 }
 
 sanitize_bundle() {
-  cmux_attach__bundle_seg "$1"
+  printf '%s' "$1" | tr '[:upper:]_-' '[:lower:]..'
 }
 
 sanitize_path() {
-  cmux_attach__slug_raw "$1"
-}
-
-is_valid_port() {
-  local port="${1:-}"
-  [[ "$port" =~ ^[0-9]+$ ]] || return 1
-  local numeric=$((10#$port))
-  (( numeric >= 1 && numeric <= 65535 ))
+  printf '%s' "$1" | tr '[:upper:]_' '[:lower:]-'
 }
 
 is_positive_integer() {
@@ -970,41 +925,6 @@ is_positive_integer() {
   (( numeric > 0 ))
 }
 
-choose_cmux_dev_port() {
-  if is_valid_port "${CMUX_PORT:-}"; then
-    echo "$CMUX_PORT"
-    return 0
-  fi
-  if is_valid_port "${PORT:-}"; then
-    echo "$PORT"
-    return 0
-  fi
-  echo "3777"
-}
-
-choose_cmux_dev_port_range() {
-  if is_positive_integer "${CMUX_PORT_RANGE:-}"; then
-    echo "$CMUX_PORT_RANGE"
-    return 0
-  fi
-  echo "1"
-}
-
-choose_cmux_dev_port_end() {
-  local start="$1"
-  local range="$2"
-  if is_valid_port "${CMUX_PORT_END:-}"; then
-    echo "$CMUX_PORT_END"
-    return 0
-  fi
-  local start_num=$((10#$start))
-  local range_num=$((10#$range))
-  local end=$((start_num + range_num - 1))
-  if (( end > 65535 )); then
-    end="$start_num"
-  fi
-  echo "$end"
-}
 
 set_plist_env() {
   local plist="$1"
@@ -1014,12 +934,6 @@ set_plist_env() {
     || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:${key} string \"${value}\"" "$plist"
 }
 
-set_plist_url_scheme() {
-  local plist="$1"
-  local scheme="$2"
-  /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:1:CFBundleURLSchemes:0 \"${scheme}\"" "$plist" 2>/dev/null \
-    || true
-}
 
 # Prints the selected Xcode's version ("26.3"), or nothing when xcodebuild cannot say.
 selected_xcode_version() {
@@ -1049,29 +963,6 @@ tagged_derived_data_path() {
   echo "$HOME/Library/Developer/Xcode/DerivedData/cmux-${slug}"
 }
 
-# Print the cmux-tui commit whose published client the bundle will carry. A branch
-# that changes cmux-tui has no published client for its own commits, so explain
-# the existing overrides next to the resolver's error.
-resolve_cmux_tui_client_commit() {
-  local commit
-  local -a resolver_args=()
-  if [[ -n "${CMUX_TUI_CLIENT_MAX_FALLBACK:-}" ]]; then
-    resolver_args+=(--max-fallback "$CMUX_TUI_CLIENT_MAX_FALLBACK")
-  fi
-  if ! commit="$("$PWD/scripts/ci/resolve-cmux-tui-client-commit.sh" ${resolver_args[@]+"${resolver_args[@]}"})"; then
-    cat >&2 <<'EOF'
-error: no published cmux-tui client for this checkout, so the app bundle cannot get one.
-       A branch that changes cmux-tui has no published client for its own commits
-       until they land on main. Point reload at a cmux-tui binary built off this Mac
-       (Blacksmith Testbox, or this branch's CI artifact):
-         CMUX_TUI_CLIENT_LOCAL=/path/to/cmux-tui ./scripts/reload.sh --tag <tag>
-       or install a published manifest with --cmux-tui-manifest-url <url>
-       (or CMUX_TUI_CLIENT_MANIFEST_URL=<url>).
-EOF
-    return 1
-  fi
-  printf '%s\n' "$commit"
-}
 
 # A tag only changes the bundle id, names, socket and state files. None of those
 # are compiler inputs, so a new tag built into a DerivedData that is already warm
@@ -1278,39 +1169,9 @@ while [[ $# -gt 0 ]]; do
       BUILD_ONLY=1
       shift
       ;;
-    --prod-auth)
-      PROD_AUTH=1
-      shift
-      ;;
     --release)
       BUILD_CONFIGURATION="Release"
       shift
-      ;;
-    --credentials-file)
-      AUTH_CREDENTIALS_FILE="${2:-}"
-      if [[ -z "$AUTH_CREDENTIALS_FILE" ]]; then
-        echo "error: --credentials-file requires a value" >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --auth-profile)
-      AUTH_PROFILE="${2:-}"
-      [[ -n "$AUTH_PROFILE" ]] || { echo "error: --auth-profile requires a value" >&2; exit 1; }
-      shift 2
-      ;;
-    --expected-account)
-      AUTH_EXPECTED_ACCOUNT="${2:-}"
-      [[ -n "$AUTH_EXPECTED_ACCOUNT" ]] || { echo "error: --expected-account requires an email" >&2; exit 1; }
-      shift 2
-      ;;
-    --cmux-tui-manifest-url)
-      CMUX_TUI_CLIENT_MANIFEST_URL_VALUE="${2:-}"
-      [[ -n "$CMUX_TUI_CLIENT_MANIFEST_URL_VALUE" ]] \
-        || { echo "error: --cmux-tui-manifest-url requires a URL" >&2; exit 1; }
-      [[ "$CMUX_TUI_CLIENT_MANIFEST_URL_VALUE" == https://* ]] \
-        || { echo "error: --cmux-tui-manifest-url requires HTTPS" >&2; exit 1; }
-      shift 2
       ;;
     --derived-data)
       DERIVED_DATA="${2:-}"
@@ -1377,50 +1238,10 @@ if [[ "$BUILD_ONLY" -eq 1 && "$NAME_SET" -eq 1 && "$APP_NAME" == "$PRODUCT_APP_N
   exit 1
 fi
 
-# A tagged launch is a dogfood surface, so it must have an explicit identity
-# before the app is started.  Keeping this gate here covers agents that call
-# reload.sh directly instead of the higher-level dev-setup wrapper.
-if [[ "$LAUNCH" -eq 1 && -n "$TAG" && -z "$AUTH_PROFILE" ]]; then
-  AUTH_PROFILE="personal"
-  if [[ -z "$AUTH_CREDENTIALS_FILE" ]]; then
-    for candidate in "${HOME:-}/.secrets/cmuxterm-dev.env" "${HOME:-}/.secrets/cmux.env"; do
-      if [[ -f "$candidate" ]]; then
-        AUTH_CREDENTIALS_FILE="$candidate"
-        break
-      fi
-    done
-  fi
-  if [[ -z "$AUTH_CREDENTIALS_FILE" || ! -f "$AUTH_CREDENTIALS_FILE" ]]; then
-    echo "error: tagged launches require authenticated dev credentials" >&2
-    echo "error: configure ~/.secrets/cmuxterm-dev.env with scripts/setup-team-dev.sh" >&2
-    exit 2
-  fi
-fi
-
-if [[ -n "$AUTH_CREDENTIALS_FILE" ]]; then
-  cmux_dev_secrets_validate_file "$AUTH_CREDENTIALS_FILE"
-  AUTH_CREDENTIALS_FILE="$(cd "$(dirname "$AUTH_CREDENTIALS_FILE")" && pwd -P)/$(basename "$AUTH_CREDENTIALS_FILE")"
-fi
-if [[ -n "$AUTH_PROFILE" || -n "$AUTH_EXPECTED_ACCOUNT" ]]; then
-  [[ "$AUTH_PROFILE" == "personal" || "$AUTH_PROFILE" == "agent" ]] \
-    || { echo "error: --auth-profile must be personal or agent" >&2; exit 1; }
-  auth_loader_args=(--profile "$AUTH_PROFILE")
-  [[ -n "$AUTH_CREDENTIALS_FILE" ]] \
-    && auth_loader_args+=(--credentials-file "$AUTH_CREDENTIALS_FILE")
-  [[ -n "$AUTH_EXPECTED_ACCOUNT" ]] \
-    && auth_loader_args+=(--expected-account "$AUTH_EXPECTED_ACCOUNT")
-  # Resolve in a short-lived subshell. The loader exports the password for
-  # callers that need to launch an app, but reload itself only needs the
-  # normalized account; build tools and package plugins must never inherit the
-  # credential while Xcode is running.
-  AUTH_EXPECTED_ACCOUNT="$(
-    cmux_dev_secrets_load "${auth_loader_args[@]}" >/dev/null
-    printf '%s' "$CMUX_DEV_AUTH_ACCOUNT"
-  )" || exit $?
-fi
 
 if [[ -n "$TAG" ]]; then
-  if ! cmux_attach_validate_dev_tag "$TAG"; then
+  if [[ ! "$TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$ ]]; then
+    echo "error: --tag must be 1-40 ASCII letters, digits, dots, underscores or hyphens" >&2
     exit 1
   fi
   TAG_ID="$(sanitize_bundle "$TAG")"
@@ -1445,64 +1266,12 @@ if [[ -n "$TAG" ]]; then
   fi
 fi
 
-# Resolve the published cmux-tui client before the dev backend, GhosttyKit and
-# xcodebuild, so a checkout without one fails in seconds rather than after a full
-# build. The install step after the build reuses this commit. The same overrides
-# skip it: --cmux-tui-manifest-url, CMUX_TUI_CLIENT_MANIFEST_URL, and
-# CMUX_TUI_CLIENT_LOCAL. CMUX_SKIP_CMUX_TUI_CLIENT=1 defers to the install step,
-# which keeps an existing bundled copy and resolves only when there is none. The
-# resolver's progress lines go to the reload log; they print here only on failure.
-CMUX_TUI_CLIENT_COMMIT=""
-CMUX_TUI_CLIENT_RESOLVE_LOG=""
-if [[ "${CMUX_SKIP_CMUX_TUI_CLIENT:-}" != "1" \
-      && -z "$CMUX_TUI_CLIENT_MANIFEST_URL_VALUE" \
-      && -z "${CMUX_TUI_CLIENT_MANIFEST_URL:-}" \
-      && -z "${CMUX_TUI_CLIENT_LOCAL:-}" ]]; then
-  cmux_tui_resolve_stderr="$(mktemp "${TMPDIR:-/tmp}/cmux-reload-tui-resolve.XXXXXX")"
-  cmux_tui_resolve_rc=0
-  CMUX_TUI_CLIENT_COMMIT="$(resolve_cmux_tui_client_commit 2>"$cmux_tui_resolve_stderr")" \
-    || cmux_tui_resolve_rc=$?
-  CMUX_TUI_CLIENT_RESOLVE_LOG="$(cat "$cmux_tui_resolve_stderr")"
-  rm -f "$cmux_tui_resolve_stderr"
-  if [[ "$cmux_tui_resolve_rc" -ne 0 ]]; then
-    printf '%s\n' "$CMUX_TUI_CLIENT_RESOLVE_LOG" >&2
-    exit 1
-  fi
+CMUX_TUI_CLIENT_LOCAL="${CMUX_TUI_CLIENT_LOCAL:-$PWD/cmux-tui/target/release/cmux-tui}"
+if [[ ! -f "$CMUX_TUI_CLIENT_LOCAL" || ! -x "$CMUX_TUI_CLIENT_LOCAL" ]]; then
+  echo "error: build the local SSH helper or set CMUX_TUI_CLIENT_LOCAL before building the app; no helper is downloaded" >&2
+  exit 1
 fi
-
-CMUX_DEV_PORT="$(choose_cmux_dev_port)"
-CMUX_DEV_PORT_RANGE="$(choose_cmux_dev_port_range)"
-CMUX_DEV_PORT_END="$(choose_cmux_dev_port_end "$CMUX_DEV_PORT" "$CMUX_DEV_PORT_RANGE")"
-CMUX_DEV_ORIGIN="http://localhost:${CMUX_DEV_PORT}"
-if [[ -n "$TAG" && "$PROD_AUTH" -eq 0 ]]; then
-  source "$PWD/scripts/lib/dev-backend-origin.sh"
-  CMUX_DEV_ORIGIN="$(cmux_resolve_tagged_backend "$TAG_SLUG" "$PWD" "$CMUX_DEV_ORIGIN")" || exit 1
-  # Local mode has no shared backend to bake into the app or the Iroh broker default.
-  if [[ "${CMUX_DEV_BACKEND_MODE:-remote}" != "local" ]]; then
-    export CMUX_DEV_BACKEND_URL="$CMUX_DEV_ORIGIN"
-  fi
-fi
-CMUX_DEV_API_BASE_URL_VALUE="$(cmux_attach_resolve_dev_api_base_url "$CMUX_DEV_ORIGIN")"
-CMUX_IROH_BROKER_BASE_URL_VALUE="${CMUX_DEV_BACKEND_URL:-${CMUX_IROH_BROKER_BASE_URL:-https://cmux-staging.vercel.app}}"
-CMUX_IROH_V2_ENVIRONMENT_VALUE="${CMUX_IROH_V2_ENVIRONMENT:-development}"
-CMUX_IROH_V2_BASE_URL_VALUE="${CMUX_IROH_V2_BASE_URL:-https://cmux-v2-development.debussy.workers.dev}"
-CMUX_IROH_V2_FORCE_RELAY_VALUE="${CMUX_IROH_V2_FORCE_RELAY:-0}"
-CMUX_AUTH_WWW_ORIGIN_VALUE="$CMUX_DEV_ORIGIN"
-CMUX_WWW_ORIGIN_VALUE="$CMUX_DEV_ORIGIN"
-if [[ "$PROD_AUTH" -eq 1 ]]; then
-  if [[ -n "${CMUX_DEV_API_BASE_URL:-}" && "$CMUX_DEV_API_BASE_URL" != "https://cmux.com" ]]; then
-    echo "error: --prod-auth cannot use API origin '$CMUX_DEV_API_BASE_URL'; production builds must use https://cmux.com" >&2
-    exit 1
-  fi
-  if [[ -n "${CMUX_IROH_BROKER_BASE_URL:-}" && "$CMUX_IROH_BROKER_BASE_URL" != "https://cmux.com" ]]; then
-    echo "error: --prod-auth cannot use Iroh broker origin '$CMUX_IROH_BROKER_BASE_URL'; production builds must use https://cmux.com" >&2
-    exit 1
-  fi
-  CMUX_DEV_API_BASE_URL_VALUE="https://cmux.com"
-  CMUX_IROH_BROKER_BASE_URL_VALUE="https://cmux.com"
-  CMUX_AUTH_WWW_ORIGIN_VALUE="https://cmux.com"
-  CMUX_WWW_ORIGIN_VALUE="https://cmux.com"
-fi
+export CMUX_TUI_CLIENT_LOCAL
 
 # Quiet logging: capture all noisy build output (xcodebuild, zig, codesign,
 # plistbuddy, etc.) to a single log file. On success we print only a one-line
@@ -1532,9 +1301,6 @@ fi
 # summary after the body redirect, then redirect bulk output into the log.
 exec 3>&1 4>&2
 exec >>"$RELOAD_LOG" 2>&1
-if [[ -n "$CMUX_TUI_CLIENT_RESOLVE_LOG" ]]; then
-  printf '%s\n' "$CMUX_TUI_CLIENT_RESOLVE_LOG"
-fi
 
 reload_finalize() {
   local rc=$?
@@ -1563,19 +1329,6 @@ reload_finalize() {
     echo
     echo "App path:"
     echo "  $APP_PATH"
-  fi
-  if [[ -n "${CMUX_DEV_ORIGIN:-}" ]]; then
-    echo
-    echo "Dev web origin:"
-    echo "  $CMUX_DEV_ORIGIN"
-    echo "Dev API origin:"
-    echo "  $CMUX_DEV_API_BASE_URL_VALUE"
-    echo "Iroh broker origin:"
-    echo "  $CMUX_IROH_BROKER_BASE_URL_VALUE"
-    if [[ -n "${TAG_SLUG:-}" ]]; then
-      echo "Dev web command:"
-      echo "  cd web && CMUX_PORT=$CMUX_DEV_PORT CMUX_PORT_RANGE=$CMUX_DEV_PORT_RANGE CMUX_PORT_END=$CMUX_DEV_PORT_END CMUX_AUTH_CALLBACK_SCHEME=cmux-dev-$TAG_SLUG bun dev"
-    fi
   fi
   if [[ "$BUILD_ONLY" -ne 1 && -x "${CLI_PATH:-}" ]]; then
     echo
@@ -1655,11 +1408,20 @@ if should_skip_ghostty_cli_helper_zig_build; then
   export CMUX_SKIP_ZIG_BUILD=1
 fi
 
+NATIVE_ARCH="$(uname -m)"
+if [[ "$(sysctl -in hw.optional.arm64 2>/dev/null || true)" == "1" ]]; then
+  NATIVE_ARCH="arm64"
+fi
 XCODEBUILD_ARGS=(
   -project cmux.xcodeproj
   -scheme cmux
   -configuration "$BUILD_CONFIGURATION"
-  -destination 'platform=macOS'
+  -destination "platform=macOS,arch=${NATIVE_ARCH}"
+  "ARCHS=${NATIVE_ARCH}"
+  ONLY_ACTIVE_ARCH=YES
+  COMPILER_INDEX_STORE_ENABLE=NO
+  DEBUG_INFORMATION_FORMAT=
+  GCC_GENERATE_DEBUGGING_SYMBOLS=NO
 )
 if [[ -n "$DERIVED_DATA" ]]; then
   XCODEBUILD_ARGS+=(-derivedDataPath "$DERIVED_DATA")
@@ -1668,7 +1430,7 @@ if [[ -n "${CMUX_SOURCE_PACKAGES_DIR:-}" ]]; then
   mkdir -p "$CMUX_SOURCE_PACKAGES_DIR"
   XCODEBUILD_ARGS+=(-clonedSourcePackagesDirPath "$CMUX_SOURCE_PACKAGES_DIR")
 fi
-if [[ "${CMUX_DISABLE_AUTOMATIC_PACKAGE_RESOLUTION:-}" == "1" ]]; then
+if [[ "${CMUX_DISABLE_AUTOMATIC_PACKAGE_RESOLUTION:-1}" == "1" ]]; then
   XCODEBUILD_ARGS+=(-disableAutomaticPackageResolution)
 fi
 if [[ -z "$TAG" ]]; then
@@ -1685,9 +1447,6 @@ fi
 # Pass the final tagged display name explicitly so its TCC entry matches the
 # app the user is dogfooding instead of falling back to the untagged product.
 XCODEBUILD_ARGS+=(CMUX_CUA_HELPER_DISPLAY_NAME="cmux Computer Use")
-if [[ "$PROD_AUTH" -eq 1 ]]; then
-  XCODEBUILD_ARGS+=(-xcconfig "$SCRIPT_DIR/../config/IrohRelayPolicyProduction.xcconfig")
-fi
 # Scope the sidebar ExtensionKit point per build tag so concurrent dev builds (and
 # their tagged sample extensions) don't share one point. The host bundle declares
 # the point under Contents/Extensions, and Info.plist carries the same identifier.
@@ -1990,31 +1749,20 @@ if [[ -n "$TAG" && "$APP_NAME" != "$SEARCH_APP_NAME" ]]; then
     /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$INFO_PLIST" 2>/dev/null \
       || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $BUNDLE_ID" "$INFO_PLIST"
     if [[ -n "${TAG_SLUG:-}" ]]; then
+      /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:1:CFBundleURLSchemes:0 cmux-dev-${TAG_SLUG}" "$INFO_PLIST"
       APP_SUPPORT_DIR="$HOME/Library/Application Support/cmux"
       CMUXD_SOCKET="${APP_SUPPORT_DIR}/cmuxd-dev-${TAG_SLUG}.sock"
       CMUX_SOCKET_PATH_VALUE="/tmp/cmux-debug-${TAG_SLUG}.sock"
       CMUX_DEBUG_LOG="/tmp/cmux-debug-${TAG_SLUG}.log"
-      CMUX_AUTH_CALLBACK_SCHEME_VALUE="cmux-dev-${TAG_SLUG}"
       if [[ "$BUILD_ONLY" -ne 1 ]]; then
         echo "$CMUX_DEBUG_LOG" > /tmp/cmux-last-debug-log-path || true
       fi
       /usr/libexec/PlistBuddy -c "Add :LSEnvironment dict" "$INFO_PLIST" 2>/dev/null || true
-      set_plist_url_scheme "$INFO_PLIST" "$CMUX_AUTH_CALLBACK_SCHEME_VALUE"
       set_plist_env "$INFO_PLIST" CMUX_BUNDLE_ID "$BUNDLE_ID"
       set_plist_env "$INFO_PLIST" CMUXD_UNIX_PATH "$CMUXD_SOCKET"
       set_plist_env "$INFO_PLIST" CMUX_SOCKET_PATH "$CMUX_SOCKET_PATH_VALUE"
       set_plist_env "$INFO_PLIST" CMUX_DEBUG_LOG "$CMUX_DEBUG_LOG"
       set_plist_env "$INFO_PLIST" CMUX_TAG "$TAG_SLUG"
-      # Keep Cloud dogfood policy in the artifact so Finder and HQ cache
-      # restores enable both gates on the Mac that actually launches it.
-      # The app additionally requires a compiled Debug identity before using it.
-      case "${CMUX_DEV_CLOUD_ENABLED:-1}" in
-        0|1) ;;
-        *) echo "error: CMUX_DEV_CLOUD_ENABLED must be 0 or 1" >&2; exit 1 ;;
-      esac
-      /usr/libexec/PlistBuddy -c 'Delete :CMUXCloudDogfoodEnabled' "$INFO_PLIST" 2>/dev/null || true
-      /usr/libexec/PlistBuddy -c "Add :CMUXCloudDogfoodEnabled bool ${CMUX_DEV_CLOUD_ENABLED:-1}" "$INFO_PLIST"
-      set_plist_env "$INFO_PLIST" CMUX_AUTH_CALLBACK_SCHEME "$CMUX_AUTH_CALLBACK_SCHEME_VALUE"
       set_plist_env "$INFO_PLIST" CMUX_SOCKET_ENABLE "1"
       set_plist_env "$INFO_PLIST" CMUX_SOCKET_MODE "allowAll"
       set_plist_env "$INFO_PLIST" CMUX_REMOTE_DAEMON_ALLOW_LOCAL_BUILD "1"
@@ -2025,33 +1773,6 @@ if [[ -n "$TAG" && "$APP_NAME" != "$SEARCH_APP_NAME" ]]; then
       fi
       set_plist_env "$INFO_PLIST" CMUX_BUNDLED_CLI_PATH "$BUNDLED_APP_PATH/Contents/Resources/bin/cmux"
       set_plist_env "$INFO_PLIST" CMUX_SHELL_INTEGRATION_DIR "$BUNDLED_APP_PATH/Contents/Resources/shell-integration"
-      set_plist_env "$INFO_PLIST" CMUX_PORT "$CMUX_DEV_PORT"
-      set_plist_env "$INFO_PLIST" CMUX_PORT_END "$CMUX_DEV_PORT_END"
-      set_plist_env "$INFO_PLIST" CMUX_PORT_RANGE "$CMUX_DEV_PORT_RANGE"
-      set_plist_env "$INFO_PLIST" PORT "$CMUX_DEV_PORT"
-      set_plist_env "$INFO_PLIST" CMUX_AUTH_WWW_ORIGIN "$CMUX_AUTH_WWW_ORIGIN_VALUE"
-      set_plist_env "$INFO_PLIST" CMUX_WWW_ORIGIN "$CMUX_WWW_ORIGIN_VALUE"
-      if [[ -n "${CMUX_DEV_BACKEND_URL:-}" ]]; then
-        set_plist_env "$INFO_PLIST" CMUX_DEV_BACKEND_URL "$CMUX_DEV_BACKEND_URL"
-        set_plist_env "$INFO_PLIST" CMUX_DEV_BACKEND_TRANSPORT direct
-        set_plist_env "$INFO_PLIST" CMUX_DEV_BACKEND_TAILSCALE_HOST cmux-dev-backend-1.tail137216.ts.net
-      fi
-      set_plist_env "$INFO_PLIST" CMUX_API_BASE_URL "$CMUX_DEV_API_BASE_URL_VALUE"
-      set_plist_env "$INFO_PLIST" CMUX_VM_API_BASE_URL "$CMUX_DEV_API_BASE_URL_VALUE"
-      set_plist_env "$INFO_PLIST" CMUX_IROH_BROKER_BASE_URL "$CMUX_IROH_BROKER_BASE_URL_VALUE"
-      set_plist_env "$INFO_PLIST" CMUX_IROH_V2_ENVIRONMENT "$CMUX_IROH_V2_ENVIRONMENT_VALUE"
-      set_plist_env "$INFO_PLIST" CMUX_IROH_V2_BASE_URL "$CMUX_IROH_V2_BASE_URL_VALUE"
-      set_plist_env "$INFO_PLIST" CMUX_IROH_V2_FORCE_RELAY "$CMUX_IROH_V2_FORCE_RELAY_VALUE"
-      if [[ "$PROD_AUTH" -eq 1 ]]; then
-        set_plist_env "$INFO_PLIST" CMUX_AUTH_ENVIRONMENT production
-      fi
-      if [[ -n "$AUTH_CREDENTIALS_FILE" ]]; then
-        set_plist_env "$INFO_PLIST" CMUX_AUTH_CREDENTIALS_FILE "$AUTH_CREDENTIALS_FILE"
-      fi
-      if [[ -n "$AUTH_PROFILE" ]]; then
-        set_plist_env "$INFO_PLIST" CMUX_DEV_AUTH_PROFILE "$AUTH_PROFILE"
-        set_plist_env "$INFO_PLIST" CMUX_DEV_AUTH_REPLACE_SESSION "1"
-      fi
       if [[ "$BUILD_ONLY" -ne 1 && -S "$CMUXD_SOCKET" ]]; then
         for PID in $(lsof -t "$CMUXD_SOCKET" 2>/dev/null); do
           kill "$PID" 2>/dev/null || true
@@ -2095,45 +1816,8 @@ if [[ -x "$CMUXD_SRC" ]]; then
   cp "$CMUXD_SRC" "$BIN_DIR/cmuxd"
   chmod +x "$BIN_DIR/cmuxd"
 fi
-# The cmux-tui client the Machines panel uses for cloud sessions ships inside the
-# bundle like the Ghostty helper. Resolve its published inputs from this source
-# history unless CMUX_TUI_CLIENT_MANIFEST_URL / CMUX_TUI_CLIENT_LOCAL overrides it.
-# CMUX_SKIP_CMUX_TUI_CLIENT=1 preserves an existing copy for offline reloads.
-if [[ "${CMUX_SKIP_CMUX_TUI_CLIENT:-}" == "1" && -x "$APP_PATH/Contents/Resources/bin/cmux-tui" ]]; then
-  echo "Preserving bundled cmux-tui client (CMUX_SKIP_CMUX_TUI_CLIENT=1)"
-else
-  # Local Debug builds run on this Mac; fetch only its client slice. The
-  # installer's universal default remains available to distribution workflows.
-  cmux_tui_install_args=(
-    "$APP_PATH"
-    --arch native
-    --require-capability wireguard-hub
-    --require-capability browser-proxy
-  )
-  if [[ -n "$CMUX_TUI_CLIENT_MANIFEST_URL_VALUE" ]]; then
-    cmux_tui_install_args+=(
-      --manifest-url "$CMUX_TUI_CLIENT_MANIFEST_URL_VALUE"
-    )
-  elif [[ -z "${CMUX_TUI_CLIENT_MANIFEST_URL:-}" && -z "${CMUX_TUI_CLIENT_LOCAL:-}" ]]; then
-    # Resolved before the build unless CMUX_SKIP_CMUX_TUI_CLIENT=1 deferred it.
-    if [[ -z "$CMUX_TUI_CLIENT_COMMIT" ]]; then
-      CMUX_TUI_CLIENT_COMMIT="$(resolve_cmux_tui_client_commit)" || exit 1
-    fi
-    cmux_tui_manifest_base="${CMUX_TUI_CLIENT_MANIFEST_BASE:-https://files.cmux.com/cmux-tui}"
-    cmux_tui_install_args+=(
-      --manifest-url "${cmux_tui_manifest_base%/}/$CMUX_TUI_CLIENT_COMMIT/manifest.json"
-      --expected-commit "$CMUX_TUI_CLIENT_COMMIT"
-    )
-  fi
-  # The installer verifies the published manifest's build-provenance attestation
-  # through gh. A dev Mac without an authenticated gh is the one explicit
-  # exception; the installer prints the unattested warning in that case.
-  if ! command -v gh >/dev/null 2>&1 || ! gh auth token >/dev/null 2>&1; then
-    cmux_tui_install_args+=(--allow-unattested)
-  fi
-  "$PWD/scripts/install-cmux-tui-client.sh" "${cmux_tui_install_args[@]}"
-fi
-"$PWD/scripts/install-coderouter-client.sh" "$APP_PATH"
+# Bundle the user-selected SSH helper from disk; no official artifact lookup.
+"$PWD/scripts/install-cmux-tui-client.sh" "$APP_PATH" --require-capability browser-proxy
 if command -v xattr >/dev/null 2>&1; then
   xattr -cr "$APP_PATH" || true
 fi
@@ -2278,21 +1962,9 @@ if [[ "$LAUNCH" -eq 1 ]]; then
     -u XDG_DATA_DIRS
   )
 
-  # DEBUG dogfood auto-sign-in needs no env injection here: the in-app resolver
-  # reads ~/.secrets/cmuxterm-dev.env (then ~/.secrets/cmux.env) directly on
-  # launch, which fires for every launch method including Finder / the CMUX Tag
-  # Opener that this script's TAG_LAUNCH_ENV never reaches. Exporting the Stack
-  # password into the long-lived GUI process environment would leak it to every
-  # child terminal/CLI it spawns, for zero added coverage, so we deliberately do
-  # not set CMUX_UITEST_STACK_* here.
-  LAUNCH_AUTH_CALLBACK_SCHEME="cmux-dev"
-  if [[ -n "${TAG_SLUG:-}" ]]; then
-    LAUNCH_AUTH_CALLBACK_SCHEME="cmux-dev-${TAG_SLUG}"
-  fi
   TAG_LAUNCH_ENV=(
     CMUX_TAG="${TAG_SLUG:-}"
     CMUX_BUNDLE_ID="$BUNDLE_ID"
-    CMUX_AUTH_CALLBACK_SCHEME="$LAUNCH_AUTH_CALLBACK_SCHEME"
     CMUX_SOCKET_ENABLE=1
     CMUX_SOCKET_MODE=allowAll
     CMUX_DEBUG_LOG="$CMUX_DEBUG_LOG"
@@ -2300,31 +1972,7 @@ if [[ "$LAUNCH" -eq 1 ]]; then
     CMUXTERM_REPO_ROOT="$PWD"
     CMUX_BUNDLED_CLI_PATH="$CLI_PATH"
     CMUX_SHELL_INTEGRATION_DIR="$APP_PATH/Contents/Resources/shell-integration"
-    CMUX_PORT="$CMUX_DEV_PORT"
-    CMUX_PORT_END="$CMUX_DEV_PORT_END"
-    CMUX_PORT_RANGE="$CMUX_DEV_PORT_RANGE"
-    PORT="$CMUX_DEV_PORT"
-    CMUX_AUTH_WWW_ORIGIN="$CMUX_AUTH_WWW_ORIGIN_VALUE"
-    CMUX_WWW_ORIGIN="$CMUX_WWW_ORIGIN_VALUE"
-    CMUX_API_BASE_URL="$CMUX_DEV_API_BASE_URL_VALUE"
-    CMUX_VM_API_BASE_URL="$CMUX_DEV_API_BASE_URL_VALUE"
-    CMUX_IROH_BROKER_BASE_URL="$CMUX_IROH_BROKER_BASE_URL_VALUE"
-    CMUX_IROH_V2_ENVIRONMENT="$CMUX_IROH_V2_ENVIRONMENT_VALUE"
-    CMUX_IROH_V2_BASE_URL="$CMUX_IROH_V2_BASE_URL_VALUE"
-    CMUX_IROH_V2_FORCE_RELAY="$CMUX_IROH_V2_FORCE_RELAY_VALUE"
   )
-  if [[ "$PROD_AUTH" -eq 1 ]]; then
-    TAG_LAUNCH_ENV+=(CMUX_AUTH_ENVIRONMENT=production)
-  fi
-  if [[ -n "$AUTH_CREDENTIALS_FILE" ]]; then
-    TAG_LAUNCH_ENV+=(CMUX_AUTH_CREDENTIALS_FILE="$AUTH_CREDENTIALS_FILE")
-  fi
-  if [[ -n "$AUTH_PROFILE" ]]; then
-    TAG_LAUNCH_ENV+=(
-      CMUX_DEV_AUTH_PROFILE="$AUTH_PROFILE"
-      CMUX_DEV_AUTH_REPLACE_SESSION=1
-    )
-  fi
 
   LAUNCH_CMD=()
   LAUNCH_RETRY_CMD=()

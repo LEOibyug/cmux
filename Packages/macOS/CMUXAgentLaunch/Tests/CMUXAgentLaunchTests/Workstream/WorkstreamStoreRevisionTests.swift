@@ -2,24 +2,19 @@
 import Foundation
 import Testing
 
-/// The revision counter is the phone feed's staleness contract: every item
-/// mutation must bump it exactly once and fire the change hook, and
-/// non-mutations must not.
+/// Every item mutation bumps the revision exactly once; non-mutations do not.
 @MainActor
 @Suite("WorkstreamStore revision")
 struct WorkstreamStoreRevisionTests {
-    @Test("Ingest bumps the revision and fires the hook")
+    @Test("Ingest bumps the revision")
     func ingestBumpsRevision() {
         let store = WorkstreamStore(ringCapacity: 10)
-        var observed: [Int] = []
-        store.onRevisionChange = { observed.append($0) }
 
         #expect(store.revision == 0)
         store.ingest(.permissionEvent("s1", requestId: "r1"))
         #expect(store.revision == 1)
         store.ingest(.permissionEvent("s1", requestId: "r2"))
         #expect(store.revision == 2)
-        #expect(observed == [1, 2])
     }
 
     @Test("Resolving and expiring bump once; repeats do not")

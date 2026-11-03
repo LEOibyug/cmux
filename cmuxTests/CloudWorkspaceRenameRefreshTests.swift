@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxCore
 import CmuxSurfaceCatalogModel
 import Foundation
@@ -11,7 +11,7 @@ import Testing
 #endif
 
 @MainActor
-@Suite struct CloudWorkspaceRenameRefreshTests {
+@Suite struct TuiWorkspaceRenameRefreshTests {
     /// Exercises the production forced-refresh and rename path against a local daemon.
     @Test("Terminal output at an equal cursor does not block the forced refresh before workspace rename", .timeLimit(.minutes(1)))
     func renameWorkspaceAfterTerminalOutput() async throws {
@@ -96,7 +96,7 @@ import Testing
         ))
         let links = SSHTuiLinkManager(
             connection: connection, clientURL: client,
-            paths: CloudTuiClientPaths(home: root), isEnabled: { true }
+            paths: TuiClientPaths(home: root), isEnabled: { true }
         )
         _ = try await links.connected(machineID: connection.id)
         let link = try #require(await links.link(machineID: connection.id))
@@ -138,14 +138,14 @@ import Testing
     /// state and every rename request the daemon received.
     private func renameAfterTerminalOutput(
         _ rename: (SurfaceCatalog, SurfaceMachineID) async throws -> Void
-    ) async throws -> (state: CloudVMState, mutations: [[String: Any]]) {
+    ) async throws -> (state: TuiState, mutations: [[String: Any]]) {
         try await withDaemonFixture { catalog, provider, root in
             // Every rename calls refreshCurrentGraph(force: true) before sending
             // the mutation. The peer changes only stream_revision in that read.
             try await rename(catalog, provider.machine)
-            let current = try #require(catalog.cloudStates[provider.machine])
-            #expect(current.cursor == CloudVMCursor(generation: "daemon", revision: 8))
-            #expect(catalog.cloudStateObservations[provider.machine]?.freshness == .current)
+            let current = try #require(catalog.tuiStates[provider.machine])
+            #expect(current.cursor == TuiCursor(generation: "daemon", revision: 8))
+            #expect(catalog.tuiStateObservations[provider.machine]?.freshness == .current)
             let terminals = try #require(current.snapshotObject()?["terminals"] as? [[String: Any]])
             #expect(terminals.first?["stream_revision"] as? String == "3")
             let requests = try String(contentsOf: root.appendingPathComponent("requests.jsonl"), encoding: .utf8)
@@ -172,7 +172,7 @@ import Testing
         #expect(params?["expected_revision"] as? String == "7", sourceLocation: sourceLocation)
     }
 
-    // A local protocol peer, started and reaped by the real CloudMachineLink.
+    // A local protocol peer, started and reaped by the real RemoteMachineLink.
     // It keeps the event feed idle so no newer event can hide a rejected read.
     private static let daemonScript = #"""
     #!/usr/bin/python3

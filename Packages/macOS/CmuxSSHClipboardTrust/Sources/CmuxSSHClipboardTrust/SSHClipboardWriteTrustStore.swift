@@ -53,13 +53,11 @@ public final class SSHClipboardWriteTrustStore: @unchecked Sendable {
         defaults.set(trustedIdentities.sorted(), forKey: Self.trustedIdentitiesKey)
     }
 
-    /// Cloud mirrors retain their existing provider grant. SSH mirrors need the
-    /// explicit per-machine opt-in. Local and device surfaces remain denied.
+    /// SSH mirrors require explicit per-machine opt-in; local surfaces are denied.
     ///
     /// - Parameter machine: The source of the remote output.
     /// - Returns: Whether automatic remote clipboard writes are allowed.
     public func allowsRemoteClipboardWrites(for machine: SurfaceMachineID) -> Bool {
-        if machine.cloudMachineID != nil { return true }
         return machine.isSSH && isTrusted(machine)
     }
 

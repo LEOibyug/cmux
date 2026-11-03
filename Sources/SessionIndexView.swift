@@ -1214,6 +1214,7 @@ private func sessionRowMenuItems(
             Text(String(localized: "sessionIndex.row.open", defaultValue: "Open"))
         }
         Button {
+
             NSWorkspace.shared.activateFileViewerSelecting([url])
         } label: {
             Text(String(localized: "sessionIndex.row.reveal", defaultValue: "Reveal in Finder"))
@@ -2569,6 +2570,7 @@ struct SectionPopoverView: View {
     /// only). When non-nil, `loadMore()` slices this array in memory
     /// instead of hitting the store.
     @State private var fullSnapshot: [SessionEntry]?
+
     private static let pageSize = 100
     /// Short, cancellable pause that coalesces rapid text-field edits before
     /// starting filesystem/SQLite work.

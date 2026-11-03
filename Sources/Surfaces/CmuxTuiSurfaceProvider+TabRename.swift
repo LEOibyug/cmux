@@ -15,7 +15,7 @@ extension CmuxTuiSurfaceProvider {
 
     private func renameTab(id: String, name: String, expectedName: String?) async throws {
         try Task.checkCancellation()
-        let normalizedName = CloudRemoteRenameName(rawValue: name).wireValue
+        let normalizedName = TuiRemoteRenameName(rawValue: name).wireValue
 
         // Creation and rename can arrive back-to-back. Refresh before validating the
         // target, but use the creation receipt when the accepted snapshot still
@@ -24,7 +24,7 @@ extension CmuxTuiSurfaceProvider {
         try Task.checkCancellation()
         let pendingCreation = self.pendingCreation(forTabID: id)
         let pendingRename = pendingRemoteRename(for: .tab(id))
-        let observed = cloudState
+        let observed = tuiState
         let previous = observed?.tabs.first(where: { $0.id == id })
         let observedCursor = observed?.cursor
         if let expectedName {
@@ -39,7 +39,7 @@ extension CmuxTuiSurfaceProvider {
                 return receipt.generation == observedCursor.generation
             }
             .max { $0.revision < $1.revision }
-        let authority = CloudVMRemoteMutationAuthority.resolve(
+        let authority = TuiRemoteMutationAuthority.resolve(
             refreshEstablishedCurrentGraph: refreshEstablishedCurrentGraph,
             hasAcceptedState: observed != nil,
             targetVisible: previous != nil,
@@ -63,7 +63,7 @@ extension CmuxTuiSurfaceProvider {
             } catch {
                 guard Self.isRevisionConflict(error),
                       await refreshCurrentGraph(force: true),
-                      let latest = cloudState,
+                      let latest = tuiState,
                       let current = latest.tabs.first(where: { $0.id == id }),
                       let latestCursor = latest.cursor,
                       (current.name ?? "") == (previous.name ?? "") else { throw error }
@@ -98,7 +98,7 @@ extension CmuxTuiSurfaceProvider {
             // wording lives on renameTerminal, which really does filter to
             // terminals.
             throw SurfaceCatalogError.unsupported(
-                String(localized: "cloudTree.error.renameNoRemoteTab", defaultValue: "This tab is not open in a remote workspace.")
+                String(localized: "tuiTree.error.renameNoRemoteTab", defaultValue: "This tab is not open in a remote workspace.")
             )
         }
         // The daemon event normally installs this before the command exits. The

@@ -1,18 +1,18 @@
 import Testing
 @testable import CmuxSurfaceCatalogModel
 
-@Suite struct CloudPortDiscoveryPresentationTests {
+@Suite struct TuiPortDiscoveryPresentationTests {
     @Test("Reachable services do not need an extra status row", arguments: [
-        CloudPortDiscoveryState.available, .loopbackOnly,
+        TuiPortDiscoveryState.available, .loopbackOnly,
     ])
-    func reachablePortsStandAlone(state: CloudPortDiscoveryState) {
+    func reachablePortsStandAlone(state: TuiPortDiscoveryState) {
         #expect(!state.keepsStatusAlongsideRows)
     }
 
     @Test("Incomplete scans keep their explanation beside retained ports", arguments: [
-        CloudPortDiscoveryState.loading, .stale, .unavailable(.transport), .unsupported,
+        TuiPortDiscoveryState.loading, .stale, .unavailable(.transport), .unsupported,
     ])
-    func incompleteScanRemainsVisible(state: CloudPortDiscoveryState) {
+    func incompleteScanRemainsVisible(state: TuiPortDiscoveryState) {
         #expect(state.keepsStatusAlongsideRows)
     }
 }

@@ -9,21 +9,6 @@ import Testing
 #endif
 
 extension SidebarWorkspaceSnapshotTests {
-    @MainActor
-    @Test func workspaceAgentSpinnerFeatureFlagDefaultsOff() throws {
-        let definition = try #require(CmuxFeatureFlags.allFlags.first {
-            $0.key == "sidebar-workspace-agent-spinner-experiment"
-        })
-        let suiteName = "cmux.feature.flags.sidebar-workspace-agent-spinner.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suiteName))
-        defer {
-            defaults.removePersistentDomain(forName: suiteName)
-        }
-
-        let flags = CmuxFeatureFlags(defaults: defaults, remoteFlagValueProvider: { _ in nil })
-
-        #expect(!flags.effectiveValue(for: definition))
-    }
 
     @Test func presentationKeyChangesWhenAgentActivityVisibilityChanges() {
         let hidden = Self.presentationKey(showsAgentActivity: false)

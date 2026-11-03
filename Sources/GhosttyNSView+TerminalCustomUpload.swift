@@ -1,4 +1,5 @@
-import CmuxCloud
+import CmuxRemoteSession
+import CmuxSettings
 import AppKit
 
 extension GhosttyNSView {
@@ -77,8 +78,8 @@ extension GhosttyNSView {
                 case .success(let text):
                     self?.deliverUploadResultText(text, originSurfaceId: originSurfaceId)
                 case .failure(let error):
-                    if ManagedFileTransferPolicy.isRefusal(error) {
-                        ManagedFileTransferPolicy.presentRefusal()
+                    if ManagedFileTransferPolicy().isRefusal(error) {
+                        ManagedFileTransferPolicy().presentRefusal()
                     } else {
                         // The runner delivers this on the main queue; state the proof the
                         // same way the sibling call sites do.

@@ -36,7 +36,6 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
     /// `sidebar.compactAgentStatus` leading status glyph.
     private let compactStatusGlyphView = SidebarCompactStatusGlyphImageView()
     private let titleView = SidebarRowTextView(lines: 1)
-    private let cloudImageView = NSImageView()
     private let trailingBadge = SidebarRowUnreadBadgeView()
     private var trailingSpinner: GPUSpinnerNSView?
     private let closeButton = SidebarHeaderGlyphButton()
@@ -324,7 +323,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         addSubview(railView)
         addSubview(contentContainer)
 
-        for view in [pinImageView, muteImageView, cloudImageView, mediaAudioView, mediaMicView, mediaCameraView] {
+        for view in [pinImageView, muteImageView, mediaAudioView, mediaMicView, mediaCameraView] {
             view.imageScaling = .scaleProportionallyDown
             contentContainer.addSubview(view)
         }
@@ -335,8 +334,6 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         contentContainer.addSubview(statusGlyphButton)
         contentContainer.addSubview(leadingBadge)
         contentContainer.addSubview(titleView)
-        cloudImageView.setAccessibilityIdentifier("sidebarCloudBadge")
-        cloudImageView.setAccessibilityElement(false)
         contentContainer.addSubview(trailingBadge)
         closeButton.onClick = { [weak self] in self?.actions?.commands.closeWorkspace() }
         closeButton.setAccessibilityRole(.button)
@@ -542,10 +539,6 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         }
 
         // Title line
-        cloudImageView.configureSidebarWorkspaceAccessory(
-            symbol: snapshot.remoteWorkspaceBadgeSymbol, label: model.settings.showsCloudDeviceIcons && !model.settings.hidesAllDetails ? snapshot.remoteWorkspaceBadgeLabel : nil,
-            pointSize: model.scaled(10), tint: palette.secondary(0.7), weight: .regular
-        )
         pinImageView.configureSidebarWorkspaceAccessory(
             symbol: "pin.fill", label: snapshot.isPinned
                 ? String(localized: "sidebar.pinnedWorkspaceProtected.tooltip", defaultValue: "Pinned workspace — protected from Close") : nil,
@@ -1329,9 +1322,6 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
             x += side + SidebarCompactStatusGlyph.titleSpacing
         }
 
-        x = cloudImageView.layoutLeadingSidebarWorkspaceAccessory(
-            minX: x, centerY: firstLineCenter, side: model.scaled(10) + 4, spacing: titleRowSpacing, apply: apply
-        )
         // Trailing slot
         let closeHit = max(16, 16 * model.fontScale)
         let closeWidth = max(16, closeHit)

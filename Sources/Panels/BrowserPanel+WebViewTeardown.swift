@@ -7,7 +7,7 @@ extension BrowserPanel {
     func tearDownWebViewBeforeReplacement(_ oldWebView: WKWebView, reason: String) {
         guard oldWebView === webView else { return }
 
-        mobileBrowserDialogBroker.resolveAll()
+        browserDialogBroker.resolveAll()
 
         if let window = oldWebView.window,
            Self.responderChainContains(window.firstResponder, target: oldWebView) {
@@ -26,10 +26,6 @@ extension BrowserPanel {
             forName: BrowserSSLTrustBypassMessageHandler.name
         )
         sslTrustBypassMessageHandler = nil
-        oldWebView.configuration.userContentController.removeScriptMessageHandler(
-            forName: MobileBrowserDirtyMessageHandler.name
-        )
-        mobileBrowserStreamMessageHandler = nil
 
         BrowserWindowPortalRegistry.detach(webView: oldWebView)
         oldWebView.stopLoading()

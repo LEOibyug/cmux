@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import Darwin
 import Foundation
 import Testing
@@ -11,8 +11,8 @@ import Testing
 #endif
 
 @Suite("Cloud mutation RPC ownership", .timeLimit(.minutes(1)))
-struct CloudTerminalMutationSocketTests {
-    private typealias Socket = CloudTuiManualIOConnectionTests
+struct TuiTerminalMutationSocketTests {
+    private typealias Socket = TuiManualIOConnectionTests
 
     @Test("Caller cancellation keeps the exact mutation response alive and skips queued turns",
           arguments: [false, true])
@@ -24,11 +24,11 @@ struct CloudTerminalMutationSocketTests {
 
     @MainActor
     private func cancelledMutationScenario(
-        channel: CloudTuiPersistentResourceConnection, peer: Int32, rejected: Bool
+        channel: TuiPersistentResourceConnection, peer: Int32, rejected: Bool
     ) async throws {
-        let transport = CloudTerminalMutationSocketRunner(channel: channel)
-        let commands = CloudTerminalMutationCommandRunner(base: transport) { try Task.checkCancellation() }
-        let queue = CloudTerminalMutationQueue()
+        let transport = TuiTerminalMutationSocketRunner(channel: channel)
+        let commands = TuiTerminalMutationCommandRunner(base: transport) { try Task.checkCancellation() }
+        let queue = TuiTerminalMutationQueue()
         var published = false
         var queuedRan = false
         var drained = false
@@ -85,16 +85,16 @@ struct CloudTerminalMutationSocketTests {
 
     @MainActor
     private func failureScenario(
-        channel: CloudTuiPersistentResourceConnection, peer: Int32, clock: CloudCommandDeadlineClock,
+        channel: TuiPersistentResourceConnection, peer: Int32, clock: CloudCommandDeadlineClock,
         failure: String, owner: String
     ) async throws {
-        let transport = CloudTerminalMutationSocketRunner(channel: channel)
+        let transport = TuiTerminalMutationSocketRunner(channel: channel)
         var current = true
-        let commands = CloudTerminalMutationCommandRunner(base: transport) {
+        let commands = TuiTerminalMutationCommandRunner(base: transport) {
             try Task.checkCancellation()
             guard current else { throw CancellationError() }
         }
-        let queue = CloudTerminalMutationQueue()
+        let queue = TuiTerminalMutationQueue()
         var published = false
         let active = queue.enqueue {
             let data = try await commands.runTuiCommand(arguments: mutation(), deadline: .seconds(30))
@@ -114,7 +114,7 @@ struct CloudTerminalMutationSocketTests {
             #expect(Darwin.shutdown(peer, SHUT_RDWR) == 0)
         }
         if owner == "active" {
-            await #expect(throws: CloudMachineLink.LinkError.self) { try await active.value }
+            await #expect(throws: RemoteMachineLink.LinkError.self) { try await active.value }
         } else {
             await #expect(throws: CancellationError.self) { try await active.value }
         }
@@ -142,13 +142,13 @@ struct CloudTerminalMutationSocketTests {
     }
 
     @MainActor
-    private func cancelledReadScenario(channel: CloudTuiPersistentResourceConnection, peer: Int32) async throws {
-        let transport = CloudTerminalMutationSocketRunner(channel: channel)
-        let commands = CloudTerminalMutationCommandRunner(base: transport) { try Task.checkCancellation() }
-        let queue = CloudTerminalMutationQueue()
+    private func cancelledReadScenario(channel: TuiPersistentResourceConnection, peer: Int32) async throws {
+        let transport = TuiTerminalMutationSocketRunner(channel: channel)
+        let commands = TuiTerminalMutationCommandRunner(base: transport) { try Task.checkCancellation() }
+        let queue = TuiTerminalMutationQueue()
         let active = queue.enqueue {
             try await commands.runTuiCommand(
-                arguments: CloudTuiRequest("terminal.wait", ["terminal": "term_test", "pattern": "x"]),
+                arguments: TuiRequest("terminal.wait", ["terminal": "term_test", "pattern": "x"]),
                 deadline: .seconds(30)
             )
         }
@@ -163,8 +163,8 @@ struct CloudTerminalMutationSocketTests {
         await queue.waitForIdle()
     }
 
-    private func roundTripRead(channel: CloudTuiPersistentResourceConnection, peer: Int32) async throws {
-        let ping = Task { try await channel.request(CloudTuiRequest("session.ping")) }
+    private func roundTripRead(channel: TuiPersistentResourceConnection, peer: Int32) async throws {
+        let ping = Task { try await channel.request(TuiRequest("session.ping")) }
         defer { ping.cancel() }
         let request = try Socket.object(await Socket.blocking { try Socket.readLine(peer) })
         try #require(request["operation"] as? String == "session.ping")
@@ -173,7 +173,7 @@ struct CloudTerminalMutationSocketTests {
         #expect(try Socket.object(await ping.value)["alive"] as? Bool == true)
     }
 
-    private func mutation() -> CloudTuiRequest {
-        CloudTuiRequest("workspace.run", ["workspace": "ws-source"], mutation: true, key: "shielded-create")
+    private func mutation() -> TuiRequest {
+        TuiRequest("workspace.run", ["workspace": "ws-source"], mutation: true, key: "shielded-create")
     }
 }

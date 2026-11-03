@@ -8,6 +8,6 @@ extension CmuxTuiSurfaceProvider: SurfaceProjectionLayoutProviding {
         guard await refreshCurrentGraph(force: true) else {
             throw ProviderError.invalidSnapshot(machineID)
         }
-        return catalog.cloudWorkspaceLayout(machine: machine, workspaceID: workspaceID)
+        return catalog.tuiWorkspaceLayout(machine: machine, workspaceID: workspaceID)
     }
 }

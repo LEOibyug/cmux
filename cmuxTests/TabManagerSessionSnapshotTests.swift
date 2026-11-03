@@ -1898,45 +1898,16 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         XCTAssertFalse(snapshot.panels.contains { $0.type == .browser })
     }
 
-    func testSessionSnapshotSkipsNonRestorableRemoteWorkspaces() {
-        let manager = makeTabManager()
-        let localWorkspace = manager.tabs[0]
-        localWorkspace.setCustomTitle("Local")
-        let remoteWorkspace = manager.addWorkspace(select: true)
-        remoteWorkspace.setCustomTitle("Cloud VM")
-        let configuration = WorkspaceRemoteConfiguration(
-            transport: .websocket,
-            destination: "cloud-vm",
-            port: nil,
-            identityFile: nil,
-            sshOptions: [],
-            localProxyPort: 54321,
-            relayPort: nil,
-            relayID: nil,
-            relayToken: nil,
-            localSocketPath: nil,
-            terminalStartupCommand: nil
-        )
-        remoteWorkspace.configureRemoteConnection(configuration, autoConnect: false)
 
-        let snapshot = manager.sessionSnapshot(includeScrollback: false)
-
-        XCTAssertEqual(snapshot.workspaces.count, 1)
-        XCTAssertEqual(snapshot.workspaces.first?.customTitle, "Local")
-        XCTAssertNil(snapshot.workspaces.first?.remote)
-        XCTAssertNil(snapshot.selectedWorkspaceIndex)
-    }
-
-    func testSessionSnapshotSkipsCloudVMLoadingWorkspaces() {
+    func testSessionSnapshotSkipsSSHLoadingWorkspaces() {
         let manager = makeTabManager()
         let localWorkspace = manager.tabs[0]
         localWorkspace.setCustomTitle("Local")
         _ = manager.addWorkspace(
-            title: "Cloud VM",
-            initialSurface: .cloudVMLoading,
+            title: "SSH",
+            initialSurface: .remoteLoading,
             inheritWorkingDirectory: false,
-            select: true,
-            autoWelcomeIfNeeded: false
+            select: true
         )
 
         let snapshot = manager.sessionSnapshot(includeScrollback: false)
@@ -1947,140 +1918,36 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         XCTAssertNil(snapshot.selectedWorkspaceIndex)
     }
 
-    func testSessionSnapshotRestoresManagedWebSocketCloudVMWorkspace() throws {
-        let manager = makeTabManager()
-        let remoteWorkspace = manager.addWorkspace(select: true)
-        remoteWorkspace.setCustomTitle("Cloud VM")
-        let configuration = WorkspaceRemoteConfiguration(
-            transport: .websocket,
-            destination: "cloud-vm",
-            port: nil,
-            identityFile: nil,
-            sshOptions: [],
-            localProxyPort: nil,
-            relayPort: nil,
-            relayID: nil,
-            relayToken: nil,
-            localSocketPath: "/tmp/cmux-test.sock",
-            managedCloudVMID: "vm-restored-cloud",
-            terminalStartupCommand: "stale websocket connect command",
-            preserveAfterTerminalExit: true,
-            persistentDaemonSlot: "cmux-default-freestyle-sshd-v1",
-            skipDaemonBootstrap: true
-        )
-        remoteWorkspace.configureRemoteConnection(configuration, autoConnect: false)
 
-        let snapshot = manager.sessionSnapshot(includeScrollback: false)
-        let persistedWorkspace = try XCTUnwrap(snapshot.workspaces.first { $0.customTitle == "Cloud VM" })
-        XCTAssertEqual(persistedWorkspace.remote?.transport, .websocket)
-        XCTAssertEqual(persistedWorkspace.remote?.managedCloudVMID, "vm-restored-cloud")
 
-        let restored = makeTabManager()
-        restored.restoreSessionSnapshot(snapshot)
 
-        let restoredWorkspace = try XCTUnwrap(restored.tabs.first { $0.customTitle == "Cloud VM" })
-        XCTAssertEqual(restoredWorkspace.remoteConfiguration?.transport, .websocket)
-        XCTAssertEqual(restoredWorkspace.remoteConfiguration?.managedCloudVMID, "vm-restored-cloud")
-        let restoredPanelId = try XCTUnwrap(restoredWorkspace.focusedPanelId)
-        let restoredInitialCommand = try XCTUnwrap(
-            restoredWorkspace.terminalPanel(for: restoredPanelId)?.surface.debugInitialCommand()
-        )
-        XCTAssertTrue(restoredInitialCommand.contains("vm-pty-attach"), restoredInitialCommand)
-        XCTAssertTrue(restoredInitialCommand.contains("--id vm-restored-cloud"), restoredInitialCommand)
-        XCTAssertFalse(restoredInitialCommand.contains("stale websocket connect command"), restoredInitialCommand)
-    }
-
-    func testRestoreSessionSnapshotDropsUnselectedManagedCloudVMWorkspaces() {
-        let localPanelId = UUID()
-        let snapshot = SessionTabManagerSnapshot(
-            selectedWorkspaceIndex: 1,
-            workspaces: [
-                Self.cloudVMWorkspaceSnapshot(panelId: UUID(), managedCloudVMID: "vm-kept-cloud"),
-                Self.localWorkspaceSnapshot(title: "Local", panelId: localPanelId),
-                Self.cloudVMWorkspaceSnapshot(panelId: UUID(), managedCloudVMID: "vm-dropped-cloud"),
-            ]
-        )
-
-        let restored = makeTabManager()
-        restored.restoreSessionSnapshot(snapshot)
-
-        XCTAssertEqual(restored.tabs.map(\.customTitle), ["Cloud VM", "Local"])
-        XCTAssertEqual(restored.tabs.first?.remoteConfiguration?.managedCloudVMID, "vm-kept-cloud")
-        XCTAssertEqual(restored.selectedTabId, restored.tabs.last?.id)
-    }
-
-    /// `DisableCloud` (MDM): no Cloud workspace restores through either
-    /// transport, the selection follows a surviving local workspace, and the
-    /// existing one-machine normalization is untouched without the policy.
-    func testManagedCloudPolicyDropsEveryCloudWorkspaceFromRestore() {
-        let localPanelId = UUID()
-        var boundWorkspace = Self.localWorkspaceSnapshot(title: "vm:bound", panelId: UUID())
-        boundWorkspace.cloudVM = SessionCloudVMBindingSnapshot(vmID: "bound", isBase: true)
-        let snapshots = [
-            Self.cloudVMWorkspaceSnapshot(panelId: UUID(), managedCloudVMID: "vm-managed"),
-            Self.localWorkspaceSnapshot(title: "Local", panelId: localPanelId),
-            boundWorkspace,
-        ]
-
-        let (kept, selection) = TabManager.normalizedCloudVMSessionRestoreWorkspaces(
-            snapshots,
-            selectedWorkspaceIndex: 2,
-            cloudDisabledByPolicy: true
-        )
-        XCTAssertEqual(kept.map(\.customTitle), ["Local"])
-        XCTAssertEqual(selection, 0)
-
-        let (_, localSelection) = TabManager.normalizedCloudVMSessionRestoreWorkspaces(
-            snapshots,
-            selectedWorkspaceIndex: 1,
-            cloudDisabledByPolicy: true
-        )
-        XCTAssertEqual(localSelection, 0)
-
-        // Nothing survives: restore falls through to its fresh-workspace path.
-        let (none, noneSelection) = TabManager.normalizedCloudVMSessionRestoreWorkspaces(
-            [snapshots[0], snapshots[2]],
-            selectedWorkspaceIndex: 0,
-            cloudDisabledByPolicy: true
-        )
-        XCTAssertTrue(none.isEmpty)
-        XCTAssertNil(noneSelection)
-
-        let (unmanaged, unmanagedSelection) = TabManager.normalizedCloudVMSessionRestoreWorkspaces(
-            snapshots,
-            selectedWorkspaceIndex: 2,
-            cloudDisabledByPolicy: false
-        )
-        XCTAssertEqual(unmanaged.map(\.customTitle), ["Cloud VM", "Local", "vm:bound"])
-        XCTAssertEqual(unmanagedSelection, 2)
-    }
-
-    func testRestoreSessionSnapshotKeepsCmuxTuiCloudVMBinding() throws {
+    func testRestoreSessionSnapshotKeepsSSHWorkspaceBinding() throws {
         let panelId = UUID()
-        var workspace = Self.localWorkspaceSnapshot(title: "vm:vivid-gecko", panelId: panelId)
-        workspace.cloudVM = SessionCloudVMBindingSnapshot(vmID: "vivid-gecko", isBase: true)
+        var workspace = Self.localWorkspaceSnapshot(title: "SSH binding", panelId: panelId)
+        let machineID = "ssh:" + String(repeating: "b", count: 64)
+        workspace.remoteWorkspace = SessionRemoteWorkspaceBindingSnapshot(machineID: machineID)
         let snapshot = SessionTabManagerSnapshot(selectedWorkspaceIndex: 0, workspaces: [workspace])
 
         let restored = makeTabManager()
         restored.restoreSessionSnapshot(snapshot)
 
-        let restoredWorkspace = try XCTUnwrap(restored.tabs.first { $0.customTitle == "vm:vivid-gecko" })
-        XCTAssertEqual(restoredWorkspace.cloudVMBinding, WorkspaceCloudVMBinding(vmID: "vivid-gecko", isBase: true))
-        XCTAssertEqual(restoredWorkspace.cloudVMID, "vivid-gecko")
+        let restoredWorkspace = try XCTUnwrap(restored.tabs.first { $0.customTitle == "SSH binding" })
+        XCTAssertEqual(restoredWorkspace.remoteWorkspaceBinding, RemoteWorkspaceBinding(machineID: machineID))
+        XCTAssertEqual(restoredWorkspace.terminalPanel(for: try XCTUnwrap(restoredWorkspace.focusedPanelId))?.surface.ioMode, .manualMirror)
         XCTAssertNil(restoredWorkspace.remoteConfiguration)
 
         // The binding round-trips through the next save too.
         let resaved = restored.sessionSnapshot(includeScrollback: false)
         XCTAssertEqual(
-            resaved.workspaces.first { $0.customTitle == "vm:vivid-gecko" }?.cloudVM,
-            SessionCloudVMBindingSnapshot(vmID: "vivid-gecko", isBase: true)
+            resaved.workspaces.first { $0.customTitle == "SSH binding" }?.remoteWorkspace,
+            SessionRemoteWorkspaceBindingSnapshot(machineID: machineID)
         )
     }
 
     func testSessionSnapshotPersistsRemoteSurfaceProjectionsAndRestoreRelinksThem() throws {
         let panelId = UUID()
-        let machineId = "session-projection-\(UUID().uuidString)"
-        let remote = SurfaceResourceID(machine: .cloud(machineId), kind: .terminal, key: "term_abc")
+        let machineId = String(repeating: "c", count: 64)
+        let remote = SurfaceResourceID(machine: .ssh(machineId), kind: .terminal, key: "term_abc")
         let workspaceTitle = "vm:\(machineId)"
         var workspace = Self.localWorkspaceSnapshot(title: workspaceTitle, panelId: panelId)
         workspace.surfaceProjections = [SurfaceProjectionRecord(panelID: panelId, resource: remote)]
@@ -2125,7 +1992,7 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(SessionWorkspaceSnapshot.self, from: data).surfaceProjections)
     }
 
-    func testWorkspaceSnapshotWithoutCloudVMBindingRestoresUnbound() throws {
+    func testWorkspaceSnapshotWithoutRemoteBindingRestoresUnbound() throws {
         // Manifests written before the Cloud tree have no `cloudVM` key.
         let panelId = UUID()
         let legacy = Self.localWorkspaceSnapshot(title: "Local", panelId: panelId)
@@ -2133,47 +2000,21 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         let json = try XCTUnwrap(String(data: data, encoding: .utf8))
         XCTAssertFalse(json.contains("\"cloudVM\""))
         let decoded = try JSONDecoder().decode(SessionWorkspaceSnapshot.self, from: data)
-        XCTAssertNil(decoded.cloudVM)
+        XCTAssertNil(decoded.remoteWorkspace)
 
         let restored = makeTabManager()
         restored.restoreSessionSnapshot(SessionTabManagerSnapshot(selectedWorkspaceIndex: 0, workspaces: [decoded]))
         let restoredWorkspace = try XCTUnwrap(restored.tabs.first { $0.customTitle == "Local" })
-        XCTAssertNil(restoredWorkspace.cloudVMBinding)
-        XCTAssertNil(restoredWorkspace.cloudVMID)
+        XCTAssertNil(restoredWorkspace.remoteWorkspaceBinding)
 
         // A malformed machine id in a snapshot never becomes a binding.
-        XCTAssertNil(Workspace.restoredCloudVMBinding(from: SessionCloudVMBindingSnapshot(vmID: "bad id!", isBase: false)))
+        XCTAssertNil(Workspace.restoredRemoteWorkspaceBinding(from: SessionRemoteWorkspaceBindingSnapshot(machineID: "bad id!")))
         XCTAssertEqual(
-            Workspace.restoredCloudVMBinding(from: SessionCloudVMBindingSnapshot(vmID: " coral-gecko ", isBase: false)),
-            WorkspaceCloudVMBinding(vmID: "coral-gecko", isBase: false)
+            Workspace.restoredRemoteWorkspaceBinding(from: SessionRemoteWorkspaceBindingSnapshot(machineID: " ssh:" + String(repeating: "d", count: 64) + " ")),
+            RemoteWorkspaceBinding(machineID: "ssh:" + String(repeating: "d", count: 64))
         )
     }
 
-    func testRestoreSessionSnapshotKeepsSingleManagedCloudVMInSavedOrder() throws {
-        let managedPanelId = UUID()
-        let localPanelId = UUID()
-        let snapshot = SessionTabManagerSnapshot(
-            selectedWorkspaceIndex: 2,
-            workspaces: [
-                Self.cloudVMWorkspaceSnapshot(panelId: UUID(), managedCloudVMID: "vm-stale-cloud-a"),
-                Self.localWorkspaceSnapshot(title: "Local", panelId: localPanelId),
-                Self.cloudVMWorkspaceSnapshot(
-                    panelId: managedPanelId,
-                    managedCloudVMID: "vm-single-cloud"
-                ),
-                Self.cloudVMWorkspaceSnapshot(panelId: UUID(), managedCloudVMID: "vm-stale-cloud-b"),
-            ]
-        )
-
-        let restored = makeTabManager()
-        restored.restoreSessionSnapshot(snapshot)
-
-        XCTAssertEqual(restored.tabs.map(\.customTitle), ["Local", "Cloud VM"])
-        XCTAssertEqual(restored.selectedTabId, restored.tabs.last?.id)
-        let restoredCloudVM = try XCTUnwrap(restored.tabs.last)
-        XCTAssertTrue(restoredCloudVM.isPinned)
-        XCTAssertEqual(restoredCloudVM.remoteConfiguration?.managedCloudVMID, "vm-single-cloud")
-    }
 
     func testRestoreSessionSnapshotRemintsDuplicatePersistedWorkspaceIds() throws {
         let duplicateWorkspaceId = UUID()
@@ -2195,31 +2036,6 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         XCTAssertEqual(restored.selectedTabId, restored.tabs.last?.id)
     }
 
-    func testClosedHistorySkipsNonRestorableRemoteWorkspaces() {
-        let manager = makeTabManager()
-        let localWorkspace = manager.tabs[0]
-        let remoteWorkspace = manager.addWorkspace(select: true)
-        remoteWorkspace.setCustomTitle("Cloud VM")
-        let configuration = WorkspaceRemoteConfiguration(
-            transport: .websocket,
-            destination: "cloud-vm",
-            port: nil,
-            identityFile: nil,
-            sshOptions: [],
-            localProxyPort: 54321,
-            relayPort: nil,
-            relayID: nil,
-            relayToken: nil,
-            localSocketPath: nil,
-            terminalStartupCommand: nil
-        )
-        remoteWorkspace.configureRemoteConnection(configuration, autoConnect: false)
-
-        manager.closeWorkspace(remoteWorkspace)
-
-        XCTAssertEqual(manager.tabs.map(\.id), [localWorkspace.id])
-        XCTAssertFalse(ClosedItemHistoryStore.shared.canReopen)
-    }
 
     func testCleanupEmptySourceWorkspaceDoesNotRecordRecentlyClosedWorkspace() {
         let originalAppDelegate = AppDelegate.shared
@@ -2669,143 +2485,8 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         XCTAssertNil(roundTrip.panels.first?.terminal?.remotePTYSessionID)
     }
 
-    func testSessionSnapshotRestoresDefaultFreestyleSSHDAsSelfHealingAttach() throws {
-        let snapshot = SessionRemoteWorkspaceSnapshot(
-            transport: .ssh,
-            destination: "nncop8f8h6w9blhns6sy+cmux@vm-ssh.freestyle.sh",
-            port: 22,
-            identityFile: nil,
-            sshOptions: [
-                "StrictHostKeyChecking=no",
-                "UserKnownHostsFile=/dev/null",
-                "LogLevel=ERROR",
-            ],
-            preserveAfterTerminalExit: nil,
-            skipDaemonBootstrap: true,
-            relayPort: nil,
-            persistentDaemonSlot: nil,
-            managedCloudVMID: "nncop8f8h6w9blhns6sy"
-        )
 
-        let configuration = try XCTUnwrap(snapshot.workspaceConfiguration())
-        let terminalStartupCommand = try XCTUnwrap(configuration.terminalStartupCommand)
 
-        XCTAssertEqual(configuration.preserveAfterTerminalExit, true)
-        XCTAssertEqual(configuration.persistentDaemonSlot, "cmux-default-freestyle-sshd-v1")
-        XCTAssertEqual(configuration.skipDaemonBootstrap, true)
-        XCTAssertEqual(configuration.managedCloudVMID, "nncop8f8h6w9blhns6sy")
-        XCTAssertNil(configuration.relayPort)
-        XCTAssertNil(configuration.localSocketPath)
-        XCTAssertFalse(terminalStartupCommand.contains("ssh-pty-attach"), terminalStartupCommand)
-        XCTAssertFalse(terminalStartupCommand.contains("ssh -p 22"), terminalStartupCommand)
-        XCTAssertTrue(terminalStartupCommand.contains("vm-pty-attach"), terminalStartupCommand)
-        XCTAssertTrue(terminalStartupCommand.contains("--id nncop8f8h6w9blhns6sy"), terminalStartupCommand)
-        XCTAssertTrue(terminalStartupCommand.contains("--default-freestyle-sshd"), terminalStartupCommand)
-        XCTAssertTrue(terminalStartupCommand.contains("CMUX_SSH_RECONNECT_LIMIT"), terminalStartupCommand)
-        XCTAssertTrue(terminalStartupCommand.contains("CMUX_CLOUD_RECONNECT_ATTEMPT"), terminalStartupCommand)
-        XCTAssertFalse(terminalStartupCommand.contains("Cloud VM reconnecting"), terminalStartupCommand)
-        XCTAssertFalse(terminalStartupCommand.contains("cmux_freestyle_notify_reconnect"), terminalStartupCommand)
-        XCTAssertFalse(terminalStartupCommand.contains("[cmux] ssh exited with status"), terminalStartupCommand)
-    }
-
-    func testSessionRestoreDropsStalePTYSessionForDefaultFreestyleSSHD() throws {
-        let manager = makeTabManager()
-        let remoteWorkspace = manager.addWorkspace(select: true)
-        remoteWorkspace.setCustomTitle("sshd")
-        let configuration = WorkspaceRemoteConfiguration(
-            destination: "nncop8f8h6w9blhns6sy+cmux@vm-ssh.freestyle.sh",
-            port: 22,
-            identityFile: nil,
-            sshOptions: [
-                "StrictHostKeyChecking=no",
-                "UserKnownHostsFile=/dev/null",
-            ],
-            localProxyPort: nil,
-            relayPort: nil,
-            relayID: nil,
-            relayToken: nil,
-            localSocketPath: nil,
-            managedCloudVMID: "nncop8f8h6w9blhns6sy",
-            terminalStartupCommand: "old raw ssh attach",
-            preserveAfterTerminalExit: true,
-            persistentDaemonSlot: "cmux-default-freestyle-sshd-v1",
-            skipDaemonBootstrap: true
-        )
-        remoteWorkspace.configureRemoteConnection(configuration, autoConnect: false)
-        let originalPanelId = try XCTUnwrap(remoteWorkspace.focusedPanelId)
-
-        var legacySnapshot = manager.sessionSnapshot(includeScrollback: false)
-        let workspaceIndex = try XCTUnwrap(
-            legacySnapshot.workspaces.firstIndex { $0.customTitle == "sshd" }
-        )
-        let panelIndex = try XCTUnwrap(
-            legacySnapshot.workspaces[workspaceIndex].panels.firstIndex { $0.id == originalPanelId }
-        )
-        legacySnapshot.workspaces[workspaceIndex].panels[panelIndex].terminal?.remotePTYSessionID = "ssh-stale-session"
-        legacySnapshot.workspaces[workspaceIndex].panels[panelIndex].terminal?.isRemoteTerminal = false
-
-        let restored = makeTabManager()
-        restored.restoreSessionSnapshot(legacySnapshot)
-
-        let restoredWorkspace = try XCTUnwrap(restored.tabs.first { $0.customTitle == "sshd" })
-        let restoredPanelId = try XCTUnwrap(restoredWorkspace.focusedPanelId)
-        let restoredInitialCommand = try XCTUnwrap(
-            restoredWorkspace.terminalPanel(for: restoredPanelId)?.surface.debugInitialCommand()
-        )
-        XCTAssertFalse(restoredInitialCommand.contains("ssh-pty-attach"), restoredInitialCommand)
-        XCTAssertFalse(restoredInitialCommand.contains("ssh-stale-session"), restoredInitialCommand)
-        XCTAssertTrue(restoredInitialCommand.contains("vm-pty-attach"), restoredInitialCommand)
-        XCTAssertTrue(restoredInitialCommand.contains("--default-freestyle-sshd"), restoredInitialCommand)
-        XCTAssertTrue(restoredInitialCommand.contains("CMUX_CLOUD_RECONNECT_ATTEMPT"), restoredInitialCommand)
-        XCTAssertFalse(restoredInitialCommand.contains("[cmux] ssh exited with status"), restoredInitialCommand)
-        XCTAssertEqual(
-            restoredWorkspace.sessionSnapshot(includeScrollback: false)
-                .panels.first { $0.id == restoredPanelId }?.terminal?.remotePTYSessionID,
-            "ssh-\(restoredWorkspace.id.uuidString)-\(restoredPanelId.uuidString)"
-        )
-    }
-
-    func testLegacyDefaultFreestyleSSHDRestoreRepairsRawSSHSnapshotBeforeSpawning() throws {
-        let legacyRemote = SessionRemoteWorkspaceSnapshot(
-            transport: .ssh,
-            destination: "71smiccrg35sw9pydt8k+cmux@vm-ssh.freestyle.sh",
-            port: 22,
-            identityFile: nil,
-            sshOptions: [],
-            preserveAfterTerminalExit: nil,
-            skipDaemonBootstrap: true,
-            relayPort: nil,
-            persistentDaemonSlot: nil,
-            managedCloudVMID: nil
-        )
-        let configuration = try XCTUnwrap(legacyRemote.workspaceConfiguration())
-        let terminalStartupCommand = try XCTUnwrap(configuration.terminalStartupCommand)
-
-        XCTAssertEqual(configuration.managedCloudVMID, "71smiccrg35sw9pydt8k")
-        XCTAssertEqual(configuration.persistentDaemonSlot, "cmux-default-freestyle-sshd-v1")
-        XCTAssertEqual(configuration.preserveAfterTerminalExit, true)
-        XCTAssertTrue(terminalStartupCommand.contains("vm-pty-attach"), terminalStartupCommand)
-        XCTAssertTrue(terminalStartupCommand.contains("--id 71smiccrg35sw9pydt8k"), terminalStartupCommand)
-        XCTAssertFalse(terminalStartupCommand.contains("ssh -p 22"), terminalStartupCommand)
-
-        let manager = makeTabManager()
-        let workspace = try XCTUnwrap(manager.selectedWorkspace)
-        workspace.setCustomTitle("sshd")
-        workspace.configureRemoteConnection(configuration, autoConnect: false)
-        let snapshot = manager.sessionSnapshot(includeScrollback: false)
-
-        let restored = makeTabManager()
-        restored.restoreSessionSnapshot(snapshot)
-
-        let restoredWorkspace = try XCTUnwrap(restored.tabs.first { $0.customTitle == "sshd" })
-        let restoredPanelId = try XCTUnwrap(restoredWorkspace.focusedPanelId)
-        let restoredInitialCommand = try XCTUnwrap(
-            restoredWorkspace.terminalPanel(for: restoredPanelId)?.surface.debugInitialCommand()
-        )
-        XCTAssertTrue(restoredInitialCommand.contains("vm-pty-attach"), restoredInitialCommand)
-        XCTAssertTrue(restoredInitialCommand.contains("--default-freestyle-sshd"), restoredInitialCommand)
-        XCTAssertFalse(restoredInitialCommand.contains("ssh -p 22"), restoredInitialCommand)
-    }
 
     func testSessionRemoteWorkspaceSnapshotRestoresOrdinarySSHWithLifecycleReporting() throws {
         let snapshot = SessionRemoteWorkspaceSnapshot(
@@ -3043,45 +2724,6 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         )
     }
 
-    private static func cloudVMWorkspaceSnapshot(
-        panelId: UUID,
-        managedCloudVMID: String? = nil
-    ) -> SessionWorkspaceSnapshot {
-        let remote = managedCloudVMID.map { vmID in
-            SessionRemoteWorkspaceSnapshot(
-                transport: .websocket,
-                destination: "cloud-vm",
-                port: nil,
-                identityFile: nil,
-                sshOptions: [],
-                preserveAfterTerminalExit: true,
-                skipDaemonBootstrap: true,
-                relayPort: nil,
-                persistentDaemonSlot: "cmux-default-freestyle-sshd-v1",
-                managedCloudVMID: vmID
-            )
-        }
-        return SessionWorkspaceSnapshot(
-            processTitle: "Cloud VM",
-            customTitle: "Cloud VM",
-            customDescription: nil,
-            customColor: nil,
-            isPinned: true,
-            terminalScrollBarHidden: nil,
-            currentDirectory: NSHomeDirectory(),
-            focusedPanelId: panelId,
-            layout: .pane(SessionPaneLayoutSnapshot(
-                panelIds: [panelId],
-                selectedPanelId: panelId
-            )),
-            panels: [terminalPanelSnapshot(id: panelId)],
-            statusEntries: [],
-            logEntries: [],
-            progress: nil,
-            gitBranch: nil,
-            remote: remote
-        )
-    }
 
     private func waitForClosedHistoryCount(
         _ expectedCount: Int,

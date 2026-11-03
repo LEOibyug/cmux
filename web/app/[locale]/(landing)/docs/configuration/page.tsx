@@ -24,17 +24,11 @@ type SchemaProperty = {
 };
 
 type SchemaDocument = {
-  $id?: string;
   properties?: Record<string, SchemaProperty>;
 };
 
 const typedSettingsSchema = settingsSchema as SchemaDocument;
 const schemaProperties = typedSettingsSchema.properties ?? {};
-const schemaUrl =
-  typedSettingsSchema.$id ??
-  "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json";
-const schemaSourceUrl =
-  "https://github.com/manaflow-ai/cmux/blob/main/web/data/cmux.schema.json";
 const sectionOrder = [
   "app",
   "terminal",
@@ -60,7 +54,6 @@ type ConfigurationTranslation = ReturnType<typeof useTranslations>;
 /** Builds the localized JSONC example, including customizable editor shortcuts. */
 function buildSettingsFileExample(t: ConfigurationTranslation) {
   return `{
-  "$schema": "${schemaUrl}",
   "schemaVersion": 1,
 
   // "app": {
@@ -360,9 +353,9 @@ working-directory = ~/code`}</CodeBlock>
         it logs a warning and parses known keys only.
       </Callout>
       <p>
-        The file accepts JSON with comments and trailing commas. The canonical schema is published
-        at <a href={schemaUrl}>{schemaUrl}</a> and the source lives at{" "}
-        <a href={schemaSourceUrl}>{schemaSourceUrl}</a>.
+        The file accepts JSON with comments and trailing commas. The canonical schema lives at{" "}
+        <code>web/data/cmux.schema.json</code> and is embedded in the app for offline validation.
+        New configs do not need a remote <code>$schema</code> URL.
       </p>
       <CodeBlock title="~/.config/cmux/cmux.json" lang="json">
         {buildSettingsFileExample(t)}

@@ -100,7 +100,6 @@ struct CmuxConfigSemanticValidatorTests {
             (["notifications": ["dockBadge": "yes"]], "$.notifications.dockBadge", "expected boolean"),
             (["app": ["appearance": "neon"]], "$.app.appearance", "must be one of"),
             (["fileEditor": ["tabWidth": 0]], "$.fileEditor.tabWidth", "must be >= 1"),
-            (["agentChat": ["fonts": ["baseSize": 0]]], "$.agentChat.fonts.baseSize", "must be > 0"),
             (["commands": "echo hello"], "$.commands", "expected array"),
         ]
 

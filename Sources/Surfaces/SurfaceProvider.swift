@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -28,12 +28,12 @@ protocol SurfaceProvider: AnyObject {
     /// Same operation into a pane the workspace already reserved for this resource
     /// (optimistic creation). A provider that cannot adopt materializes a fresh pane;
     /// the caller then closes the reservation when the returned panel differs.
-    func materialize(_ resource: SurfaceResource, remoteView: SurfaceRemoteView?, at destination: SurfaceDestination, focus: Bool, adopting reservation: CloudTerminalPaneReservation?) async throws -> SurfaceProjection
+    func materialize(_ resource: SurfaceResource, remoteView: SurfaceRemoteView?, at destination: SurfaceDestination, focus: Bool, adopting reservation: TuiTerminalPaneReservation?) async throws -> SurfaceProjection
     /// Create a new terminal on this machine (remote providers create it in the cmux-tui
     /// session; the local provider spawns a shell) and return its resource.
     func createTerminal(command: [String]?, cwd: String?, name: String?, remoteWorkspaceID: String?) async throws -> SurfaceResource
     /// Retries of one UI intent carry the same id so a remote mutation can replay its receipt.
-    func createTerminal(command: [String]?, cwd: String?, name: String?, remoteWorkspaceID: String?, request: CloudTerminalCreationRequest) async throws -> SurfaceResource
+    func createTerminal(command: [String]?, cwd: String?, name: String?, remoteWorkspaceID: String?, request: TuiTerminalCreationRequest) async throws -> SurfaceResource
     /// Create a browser in a remote workspace and return its committed daemon resource.
     func createBrowser(url: URL, name: String?, remoteWorkspaceID: String?, screenID: String?, paneID: String?, idempotencyKey: String?, correlationKey: String?) async throws -> SurfaceResource
     /// Read the live working directory of a terminal's foreground process. Remote
@@ -93,7 +93,7 @@ extension SurfaceProvider {
         projectionDidEnd(projection)
     }
 
-    func createTerminal(command: [String]?, cwd: String?, name: String?, remoteWorkspaceID: String?, request: CloudTerminalCreationRequest) async throws -> SurfaceResource {
+    func createTerminal(command: [String]?, cwd: String?, name: String?, remoteWorkspaceID: String?, request: TuiTerminalCreationRequest) async throws -> SurfaceResource {
         try await createTerminal(command: command, cwd: cwd, name: name, remoteWorkspaceID: remoteWorkspaceID)
     }
 
@@ -121,7 +121,7 @@ extension SurfaceProvider {
         try await materialize(resource, at: destination, focus: focus)
     }
 
-    func materialize(_ resource: SurfaceResource, remoteView: SurfaceRemoteView?, at destination: SurfaceDestination, focus: Bool, adopting reservation: CloudTerminalPaneReservation?) async throws -> SurfaceProjection {
+    func materialize(_ resource: SurfaceResource, remoteView: SurfaceRemoteView?, at destination: SurfaceDestination, focus: Bool, adopting reservation: TuiTerminalPaneReservation?) async throws -> SurfaceProjection {
         try await materialize(resource, remoteView: remoteView, at: destination, focus: focus)
     }
 

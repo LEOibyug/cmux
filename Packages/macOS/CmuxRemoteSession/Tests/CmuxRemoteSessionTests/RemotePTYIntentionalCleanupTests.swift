@@ -136,7 +136,7 @@ struct RemotePTYIntentionalCleanupTests {
                 cloudNotificationClearSurfaceInvalid: ""
             ),
             strings: RemoteSessionStrings(
-                connectedVMNoProxyFormat: "%@",
+                connectedWithoutDaemonFormat: "%@",
                 suspendedDetailFormat: "%@",
                 reverseRelayUnavailableRetrying: "",
                 reverseRelayPortUnavailableRetrying: "",

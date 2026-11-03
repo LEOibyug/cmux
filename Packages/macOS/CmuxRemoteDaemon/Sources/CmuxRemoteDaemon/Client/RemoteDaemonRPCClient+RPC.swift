@@ -406,31 +406,6 @@ extension RemoteDaemonRPCClient {
     }
 
     func writePayload(_ payload: Data) throws {
-        let webSocketConnection: RemoteDaemonWebSocketConnection? = stateQueue.sync {
-            self.webSocketConnection
-        }
-        if let webSocketConnection {
-            guard let text = String(data: payload, encoding: .utf8) else {
-                throw NSError(domain: "cmux.remote.daemon.rpc", code: 27, userInfo: [
-                    NSLocalizedDescriptionKey: "failed encoding daemon websocket request as UTF-8",
-                ])
-            }
-            let semaphore = DispatchSemaphore(value: 0)
-            let sendErrorBox = RemoteDaemonSendErrorBox()
-            webSocketConnection.sendText(text) { error in
-                sendErrorBox.error = error
-                semaphore.signal()
-            }
-            semaphore.wait()
-            if let sendError = sendErrorBox.error {
-                stop(suppressTerminationCallback: false)
-                throw NSError(domain: "cmux.remote.daemon.rpc", code: 16, userInfo: [
-                    NSLocalizedDescriptionKey: "failed writing daemon RPC request: \(sendError.localizedDescription)",
-                ])
-            }
-            return
-        }
-
         let stdinHandle: FileHandle = stateQueue.sync {
             self.stdinHandle ?? FileHandle.nullDevice
         }

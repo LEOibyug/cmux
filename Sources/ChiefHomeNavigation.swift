@@ -167,7 +167,6 @@ struct ChiefHomeNavigation {
             inheritWorkingDirectory: false,
             select: false,
             initialTerminalStartsOnFirstVisit: true,
-            autoWelcomeIfNeeded: false,
             autoRefreshMetadata: false
         ), let pane = workspace.bonsplitController.focusedPaneId else { return nil }
         let scaffold = Array(workspace.panels.keys)

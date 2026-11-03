@@ -2,6 +2,12 @@ import CMUXAgentLaunch
 import Foundation
 
 extension TerminalController {
+    /// Immediately reflects accepted local terminal input in session state and Feed attention.
+    func noteAcceptedAgentInput(surfaceID: UUID, at: Date = Date()) {
+        _ = agentChatTranscriptService?.noteExplicitInput(surfaceID: surfaceID.uuidString, at: at)
+        FeedCoordinator.shared.noteExplicitInput(surfaceID: surfaceID, at: at)
+    }
+
     /// Reconciles and inserts one authoritative batch, then publishes it off the main-actor hop.
     nonisolated func v2IngestAcknowledgedFeedEvents(
         _ events: [WorkstreamEvent],

@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -14,9 +14,9 @@ final class CloudTerminalPlacementTestProvider: SurfaceLayoutTerminalCreating {
     let machine: SurfaceMachineID
     let catalog: SurfaceCatalog
     let remote = SurfaceRemoteWorkspace(id: "ws-source", name: "source", index: 0, focused: true)
-    let release = CloudLinkFirstValue<Bool>()
-    let creationStarted = CloudLinkFirstValue<Bool>()
-    let materializationFinished = CloudLinkFirstValue<Bool>()
+    let release = RemoteLinkFirstValue<Bool>()
+    let creationStarted = RemoteLinkFirstValue<Bool>()
+    let materializationFinished = RemoteLinkFirstValue<Bool>()
     private(set) var requestedCommands: [[String]?] = []
     private(set) var closedTerminals: [SurfaceResourceID] = []
     private(set) var requestedWorkspaces: [String?] = []
@@ -29,7 +29,7 @@ final class CloudTerminalPlacementTestProvider: SurfaceLayoutTerminalCreating {
     var omitRemoteViews = false
     var contradictoryViewWorkspaceID: String?
 
-    init(machine: SurfaceMachineID = .cloud("placement-\(UUID())"), catalog: SurfaceCatalog? = nil) {
+    init(machine: SurfaceMachineID = TuiTestHost(destination: "placement-\(UUID()).example.test").machine, catalog: SurfaceCatalog? = nil) {
         self.machine = machine
         self.catalog = catalog ?? SurfaceCatalog.shared
     }
@@ -37,7 +37,7 @@ final class CloudTerminalPlacementTestProvider: SurfaceLayoutTerminalCreating {
     var info: SurfaceMachineInfo {
         SurfaceMachineInfo(
             id: machine, name: "fixture", status: "running", image: nil,
-            hasDesktop: false, memoryMb: nil, diskMb: nil, linkState: .connected,
+            memoryMb: nil, diskMb: nil, linkState: .connected,
             linkError: nil, cpuPercent: nil, memoryUsedMb: nil, diskUsedMb: nil,
             remoteWorkspaces: [remote]
         )
@@ -91,7 +91,7 @@ final class CloudTerminalPlacementTestProvider: SurfaceLayoutTerminalCreating {
 
     func materialize(
         _ resource: SurfaceResource, remoteView: SurfaceRemoteView?, at destination: SurfaceDestination,
-        focus: Bool, adopting reservation: CloudTerminalPaneReservation?
+        focus: Bool, adopting reservation: TuiTerminalPaneReservation?
     ) async throws -> SurfaceProjection {
         var identity = resource.id
         identity.machine = projectedMachine ?? resource.machine

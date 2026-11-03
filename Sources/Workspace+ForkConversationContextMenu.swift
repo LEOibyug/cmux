@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Bonsplit
 import CmuxCore
 import CmuxSettings
@@ -12,13 +12,13 @@ extension Workspace {
         snapshot: SessionRestorableAgentSnapshot,
         destination: SurfaceDestination
     ) -> TerminalPanel? {
-        guard let source = cloudTerminalSourcePlacement(forPanel: panelID), source.machine.isSSH,
+        guard let source = tuiTerminalSourcePlacement(forPanel: panelID), source.machine.isSSH,
               let configuration = remoteConfiguration,
               SSHTuiConnection(configuration: configuration).id == source.machine.rawValue,
               let command = snapshot.retargetingForkWorkingDirectory(
                 forkAgentWorkingDirectory(fromPanelId: panelID, snapshot: snapshot)
               ).forkCommand else { return nil }
-        return routeCloudPaneTerminalCreate(
+        return routeTuiPaneTerminalCreate(
             source: source, sourcePanelID: panelID, destination: destination, focus: true,
             commandOverride: SSHTuiConnection(configuration: configuration).commandArguments(command)
         ).panel
@@ -291,8 +291,7 @@ extension Workspace {
             initialTerminalInput: startupInput,
             initialTerminalStartupRestoreAgent: canReachLocalForkVerb ? snapshot : nil,
             initialTerminalEnvironment: remoteConfiguration.sshTerminalStartupEnvironment ?? [:],
-            inheritWorkingDirectory: false,
-            autoWelcomeIfNeeded: false
+            inheritWorkingDirectory: false
         ) else {
             return false
         }
@@ -337,8 +336,7 @@ extension Workspace {
             initialTerminalInput: launch.initialTerminalInput,
             initialTerminalStartupRestoreAgent: launch.startupRestoreAgent,
             initialTerminalEnvironment: launch.initialTerminalEnvironment,
-            inheritWorkingDirectory: launch.terminalWorkingDirectory != nil,
-            autoWelcomeIfNeeded: false
+            inheritWorkingDirectory: launch.terminalWorkingDirectory != nil
         ) else {
             return false
         }

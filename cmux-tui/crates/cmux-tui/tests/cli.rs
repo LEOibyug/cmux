@@ -2393,27 +2393,6 @@ fn durable_registry_survives_sigkill_and_rejects_a_second_writer() {
     let _ = fs::remove_dir_all(dir);
 }
 
-#[cfg(unix)]
-#[test]
-fn machine_agent_is_a_real_entrypoint_without_changing_ordinary_cli_dispatch() {
-    let machine_agent = cmux_command()
-        .env("LC_ALL", "C")
-        .env("LC_MESSAGES", "C")
-        .env("LANG", "C")
-        .args(["machine-agent", "--help"])
-        .output()
-        .unwrap();
-    assert_success(&machine_agent);
-    let help = String::from_utf8(machine_agent.stdout).unwrap();
-    assert!(help.starts_with("cmux machine-agent - share one local cmux session"));
-    assert!(help.contains("Authenticate with the configured host before retrying."));
-    assert!(!help.contains("cmux machine register"));
-    assert!(!help.contains("BatchMode"));
-
-    let version = cmux_command().arg("--version").output().unwrap();
-    assert_success(&version);
-    assert!(String::from_utf8(version.stdout).unwrap().starts_with("cmux "));
-}
 
 #[test]
 fn ghostty_config_helper_outputs_resolved_file_defaults() {
@@ -2506,21 +2485,6 @@ fn ghostty_config_helper_scrubs_provider_env_before_desktop_probe() {
     assert!(!stdout.contains("foreground = #a0b0c0\n"), "{stdout}");
 }
 
-#[cfg(unix)]
-#[test]
-fn machine_agent_argument_failures_are_stable_and_localized() {
-    let output = cmux_command()
-        .env("LC_ALL", "ja_JP.UTF-8")
-        .env("LC_MESSAGES", "ja_JP.UTF-8")
-        .env("LANG", "ja_JP.UTF-8")
-        .args(["machine-agent", "--cloud-port", "invalid"])
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("--cloud-port の値が無効です: invalid"));
-    assert!(!stderr.contains("machine-agent を開始または続行できませんでした"));
-}
 
 #[cfg(unix)]
 #[test]

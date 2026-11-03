@@ -183,7 +183,6 @@ impl SurfaceSessionScope {
             | MuxEvent::TerminalRegistryChanged { .. }
             | MuxEvent::PairingRequested(_)
             | MuxEvent::PairingResolved { .. }
-            | MuxEvent::MachineUsageChanged(_)
             | MuxEvent::Empty => true,
         }
     }

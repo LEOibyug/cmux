@@ -13,11 +13,11 @@ extension Workspace {
               let paneId = paneId(forPanelId: panelId),
               let browser = browserPanel(for: panelId) else { return nil }
         let catalog = SurfaceCatalog.shared
-        let keepsCloudRoute = browser.retainsCloudResourceForDuplication
-        let record = keepsCloudRoute
+        let keepsTuiRoute = browser.retainsRemoteResourceForDuplication
+        let record = keepsTuiRoute
             ? catalog.projectionRecord(forPanel: panelId).flatMap { $0.resource.machine.isLocal ? nil : $0 }
             : nil
-        let resource = keepsCloudRoute ? (record?.resource ?? browser.cloudResourceForDuplication) : nil
+        let resource = keepsTuiRoute ? (record?.resource ?? browser.remoteResourceForDuplication) : nil
         guard surfaceOwnershipPolicy.rejection(for: machineOwningSurface(panelId), kind: AppDelegate.shared?.surfaceResourceKind(for: browser)) == nil else { return nil }
         let isCloud = resource?.machine.isLocal == false
         let targetIndex = insertionIndexToRight(of: anchorTabId, inPane: paneId)
@@ -37,11 +37,11 @@ extension Workspace {
             newPanel.retainTransferredSurfaceMachine(resource.machine)
             catalog.restore([SurfaceProjectionRecord(panelID: newPanel.id, resource: resource,
                 remoteWorkspaceID: record?.remoteWorkspaceID)], workspaceID: id)
-            if let model = browser.cloudAccess.model, let url = browser.cloudAccess.remoteURL {
-                let configuredURL = browser.cloudRestoreURL(on: url)
-                newPanel.configureCloudBrowser(model: model, url: configuredURL, resourceID: resource)
+            if let model = browser.remoteAccess.model, let url = browser.remoteAccess.remoteURL {
+                let configuredURL = browser.remoteRestoreURL(on: url)
+                newPanel.configureRemoteBrowser(model: model, url: configuredURL, resourceID: resource)
             } else {
-                newPanel.restoreCloudResource(resource, preferredURL: browser.currentURLForTabDuplication)
+                newPanel.restoreRemoteResource(resource, preferredURL: browser.currentURLForTabDuplication)
             }
         }
         newPanel.setMuted(browser.isMuted)

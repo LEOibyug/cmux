@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import AppKit
 import Bonsplit
 

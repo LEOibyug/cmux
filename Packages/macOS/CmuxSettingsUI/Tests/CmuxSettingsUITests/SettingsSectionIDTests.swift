@@ -15,24 +15,6 @@ struct SettingsSectionIDTests {
         #expect(titles.count == Set(titles).count)
     }
 
-    /// Devices keeps the persisted `computers` raw value and sits right after
-    /// Cloud, so search ties and the detail stack follow the sidebar (#14771).
-    @Test func devicesIsItsOwnSectionAfterCloud() {
-        let cases = SettingsSectionID.allCases
-        #expect(SettingsSectionID.computers.title == "Devices")
-        #expect(SettingsSectionID(rawValue: "computers") == .computers)
-        #expect(cases.firstIndex(of: .computers) == cases.firstIndex(of: .cloudMachines).map { $0 + 1 })
-    }
-
-    /// Anchors saved while Devices lived under Mobile select Devices and
-    /// scroll to its header, whichever section the request named.
-    @Test(arguments: [SettingsSectionID.mobile, .computers], ["setting:computers:pair", "setting:mobile:computers"])
-    func legacyDevicesAnchorsLandOnTheDevicesHeader(target: SettingsSectionID, anchor: String) {
-        let destination = target.navigationDestination(providedAnchor: anchor)
-        #expect(destination.section == .computers)
-        #expect(destination.anchorID == "section:computers")
-    }
-
     @Test(arguments: SettingsSectionID.allCases)
     func missingAnchorLandsOnTheRequestedSectionHeader(section: SettingsSectionID) {
         let destination = section.navigationDestination(providedAnchor: nil)
@@ -41,9 +23,9 @@ struct SettingsSectionIDTests {
     }
 
     @Test(arguments: [
-        (SettingsSectionID.mobile, "setting:mobile:pairDevice"),
-        (.computers, "setting:computers:discovery"),
-        (.computers, "section:computers")
+        (SettingsSectionID.app, "setting:app:language"),
+        (.terminal, "setting:terminal:copy-on-select"),
+        (.terminal, "section:terminal")
     ])
     func rowAnchorsArePreserved(section: SettingsSectionID, anchor: String) {
         let destination = section.navigationDestination(providedAnchor: anchor)
@@ -52,9 +34,9 @@ struct SettingsSectionIDTests {
     }
 
     @Test func notificationUserInfoResolvesTargetAndAnchor() throws {
-        let legacy = try #require(SettingsSectionID.navigationDestination(userInfo: ["target": "mobile", "anchor": "setting:mobile:computers"]))
-        #expect(legacy.section == .computers)
-        #expect(legacy.anchorID == "section:computers")
+        let destination = try #require(SettingsSectionID.navigationDestination(userInfo: ["target": "app", "anchor": "setting:app:language"]))
+        #expect(destination.section == .app)
+        #expect(destination.anchorID == "setting:app:language")
         #expect(SettingsSectionID.navigationDestination(userInfo: ["target": "notASection"]) == nil)
         #expect(SettingsSectionID.navigationDestination(userInfo: nil) == nil)
     }

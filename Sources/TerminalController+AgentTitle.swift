@@ -1,9 +1,9 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Bonsplit
 import CmuxSettings
 import Foundation
 
-/// Agent callbacks name stable projections through the Cloud authority boundary.
+/// Agent callbacks name stable projections through the remote naming authority boundary.
 extension TerminalController {
     /// `surface.sync_codex_native_title`: applies Codex's already-resolved
     /// native thread title to the panel's raw title tier, the same tier used
@@ -44,7 +44,7 @@ extension TerminalController {
         }
 
         if v2Bool(params, "probe") == true {
-            return v2MainSync { self.cloudNameProbe(workspaceId: workspaceId, panelId: panelId, manager: tabManager) }
+            return v2MainSync { self.tuiNameProbe(workspaceId: workspaceId, panelId: panelId, manager: tabManager) }
         }
         guard let title = v2String(params, "title")?.trimmingCharacters(in: .whitespacesAndNewlines),
               !title.isEmpty else {
@@ -66,9 +66,9 @@ extension TerminalController {
                 : workspace.panelIdFromSurfaceId(TabID(uuid: panelId))
             guard let resolvedPanelId else { return }
             found = true
-            applied = SurfaceCatalog.shared.submitCloudPanelRename(
+            applied = SurfaceCatalog.shared.submitTuiPanelRename(
                 workspace: workspace, panelID: resolvedPanelId, title: title, source: .auto,
-                context: CloudAgentNameContext(wire: params["cloud_name_context"])
+                context: TuiAgentNameContext(wire: params["tui_name_context"])
             ) ?? tabManager.updatePanelTitle(tabId: workspaceId, panelId: resolvedPanelId, title: title)
         }
 
@@ -118,9 +118,9 @@ extension TerminalController {
                 result["workspace_user_owned"] = v2OrNull(userOwned)
                 if let panelId = v2UUID(params, "panel_id") {
                     v2MainSync {
-                        if case .ok(let values) = self.cloudNameProbe(workspaceId: workspaceId, panelId: panelId, manager: tabManager),
-                           let cloudValues = values as? [String: Any] {
-                            result.merge(cloudValues) { _, new in new }
+                        if case .ok(let values) = self.tuiNameProbe(workspaceId: workspaceId, panelId: panelId, manager: tabManager),
+                           let tuiValues = values as? [String: Any] {
+                            result.merge(tuiValues) { _, new in new }
                         }
                     }
                 }
@@ -169,10 +169,10 @@ extension TerminalController {
                     ? panelId
                     : workspace.panelIdFromSurfaceId(TabID(uuid: panelId))
                 if let resolvedPanelId,
-                   !(panelOnlyIfMultiple && workspace.panels.count < 2 && workspace.cloudVMBinding == nil) {
-                    panelApplied = SurfaceCatalog.shared.submitCloudPanelRename(
+                   !(panelOnlyIfMultiple && workspace.panels.count < 2 && workspace.remoteWorkspaceBinding == nil) {
+                    panelApplied = SurfaceCatalog.shared.submitTuiPanelRename(
                         workspace: workspace, panelID: resolvedPanelId, title: title, source: .auto,
-                        context: CloudAgentNameContext(wire: params["cloud_name_context"])
+                        context: TuiAgentNameContext(wire: params["tui_name_context"])
                     ) ?? workspace.setPanelCustomTitle(panelId: resolvedPanelId, title: title, source: .auto)
                 }
             }
@@ -203,11 +203,11 @@ extension TerminalController {
 
 
     @MainActor
-    private func cloudNameProbe(workspaceId: UUID, panelId: UUID, manager: TabManager) -> V2CallResult {
+    private func tuiNameProbe(workspaceId: UUID, panelId: UUID, manager: TabManager) -> V2CallResult {
         guard let workspace = manager.workspacesById[workspaceId],
               let resolved = workspace.panels[panelId] != nil ? panelId : workspace.panelIdFromSurfaceId(TabID(uuid: panelId))
         else { return .ok([:]) }
-        let context = SurfaceCatalog.shared.cloudAgentNameContext(workspaceID: workspaceId, panelID: resolved)
-        return .ok(["cloud_name_context": v2OrNull(context?.wire)])
+        let context = SurfaceCatalog.shared.tuiAgentNameContext(workspaceID: workspaceId, panelID: resolved)
+        return .ok(["tui_name_context": v2OrNull(context?.wire)])
     }
 }

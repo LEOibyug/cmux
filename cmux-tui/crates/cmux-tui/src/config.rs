@@ -60,13 +60,6 @@
 //!     "create_sources": []
 //!   },
 //!   "machine_provider": {
-//!     "cloud": {
-//!       "enabled": false,
-//!       "host": "cmux.cloud",
-//!       "user": null,
-//!       "port": null,
-//!       "identity_file": null
-//!     }
 //!   },
 //!   "browser": {
 //!     "chrome_binary": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -282,8 +275,6 @@ struct RawUserCommand {
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawMachineProvider {
-    #[serde(default)]
-    cloud: RawCloudProvider,
     /// Config parity with `--machine-provider-command`: the argv of a
     /// provider process to spawn, no shell. The CLI flag wins when both are
     /// given.
@@ -291,15 +282,6 @@ struct RawMachineProvider {
     command: Option<Vec<String>>,
 }
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawCloudProvider {
-    enabled: Option<bool>,
-    host: Option<String>,
-    user: Option<String>,
-    port: Option<u16>,
-    identity_file: Option<String>,
-}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1270,33 +1252,12 @@ pub struct MachineCreationSourceConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MachineProviderConfig {
-    pub cloud: CloudProviderConfig,
     /// Argv of a machine-provider process to spawn, exactly like
     /// `--machine-provider-command program arg -- `. CLI provider modes
     /// override it.
     pub command: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CloudProviderConfig {
-    pub enabled: bool,
-    pub host: String,
-    pub user: Option<String>,
-    pub port: Option<u16>,
-    pub identity_file: Option<PathBuf>,
-}
-
-impl Default for CloudProviderConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            host: "cmux.cloud".to_string(),
-            user: None,
-            port: None,
-            identity_file: None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MachineConfig {
@@ -3778,38 +3739,6 @@ pub fn load() -> Config {
         }
         None => {}
     }
-    let cloud = raw.machine_provider.cloud;
-    if let Some(enabled) = cloud.enabled {
-        config.machine_provider.cloud.enabled = enabled;
-    }
-    if let Some(host) = cloud.host {
-        let host = host.trim();
-        if host.is_empty() {
-            crate::client_log::stderr_log!(
-                "config",
-                "cmux-tui: ignoring empty machine_provider.cloud.host"
-            );
-        } else {
-            config.machine_provider.cloud.host = host.to_string();
-        }
-    }
-    config.machine_provider.cloud.user =
-        cloud.user.map(|user| user.trim().to_string()).filter(|user| !user.is_empty());
-    config.machine_provider.cloud.port = match cloud.port {
-        Some(0) => {
-            crate::client_log::stderr_log!(
-                "config",
-                "cmux-tui: ignoring zero machine_provider.cloud.port"
-            );
-            None
-        }
-        port => port,
-    };
-    config.machine_provider.cloud.identity_file = cloud
-        .identity_file
-        .map(|path| path.trim().to_string())
-        .filter(|path| !path.is_empty())
-        .map(PathBuf::from);
     let mut machine_ids = HashSet::new();
     for machine in raw.machines {
         let id = machine.id.trim().to_string();
@@ -8288,16 +8217,6 @@ mod tests {
         assert_eq!(raw.server.ws_token.as_deref(), Some("secret"));
     }
 
-    #[test]
-    fn cloud_provider_defaults_are_inert_and_target_cmux_cloud() {
-        let config = Config::default();
-
-        assert!(!config.machine_provider.cloud.enabled);
-        assert_eq!(config.machine_provider.cloud.host, "cmux.cloud");
-        assert_eq!(config.machine_provider.cloud.user, None);
-        assert_eq!(config.machine_provider.cloud.port, None);
-        assert_eq!(config.machine_provider.cloud.identity_file, None);
-    }
 
     #[test]
     fn ignores_empty_websocket_server_config_values() {
@@ -8345,215 +8264,6 @@ mod tests {
         assert!(Action::select_tab(10).is_none());
     }
 
-    #[test]
-    fn config_overrides_defaults() {
-        let _guard = CONFIG_ENV_LOCK.lock().unwrap();
-        let dir = std::env::temp_dir().join(format!("mux-config-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("mux.json");
-        std::fs::write(
-            &path,
-            r##"{
-                "theme": {
-                    "chrome": "dark",
-                    "selection_background": "#101010",
-                    "sidebar_rail": 42,
-                    "sidebar_active_bg": "#202020",
-                    "tab_bg": 44,
-                    "border_style": "rounded"
-                },
-                "tabs": {"min_width": 9, "solid_background": false},
-                "sidebar": {
-                    "view": "workspaces",
-                    "width": 30,
-                    "compact_width": 12,
-                    "max_width": 38,
-                    "columns": [
-                        {"kind": "machines", "width": 18},
-                        {"kind": "workspaces", "width": 24},
-                        {"kind": "tabs", "width": 26, "max_width": 40}
-                    ],
-                    "plugin": {
-                        "command": ["/tmp/sidebar-plugin", "--mode", "test"],
-                        "cwd": "/tmp"
-                    }
-                },
-                "agents": {
-                    "plugin": {
-                        "id": "screen-detector",
-                        "command": ["/tmp/agent-plugin", "", "--mode", "test"],
-                        "cwd": "/tmp",
-                        "revision": "sha256-test"
-                    }
-                },
-                "machine_sidebar": {
-                    "enabled": true,
-                    "width": 26,
-                    "max_width": 34,
-                    "create_sources": [
-                        {"id": "docker", "name": "Docker", "subtitle": "container prototype"},
-                        {"id": "e2b", "name": "E2B"}
-                    ]
-                },
-                "machine_provider": {
-                    "cloud": {
-                        "enabled": true,
-                        "host": "edge.example.com",
-                        "user": "lawrence",
-                        "port": 2200,
-                        "identity_file": "/tmp/cloud-key"
-                    }
-                },
-                "machines": [
-                    {
-                        "id": "mini",
-                        "name": "Mac mini",
-                        "subtitle": "studio",
-                        "transport": "ssh",
-                        "host": "mini.local",
-                        "user": "lawrence",
-                        "session": "main"
-                    }
-                ],
-                "scrollbar": {"position": "border"},
-                "pane": {"padding": 9},
-                "status_bar": {"visible": false},
-                "viewport": {"animation": false},
-                "keys": {
-                    "alt_shortcuts": false,
-                    "rename-pane": "r",
-                    "focus-left": ["left", "alt+h"],
-                    "next-tab": "none",
-                    "select-tab-0": "q",
-                    "browser-edit-url": "u"
-                }
-            }"##,
-        )
-        .unwrap();
-        // SAFETY: env mutation in tests is serialized by CONFIG_ENV_LOCK.
-        unsafe { std::env::set_var("CMUX_MUX_CONFIG", &path) };
-        let config = load();
-        // SAFETY: env mutation in tests is serialized by CONFIG_ENV_LOCK.
-        unsafe { std::env::remove_var("CMUX_MUX_CONFIG") };
-        let _ = std::fs::remove_file(&path);
-        assert_eq!(config.theme.selection_bg, Color::Rgb(0x10, 0x10, 0x10));
-        assert_eq!(config.chrome, ChromeMode::Dark);
-        assert!(config.theme_overrides.selection);
-        assert_eq!(config.theme.sidebar_rail, Color::Indexed(42));
-        assert_eq!(config.theme.sidebar_active_bg, Color::Rgb(0x20, 0x20, 0x20));
-        assert_eq!(config.theme.tab_bg, Color::Indexed(44));
-        assert!(config.theme_overrides.sidebar_active_bg);
-        assert!(config.theme_overrides.tab_bg);
-        assert_eq!(config.tabs.min_width, 9);
-        assert!(!config.tabs.solid_background);
-        assert_eq!(config.sidebar.width, 30);
-        assert_eq!(config.sidebar.compact_width, 12);
-        assert_eq!(config.sidebar.max_width, 38);
-        assert_eq!(config.sidebar.view, SidebarView::Workspaces);
-        assert!(config.sidebar.columns_explicit);
-        assert_eq!(
-            config.sidebar.columns,
-            vec![
-                SidebarColumn { kind: SidebarColumnKind::Machines, width: 18, max_width: 34 },
-                SidebarColumn { kind: SidebarColumnKind::Workspaces, width: 24, max_width: 38 },
-                SidebarColumn { kind: SidebarColumnKind::Tabs, width: 26, max_width: 40 },
-            ]
-        );
-        assert!(config.sidebar.views_explicit);
-        assert_eq!(
-            config.sidebar.views,
-            vec![
-                SidebarViewSpec::legacy(SidebarColumnKind::Machines, 18, 34),
-                SidebarViewSpec::legacy(SidebarColumnKind::Workspaces, 24, 38),
-                SidebarViewSpec::legacy(SidebarColumnKind::Tabs, 26, 40),
-            ]
-        );
-        assert_eq!(
-            config.machine_sidebar,
-            MachineSidebar {
-                enabled: true,
-                width: 26,
-                max_width: 34,
-                create_sources: vec![
-                    MachineCreationSourceConfig {
-                        id: "docker".into(),
-                        name: "Docker".into(),
-                        subtitle: "container prototype".into(),
-                    },
-                    MachineCreationSourceConfig {
-                        id: "e2b".into(),
-                        name: "E2B".into(),
-                        subtitle: String::new(),
-                    },
-                ],
-            }
-        );
-        assert_eq!(
-            config.machine_provider.cloud,
-            CloudProviderConfig {
-                enabled: true,
-                host: "edge.example.com".into(),
-                user: Some("lawrence".into()),
-                port: Some(2200),
-                identity_file: Some(PathBuf::from("/tmp/cloud-key")),
-            }
-        );
-        assert_eq!(config.machines.len(), 1);
-        assert_eq!(config.machines[0].id, "mini");
-        assert_eq!(config.machines[0].name, "Mac mini");
-        assert!(matches!(
-            &config.machines[0].target,
-            MachineTargetConfig::Ssh { host, user: Some(user), session, binary, .. }
-                if host == "mini.local"
-                    && user == "lawrence"
-                    && session == "main"
-                    && binary == "~/.local/bin/cmux-tui"
-        ));
-        let plugin = config.sidebar.plugin.as_ref().expect("sidebar plugin config");
-        assert_eq!(plugin.command, vec!["/tmp/sidebar-plugin", "--mode", "test"]);
-        assert_eq!(plugin.cwd.as_deref(), Some("/tmp"));
-        let agent_plugin = config.agents.plugin.as_ref().expect("agent plugin config");
-        assert_eq!(agent_plugin.id, "screen-detector");
-        assert_eq!(
-            agent_plugin.command,
-            vec!["/tmp/agent-plugin", "", "--mode", "test"],
-            "empty arguments after argv[0] must remain part of the command"
-        );
-        assert_eq!(agent_plugin.cwd.as_deref(), Some("/tmp"));
-        assert_eq!(agent_plugin.revision.as_deref(), Some("sha256-test"));
-        assert_eq!(config.scrollbar.position, ScrollbarPosition::Border);
-        assert_eq!(config.theme.border_style, BorderStyle::Rounded);
-        assert_eq!(config.pane.padding, MAX_PANE_PADDING, "padding clamps to the maximum");
-        assert!(!config.status_bar.visible);
-        assert!(!config.viewport.animation);
-        assert_eq!(
-            config.keys.action_for(&KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE)),
-            Some(Action::RenameTab)
-        );
-        assert_eq!(config.keys.action_for(&KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)), None);
-        assert_eq!(
-            config.keys.action_for(&KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE)),
-            Action::select_tab(0)
-        );
-        assert_eq!(
-            config.keys.action_for(&KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE)),
-            Some(Action::BrowserEditUrl)
-        );
-        assert_eq!(
-            config.keys.action_for(&KeyEvent::new(KeyCode::Char('S'), KeyModifiers::SHIFT)),
-            Some(Action::FocusSidebar)
-        );
-        assert_eq!(
-            config.keys.modeless_action_for(&KeyEvent::new(KeyCode::Char('n'), KeyModifiers::ALT)),
-            None
-        );
-        assert_eq!(
-            config.keys.modeless_action_for(&KeyEvent::new(KeyCode::Char('h'), KeyModifiers::ALT)),
-            Some(Action::FocusLeft)
-        );
-        // Untouched keys keep their default.
-        assert_eq!(config.theme.border_inactive, Theme::default().border_inactive);
-    }
 
     #[test]
     fn sidebar_views_parse_flat_columns_and_nested_resource_trees() {

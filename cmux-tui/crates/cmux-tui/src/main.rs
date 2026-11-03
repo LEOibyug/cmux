@@ -16,8 +16,6 @@ mod claude_wrapper;
 mod cli;
 mod client_log;
 #[cfg(unix)]
-mod coderouter_usage;
-#[cfg(unix)]
 mod codex_wrapper;
 mod config;
 // The agent hook helper, also built as the standalone `cmux-tui-hook`.
@@ -29,8 +27,6 @@ mod layout_undo;
 mod local_owner;
 mod localization;
 mod machine;
-#[cfg(unix)]
-mod machine_agent;
 mod machine_provider_client;
 #[cfg(unix)]
 mod machine_provider_runtime;
@@ -99,7 +95,7 @@ use machine::{
 };
 #[cfg(unix)]
 use machine_provider_client::{
-    CommandProviderConnector, MachineProviderConnector, SshProviderConnector, UnixProviderConnector,
+    CommandProviderConnector, MachineProviderConnector, UnixProviderConnector,
 };
 #[cfg(unix)]
 use machine_provider_runtime::ProviderMachineController;
@@ -477,7 +473,6 @@ USAGE
 {lifecycle_usage}
   cmux attach [OPTIONS]    Attach to a session or one terminal
   cmux relay [OPTIONS]     Relay protocol bytes over stdio
-  {machine_agent_usage}
   cmux <scope> --help      Discover resource commands
 
 START OPTIONS
@@ -490,11 +485,6 @@ START OPTIONS
                      Use a dynamic machine provider Unix socket.
   --machine-provider-command <program> [arg ...] --
                      Run a provider command directly, appending control or stream.
-  --cloud            Connect through the built-in cmux.cloud SSH provider.
-  --cloud-host <host>       Cloud SSH host (default: cmux.cloud).
-  --cloud-user <user>       Cloud SSH user.
-  --cloud-port <port>       Cloud SSH port.
-  --cloud-identity <path>   Cloud SSH identity file.
   --headless         Run only the control socket, no TUI.
   --ws <addr>        Also listen for WebSocket clients (default: off).
   --ws-token <token> Allow a static-token bypass for interactive pairing.
@@ -525,19 +515,14 @@ START OPTIONS
 ";
 
 fn usage_for(catalog: &localization::Catalog) -> String {
-    usage_for_platform(catalog, cfg!(unix))
+    usage_for_platform(catalog)
 }
 
-fn usage_for_platform(catalog: &localization::Catalog, supports_machine_agent: bool) -> String {
-    let usage = USAGE.replace(
+fn usage_for_platform(catalog: &localization::Catalog) -> String {
+    USAGE.replace(
         "{lifecycle_usage}\n",
         &format!("{}\n", catalog.local_server.startup_lifecycle_usage),
-    );
-    if supports_machine_agent {
-        usage.replace("  {machine_agent_usage}\n", &format!("  {}\n", catalog.machine_agent.usage))
-    } else {
-        usage.replace("  {machine_agent_usage}\n", "")
-    }
+    )
 }
 
 fn usage() -> String {
@@ -554,11 +539,6 @@ struct Args {
     ephemeral: bool,
     machine_provider: Option<PathBuf>,
     machine_provider_command: Option<Vec<String>>,
-    cloud: bool,
-    cloud_host: Option<String>,
-    cloud_user: Option<String>,
-    cloud_port: Option<u16>,
-    cloud_identity: Option<PathBuf>,
     headless: bool,
     ws: Option<String>,
     ws_token: Option<String>,
@@ -656,11 +636,6 @@ fn parse_args_result(args: impl IntoIterator<Item = String>) -> Result<Args, Str
         ephemeral: false,
         machine_provider: None,
         machine_provider_command: None,
-        cloud: false,
-        cloud_host: None,
-        cloud_user: None,
-        cloud_port: None,
-        cloud_identity: None,
         headless: false,
         ws: None,
         ws_token: None,
@@ -738,29 +713,6 @@ fn parse_args_result(args: impl IntoIterator<Item = String>) -> Result<Args, Str
                     return Err("--machine-provider-command needs a program".to_string());
                 }
                 out.machine_provider_command = Some(command);
-            }
-            "--cloud" => out.cloud = true,
-            "--cloud-host" => {
-                out.cloud_host =
-                    Some(args.next().ok_or_else(|| "--cloud-host needs a value".to_string())?);
-            }
-            "--cloud-user" => {
-                out.cloud_user =
-                    Some(args.next().ok_or_else(|| "--cloud-user needs a value".to_string())?);
-            }
-            "--cloud-port" => {
-                let value = args.next().ok_or_else(|| "--cloud-port needs a value".to_string())?;
-                let port =
-                    value.parse::<u16>().map_err(|_| format!("invalid --cloud-port {value:?}"))?;
-                if port == 0 {
-                    return Err("--cloud-port cannot be zero".to_string());
-                }
-                out.cloud_port = Some(port);
-            }
-            "--cloud-identity" => {
-                out.cloud_identity = Some(
-                    args.next().ok_or_else(|| "--cloud-identity needs a value".to_string())?.into(),
-                );
             }
             "--state" => {
                 out.state =
@@ -1162,18 +1114,10 @@ fn session_selector_for_command(session: &str) -> String {
 }
 
 impl Args {
-    fn cloud_cli_requested(&self) -> bool {
-        self.cloud
-            || self.cloud_host.is_some()
-            || self.cloud_user.is_some()
-            || self.cloud_port.is_some()
-            || self.cloud_identity.is_some()
-    }
 
     fn provider_cli_requested(&self) -> bool {
         self.machine_provider.is_some()
             || self.machine_provider_command.is_some()
-            || self.cloud_cli_requested()
     }
 }
 
@@ -1181,24 +1125,6 @@ impl Args {
 enum ProviderLaunch {
     Unix(PathBuf),
     Command(Vec<OsString>),
-    Cloud(CloudLaunch),
-}
-
-impl ProviderLaunch {
-    /// Only a locally initiated Cloud client may use the caller's SSH config,
-    /// agent, and known_hosts for ad-hoc machines. A Unix provider can be the
-    /// native `ssh cmux.cloud` edge process and must remain provider-only.
-    fn enables_client_machine_connect(&self) -> bool {
-        matches!(self, Self::Cloud(_))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct CloudLaunch {
-    host: String,
-    user: Option<String>,
-    port: Option<u16>,
-    identity_file: Option<PathBuf>,
 }
 
 fn resolve_provider_launch(
@@ -1206,11 +1132,10 @@ fn resolve_provider_launch(
     config: &config::Config,
 ) -> anyhow::Result<Option<ProviderLaunch>> {
     let explicit_modes = usize::from(args.machine_provider.is_some())
-        + usize::from(args.machine_provider_command.is_some())
-        + usize::from(args.cloud_cli_requested());
+        + usize::from(args.machine_provider_command.is_some());
     if explicit_modes > 1 {
         anyhow::bail!(
-            "choose only one provider mode: --machine-provider, --machine-provider-command, or --cloud"
+            "choose only one provider mode: --machine-provider or --machine-provider-command"
         );
     }
 
@@ -1218,32 +1143,15 @@ fn resolve_provider_launch(
         Some(ProviderLaunch::Unix(socket.clone()))
     } else if let Some(command) = &args.machine_provider_command {
         Some(ProviderLaunch::Command(command.iter().map(OsString::from).collect()))
-    } else if let Some(command) =
-        // Config parity with --machine-provider-command. Any explicit CLI
-        // provider mode above wins; an explicit --cloud also wins below, so
-        // the config command only applies when the CLI chose nothing.
-        config
-            .machine_provider
-            .command
-            .as_ref()
-            .filter(|_| !args.cloud_cli_requested())
-    {
+    } else if let Some(command) = &config.machine_provider.command {
         Some(ProviderLaunch::Command(command.iter().map(OsString::from).collect()))
-    } else if args.cloud_cli_requested() || config.machine_provider.cloud.enabled {
-        let cloud = &config.machine_provider.cloud;
-        Some(ProviderLaunch::Cloud(CloudLaunch {
-            host: args.cloud_host.clone().unwrap_or_else(|| cloud.host.clone()),
-            user: args.cloud_user.clone().or_else(|| cloud.user.clone()),
-            port: args.cloud_port.or(cloud.port),
-            identity_file: args.cloud_identity.clone().or_else(|| cloud.identity_file.clone()),
-        }))
     } else {
         None
     };
     if !config.machines.is_empty()
         && matches!(launch, Some(ProviderLaunch::Unix(_) | ProviderLaunch::Command(_)))
     {
-        anyhow::bail!("static machines can only be combined with the local cloud provider client");
+        anyhow::bail!("static machines cannot be combined with an external machine provider");
     }
     Ok(launch)
 }
@@ -1259,12 +1167,6 @@ fn provider_connector_with_unix_token(
             None => Arc::new(UnixProviderConnector::generated(socket)),
         },
         ProviderLaunch::Command(command) => Arc::new(CommandProviderConnector::new(command)?),
-        ProviderLaunch::Cloud(cloud) => Arc::new(SshProviderConnector::cloud(
-            &cloud.host,
-            cloud.user.as_deref(),
-            cloud.port,
-            cloud.identity_file,
-        )?),
     };
     Ok(connector)
 }
@@ -1361,7 +1263,6 @@ fn rewrite_server_start(args: &mut Vec<String>) {
 
 const STARTUP_SWITCH_OPTIONS: &[&str] = &[
     "--ephemeral",
-    "--cloud",
     "--headless",
     "--ws-insecure-bind",
     "--remote",
@@ -1377,10 +1278,6 @@ const STARTUP_VALUE_OPTIONS: &[&str] = &[
     "--terminal",
     "--state",
     "--machine-provider",
-    "--cloud-host",
-    "--cloud-user",
-    "--cloud-port",
-    "--cloud-identity",
     "--ws",
     "--ws-token",
     "--remote-ws",
@@ -1598,41 +1495,8 @@ fn main() -> std::process::ExitCode {
     std::process::ExitCode::SUCCESS
 }
 
-/// Cloud snapshot template settings, set by the Cloud VM boot supervisor for
-/// this daemon only (see SurfaceOptions::adopt_template_terminal).
-struct CloudTemplateEnv {
-    adopt: bool,
-    bound_file: Option<PathBuf>,
-    workspace_name: Option<String>,
-}
-
-static CLOUD_TEMPLATE_ENV: std::sync::OnceLock<CloudTemplateEnv> = std::sync::OnceLock::new();
-
-/// Read the Cloud template settings and remove them from this process's
-/// environment, so no terminal host, shell, agent, or plugin it spawns
-/// inherits them. Must run before any thread starts.
-fn take_cloud_template_env() {
-    const KEYS: [&str; 3] = [
-        "CMUX_TUI_ADOPT_TEMPLATE_TERMINAL",
-        "CMUX_TUI_TEMPLATE_BOUND_FILE",
-        "CMUX_TUI_TEMPLATE_WORKSPACE_NAME",
-    ];
-    let settings = CloudTemplateEnv {
-        adopt: std::env::var(KEYS[0]).is_ok_and(|value| value == "1"),
-        bound_file: std::env::var_os(KEYS[1]).filter(|value| !value.is_empty()).map(PathBuf::from),
-        workspace_name: std::env::var(KEYS[2]).ok().filter(|value| !value.is_empty()),
-    };
-    for key in KEYS {
-        // SAFETY: called first in run_main, before this process starts any
-        // thread, so no other thread can read the environment concurrently.
-        unsafe { std::env::remove_var(key) };
-    }
-    let _ = CLOUD_TEMPLATE_ENV.set(settings);
-}
-
 /// Routes argv to a private mode, the CLI, or the interactive or headless mux.
 fn run_main() {
-    take_cloud_template_env();
     // The pane's `claude` shim lands here. Dispatch before the signal
     // handlers and argv decoding: the wrapper execs Claude with arguments
     // that need not be UTF-8 or valid cmux-tui flags.
@@ -1713,22 +1577,6 @@ fn run_main() {
         }
         return;
     }
-    #[cfg(unix)]
-    if raw_args.first().map(|arg| arg.as_str()) == Some("machine-agent") {
-        discard_provider_secret_environment();
-        if let Err(error) = machine_agent::run(&raw_args[1..]) {
-            crate::client_log::stderr_log!("startup", "cmux-tui: {error}");
-            if error.show_help() {
-                crate::client_log::stderr_log!(
-                    "startup",
-                    "{}",
-                    localization::catalog().machine_agent.help
-                );
-            }
-            client_log::exit(1);
-        }
-        return;
-    }
     // `server start` is the canonical spelling for the existing foreground
     // headless owner. Keep startup in the established Args/run_server path so
     // lifecycle aliases cannot drift into a second server launcher.
@@ -1748,14 +1596,7 @@ fn run_main() {
     let provider = provider
         .map(|launch| -> anyhow::Result<_> {
             validate_provider_process_args(&args)?;
-            let connect_external = launch.enables_client_machine_connect();
-            let local_machines =
-                if connect_external { config.machines.clone() } else { Vec::new() };
-            Ok((
-                provider_connector_with_unix_token(launch, provider_token)?,
-                local_machines,
-                connect_external,
-            ))
+            provider_connector_with_unix_token(launch, provider_token)
         })
         .transpose()
         .unwrap_or_else(|error| usage_exit(&error.to_string()));
@@ -1773,9 +1614,7 @@ fn run_main() {
     }
     #[cfg(unix)]
     let result = match provider {
-        Some((provider, local_machines, connect_external)) => {
-            run_provider_machine_client(provider, local_machines, connect_external, config)
-        }
+        Some(provider) => run_provider_machine_client(provider, config),
         None if args.attach => run_attach(args, config),
         None => run_server(args, provider_workspace_authority, config),
     };
@@ -2198,13 +2037,6 @@ fn run_server(
         surface_options.terminal_host_root = Some(
             cmux_tui_core::terminal_host_runtime::terminal_host_root(state_root, &args.session),
         );
-        // Set by the Cloud VM boot supervisor on a snapshot clone; see
-        // SurfaceOptions::adopt_template_terminal.
-        if let Some(template) = CLOUD_TEMPLATE_ENV.get() {
-            surface_options.adopt_template_terminal = template.adopt;
-            surface_options.template_bound_file = template.bound_file.clone();
-            surface_options.template_workspace_name = template.workspace_name.clone();
-        }
     }
     let provider_management_pending = provider_management_listener.is_some();
     let mux =
@@ -2250,7 +2082,7 @@ fn run_server(
     // idempotent Session bootstrap preserves existing names and sessions.
     #[cfg(unix)]
     let trusted_carrier =
-        args.remote && (args.remote_ws_trusted_carrier || remote_ws_trusted_carrier_from_env());
+        args.remote && (args.remote_ws_trusted_carrier);
     #[cfg(unix)]
     if trusted_carrier {
         Session::Local(mux.clone()).ensure_initial(None)?;
@@ -2366,10 +2198,6 @@ fn run_server(
     let served_socket = pending_server.into_bound_path();
     mux.start_journal_plugin(served_socket.clone());
     let mut served_mux_cleanup = ServedMuxCleanup::new(mux.clone(), served_socket);
-    // Cloud VMs carry coderouter identity in their model-plane env; every
-    // other host resolves no source and gets no poller.
-    #[cfg(unix)]
-    let machine_usage_poller = coderouter_usage::start_poller(Arc::downgrade(&mux));
     // Closes terminals whose idle-close policy (`set-terminal-idle-policy`)
     // has elapsed with no attached view.
     let idle_terminal_reaper = match cmux_tui_core::start_idle_terminal_reaper(
@@ -2429,10 +2257,6 @@ fn run_server(
     let owner_event_result = owner_event_loop.map_or(Ok(()), LocalOwnerEventLoop::finish);
     if let Some(reaper) = idle_terminal_reaper {
         reaper.stop();
-    }
-    #[cfg(unix)]
-    if let Some(poller) = machine_usage_poller {
-        poller.stop();
     }
     #[cfg(unix)]
     let remote_shutdown = remote_runtime.map(|runtime| runtime.shutdown()).transpose();
@@ -2522,15 +2346,6 @@ fn finish_server_shutdown<W, R>(
     result
 }
 
-/// `CMUX_TUI_REMOTE_WS_TRUSTED_CARRIER=1` is how a systemd drop-in turns the
-/// trusted listener on for a daemon whose baked launch line predates the flag
-/// (cmux Cloud machines healed in place). Only an exact truthy value counts.
-#[cfg(unix)]
-fn remote_ws_trusted_carrier_from_env() -> bool {
-    std::env::var("CMUX_TUI_REMOTE_WS_TRUSTED_CARRIER")
-        .map(|value| matches!(value.trim(), "1" | "true" | "yes"))
-        .unwrap_or(false)
-}
 
 #[cfg(not(unix))]
 fn reject_unsupported_remote_options(args: &Args) -> anyhow::Result<()> {
@@ -2917,15 +2732,13 @@ impl StaticMachineController {
 #[cfg(unix)]
 fn run_provider_machine_client(
     connector: Arc<dyn MachineProviderConnector>,
-    local_machines: Vec<config::MachineConfig>,
-    connect_external: bool,
     config: config::StartupConfigSnapshot,
 ) -> anyhow::Result<()> {
     let state_root = cmux_tui_core::platform::workspace_state_dir();
     let mut runtime = ProviderMachineController::connect_with(
         connector,
-        local_machines,
-        connect_external,
+        Vec::new(),
+        false,
         state_root,
     )?;
 
@@ -4147,171 +3960,12 @@ mod tests {
         assert!(parse_args_result(["--machine-provider-command".into(), "--".into()]).is_err());
     }
 
-    #[test]
-    fn cloud_cli_parses_overrides_and_implies_cloud_mode() {
-        let parsed = args(&[
-            "--cloud-host",
-            "edge.example.com",
-            "--cloud-user",
-            "lawrence",
-            "--cloud-port",
-            "2200",
-            "--cloud-identity",
-            "/tmp/cloud-key",
-        ]);
 
-        assert!(parsed.cloud_cli_requested());
-        assert_eq!(parsed.cloud_host.as_deref(), Some("edge.example.com"));
-        assert_eq!(parsed.cloud_user.as_deref(), Some("lawrence"));
-        assert_eq!(parsed.cloud_port, Some(2200));
-        assert_eq!(parsed.cloud_identity, Some(PathBuf::from("/tmp/cloud-key")));
-        assert!(parse_args_result(["--cloud-port".into(), "0".into()]).is_err());
-    }
 
-    #[test]
-    fn provider_resolution_keeps_defaults_off_and_applies_cli_over_config() {
-        let mut config = config::Config::default();
-        assert_eq!(resolve_provider_launch(&args(&[]), &config).unwrap(), None);
 
-        config.machine_provider.cloud.enabled = true;
-        config.machine_provider.cloud.host = "configured.example.com".into();
-        config.machine_provider.cloud.user = Some("configured-user".into());
-        config.machine_provider.cloud.port = Some(2222);
-        config.machine_provider.cloud.identity_file = Some(PathBuf::from("/configured-key"));
-        assert_eq!(
-            resolve_provider_launch(&args(&[]), &config).unwrap(),
-            Some(ProviderLaunch::Cloud(CloudLaunch {
-                host: "configured.example.com".into(),
-                user: Some("configured-user".into()),
-                port: Some(2222),
-                identity_file: Some(PathBuf::from("/configured-key")),
-            }))
-        );
-        assert_eq!(
-            resolve_provider_launch(
-                &args(&["--cloud", "--cloud-host", "cli.example.com", "--cloud-port", "2200",]),
-                &config,
-            )
-            .unwrap(),
-            Some(ProviderLaunch::Cloud(CloudLaunch {
-                host: "cli.example.com".into(),
-                user: Some("configured-user".into()),
-                port: Some(2200),
-                identity_file: Some(PathBuf::from("/configured-key")),
-            }))
-        );
 
-        assert_eq!(
-            resolve_provider_launch(&args(&["--machine-provider", "/tmp/provider.sock"]), &config)
-                .unwrap(),
-            Some(ProviderLaunch::Unix(PathBuf::from("/tmp/provider.sock")))
-        );
 
-        assert_eq!(
-            resolve_provider_launch(
-                &args(&["--machine-provider-command", "/opt/provider", "--profile", "dev", "--",]),
-                &config,
-            )
-            .unwrap(),
-            Some(ProviderLaunch::Command(vec![
-                OsString::from("/opt/provider"),
-                OsString::from("--profile"),
-                OsString::from("dev"),
-            ]))
-        );
-    }
 
-    #[test]
-    fn provider_resolution_rejects_conflicts_and_limits_static_overlay() {
-        let mut config = config::Config::default();
-        let parsed = args(&["--machine-provider", "/tmp/provider.sock", "--cloud"]);
-        let error = resolve_provider_launch(&parsed, &config).unwrap_err().to_string();
-        assert!(error.contains("choose only one provider mode"), "{error}");
-
-        let parsed = args(&[
-            "--machine-provider-command",
-            "provider",
-            "--",
-            "--cloud-host",
-            "edge.example.com",
-        ]);
-        let error = resolve_provider_launch(&parsed, &config).unwrap_err().to_string();
-        assert!(error.contains("choose only one provider mode"), "{error}");
-
-        config.machines.push(config::MachineConfig {
-            id: "local-agents".into(),
-            name: "Local agents".into(),
-            subtitle: String::new(),
-            target: config::MachineTargetConfig::Unix {
-                socket: PathBuf::from("/tmp/local-agents.sock"),
-            },
-        });
-        assert!(matches!(
-            resolve_provider_launch(&args(&["--cloud"]), &config).unwrap(),
-            Some(ProviderLaunch::Cloud(_))
-        ));
-        let error =
-            resolve_provider_launch(&args(&["--machine-provider", "/tmp/provider.sock"]), &config)
-                .unwrap_err()
-                .to_string();
-        assert!(error.contains("only be combined with the local cloud"), "{error}");
-    }
-
-    #[test]
-    fn only_local_cloud_launch_enables_ephemeral_machine_connect() {
-        assert!(
-            ProviderLaunch::Cloud(CloudLaunch {
-                host: "cmux.cloud".into(),
-                user: None,
-                port: None,
-                identity_file: None,
-            })
-            .enables_client_machine_connect()
-        );
-        assert!(
-            !ProviderLaunch::Unix(PathBuf::from("/tmp/provider.sock"))
-                .enables_client_machine_connect()
-        );
-        assert!(
-            !ProviderLaunch::Command(vec![OsString::from("provider")])
-                .enables_client_machine_connect()
-        );
-    }
-
-    #[test]
-    fn startup_help_lists_all_provider_entrypoints() {
-        let usage = usage();
-        assert!(usage.contains("--machine-provider <path>"));
-        assert!(usage.contains("--machine-provider-command <program> [arg ...] --"));
-        assert!(usage.contains("--cloud"));
-        assert!(usage.contains("--cloud-identity"));
-    }
-
-    #[test]
-    fn startup_help_localizes_the_machine_agent_entrypoint() {
-        let english = usage_for_platform(localization::catalog_for_locale("en_US.UTF-8"), true);
-        assert!(english.contains("cmux machine-agent"));
-        assert!(english.contains("Share one local session through the configured host"));
-        assert!(english.contains("cmux server <ACTION>"));
-        assert!(english.contains("Stop a replaceable SSH sidecar explicitly"));
-        let japanese = usage_for_platform(localization::catalog_for_locale("ja_JP.UTF-8"), true);
-        assert!(japanese.contains("cmux machine-agent"));
-        assert!(japanese.contains("設定したホスト経由でローカルセッションを共有"));
-        assert!(japanese.contains("cmux server <操作>"));
-        assert!(japanese.contains("置換可能な SSH サイドカーを明示的に停止"));
-        assert!(!japanese.contains("Share one local session"));
-        assert!(!japanese.contains("Stop authenticated remote access explicitly"));
-    }
-
-    #[test]
-    fn startup_help_omits_machine_agent_on_unsupported_platforms() {
-        let english = localization::catalog_for_locale("en_US.UTF-8");
-        let usage = usage_for_platform(english, false);
-        assert!(!usage.contains("machine-agent"));
-        assert!(usage.contains("cmux relay"));
-        assert!(!usage.contains("cmux-tui"));
-        assert!(!usage.lines().any(|line| !line.is_empty() && line.trim().is_empty()));
-    }
 
     #[test]
     fn old_single_target_attach_flag_is_rejected() {
@@ -4338,57 +3992,7 @@ mod tests {
         assert_eq!(parsed.session, "agents");
     }
 
-    #[test]
-    fn startup_help_stays_focused_on_process_modes() {
-        let english = usage_for_platform(localization::catalog_for_locale("en_US.UTF-8"), true);
-        assert!(english.contains("cmux <scope> --help"));
-        assert!(english.contains("--terminal <id>"));
-        assert!(!english.contains("cmux-tui"));
-        assert!(!english.contains("KEYS"));
-        assert!(!english.contains("CLI VERBS"));
 
-        let japanese = usage_for_platform(localization::catalog_for_locale("ja_JP.UTF-8"), true);
-        assert!(japanese.contains("cmux <scope> --help"));
-        assert!(!japanese.contains("cmux-tui"));
-        assert!(!japanese.contains("KEYS"));
-    }
-
-    #[test]
-    fn provider_mode_rejects_server_and_attach_options_before_connecting() {
-        let parsed = args(&[
-            "attach",
-            "--cloud",
-            "--session",
-            "agents",
-            "--socket",
-            "/tmp/session.sock",
-            "--headless",
-            "--ws",
-            "127.0.0.1:7681",
-            "--ws-token",
-            "secret",
-            "--ws-insecure-bind",
-            "--remote-ws",
-            "127.0.0.1:8443",
-            "--term",
-            "xterm-direct",
-        ]);
-
-        let error = validate_provider_process_args(&parsed).unwrap_err().to_string();
-        for conflict in [
-            "attach",
-            "--session",
-            "--socket",
-            "--headless",
-            "--ws",
-            "--ws-token",
-            "--ws-insecure-bind",
-            "remote daemon options",
-            "--term",
-        ] {
-            assert!(error.contains(conflict), "missing {conflict:?} in {error:?}");
-        }
-    }
 
     #[test]
     fn existing_session_reuse_preserves_machine_client_mode() {

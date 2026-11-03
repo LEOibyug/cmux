@@ -41,13 +41,6 @@ struct LocalTmuxSettingsCard: View {
                     .controlSize(.small)
                     .disabled(model.phase != .idle)
                     .accessibilityIdentifier("SettingsTerminalLocalTmuxRefreshButton")
-
-                    Link(
-                        String(localized: "settings.terminal.localTmux.details", defaultValue: "Details", bundle: .module),
-                        destination: URL(string: "https://github.com/manaflow-ai/cmux/blob/main/docs/local-tmux.md")!
-                    )
-                    .cmuxFont(.caption)
-                    .accessibilityIdentifier("SettingsTerminalLocalTmuxDocsLink")
                 }
             }
 

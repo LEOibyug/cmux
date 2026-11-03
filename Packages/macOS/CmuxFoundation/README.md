@@ -22,9 +22,6 @@ so call sites read naturally (`value.javaScriptStringLiteral`, not `f(value)`).
 - `RemoteTmuxCommandBuilder` — shared remote `tmux` resolution and argv preservation.
 - `WorkspaceRemoteTerminalProfile` — durable shell-or-named-tmux terminal intent.
 - `WorkspaceRemoteTerminalTransport` — the persisted SSH-or-Mosh interactive terminal preference.
-- `SentryNoiseFilter` — shared classification for expected CLI socket lifecycle failures,
-  including structured `unavailable` replies and typed missing socket paths.
-- `CLISocketSentryPolicy`: trusted Codex sandbox provenance for CLI socket `EPERM` filtering.
 - `CmuxCodexConfigEditor` — pure install and uninstall transforms for cmux's Codex `config.toml` hooks.
 - `MainActorDeferredActionScheduler` — replaceable clock-driven main-actor work
   whose queued actions cannot retain prior scheduled actions.
@@ -81,24 +78,6 @@ let result = editor.installingHooks(in: configContents, trustEntries: trustEntri
 try result.content.write(to: configURL, atomically: true, encoding: .utf8)
 ```
 
-CLI telemetry may suppress socket-connect `EPERM` only when the process
-environment contains a known restricted `CODEX_SANDBOX` value:
-
-```swift
-let policy = CLISocketSentryPolicy(environment: ProcessInfo.processInfo.environment)
-let isExpected = SentryNoiseFilter().isExpectedCLISocketTransportFailure(
-    stage: stage,
-    message: errorMessage,
-    allowSandboxPolicyDenial: policy.allowsSandboxPolicyDenial
-)
-```
-
-Pass structured `CLIError.v2Code` as `cliErrorCode` and a typed missing-path
-classification as `socketPathMissing` when those values are available; this avoids
-guessing lifecycle state from localized text. Missing, unknown, and unrestricted
-`CODEX_SANDBOX` values keep the error visible, and
-`CLISentryErrorFingerprint` groups them as `socket-connect-denied`, a throttled
-kind reported at most once per stage per 15 minutes.
 
 ## Testing
 

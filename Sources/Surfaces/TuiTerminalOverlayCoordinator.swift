@@ -1,0 +1,194 @@
+import CmuxRemoteSession
+import AppKit
+import CmuxTerminal
+import os
+
+private let tuiTerminalPresentationLogger = Logger(
+    subsystem: "com.cmuxterm.app", category: "TuiTerminalPresentation"
+)
+
+/// Owns one status card across the representable anchor and the native portal.
+/// The attachment session owns connection health. Layout and visibility only
+/// choose where to present that state, never whether the connection has failed.
+@MainActor
+final class TuiTerminalOverlayCoordinator {
+    private let dismissalStore: RemoteTerminalCardDismissalStore
+    weak var session: TuiManualMirrorSession? {
+        didSet { if session != nil { endedPresentation = nil } }
+    }
+    /// The card a stopped session left behind after an interrupted connection.
+    /// It outlives the session so the pane never falls back to a frozen frame;
+    /// binding a new session replaces it.
+    private(set) var endedPresentation: RemoteTerminalReconnectOverlayPolicy.Presentation?
+    private(set) var overlay: RemoteTerminalReconnectOverlayView?
+    private weak var anchor: GhosttyTerminalView.HostContainerView?
+    private var anchorOwnership: (generation: UInt64, serial: UInt64)?
+    private var anchorVisible = false
+    private var lastDestination: Destination = .hidden
+
+    private enum Destination: String {
+        case hidden, anchor, terminal
+    }
+
+    /// Creates a coordinator with an injected dismissal store.
+    ///
+    /// - Parameter dismissalStore: Repository shared by this native surface owner.
+    init(dismissalStore: RemoteTerminalCardDismissalStore) {
+        self.dismissalStore = dismissalStore
+    }
+
+    /// Creates a coordinator backed by the app's standard user defaults.
+    convenience init() {
+        self.init(
+            dismissalStore: RemoteTerminalCardDismissalStore(defaults: .standard)
+        )
+    }
+
+    /// A replaced representable may still emit layout and hide callbacks. Only
+    /// the newest ownership epoch/host may move or hide this terminal's card.
+    func updateAnchor(
+        _ host: GhosttyTerminalView.HostContainerView,
+        visible: Bool,
+        ownershipGeneration: UInt64
+    ) {
+        let incoming = (generation: ownershipGeneration, serial: host.instanceSerial)
+        if let current = anchorOwnership,
+           incoming.generation < current.generation ||
+            (incoming.generation == current.generation && incoming.serial < current.serial) {
+            return
+        }
+        anchor = host
+        anchorOwnership = incoming
+        anchorVisible = visible
+    }
+
+    /// Reconciles the current connection card with portal visibility and dismissal state.
+    func synchronize(
+        hostedView: GhosttySurfaceScrollView,
+        contentFrame: CGRect,
+        legacyPresentation: RemoteTerminalReconnectOverlayPolicy.Presentation?,
+        onReconnect: @escaping () -> Void,
+        onCancel: (() -> Void)? = nil
+    ) {
+        let visible = anchor == nil ? hostedView.isVisibleInUI : anchorVisible
+        let presented: Bool
+        if let anchor {
+            presented = TerminalWindowPortalRegistry.isHostedView(hostedView, boundTo: anchor)
+                && TerminalWindowPortalRegistry.isPresented(hostedView)
+        } else {
+            // Canvas can host the native view directly without a window portal.
+            presented = hostedView.window != nil && !hostedView.isHidden
+                && hostedView.bounds.width > 1 && hostedView.bounds.height > 1
+        }
+        let presentation: RemoteTerminalReconnectOverlayPolicy.Presentation?
+        if let session {
+            presentation = session.connectionPresentation
+        } else if let endedPresentation {
+            presentation = endedPresentation
+        } else {
+            presentation = legacyPresentation
+        }
+
+        let destination: NSView = presented ? hostedView : ((anchor as NSView?) ?? hostedView)
+        let dismissalID = hostedView.surfaceView.terminalSurface.map {
+            "remote.terminal-reconnect.\($0.id.uuidString)"
+        }
+        let effectiveCancel = { [weak self] in
+            if let onCancel { onCancel() }
+            else { self?.session?.cancelConnectionAttempt() }
+        }
+        apply(
+            visible ? presentation : nil,
+            in: destination,
+            frame: presented ? contentFrame : destination.bounds,
+            dismissalID: dismissalID,
+            onReconnect: onReconnect,
+            onCancel: effectiveCancel
+        )
+        let next: Destination = overlay == nil ? .hidden : (presented ? .terminal : .anchor)
+        if next != lastDestination, let session {
+            tuiTerminalPresentationLogger.notice("pane terminal=\(session.terminalID, privacy: .private(mask: .hash)) destination=\(next.rawValue, privacy: .public) bound=\(presented) phase=\(String(describing: session.phase), privacy: .public)")
+        }
+        lastDestination = next
+    }
+
+    /// Retires `expectedSession`, keeping `presentation` as the pane's final
+    /// card. A nil presentation removes the card, like ``unbindSession(_:)``.
+    func endSession(
+        _ expectedSession: TuiManualMirrorSession,
+        presentation: RemoteTerminalReconnectOverlayPolicy.Presentation?
+    ) {
+        guard session === expectedSession else { return }
+        session = nil
+        endedPresentation = presentation
+        if presentation == nil {
+            overlay?.removeFromSuperview()
+            overlay = nil
+        }
+    }
+
+    /// A retired session cannot clear a replacement session's presentation.
+    func unbindSession(_ expectedSession: TuiManualMirrorSession) {
+        guard session === expectedSession else { return }
+        session = nil
+        overlay?.removeFromSuperview()
+        overlay = nil
+    }
+
+    /// Applies a snapshot by moving the existing card; no second fallback view
+    /// can retain a stale button or outlive a connected presentation.
+    /// Places or removes a card for one presentation snapshot.
+    func apply(
+        _ presentation: RemoteTerminalReconnectOverlayPolicy.Presentation?,
+        in destination: NSView,
+        frame: CGRect,
+        dismissalID: String? = nil,
+        onReconnect: @escaping () -> Void,
+        onCancel: (() -> Void)? = nil,
+        onDismiss: (() -> Void)? = nil
+    ) {
+        guard let presentation else {
+            overlay?.removeFromSuperview()
+            overlay = nil
+            return
+        }
+        let card = overlay ?? RemoteTerminalReconnectOverlayView(frame: frame)
+        if let dismissalID,
+           dismissalStore.isDismissed(id: dismissalID, signature: presentation.copyableError) {
+            card.removeFromSuperview()
+            if overlay === card {
+                overlay = nil
+            }
+            return
+        }
+        overlay = card
+        card.apply(presentation)
+        card.onReconnect = onReconnect
+        card.onDismiss = { [weak self, weak card] in
+            guard let self, let card else { return }
+            if let onDismiss {
+                onDismiss()
+            } else if presentation.showsProgress {
+                if let onCancel {
+                    onCancel()
+                } else if let session = self.session {
+                    session.cancelConnectionAttempt()
+                } else if let dismissalID {
+                    self.dismissalStore.dismiss(id: dismissalID, signature: presentation.copyableError)
+                }
+            } else if let dismissalID {
+                self.dismissalStore.dismiss(id: dismissalID, signature: presentation.copyableError)
+            }
+            if self.overlay === card {
+                card.removeFromSuperview()
+                self.overlay = nil
+            }
+        }
+        if card.frame != frame { card.frame = frame }
+        card.autoresizingMask = [.width, .height]
+        if card.superview !== destination {
+            destination.addSubview(card, positioned: .above, relativeTo: nil)
+        }
+    }
+
+}

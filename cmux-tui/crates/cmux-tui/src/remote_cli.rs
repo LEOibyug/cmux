@@ -32,7 +32,7 @@ use cmux_remote::provider::{
     WireGuardDialer, sanitized_route,
 };
 use cmux_remote::secure_directory::{DirectoryAccess, ensure_secure_directory};
-use cmux_remote::ssh_bootstrap::{BUILD_IDENTITY, DISTRIBUTION_VERSION, NPM_BOOTSTRAP_VERSION};
+use cmux_remote::ssh_prerequisite::{BUILD_IDENTITY, DISTRIBUTION_VERSION};
 use cmux_remote_protocol::{
     LanePolicy, REMOTE_PROTOCOL_VERSION, RoutePolicy, SessionId, WorkspaceRequest,
     WorkspaceResponse,
@@ -46,7 +46,7 @@ use crate::localization::catalog;
 use crate::remote_runtime::persist_daemon_lifecycle_fence;
 use crate::remote_runtime::{
     ClientRuntimeOptions, DaemonRuntimeOptions, DaemonShutdownStatus, RelayClientOptions,
-    ResolvedRouteCandidate, SshBootstrapOptions, acknowledge_failed_shutdown_outcome,
+    ResolvedRouteCandidate, SshPrerequisiteOptions, acknowledge_failed_shutdown_outcome,
     acknowledge_legacy_shutdown_state, client_provider_registry, complete_verified_daemon_stop,
     daemon_paths, inactive_daemon_needs_legacy_acknowledgement, load_runtime_info,
     load_shutdown_outcome, start_client_runtime, start_daemon_runtime,
@@ -247,8 +247,6 @@ struct ConnectFlags {
     ssh_args: Vec<String>,
     /// Coding-agent providers whose hooks the SSH host installs on attach.
     agent_hooks: Vec<String>,
-    auto_install: bool,
-    upgrade: bool,
     forward_workspace: Option<String>,
     forward_host: Option<String>,
     forward_port: Option<u16>,
@@ -272,7 +270,6 @@ fn parse_connect_flags(args: &[String]) -> anyhow::Result<ConnectFlags> {
         ssh_session: "main".into(),
         ssh_binary: "ssh".into(),
         remote_binary: "~/.local/bin/cmux-tui".into(),
-        auto_install: true,
         forward_scheme: "http".into(),
         ..ConnectFlags::default()
     };
@@ -489,8 +486,8 @@ fn parse_connect_flags(args: &[String]) -> anyhow::Result<ConnectFlags> {
             "--agent-hooks" => {
                 flags.agent_hooks.extend(agent_hook_providers(&value("--agent-hooks")?));
             }
-            "--no-install" => flags.auto_install = false,
-            "--upgrade" => flags.upgrade = true,
+            // Explicit safety assertion: this client only probes preinstalled helpers.
+            "--no-install" => {},
             "--workspace-root" => flags.forward_workspace = Some(value("--workspace-root")?),
             "--host" => flags.forward_host = Some(value("--host")?),
             "--port" => {
@@ -530,9 +527,6 @@ fn parse_connect_flags(args: &[String]) -> anyhow::Result<ConnectFlags> {
             && flags.reconnect.heartbeat_timeout.is_zero())
     {
         return Err(anyhow!(catalog().remote_client.reconnect_policy_invalid));
-    }
-    if flags.upgrade && !flags.auto_install {
-        return Err(anyhow!(catalog().remote_client.upgrade_no_install));
     }
     if flags.json && !flags.headless {
         return Err(anyhow!(catalog().remote_client.json_requires_headless));
@@ -770,9 +764,6 @@ fn start_connected(mut flags: ConnectFlags) -> anyhow::Result<ConnectedRuntime> 
 
     let mut routes = resolve_route_candidates(&route_strings, &flags.routing, &providers)?;
     promote_reachable_unix_routes(&mut routes);
-    if flags.upgrade && routes.first().is_none_or(|route| route.endpoint.scheme() != "ssh") {
-        return Err(anyhow!(catalog().remote_client.upgrade_requires_ssh));
-    }
     for route in relay_route_names {
         if !routes.iter().any(|candidate| candidate.endpoint.as_str() == route) {
             let display = parse_route(&route, "relay credential route")
@@ -783,7 +774,7 @@ fn start_connected(mut flags: ConnectFlags) -> anyhow::Result<ConnectedRuntime> 
     }
     let session = SessionId(*uuid::Uuid::new_v4().as_bytes());
     let startup_timeout = remaining_startup_timeout(startup_started, total_startup_timeout)?;
-    let ssh_bootstrap = initial_ssh_bootstrap_options(&flags, startup_timeout);
+    let ssh_prerequisite = initial_ssh_prerequisite_options(startup_timeout);
     let runtime = start_client_runtime(ClientRuntimeOptions {
         routes,
         providers,
@@ -798,7 +789,7 @@ fn start_connected(mut flags: ConnectFlags) -> anyhow::Result<ConnectedRuntime> 
         state_dir: client_root,
         local_socket: flags.local_socket,
         ssh,
-        ssh_bootstrap,
+        ssh_prerequisite,
     })?;
 
     if let Some(invitation) = &invitation {
@@ -829,13 +820,10 @@ fn start_connected(mut flags: ConnectFlags) -> anyhow::Result<ConnectedRuntime> 
     Ok(ConnectedRuntime { runtime, route: connected_route })
 }
 
-fn initial_ssh_bootstrap_options(
-    flags: &ConnectFlags,
+fn initial_ssh_prerequisite_options(
     startup_timeout: Duration,
-) -> SshBootstrapOptions {
-    SshBootstrapOptions {
-        auto_install: flags.auto_install,
-        upgrade: flags.upgrade,
+) -> SshPrerequisiteOptions {
+    SshPrerequisiteOptions {
         attempt_timeout: startup_timeout,
     }
 }
@@ -2087,26 +2075,16 @@ fn print_admin_response(action: &str, response: AdminResponse, json: bool) -> an
     Ok(())
 }
 
-/// Advertised by `remote-probe --json` so a control plane can choose routes the client can use.
+/// Advertised by `remote-probe --json` for clients selecting explicit local or remote transports.
 ///
 /// `direct-ws-user-agent`: direct WebSocket dials carry a User-Agent, which
 /// hosted ingress on branded machine domains requires.
 /// `wireguard-hub`: `remote connect --wireguard-hub` and `wg hub` exist, so the
 /// app may reach private-network machines through a shared in-process tunnel.
-/// `cloud-browser-network`: Cloud browser proxy routes preserve the guest
-/// machine's network and loopback context.
-/// `ssh-payload-download`: a remote platform's build that the app does not
-/// bundle is downloaded once, checked against the bundled manifest and cached,
-/// so the app's packager may ship only its checksum.
-/// `ssh-payload-macos-from-client`: a Mac host gets this client's own build or
-/// its slice of a universal binary, so the packager may ship no macOS payload.
 pub const PROBE_CAPABILITIES: &[&str] = &[
     "direct-ws-user-agent",
     "wireguard-hub",
     "browser-proxy",
-    "cloud-browser-network",
-    "ssh-payload-download",
-    "ssh-payload-macos-from-client",
 ];
 
 fn run_probe(args: &[String]) -> anyhow::Result<()> {
@@ -2114,7 +2092,6 @@ fn run_probe(args: &[String]) -> anyhow::Result<()> {
         "app": "cmux-tui",
         "version": env!("CARGO_PKG_VERSION"),
         "distribution_version": DISTRIBUTION_VERSION,
-        "npm_bootstrap_version": NPM_BOOTSTRAP_VERSION,
         "build_identity": BUILD_IDENTITY,
         "remote_protocol": REMOTE_PROTOCOL_VERSION,
         "os": std::env::consts::OS,
@@ -3047,19 +3024,7 @@ mod tests {
         assert!(PROBE_CAPABILITIES.contains(&"wireguard-hub"));
     }
 
-    #[test]
-    fn probe_capabilities_include_ssh_payload_download() {
-        // The app's packager bundles Linux SSH payloads only for a client
-        // without this capability (scripts/install-cmux-tui-client.sh).
-        assert!(PROBE_CAPABILITIES.contains(&"ssh-payload-download"));
-    }
 
-    #[test]
-    fn probe_capabilities_include_ssh_payload_macos_from_client() {
-        // The app's packager bundles macOS SSH payloads only for a client
-        // without this capability (scripts/install-cmux-tui-client.sh).
-        assert!(PROBE_CAPABILITIES.contains(&"ssh-payload-macos-from-client"));
-    }
 
     #[test]
     fn agent_hooks_flag_collects_providers() {
@@ -3203,25 +3168,6 @@ mod tests {
         assert_eq!(responder.await.unwrap(), 0, "stdio data leaked to the rejected Unix responder");
     }
 
-    #[test]
-    fn initial_ssh_bootstrap_uses_startup_budget_not_reconnect_attempt_budget() {
-        let startup_timeout = Duration::from_secs(2);
-        let flags = ConnectFlags {
-            reconnect: ReconnectPolicy {
-                attempt_timeout: Duration::from_millis(20),
-                ..ReconnectPolicy::default()
-            },
-            auto_install: true,
-            upgrade: true,
-            ..ConnectFlags::default()
-        };
-
-        let bootstrap = initial_ssh_bootstrap_options(&flags, startup_timeout);
-        assert_eq!(bootstrap.attempt_timeout, startup_timeout);
-        assert_ne!(bootstrap.attempt_timeout, flags.reconnect.attempt_timeout);
-        assert!(bootstrap.auto_install);
-        assert!(bootstrap.upgrade);
-    }
 
     #[test]
     fn iroh_url_query_becomes_non_secret_routing_hints() {

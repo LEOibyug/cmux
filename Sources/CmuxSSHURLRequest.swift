@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Foundation
 
 enum CmuxSSHURLParseError: Error, Equatable {
@@ -23,9 +23,12 @@ struct CmuxSSHURLRequest: Equatable {
     static let maxDestinationLength = 256
     static let maxTitleLength = 160
     static let supportedSchemes: Set<String> = ["cmux", "cmux-nightly", "cmux-rc", "cmux-dev"]
-    static var activeSupportedSchemes: Set<String> {
-        [AuthEnvironment.callbackScheme.lowercased()]
+    static var callbackScheme: String {
+        let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]] ?? []
+        return types.lazy.flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
+            .first { $0.lowercased().hasPrefix("cmux") }?.lowercased() ?? "cmux"
     }
+    static var activeSupportedSchemes: Set<String> { [callbackScheme] }
 
     let originalURL: URL
     let destination: String
@@ -535,7 +538,7 @@ struct CmuxNavigationURLRequest: Equatable {
     }
 
     static var activeSupportedSchemes: Set<String> {
-        [AuthEnvironment.callbackScheme.lowercased()]
+        [CmuxSSHURLRequest.callbackScheme.lowercased()]
     }
 
     let originalURL: URL
@@ -637,14 +640,14 @@ struct CmuxNavigationURLRequest: Equatable {
         }
     }
 
-    static func workspaceLink(workspaceId: UUID, scheme: String = AuthEnvironment.callbackScheme) -> String {
+    static func workspaceLink(workspaceId: UUID, scheme: String = CmuxSSHURLRequest.callbackScheme) -> String {
         "\(scheme)://workspace/\(workspaceId.uuidString)"
     }
 
     static func paneLink(
         workspaceId: UUID,
         paneId: UUID,
-        scheme: String = AuthEnvironment.callbackScheme
+        scheme: String = CmuxSSHURLRequest.callbackScheme
     ) -> String {
         "\(scheme)://workspace/\(workspaceId.uuidString)/pane/\(paneId.uuidString)"
     }
@@ -654,7 +657,7 @@ struct CmuxNavigationURLRequest: Equatable {
         surfaceId: UUID,
         stableWorkspaceId: UUID? = nil,
         stableSurfaceId: UUID? = nil,
-        scheme: String = AuthEnvironment.callbackScheme
+        scheme: String = CmuxSSHURLRequest.callbackScheme
     ) -> String {
         var link = "\(scheme)://workspace/\(workspaceId.uuidString)/surface/\(surfaceId.uuidString)"
         var queryItems: [String] = []

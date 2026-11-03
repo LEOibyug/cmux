@@ -235,14 +235,13 @@ final class WorkspaceContentViewVisibilityTests {
             withIntermediateDirectories: true
         )
         defer { try? FileManager.default.removeItem(at: projectRoot) }
-        let tabManager = TabManager(autoWelcomeIfNeeded: false, createInitialWorkspace: false)
+        let tabManager = TabManager(createInitialWorkspace: false)
         defer { tabManager.finalizeAllWorkspacesForWindowClose() }
         for _ in 0..<7 {
             tabManager.addWorkspace(
                 workingDirectory: projectRoot.path,
-                initialSurface: .cloudVMLoading,
-                select: tabManager.tabs.isEmpty,
-                autoWelcomeIfNeeded: false
+                initialSurface: .remoteLoading,
+                select: tabManager.tabs.isEmpty
             )
         }
         for workspace in tabManager.tabs {
@@ -362,17 +361,15 @@ final class WorkspaceContentViewVisibilityTests {
         // either can publish a workspace change after `counts.reset()`. That
         // re-evaluates VerticalTabsSidebar for a reason unrelated to unread
         // state, so the count below depended on how fast the runner was.
-        let tabManager = TabManager(autoWelcomeIfNeeded: false, createInitialWorkspace: false)
+        let tabManager = TabManager(createInitialWorkspace: false)
         let selectedWorkspace = tabManager.addWorkspace(
-            initialSurface: .cloudVMLoading,
-            select: true,
-            autoWelcomeIfNeeded: false
+            initialSurface: .remoteLoading,
+            select: true
         )
         let workspaceId = selectedWorkspace.id
         let unaffectedWorkspace = tabManager.addWorkspace(
-            initialSurface: .cloudVMLoading,
-            select: false,
-            autoWelcomeIfNeeded: false
+            initialSurface: .remoteLoading,
+            select: false
         )
         let unread = SidebarUnreadModel()
         let counts = MinimalModeBodyProbeCounts()
@@ -548,7 +545,7 @@ final class WorkspaceContentViewVisibilityTests {
     }
 
     @Test
-    func minimalModeSidebarFooterKeepsOnlyUpgradeControl() {
+    func minimalModeSidebarFooterHidesLocalControls() {
         let minimalControls = SidebarFooterControl.allCases.filter {
             SidebarFooterPresentationPolicy.isVisible($0, presentationMode: .minimal)
         }
@@ -556,88 +553,10 @@ final class WorkspaceContentViewVisibilityTests {
             SidebarFooterPresentationPolicy.isVisible($0, presentationMode: .standard)
         }
 
-        #expect(minimalControls == [.upgrade])
+        #expect(minimalControls.isEmpty)
         #expect(standardControls == SidebarFooterControl.allCases)
     }
 
-    @Test
-    func upgradeVisibilityRequiresKnownFreeEntitlement() {
-        #expect(
-            SidebarFooterPresentationPolicy.isUpgradeVisible(
-                isProActive: false,
-                isProStatusKnown: true
-            )
-        )
-        #expect(
-            !SidebarFooterPresentationPolicy.isUpgradeVisible(
-                isProActive: true,
-                isProStatusKnown: true
-            )
-        )
-        #expect(
-            !SidebarFooterPresentationPolicy.isUpgradeVisible(
-                isProActive: false,
-                isProStatusKnown: false
-            )
-        )
-    }
-
-    @Test
-    func sidebarAccountPictureAndIconPresentationsStayDistinct() {
-        let picture = SidebarAccountButtonPresentation.resolve(
-            isSignedIn: true,
-            prefersProfileIcon: false,
-            hasProfilePicture: true
-        )
-        let toggledIcon = SidebarAccountButtonPresentation.resolve(
-            isSignedIn: true,
-            prefersProfileIcon: true
-        )
-        let signedOutIcon = SidebarAccountButtonPresentation.resolve(
-            isSignedIn: false,
-            prefersProfileIcon: false
-        )
-        let missingPictureIcon = SidebarAccountButtonPresentation.resolve(
-            isSignedIn: true,
-            prefersProfileIcon: false,
-            hasProfilePicture: false
-        )
-
-        #expect(picture.visual == .profilePicture)
-        #expect(picture.size == SidebarFooterButtonMetrics.accountAndHelpVisualSize)
-        #expect(
-            SidebarAccountButtonPresentation.defaultProfileIconSystemName
-                == "person.crop.circle"
-        )
-        #expect(
-            toggledIcon.visual == .profileIcon(
-                systemName: SidebarAccountButtonPresentation.defaultProfileIconSystemName
-            )
-        )
-        #expect(toggledIcon.size == SidebarFooterButtonMetrics.accountAndHelpVisualSize)
-        #expect(signedOutIcon == toggledIcon)
-        #expect(missingPictureIcon == toggledIcon)
-        #expect(
-            SidebarFooterButtonMetrics.profilePictureSize
-                == SidebarFooterButtonMetrics.helpIconSize
-        )
-        #expect(
-            SidebarFooterButtonMetrics.profileIconSize
-                == SidebarFooterButtonMetrics.helpIconSize
-        )
-        #expect(
-            SidebarFooterCircularIconStyle.standard.pointSize
-                == SidebarFooterButtonMetrics.accountAndHelpVisualSize
-        )
-        #expect(SidebarFooterCircularIconStyle.standard.weight == .regular)
-#if DEBUG
-        #expect(SidebarFooterProfileIconDebugSettings.defaultIcon == .cropCircle)
-        #expect(
-            SidebarFooterHelpIconDebugSettings.defaultWeight.fontWeight
-                == SidebarFooterCircularIconStyle.standard.weight
-        )
-#endif
-    }
 
     /// Drains until three consecutive drains re-evaluate no chrome body, so a
     /// measurement only counts what the change under test invalidates.

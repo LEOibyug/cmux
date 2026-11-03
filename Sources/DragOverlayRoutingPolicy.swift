@@ -237,10 +237,8 @@ enum DragOverlayRoutingPolicy {
     }
 
     static func hasFileDropPayload(_ pasteboardTypes: [NSPasteboard.PasteboardType]?) -> Bool {
-        // Cloud rows move workspace/surface identities. An incidental URL
-        // representation must not turn them into Finder-style file drags.
-        guard pasteboardTypes?.contains(.cloudSidebarRow) != true,
-              !hasSurfaceResourceTransfer(pasteboardTypes) else { return false }
+        // Surface identities must never become file drags through incidental URLs.
+        guard !hasSurfaceResourceTransfer(pasteboardTypes) else { return false }
         return hasFileURL(pasteboardTypes) || hasFilePreviewTransfer(pasteboardTypes)
     }
 

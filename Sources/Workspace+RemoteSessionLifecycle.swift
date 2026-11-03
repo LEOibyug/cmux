@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxCore
 import CmuxRemoteDaemon
 import CmuxRemoteSession
@@ -155,7 +155,6 @@ extension Workspace {
     @discardableResult
     func reconnectRemoteConnection(surfaceId: UUID? = nil) -> Bool {
         guard !managedDevicePolicy.isEnforced(.disableRemoteConnections) else { return false }
-        if isManagedCloudVMWorkspace, !CloudMachinesFeature.offMainIsEnabled() { return false }
         if let surfaceId, let session = tuiMirrorSession(for: surfaceId) { return session.retryConnection() }
         if usesSSHTui, let configuration = remoteConfiguration {
             // A targeted pane reconnect cannot escalate into retrying every SSH viewer.
@@ -190,8 +189,7 @@ extension Workspace {
         } else if let startupCommand = effectiveRemoteTerminalStartupCommand(from: configuration),
                   !startupCommand.isEmpty,
                   let reconnectingSurfaceId {
-            let shouldRespawnSurface = isDefaultFreestyleSSHDRemoteWorkspace ||
-                surfaceId != nil ||
+            let shouldRespawnSurface = surfaceId != nil ||
                 remoteDisconnectPlaceholderPanelIds.contains(reconnectingSurfaceId) ||
                 pendingRemoteTerminalChildExitSurfaceIds.contains(reconnectingSurfaceId) ||
                 !activeRemoteTerminalSurfaceIds.contains(reconnectingSurfaceId) ||
@@ -228,44 +226,27 @@ extension Workspace {
     }
 
     @discardableResult
-    func reconnectCloudTerminalSurface(surfaceId: UUID) -> Bool {
-        if let status = terminalPanel(for: surfaceId)?.deviceAttachment {
-            status.retry()
-            return true
-        }
-        guard !managedDevicePolicy.isEnforced(.disableRemoteConnections), CloudMachinesFeature.offMainIsEnabled() else { return false }
+    func reconnectTuiTerminalSurface(surfaceId: UUID) -> Bool {
+        guard !managedDevicePolicy.isEnforced(.disableRemoteConnections) else { return false }
         // An optimistic pane whose creation failed replays its own request.
-        if retryReservedCloudTerminalPane(surfaceId: surfaceId) { return true }
-        if let resource = cloudProjectedResource(forPanel: surfaceId),
+        if retryReservedTuiTerminalPane(surfaceId: surfaceId) { return true }
+        if let resource = tuiProjectedResource(forPanel: surfaceId),
            let provider = SurfaceCatalog.shared.provider(for: resource.id.machine) as? CmuxTuiSurfaceProvider {
             guard let session = provider.manualMirrorSessions[surfaceId] else {
-                clearCloudMaterializationFailure(surfaceID: surfaceId)
+                clearTuiMaterializationFailure(surfaceID: surfaceId)
                 provider.scheduleRefresh()
                 return true
             }
             (panels[surfaceId] as? TerminalPanel)?.requestViewReattach()
             return session.retryConnection()
         }
-        guard isManagedCloudVMWorkspace,
+        guard remoteConfiguration != nil,
               isRemoteTerminalSurface(surfaceId) || remoteDisconnectPlaceholderPanelIds.contains(surfaceId) else {
             return false
         }
         return reconnectRemoteConnection(surfaceId: surfaceId)
     }
 
-    func suspendCloudRemoteConfiguration(_ configuration: WorkspaceRemoteConfiguration) -> Bool {
-        disconnectRemoteConnection(clearConfiguration: false, disconnectedDetail: CloudMachinesFeature.disabledMessage)
-        remoteConfiguration = configuration.scopedToOwnerWorkspace(id)
-        remoteControllerConnectionState = .disconnected
-        remoteConnectionState = .disconnected
-        remoteConnectionDetail = String(
-            localized: "cloud.feature.disabled",
-            defaultValue: "Cloud Machines are temporarily unavailable."
-        )
-        applyBrowserRemoteWorkspaceStatusToPanels()
-        postRemoteConnectionPresentationDidChange()
-        return true
-    }
 
     private func remoteReconnectTerminalSurfaceId(requestedSurfaceId: UUID?) -> UUID? {
         if let requestedSurfaceId, panels[requestedSurfaceId] is TerminalPanel { return requestedSurfaceId }

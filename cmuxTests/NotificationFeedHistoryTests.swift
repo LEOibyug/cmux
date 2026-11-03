@@ -1,4 +1,3 @@
-import CMUXMobileCore
 import Foundation
 import Testing
 #if canImport(cmux_DEV)
@@ -130,14 +129,11 @@ struct NotificationFeedHistoryTests {
     }
 
     @Test func oversizedActiveReconcileDoesNotChurnRevisionAfterRetentionTrim() {
-        var revisions: [Int] = []
         let history = NotificationFeedHistoryStore(
             fileURL: nil,
             readRetentionLimit: 10,
             totalRetentionLimit: 3
-        ) { revision in
-            revisions.append(revision)
-        }
+        )
         let workspaceID = UUID()
         let baseDate = Date(timeIntervalSince1970: 1_200)
         let active = (0..<5).map { offset in
@@ -157,7 +153,7 @@ struct NotificationFeedHistoryTests {
         #expect(retainedTitles == ["Active 4", "Active 3", "Active 2"])
         #expect(history.notifications.map(\.title) == retainedTitles)
         #expect(history.revision == retainedRevision)
-        #expect(revisions == [1])
+        #expect(retainedRevision == 1)
     }
 
     @Test func activeReconcileCapsBeforeMaterializingHistoryRecords() {
@@ -760,116 +756,6 @@ struct NotificationFeedHistoryTests {
         #expect(size.uint64Value <= 512)
     }
 
-    @Test func feedListResponseStaysWithinMobileFrameLimit() async throws {
-        let store = TerminalNotificationStore.shared
-        let workspaceID = UUID()
-        let baseDate = Date(timeIntervalSince1970: 1_800)
-        let body = String(repeating: "x", count: 8_192)
-        let notifications = (0..<NotificationFeedHistoryStore.totalRetentionLimit).map { offset in
-            notification(
-                workspaceID: workspaceID,
-                title: "Frame budget \(offset)",
-                body: body,
-                date: baseDate.addingTimeInterval(Double(offset)),
-                isRead: false
-            )
-        }
-        store.replaceNotificationsForTesting(notifications)
-        defer { store.replaceNotificationsForTesting([]) }
-
-        let response = await TerminalController.shared.mobileHostHandleRPC(
-            MobileHostRPCRequest(
-                id: "feed-list",
-                method: "notification.feed.list",
-                params: [:],
-                auth: nil
-            )
-        )
-        let encoded = MobileHostRPCEnvelope.encodeResponse(id: "feed-list", result: response)
-        #expect(encoded.count <= MobileSyncFrameCodec.defaultMaximumFrameByteCount)
-        let payload = try responsePayload(response)
-        let rows = try #require(payload["notifications"] as? [[String: Any]])
-        #expect(rows.count == notifications.count)
-        #expect(rows.first?["title"] as? String == "Frame budget \(notifications.count - 1)")
-        #expect((rows.first?["body"] as? String)?.utf8.count == NotificationFeedHistoryRecord.historyBodyByteLimit)
-    }
-
-    @Test func agentFeedDoesNotImportNotificationHistory() async throws {
-        let store = TerminalNotificationStore.shared
-        store.replaceNotificationsForTesting([])
-        let notification = notification(
-            workspaceID: UUID(),
-            title: "Notification said",
-            body: "Hello from Codex",
-            date: Date(timeIntervalSince1970: 2_000),
-            isRead: false
-        )
-        store.notificationFeedHistory.record(notification, supersededIDs: [])
-        defer { store.replaceNotificationsForTesting([]) }
-
-        let response = await TerminalController.shared.mobileHostHandleRPC(
-            MobileHostRPCRequest(
-                id: "agent-feed-list",
-                method: "feed.list",
-                params: [:],
-                auth: nil
-            )
-        )
-        let payload = try responsePayload(response)
-        let rows = try #require(payload["items"] as? [[String: Any]])
-        #expect(rows.allSatisfy { $0["source"] as? String != "notification" })
-
-        let textResponse = TerminalController.shared.v2MobileFeedText(
-            params: ["item_id": notification.id.uuidString, "offset": 0]
-        )
-        guard case let .ok(rawTextPayload) = textResponse,
-              let textPayload = rawTextPayload as? [String: Any] else {
-            Issue.record("Expected cached notification row to remain readable by feed.text")
-            return
-        }
-        #expect(textPayload["text"] as? String == "Notification said\nAgent\nHello from Codex")
-    }
-
-    @Test func feedListBoundsOversizedLeadingRowWithoutDroppingFeed() async throws {
-        let store = TerminalNotificationStore.shared
-        let workspaceID = UUID()
-        let baseDate = Date(timeIntervalSince1970: 1_900)
-        let older = notification(
-            workspaceID: workspaceID,
-            title: "Older valid",
-            body: "small",
-            date: baseDate,
-            isRead: false
-        )
-        let newest = notification(
-            workspaceID: workspaceID,
-            title: "Huge newest",
-            body: String(
-                repeating: "x",
-                count: MobileSyncFrameCodec.defaultMaximumFrameByteCount + 1_024
-            ),
-            date: baseDate.addingTimeInterval(1),
-            isRead: false
-        )
-        store.replaceNotificationsForTesting([older, newest])
-        defer { store.replaceNotificationsForTesting([]) }
-
-        let response = await TerminalController.shared.mobileHostHandleRPC(
-            MobileHostRPCRequest(
-                id: "feed-huge-row",
-                method: "notification.feed.list",
-                params: [:],
-                auth: nil
-            )
-        )
-        let encoded = MobileHostRPCEnvelope.encodeResponse(id: "feed-huge-row", result: response)
-        #expect(encoded.count <= MobileSyncFrameCodec.defaultMaximumFrameByteCount)
-        let payload = try responsePayload(response)
-        let rows = try #require(payload["notifications"] as? [[String: Any]])
-        #expect(rows.map { $0["title"] as? String } == ["Huge newest", "Older valid"])
-        let returnedBody = try #require(rows.first?["body"] as? String)
-        #expect(returnedBody.utf8.count <= 4_096)
-    }
 
     @Test func persistenceReloadsAndRejectsAnOlderRevisionWrite() async throws {
         let directory = FileManager.default.temporaryDirectory
@@ -918,11 +804,8 @@ struct NotificationFeedHistoryTests {
         #expect(finalSnapshot.notifications.map(\.id) == [first.id])
     }
 
-    @Test func revisionsAndChangeEventsAdvanceOnlyForRealMutations() {
-        var revisions: [Int] = []
-        let history = NotificationFeedHistoryStore(fileURL: nil) { revision in
-            revisions.append(revision)
-        }
+    @Test func revisionsAdvanceOnlyForRealMutations() {
+        let history = NotificationFeedHistoryStore(fileURL: nil)
         let entry = notification(
             workspaceID: UUID(),
             title: "Needs input",
@@ -942,89 +825,8 @@ struct NotificationFeedHistoryTests {
         history.markUnread(ids: [entry.id])
 
         #expect(history.revision == 3)
-        #expect(revisions == [1, 2, 3])
     }
 
-    @Test func listBootstrapsCurrentEntriesAndReadStateRPCsMutateHistoryAndActiveState() async throws {
-        let store = TerminalNotificationStore.shared
-        let workspaceID = UUID()
-        let surfaceID = UUID()
-        let older = notification(
-            workspaceID: workspaceID,
-            surfaceID: surfaceID,
-            title: "Permission needed",
-            date: Date(timeIntervalSince1970: 4_000),
-            isRead: false
-        )
-        let newer = notification(
-            workspaceID: workspaceID,
-            surfaceID: UUID(),
-            title: "Task finished",
-            date: Date(timeIntervalSince1970: 4_100),
-            isRead: false
-        )
-        store.replaceNotificationsForTesting([older, newer])
-        defer { store.replaceNotificationsForTesting([]) }
-
-        let listResponse = await TerminalController.shared.mobileHostHandleRPC(
-            MobileHostRPCRequest(
-                id: "feed-list",
-                method: "notification.feed.list",
-                params: [:],
-                auth: nil
-            )
-        )
-        let listPayload = try responsePayload(listResponse)
-        #expect(listPayload["revision"] as? Int == 1)
-        let rows = try #require(listPayload["notifications"] as? [[String: Any]])
-        #expect(rows.map { $0["title"] as? String } == ["Task finished", "Permission needed"])
-        #expect(rows.last?["surface_id"] as? String == surfaceID.uuidString)
-        #expect(rows.last?["created_at"] as? Double == older.createdAt.timeIntervalSince1970)
-
-        let markResponse = await TerminalController.shared.mobileHostHandleRPC(
-            MobileHostRPCRequest(
-                id: "feed-mark",
-                method: "notification.feed.mark_read",
-                params: ["notification_ids": [older.id.uuidString]],
-                auth: nil
-            )
-        )
-        let markPayload = try responsePayload(markResponse)
-        #expect(markPayload["marked"] as? Int == 1)
-        #expect(markPayload["revision"] as? Int == 2)
-        #expect(store.notifications.first(where: { $0.id == older.id })?.isRead == true)
-
-        let markAllResponse = await TerminalController.shared.mobileHostHandleRPC(
-            MobileHostRPCRequest(
-                id: "feed-mark-all",
-                method: "notification.feed.mark_all_read",
-                params: [:],
-                auth: nil
-            )
-        )
-        let markAllPayload = try responsePayload(markAllResponse)
-        #expect(markAllPayload["marked"] as? Int == 1)
-        #expect(markAllPayload["revision"] as? Int == 3)
-        #expect(store.notificationFeedHistory.notifications.allSatisfy { $0.isRead })
-        #expect(store.notifications.allSatisfy { $0.isRead })
-
-        store.remove(id: older.id)
-        #expect(store.notifications.contains(where: { $0.id == older.id }) == false)
-
-        let markUnreadResponse = await TerminalController.shared.mobileHostHandleRPC(
-            MobileHostRPCRequest(
-                id: "feed-mark-unread",
-                method: "notification.feed.mark_unread",
-                params: ["notification_ids": [older.id.uuidString]],
-                auth: nil
-            )
-        )
-        let markUnreadPayload = try responsePayload(markUnreadResponse)
-        #expect(markUnreadPayload["marked"] as? Int == 1)
-        #expect(markUnreadPayload["revision"] as? Int == 4)
-        #expect(store.notificationFeedHistory.notifications.first(where: { $0.id == older.id })?.isRead == false)
-        #expect(store.notifications.contains(where: { $0.id == older.id }) == false)
-    }
 
     @Test func unsupportedFutureSnapshotIsPreservedWhenHistoryMutates() async throws {
         let directory = FileManager.default.temporaryDirectory
@@ -1207,14 +1009,6 @@ struct NotificationFeedHistoryTests {
         )
     }
 
-    private func responsePayload(_ response: MobileHostRPCResult) throws -> [String: Any] {
-        guard case let .ok(rawPayload) = response,
-              let payload = rawPayload as? [String: Any] else {
-            Issue.record("Expected mobile-host success payload")
-            throw NotificationFeedHistoryTestError.missingPayload
-        }
-        return payload
-    }
 
     @discardableResult
     private func write(

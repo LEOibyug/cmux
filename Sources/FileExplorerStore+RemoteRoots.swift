@@ -79,67 +79,6 @@ extension FileExplorerStore {
         )
     }
 
-    func applyRemoteCloudWorkspaceRoot(
-        workspaceId: UUID,
-        vmID: String,
-        displayTarget: String,
-        rootPath requestedRootPath: String?,
-        isAvailable: Bool,
-        unavailableDetail: String?,
-        target: CloudFileExplorerTarget?
-    ) {
-        setWorkspaceRootIdentity(workspaceId)
-
-        let existingProvider = provider as? CloudVMFileExplorerProvider
-        let cloudProvider: CloudVMFileExplorerProvider
-        if let existingProvider,
-           existingProvider.vmID == vmID,
-           existingProvider.target == target,
-           existingProvider.displayTarget == displayTarget,
-           existingProvider.isAvailable == isAvailable {
-            cloudProvider = existingProvider
-        } else {
-            cancelRemoteHomeResolution()
-            setRootPath("")
-            cloudProvider = CloudVMFileExplorerProvider(
-                vmID: vmID,
-                displayTarget: displayTarget,
-                isAvailable: isAvailable, target: target
-            )
-            setProvider(cloudProvider, reloadIfAvailable: false)
-        }
-
-        guard isAvailable else {
-            cancelRemoteHomeResolution()
-            setRootPath("")
-            let detail = unavailableDetail?.trimmingCharacters(in: .whitespacesAndNewlines)
-            setRootStatusMessage(
-                detail?.isEmpty == false
-                    ? String(
-                        format: String(localized: "fileExplorer.status.remoteUnavailableWithDetail", defaultValue: "Remote files unavailable: %@"),
-                        detail!
-                    )
-                    : String(localized: "fileExplorer.status.remoteUnavailable", defaultValue: "Remote files unavailable")
-            )
-            return
-        }
-
-        if let requestedRootPath = Self.normalizedRootPath(requestedRootPath) {
-            cancelRemoteHomeResolution()
-            setRootStatusMessage(nil)
-            setRootPath(requestedRootPath)
-            return
-        }
-
-        let currentHomePath = cloudProvider.homePath
-        if !currentHomePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            setRootStatusMessage(nil)
-            setRootPath(currentHomePath)
-            return
-        }
-
-        resolveRemoteHome(workspaceId: workspaceId, provider: cloudProvider, providerKey: vmID)
-    }
 
     func resolveRemoteHome(
         workspaceId: UUID,
@@ -170,8 +109,6 @@ extension FileExplorerStore {
                     self.remoteHomeResolutionTask = nil
                     if let sshProvider = provider as? SSHFileExplorerProvider {
                         sshProvider.updateAvailability(true, homePath: homePath)
-                    } else if let cloudProvider = provider as? CloudVMFileExplorerProvider {
-                        self.setProvider(cloudProvider.resolvingHome(homePath), reloadIfAvailable: false)
                     }
                     self.setRootStatusMessage(nil)
                     self.setRootPath(homePath)

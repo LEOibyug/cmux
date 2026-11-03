@@ -228,8 +228,6 @@ final class ChiefTranscriptView: NSView {
         transcript.fetchAttachment = binding.fetchAttachment
         transcript.onCancelSend = { [weak binding] key in binding?.cancelSend(key) ?? false }
         transcript.onRefusal = { [weak self] _, rejection in self?.showNotice(ChiefStrings.rejection(rejection)) }
-        transcript.onOpenCloudWorkspace = { [weak self] machine, workspace in self?.openCloudWorkspace(machine, workspace) }
-        transcript.onOpenCloudDesktop = { [weak self] machine in self?.openCloudDesktop(machine) }
         // A turn's end, a failure or an approval card drops the typing dots at once (no fading ghost).
         transcript.typingLeavesAtOnce = true
         let id = conversation
@@ -634,38 +632,6 @@ final class ChiefTranscriptView: NSView {
         noticeLabel.frame = CGRect(x: 16, y: bottom - height, width: width, height: height)
     }
 
-    /// Shows (or with nil clears) the notice above the field; VoiceOver hears it.
-    /// A Cloud result card's Open Workspace: the `cmux vm workspace open` path, focused
-    /// (the user asked to see it).
-    private func openCloudWorkspace(_ machine: String, _ workspace: String) {
-        // task-owner: one open; ends when the workspace is projected or fails
-        Task { @MainActor [weak self] in
-            do {
-                try await TerminalController.openRemoteWorkspace(workspace, machine: machine, focus: true)
-            } catch {
-                self?.showNotice(ChiefStrings.cloudOpenFailed(machine))
-            }
-        }
-    }
-
-    /// A Cloud result card's Open Desktop: use the same bundled CLI path as the Cloud menu,
-    /// leaving the display in cmux for the user to inspect or operate.
-    private func openCloudDesktop(_ machine: String) {
-        let socketPath = TerminalController.shared.activeSocketPath(
-            preferredPath: SocketControlSettings.socketPath()
-        )
-        let started = CloudVMActionLauncher.shared.start(
-            socketPath: socketPath,
-            preferredWindow: window,
-            arguments: ["vm", "desktop", machine],
-            presentsFailureAlert: false,
-            onCompletion: { [weak self] completion in
-                guard !completion.succeeded else { return }
-                self?.showNotice(ChiefStrings.cloudDesktopOpenFailed(machine))
-            }
-        )
-        if !started { showNotice(ChiefStrings.cloudDesktopOpenFailed(machine)) }
-    }
 
     func showNotice(_ text: String?) {
         guard text != notice else { return }

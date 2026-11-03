@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Bonsplit
 import CmuxCore
 import CmuxSurfaceCatalogModel
@@ -40,8 +40,8 @@ struct CloudTerminalDragSplitRoutingTests {
             #expect(workspace.paneId(forPanelId: source) != sourcePane)
             #expect(workspace.paneId(forPanelId: replacement) == sourcePane)
             #expect(workspace.bonsplitController.tabs(inPane: sourcePane).count == 1)
-            #expect(workspace.cloudPendingCreations[replacement]?.machine == provider.machine)
-            #expect(workspace.cloudPendingCreations[replacement]?.remoteWorkspaceID == provider.remote.id)
+            #expect(workspace.tuiPendingCreations[replacement]?.machine == provider.machine)
+            #expect(workspace.tuiPendingCreations[replacement]?.remoteWorkspaceID == provider.remote.id)
             #expect(workspace.machineOwningSurface(replacement) == provider.machine)
             #expect(workspace.terminalPanel(for: replacement)?.surface.ioMode == .manualMirror)
             #expect(workspace.terminalPanel(for: replacement)?.surface.fontSizeLineageSnapshot() == font)
@@ -51,13 +51,13 @@ struct CloudTerminalDragSplitRoutingTests {
             #expect(provider.layoutSources.first?.direction != nil)
             #expect(provider.requestedWorkspaces == [provider.remote.id])
             provider.release.resolve(true)
-            try await settled { !workspace.cloudPaneCreationFailureStore.hasActiveRequests }
+            try await settled { !workspace.tuiPaneCreationFailureStore.hasActiveRequests }
             let projection = try #require(SurfaceCatalog.shared.projection(forPanel: replacement))
             #expect(projection.workspaceID == workspace.id)
             #expect(projection.resource.machine == provider.machine)
             #expect(projection.remoteWorkspaceID == provider.remote.id)
             #expect(workspace.focusedPanelId == source)
-            #expect(workspace.cloudPendingCreations.isEmpty)
+            #expect(workspace.tuiPendingCreations.isEmpty)
         }
     }
 
@@ -89,8 +89,8 @@ struct CloudTerminalDragSplitRoutingTests {
             try drag(source, in: workspace, direction: "down")
             #expect(Set(workspace.panels.keys) == before)
             #expect(workspace.bonsplitController.allPaneIds.count == 1)
-            #expect(workspace.cloudPaneCreationFailureStore.failure?.machine == machine)
-            #expect(workspace.cloudPaneCreationFailureStore.failure?.sourcePanelID == source)
+            #expect(workspace.tuiPaneCreationFailureStore.failure?.machine == machine)
+            #expect(workspace.tuiPaneCreationFailureStore.failure?.sourcePanelID == source)
             #expect(workspace.focusedPanelId == source)
         }
     }
@@ -106,11 +106,11 @@ struct CloudTerminalDragSplitRoutingTests {
             #expect(workspace.newTerminalSplitOutcome(from: source, orientation: .horizontal).isAccepted)
             let parent = try #require(workspace.focusedPanelId)
             try drag(parent, in: workspace, direction: "up")
-            #expect(workspace.cloudPendingCreations.count == 2)
+            #expect(workspace.tuiPendingCreations.count == 2)
             #expect(workspace.panels.count == 3)
             try await settled { provider.requestedWorkspaces.count == 1 }
             provider.release.resolve(true)
-            try await settled { !workspace.cloudPaneCreationFailureStore.hasActiveRequests }
+            try await settled { !workspace.tuiPaneCreationFailureStore.hasActiveRequests }
             #expect(provider.layoutSources.map(\.tabID) == ["tab-source", "tab-created-0"])
             #expect(provider.layoutSources.map(\.direction) == [.right, .down])
             #expect(provider.materialized.count == 2)
@@ -131,31 +131,31 @@ struct CloudTerminalDragSplitRoutingTests {
             workspace.remoteConfiguration = WorkspaceRemoteConfiguration(
                 destination: "root@cloud", port: nil, identityFile: nil, sshOptions: [],
                 localProxyPort: nil, relayPort: nil, relayID: nil, relayToken: nil,
-                localSocketPath: nil, managedCloudVMID: provider.machine.rawValue,
+                localSocketPath: nil, managedTuiID: provider.machine.rawValue,
                 terminalStartupCommand: nil
             )
-            workspace.cloudVMBinding = WorkspaceCloudVMBinding(
-                vmID: provider.machine.rawValue, isBase: false, remoteWorkspaceID: provider.remote.id
+            workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(
+                vmID: provider.machine.rawValue, remoteWorkspaceID: provider.remote.id
             )
             workspace.activeRemoteTerminalSurfaceIds.insert(source)
             defer { tearDown(app, provider: provider) }
 
             try drag(source, in: workspace, direction: "right")
 
-            #expect(workspace.cloudPendingCreations.count == 1)
+            #expect(workspace.tuiPendingCreations.count == 1)
             #expect(workspace.machineOwningSurface(source) == provider.machine)
             try await settled { provider.requestedWorkspaces.count == 1 }
             #expect(provider.requestedWorkspaces == [provider.remote.id])
             provider.release.resolve(true)
-            try await settled { !workspace.cloudPaneCreationFailureStore.hasActiveRequests }
+            try await settled { !workspace.tuiPaneCreationFailureStore.hasActiveRequests }
             #expect(provider.materialized.count == 1)
         }
     }
 
     @Test("Cloud drag failures keep provider details and identifiers out of user copy")
     func cloudFailureTextIsSanitized() {
-        let failure = CloudPaneCreationFailure(
-            machine: .cloud("secret-machine"),
+        let failure = TuiPaneCreationFailure(
+            machine: .ssh("a3543c37cd64b8329fb4cb8bbd7b8ffef737f0aba2b37b6a60b664e8ac5fc479"),
             error: CmuxTuiSurfaceProvider.ProviderError.remoteWorkspaceNotFound("secret-workspace")
         )
         #expect(!failure.errorText.contains("secret-workspace"))
@@ -178,7 +178,7 @@ struct CloudTerminalDragSplitRoutingTests {
             try drag(source, in: workspace, direction: "left")
             #expect(Set(workspace.panels.keys) == before)
             #expect(workspace.bonsplitController.allPaneIds.count == 2)
-            #expect(workspace.cloudPendingCreations.isEmpty)
+            #expect(workspace.tuiPendingCreations.isEmpty)
             #expect(provider.requestedWorkspaces.isEmpty)
         }
     }
@@ -200,7 +200,7 @@ struct CloudTerminalDragSplitRoutingTests {
             #expect(workspace.terminalPanel(for: replacement)?.surface.ioMode == .exec)
             #expect(workspace.paneId(forPanelId: replacement) == sourcePane)
             #expect(workspace.focusedPanelId == source)
-            #expect(workspace.cloudPendingCreations.isEmpty)
+            #expect(workspace.tuiPendingCreations.isEmpty)
         }
     }
 
@@ -215,8 +215,8 @@ struct CloudTerminalDragSplitRoutingTests {
             resource: resource.id, workspaceID: workspace.id, panelID: source,
             remoteWorkspaceID: provider.remote.id, remoteTabID: remoteTabID
         ))
-        workspace.cloudVMBinding = WorkspaceCloudVMBinding(
-            vmID: provider.machine.rawValue, isBase: false, remoteWorkspaceID: provider.remote.id
+        workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(
+            vmID: provider.machine.rawValue, remoteWorkspaceID: provider.remote.id
         )
         return source
     }
@@ -237,7 +237,7 @@ struct CloudTerminalDragSplitRoutingTests {
     }
 
     private func tearDown(_ app: VaultPaneAppFixture, provider: CloudTerminalPlacementTestProvider) {
-        app.workspace.cloudPaneCreationFailureStore.cancelAll()
+        app.workspace.tuiPaneCreationFailureStore.cancelAll()
         provider.release.resolve(true)
         SurfaceCatalog.shared.unregister(machine: provider.machine)
         app.tearDown()

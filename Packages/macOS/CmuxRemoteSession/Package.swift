@@ -19,6 +19,9 @@ let package = Package(
         .package(path: "../CmuxRemoteDaemon"),
         .package(path: "../CmuxRemoteWorkspace"),
         .package(path: "../CMUXDebugLog"),
+        .package(path: "../CmuxTui"),
+        .package(path: "../CmuxSurfaceCatalogModel"),
+        .package(path: "../CmuxSettings"),
         .package(path: "../../../vendor/bonsplit"),
     ],
     targets: [
@@ -30,6 +33,9 @@ let package = Package(
                 .product(name: "CmuxRemoteDaemon", package: "CmuxRemoteDaemon"),
                 .product(name: "CmuxRemoteWorkspace", package: "CmuxRemoteWorkspace"),
                 .product(name: "CMUXDebugLog", package: "CMUXDebugLog"),
+                .product(name: "CmuxTui", package: "CmuxTui"),
+                .product(name: "CmuxSurfaceCatalogModel", package: "CmuxSurfaceCatalogModel"),
+                .product(name: "CmuxSettings", package: "CmuxSettings"),
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),

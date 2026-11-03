@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Foundation
 import CmuxTerminalCore
 import Combine
@@ -111,10 +111,8 @@ final class TerminalPanel: Panel, ObservableObject {
     /// Set by the owning workspace while `agentWakeFailure` is shown.
     var onRequestAgentWakeRetry: (() -> Void)?
     var onDismissAgentWakeFailure: (() -> Void)?
-    /// A native cloud pane's live attachment state (nil for local terminals).
-    /// Written only by the owning cloud session; the view shows it.
-    var cloudAttachment: CloudTerminalAttachmentStatus?
-    var deviceAttachment: DeviceTerminalAttachmentStatus?
+    /// A remote SSH pane's live attachment state (nil for local terminals).
+    var remoteAttachment: RemoteTerminalAttachmentStatus?
 
     var onRequestWorkspacePaneFlash: ((WorkspaceAttentionFlashReason) -> Void)?
     var onRequestAgentHibernationResume: ((Bool) -> Bool)?
@@ -124,7 +122,7 @@ final class TerminalPanel: Panel, ObservableObject {
     var onTerminalFocus: (() -> Void)?
     /// Optional input hook owned by a manual-mirror session. Workspace routing
     /// composes this hook into its current owner callback so a panel that moves
-    /// between workspaces keeps its Cloud input behavior.
+    /// between workspaces keeps its remote input behavior.
     var onManualMirrorExplicitInput: (() -> Void)?
 
     private var cancellables = Set<AnyCancellable>()

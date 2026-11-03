@@ -1,15 +1,16 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxCore
 import CmuxFoundation
 import CmuxSurfaceCatalogModel
+import CmuxSettings
 import Foundation
 
 extension TerminalController {
     /// Network work suspends; only workspace/catalog mutations execute on the main actor.
     @MainActor
     func openSSHTuiWorkspace(params: [String: Any]) async throws -> [String: Any] {
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
-            throw SurfaceCatalogError.unsupported(ManagedRemoteConnectionsPolicy.disabledMessage)
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
+            throw SurfaceCatalogError.unsupported(ManagedRemoteConnectionsPolicy().disabledMessage)
         }
         var hostParams = params
         hostParams["host"] = params["destination"]
@@ -20,7 +21,7 @@ extension TerminalController {
         let options = params["ssh_options"] as? [String] ?? []
         let configuredCommand = params["configured_remote_command"] as? String
         guard let profile = WorkspaceRemoteTerminalProfile(remoteConfigurationValue: params["terminal_profile"] as? String,
-                tmuxSessionName: params["terminal_tmux_session"] as? String) else { throw CloudDiagnosticFailure.unsupported }
+                tmuxSessionName: params["terminal_tmux_session"] as? String) else { throw TuiTransportError.unsupported }
         let configuration = WorkspaceRemoteConfiguration(
             terminalProfile: profile,
             destination: host.destination, port: host.port, identityFile: host.identityFile,
@@ -32,7 +33,7 @@ extension TerminalController {
         )
         let connection = SSHTuiConnection(configuration: configuration)
         let provider = try coordinator.provider(connection: connection)
-        guard let links = provider.links as? SSHTuiLinkManager else { throw CloudDiagnosticFailure.unsupported }
+        guard let links = provider.links as? SSHTuiLinkManager else { throw TuiTransportError.unsupported }
         await links.adopt(connection)
         do {
             // Like `ssh`, a new route reports OpenSSH's own failure in seconds
@@ -45,7 +46,7 @@ extension TerminalController {
             throw Self.sshTuiOpenFailure(error)
         }
         try Task.checkCancellation()
-        guard ManagedRemoteConnectionsPolicy.isEnabled else { throw CancellationError() }
+        guard ManagedRemoteConnectionsPolicy().isEnabled else { throw CancellationError() }
         var creation = params
         creation.removeValue(forKey: "initial_command")
         creation["eager_load_terminal"] = false
@@ -57,7 +58,7 @@ extension TerminalController {
               let rawID = payload["workspace_id"] as? String,
               let id = UUID(uuidString: rawID),
               let workspace = Workspace.liveWorkspace(id: id) else {
-            throw CloudDiagnosticFailure.response
+            throw TuiTransportError.invalidResponse
         }
         do {
             let initialCommand = (params["initial_command"] as? String).map(connection.commandArguments)
@@ -76,7 +77,7 @@ extension TerminalController {
             result["surface_id"] = workspace.focusedPanelId?.uuidString
             return result
         } catch {
-            workspace.applyRemoteConnectionStateUpdate(.error, detail: CloudMachineLink.errorText(error), target: host.destination)
+            workspace.applyRemoteConnectionStateUpdate(.error, detail: RemoteMachineLink.errorText(error), target: host.destination)
             throw Self.sshTuiOpenFailure(error)
         }
     }
@@ -93,8 +94,8 @@ extension TerminalController {
     /// OpenSSH and carrier output belongs to the user's own SSH route, so it
     /// keeps its text instead of the Cloud VM fallback that hides provider detail.
     private static func sshTuiOpenFailure(_ error: Error) -> Error {
-        guard error is SSHTuiPreflightError || error is CloudMachineLink.LinkError else { return error }
-        return SSHTuiOpenFailure(reason: CloudMachineLink.errorText(error))
+        guard error is SSHTuiPreflightError || error is RemoteMachineLink.LinkError else { return error }
+        return SSHTuiOpenFailure(reason: RemoteMachineLink.errorText(error))
     }
 }
 

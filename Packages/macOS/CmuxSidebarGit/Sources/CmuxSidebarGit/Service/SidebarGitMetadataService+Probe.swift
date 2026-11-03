@@ -124,19 +124,6 @@ extension SidebarGitMetadataService {
             }
             return
         }
-        guard host?.mobileHostHasRecentActivity(within: mobileHostDeferral.quietInterval) != true else {
-            workspaceGitProbeStateByKey[probeKey] = .idle
-            scheduleWorkspaceGitMetadataRefreshIfPossible(
-                workspaceId: probeKey.workspaceId,
-                panelId: probeKey.panelId,
-                reason: "mobileHostDeferred",
-                delays: [max(
-                    mobileHostDeferral.deferralInterval,
-                    host?.mobileHostQuietDelay(for: mobileHostDeferral.quietInterval) ?? 0
-                )]
-            )
-            return
-        }
 
         switch workspaceGitProbeStateByKey[probeKey] ?? .idle {
         case .idle:
@@ -283,19 +270,6 @@ extension SidebarGitMetadataService {
             if case .inFlight = workspaceGitProbeStateByKey[probeKey] { return true }
             return false
         }()
-        guard host?.mobileHostHasRecentActivity(within: mobileHostDeferral.quietInterval) != true else {
-            workspaceGitProbeStateByKey[probeKey] = .idle
-            scheduleWorkspaceGitMetadataRefreshIfPossible(
-                workspaceId: probeKey.workspaceId,
-                panelId: probeKey.panelId,
-                reason: "mobileHostDeferred",
-                delays: [max(
-                    mobileHostDeferral.deferralInterval,
-                    host?.mobileHostQuietDelay(for: mobileHostDeferral.quietInterval) ?? 0
-                )]
-            )
-            return
-        }
         let shouldTrackPullRequests = sidebarPullRequestPollingEnabled
         let resolvedPullRequest: SidebarPullRequestBadge? = {
             guard shouldTrackPullRequests else { return nil }

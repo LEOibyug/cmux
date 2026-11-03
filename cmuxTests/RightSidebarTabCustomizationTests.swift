@@ -32,27 +32,23 @@ final class RightSidebarTabCustomizationTests: XCTestCase {
 
     private func enableAllModeGates() {
         defaults.set(true, forKey: RightSidebarBetaFeatureSettings.feedEnabledKey)
-        defaults.set(true, forKey: RightSidebarBetaFeatureSettings.cloudMachinesEnabledKey)
     }
 
-    private func enableMachinesGate() {
-        defaults.set(true, forKey: RightSidebarBetaFeatureSettings.cloudMachinesEnabledKey)
-    }
 
     // MARK: - Ordering and visibility
 
     func testDefaultOrderIsCanonical() {
         XCTAssertEqual(
             RightSidebarTabPreferences.orderedModes(defaults: defaults),
-            [.files, .find, .sessions, .feed, .dock, .machines]
+            [.files, .find, .sessions, .feed, .dock]
         )
     }
 
     func testStoredOrderIgnoresUnknownEntriesAndAppendsMissingModes() {
-        defaults.set(["machines", "bogus", "files", "custom-sidebar"], forKey: RightSidebarTabPreferences.orderKey)
+        defaults.set(["dock", "bogus", "files", "custom-sidebar"], forKey: RightSidebarTabPreferences.orderKey)
         XCTAssertEqual(
             RightSidebarTabPreferences.orderedModes(defaults: defaults),
-            [.machines, .files, .find, .sessions, .feed, .dock]
+            [.dock, .files, .find, .sessions, .feed]
         )
     }
 
@@ -61,7 +57,7 @@ final class RightSidebarTabCustomizationTests: XCTestCase {
         XCTAssertTrue(RightSidebarTabPreferences.setHidden(true, mode: .find, defaults: defaults))
         XCTAssertEqual(
             RightSidebarMode.visibleModes(defaults: defaults),
-            [.files, .sessions, .feed, .dock, .machines]
+            [.files, .sessions, .feed, .dock]
         )
     }
 
@@ -70,7 +66,6 @@ final class RightSidebarTabCustomizationTests: XCTestCase {
         // control; the Dock is no longer beta-gated.
         XCTAssertTrue(RightSidebarTabPreferences.setHidden(true, mode: .files, defaults: defaults))
         XCTAssertTrue(RightSidebarTabPreferences.setHidden(true, mode: .find, defaults: defaults))
-        XCTAssertTrue(RightSidebarTabPreferences.setHidden(true, mode: .machines, defaults: defaults))
         XCTAssertTrue(RightSidebarTabPreferences.setHidden(true, mode: .dock, defaults: defaults))
         XCTAssertFalse(
             RightSidebarTabPreferences.setHidden(true, mode: .sessions, defaults: defaults),
@@ -80,31 +75,30 @@ final class RightSidebarTabCustomizationTests: XCTestCase {
     }
 
     func testMoveReordersAndClampsAtEdges() {
-        RightSidebarTabPreferences.move(.machines, offset: -5, defaults: defaults)
+        RightSidebarTabPreferences.move(.dock, offset: -4, defaults: defaults)
         XCTAssertEqual(
             RightSidebarTabPreferences.orderedModes(defaults: defaults),
-            [.machines, .files, .find, .sessions, .feed, .dock]
+            [.dock, .files, .find, .sessions, .feed]
         )
-        RightSidebarTabPreferences.move(.machines, offset: -1, defaults: defaults)
+        RightSidebarTabPreferences.move(.dock, offset: -1, defaults: defaults)
         XCTAssertEqual(
             RightSidebarTabPreferences.orderedModes(defaults: defaults).first,
-            .machines,
+            .dock,
             "moving past the front clamps"
         )
     }
 
     func testSetDisplayedOrderPermutesOnlyTheDisplayedSlots() {
-        // Hide Feed; Dock keeps its slot in the full order. Dragging Cloud
-        // before Files must not move Feed or Dock.
+        // Hide Feed. Dragging Dock before Files must preserve Feed's slot.
         enableAllModeGates()
         RightSidebarTabPreferences.setHidden(true, mode: .feed, defaults: defaults)
         RightSidebarTabPreferences.setDisplayedOrder(
-            [.machines, .files, .find, .sessions, .dock],
+            [.dock, .files, .find, .sessions],
             defaults: defaults
         )
         XCTAssertEqual(
             RightSidebarTabPreferences.orderedModes(defaults: defaults),
-            [.machines, .files, .find, .feed, .sessions, .dock],
+            [.dock, .files, .find, .feed, .sessions],
             "hidden Feed keeps its 4th slot while the displayed tabs permute around it"
         )
     }
@@ -138,8 +132,8 @@ final class RightSidebarTabCustomizationTests: XCTestCase {
         XCTAssertEqual(offsets[3], 0)
         XCTAssertEqual(layout.draggedOffset(translation: 25), 25, "the tab stays under the pointer")
         XCTAssertEqual(
-            layout.reordered([RightSidebarMode.files, .find, .sessions, .machines], slot: 2),
-            [.files, .sessions, .find, .machines]
+            layout.reordered([RightSidebarMode.files, .find, .sessions, .dock], slot: 2),
+            [.files, .sessions, .find, .dock]
         )
     }
 
@@ -174,30 +168,27 @@ final class RightSidebarTabCustomizationTests: XCTestCase {
     }
 
     func testResetRestoresCanonicalOrderAndVisibility() {
-        RightSidebarTabPreferences.move(.machines, offset: -5, defaults: defaults)
+        RightSidebarTabPreferences.move(.dock, offset: -4, defaults: defaults)
         RightSidebarTabPreferences.setHidden(true, mode: .find, defaults: defaults)
         RightSidebarTabPreferences.resetToDefaults(defaults: defaults)
         XCTAssertEqual(
             RightSidebarTabPreferences.orderedModes(defaults: defaults),
-            [.files, .find, .sessions, .feed, .dock, .machines]
+            [.files, .find, .sessions, .feed, .dock]
         )
         XCTAssertTrue(RightSidebarTabPreferences.hiddenModes(defaults: defaults).isEmpty)
     }
 
     // MARK: - Positional shortcut defaults
 
-    /// With Feed and Dock hidden through the regular tab-visibility controls,
-    /// Cloud is the 4th visible tab, so ctrl+4 must focus it.
-    func testCloudDefaultsToControlFourWhenFeedAndDockAreHidden() {
-        enableMachinesGate()
+    /// With Feed hidden, Dock becomes the fourth visible tab.
+    func testDockDefaultsToControlFourWhenFeedIsHidden() {
         XCTAssertTrue(RightSidebarTabPreferences.setHidden(true, mode: .feed, defaults: defaults))
-        XCTAssertTrue(RightSidebarTabPreferences.setHidden(true, mode: .dock, defaults: defaults))
         XCTAssertEqual(
             RightSidebarMode.visibleModes(defaults: defaults),
-            [.files, .find, .sessions, .machines]
+            [.files, .find, .sessions, .dock]
         )
         XCTAssertEqual(
-            KeyboardShortcutSettings.rightSidebarPositionalDefaultShortcut(for: .machines, defaults: defaults),
+            KeyboardShortcutSettings.rightSidebarPositionalDefaultShortcut(for: .dock, defaults: defaults),
             StoredShortcut(key: "4", command: false, shift: false, option: false, control: true)
         )
     }
@@ -205,7 +196,7 @@ final class RightSidebarTabCustomizationTests: XCTestCase {
     func testAllTabsVisibleKeepsHistoricDigits() {
         enableAllModeGates()
         let expected: [(RightSidebarMode, String)] = [
-            (.files, "1"), (.find, "2"), (.sessions, "3"), (.feed, "4"), (.dock, "5"), (.machines, "6"),
+            (.files, "1"), (.find, "2"), (.sessions, "3"), (.feed, "4"), (.dock, "5"),
         ]
         for (mode, digit) in expected {
             XCTAssertEqual(
@@ -231,9 +222,9 @@ final class RightSidebarTabCustomizationTests: XCTestCase {
 
     func testReorderMovesDigitsWithTheTabs() {
         enableAllModeGates()
-        RightSidebarTabPreferences.move(.machines, offset: -5, defaults: defaults)
+        RightSidebarTabPreferences.move(.dock, offset: -4, defaults: defaults)
         XCTAssertEqual(
-            KeyboardShortcutSettings.rightSidebarPositionalDefaultShortcut(for: .machines, defaults: defaults),
+            KeyboardShortcutSettings.rightSidebarPositionalDefaultShortcut(for: .dock, defaults: defaults),
             StoredShortcut(key: "1", command: false, shift: false, option: false, control: true)
         )
         XCTAssertEqual(

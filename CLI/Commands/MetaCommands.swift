@@ -75,11 +75,6 @@ struct PingCommand: LegacyMetaCommand {
     static let configuration = CommandConfiguration(commandName: "ping", helpNames: [])
 }
 
-struct IrohDiagnosticsCommand: LegacyMetaCommand {
-    @Argument(parsing: .allUnrecognized) var arguments: [String] = []
-    static let configuration = CommandConfiguration(commandName: "iroh-diag", helpNames: [])
-}
-
 struct HelpCommand: LegacyMetaCommand {
     @Argument(parsing: .allUnrecognized) var arguments: [String] = []
     static let configuration = CommandConfiguration(commandName: "help", helpNames: [])
@@ -88,16 +83,6 @@ struct HelpCommand: LegacyMetaCommand {
 struct ReloadConfigCommand: LegacyMetaCommand {
     @Argument(parsing: .allUnrecognized) var arguments: [String] = []
     static let configuration = CommandConfiguration(commandName: "reload-config", helpNames: [])
-}
-
-struct FeedbackCommand: LegacyMetaCommand {
-    @Option(name: .customLong("email")) var email: String?
-    @Option(name: .customLong("body")) var body: String?
-    // `--image` repeats; the array default `.singleValue` already reads exactly
-    // one value per occurrence, matching the legacy `parseRepeatedOption`.
-    @Option(name: .customLong("image"), completion: .file()) var images: [String] = []
-    @Argument(parsing: .allUnrecognized) var arguments: [String] = []
-    static let configuration = CommandConfiguration(commandName: "feedback", helpNames: [])
 }
 
 struct ThemesCommand: LegacyMetaCommand {
@@ -134,11 +119,6 @@ struct ThemesSetCommand: LegacyMetaCommand {
 struct ThemesClearCommand: LegacyMetaCommand {
     @Argument(parsing: .allUnrecognized) var arguments: [String] = []
     static let configuration = CommandConfiguration(commandName: "clear", helpNames: [])
-}
-
-struct InternalFlagsCommand: LegacyMetaCommand {
-    @Argument(parsing: .allUnrecognized) var arguments: [String] = []
-    static let configuration = CommandConfiguration(commandName: "__internal_flags", shouldDisplay: false, helpNames: [])
 }
 
 struct SidebarFooterIconBalanceCommand: LegacyMetaCommand {

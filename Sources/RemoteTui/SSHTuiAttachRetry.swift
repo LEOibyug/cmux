@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -31,7 +31,7 @@ struct SSHTuiAttachRetryPolicy: Sendable {
         if isPermanent(error) { return false }
         // The carrier already waited out its own connect deadline (minutes,
         // with internal retries); another fast lap only delays the report.
-        if case CloudMachineLink.LinkError.timedOut? = error as? CloudMachineLink.LinkError { return false }
+        if case RemoteMachineLink.LinkError.timedOut? = error as? RemoteMachineLink.LinkError { return false }
         return true
     }
 
@@ -39,9 +39,10 @@ struct SSHTuiAttachRetryPolicy: Sendable {
     /// retrying in the background and waits for Reconnect or a link-up.
     static func isPermanent(_ error: Error) -> Bool {
         if error is CancellationError { return true }
-        if let failure = error as? CloudDiagnosticFailure, failure == .unsupported { return true }
-        if case CloudMachineLink.LinkError.clientMissing? = error as? CloudMachineLink.LinkError { return true }
-        return CloudMachineAccessLoss(error: error) != nil
+        if let failure = error as? TuiTransportError,
+           [.unsupported, .missingSSHConfiguration, .missingTerminalIdentity].contains(failure) { return true }
+        if case RemoteMachineLink.LinkError.clientMissing? = error as? RemoteMachineLink.LinkError { return true }
+        return false
     }
 
     /// Whether a waiting or failed attach should retry now instead of

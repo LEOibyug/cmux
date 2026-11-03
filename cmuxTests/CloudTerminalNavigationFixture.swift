@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -10,8 +10,8 @@ import Foundation
 
 /// Executes the production navigation policy without an app, window, or catalog.
 @MainActor
-final class CloudTerminalNavigationFixture: CloudTerminalNavigationCatalog, CloudTerminalNavigationScheduling {
-    let machine = SurfaceMachineID.cloud("navigation-fixture")
+final class CloudTerminalNavigationFixture: CloudTerminalNavigationCatalog, RemoteTerminalNavigationScheduling {
+    let machine = SurfaceMachineID.ssh("77dd4c464edcec690aeca180bbd9d67c793ae9d1d2ef38d6deb3eecc797be88a")
     let remoteWorkspace = SurfaceRemoteWorkspace(id: "ws-1", name: "Project", index: 0, focused: false)
     let workspaceID = UUID()
     let panelID = UUID()
@@ -49,8 +49,8 @@ final class CloudTerminalNavigationFixture: CloudTerminalNavigationCatalog, Clou
     }
     var layout: SurfaceProjectionLayout { .leaf(placements: group.placements) }
 
-    func makeNavigation() -> CloudTreeTerminalNavigationCoordinator {
-        CloudTreeTerminalNavigationCoordinator(
+    func makeNavigation() -> TuiTreeTerminalNavigationCoordinator {
+        TuiTreeTerminalNavigationCoordinator(
             machineName: { _ in "Friendly machine" },
             run: { [unowned self] _, operation in
                 Task { @MainActor in
@@ -58,7 +58,7 @@ final class CloudTerminalNavigationFixture: CloudTerminalNavigationCatalog, Clou
                     catch { failures.append(error) }
                 }
             },
-            host: CloudTerminalNavigationHost(
+            host: RemoteTerminalNavigationHost(
                 focus: { [unowned self] panel, workspace in
                     events.append("focus"); focused.append((panel, workspace))
                 },
@@ -70,7 +70,7 @@ final class CloudTerminalNavigationFixture: CloudTerminalNavigationCatalog, Clou
         )
     }
 
-    func start(key: String, _ operation: @escaping CloudTerminalNavigationScheduling.Operation) -> Bool {
+    func start(key: String, _ operation: @escaping RemoteTerminalNavigationScheduling.Operation) -> Bool {
         guard available else { return false }
         tasks.append(Task { @MainActor in
             do { try await operation() }

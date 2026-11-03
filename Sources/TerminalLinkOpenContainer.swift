@@ -11,7 +11,7 @@ protocol TerminalLinkOpenContainer: AnyObject {
 
     func deferRemoteTerminalFileLinkOpen(sourcePanelId: UUID, rawValue: String) -> Bool
 
-    func cloudTerminalLinkTarget(url: URL, sourcePanelId: UUID) -> CloudTerminalLinkTarget?
+    func tuiTerminalLinkTarget(url: URL, sourcePanelId: UUID) -> RemoteTerminalLinkTarget?
 
     @discardableResult
     func deferTerminalFileLinkOpen(
@@ -24,7 +24,7 @@ protocol TerminalLinkOpenContainer: AnyObject {
     func openTerminalBrowserLink(url: URL, sourcePanelId: UUID, focus: Bool) -> Bool
 }
 
-struct CloudTerminalLinkTarget: Sendable, Equatable {
+struct RemoteTerminalLinkTarget: Sendable, Equatable {
     let url: URL
 }
 

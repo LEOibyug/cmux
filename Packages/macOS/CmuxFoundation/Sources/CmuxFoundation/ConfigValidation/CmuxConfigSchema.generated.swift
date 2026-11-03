@@ -10,9 +10,8 @@ enum CmuxEmbeddedConfigSchema {
     static let json = ##"""
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json",
   "title": "cmux.json",
-  "description": "cmux configuration. Global cmux.json supports app settings, shortcuts, actions, custom commands, notification hooks, and workspace layouts. Project-local .cmux/cmux.json or cmux.json supports actions, commands, notification hooks, UI action wiring, Agent Chat overrides, vault agents, workspace-group overrides, and workspace launch/button configuration.",
+  "description": "cmux configuration. Global cmux.json supports app settings, shortcuts, actions, custom commands, notification hooks, and workspace layouts. Project-local .cmux/cmux.json or cmux.json supports actions, commands, notification hooks, UI action wiring, vault agents, workspace-group overrides, and workspace launch/button configuration.",
   "descriptionKey": "schemaDescriptions.root",
   "type": "object",
   "additionalProperties": false,
@@ -20,7 +19,6 @@ enum CmuxEmbeddedConfigSchema {
     "$schema": {
       "type": "string",
       "format": "uri",
-      "default": "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json",
       "description": "Optional schema URL for editor completion and validation."
     },
     "schemaVersion": {
@@ -206,28 +204,6 @@ enum CmuxEmbeddedConfigSchema {
         }
       }
     },
-    "cloud": {
-      "x-cmux-scopes": ["global"],
-      "title": "cloud",
-      "description": "Cloud feature settings.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "beta": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "machines": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": { "type": "boolean", "default": false, "description": "Enable Cloud Machines." }
-              }
-            }
-          }
-        }
-      }
-    },
     "remoteTmux": {
       "x-cmux-scopes": ["global"],
       "title": "remoteTmux",
@@ -308,113 +284,6 @@ enum CmuxEmbeddedConfigSchema {
             }
           },
           "default": {}
-        }
-      }
-    },
-    "agentChat": {
-      "title": "agentChat",
-      "description": "Agent Chat GUI server settings. The built-in New agent chat action opens this URL in a browser workspace, probing /healthz first and optionally starting the server with startCommand.",
-      "descriptionKey": "schemaDescriptions.agentChat.description",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "url": {
-          "type": "string",
-          "format": "uri",
-          "pattern": "^https?://",
-          "minLength": 1,
-          "default": "http://127.0.0.1:7739",
-          "description": "Base URL for the machine-local Agent Chat GUI server. cmux probes <url>/healthz before opening the workspace.",
-          "descriptionKey": "schemaDescriptions.agentChat.url"
-        },
-        "startCommand": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Optional shell command to start the Agent Chat server when <url>/healthz is unreachable. cmux runs it detached with the user's SHELL, polls healthz for a short bounded window, then opens the workspace either way.",
-          "descriptionKey": "schemaDescriptions.agentChat.startCommand"
-        },
-        "keys": {
-          "type": "object",
-          "additionalProperties": false,
-          "description": "Keyboard behavior overrides for the Agent Chat web UI.",
-          "descriptionKey": "schemaDescriptions.agentChat.keys.description",
-          "properties": {
-            "ctrlJ": {
-              "type": "string",
-              "enum": ["newline", "menu"],
-              "default": "newline",
-              "description": "Behavior for Ctrl+J in Agent Chat text fields. Use newline to insert a line break, or menu to move to the next popup item while a menu is open.",
-              "descriptionKey": "schemaDescriptions.agentChat.keys.ctrlJ"
-            }
-          }
-        },
-        "fonts": {
-          "type": "object",
-          "additionalProperties": false,
-          "description": "Font overrides for the Agent Chat web UI. Omitted values fall back to Ghostty and built-in defaults.",
-          "descriptionKey": "schemaDescriptions.agentChat.fonts.description",
-          "properties": {
-            "sansFamily": {
-              "type": "string",
-              "minLength": 1,
-              "description": "CSS font family used for Agent Chat body and UI text.",
-              "descriptionKey": "schemaDescriptions.agentChat.fonts.sansFamily"
-            },
-            "bodyFamily": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Alias for sansFamily.",
-              "descriptionKey": "schemaDescriptions.agentChat.fonts.bodyFamily"
-            },
-            "family": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Alias for sansFamily.",
-              "descriptionKey": "schemaDescriptions.agentChat.fonts.family"
-            },
-            "baseSize": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "description": "Base Agent Chat font size in CSS pixels.",
-              "descriptionKey": "schemaDescriptions.agentChat.fonts.baseSize"
-            },
-            "bodySize": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "description": "Alias for baseSize.",
-              "descriptionKey": "schemaDescriptions.agentChat.fonts.bodySize"
-            },
-            "monoFamily": {
-              "type": "string",
-              "minLength": 1,
-              "description": "CSS font family used for Agent Chat code and monospace text.",
-              "descriptionKey": "schemaDescriptions.agentChat.fonts.monoFamily"
-            },
-            "codeFamily": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Alias for monoFamily.",
-              "descriptionKey": "schemaDescriptions.agentChat.fonts.codeFamily"
-            },
-            "codeSize": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "description": "Agent Chat code font size in CSS pixels.",
-              "descriptionKey": "schemaDescriptions.agentChat.fonts.codeSize"
-            },
-            "monoSize": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "description": "Alias for codeSize.",
-              "descriptionKey": "schemaDescriptions.agentChat.fonts.monoSize"
-            },
-            "codeLineHeight": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "description": "Line-height multiplier used for Agent Chat code blocks.",
-              "descriptionKey": "schemaDescriptions.agentChat.fonts.codeLineHeight"
-            }
-          }
         }
       }
     },
@@ -895,11 +764,6 @@ enum CmuxEmbeddedConfigSchema {
           "default": false,
           "description": "Move a workspace to the top and show the submitted message when sending an agent prompt."
         },
-        "sendAnonymousTelemetry": {
-          "type": "boolean",
-          "default": true,
-          "description": "Allow anonymous telemetry."
-        },
         "confirmQuit": {
           "type": "string",
           "enum": ["always", "dirty-only", "never"],
@@ -1088,7 +952,7 @@ enum CmuxEmbeddedConfigSchema {
         "predictiveLocalEcho": {
           "type": "boolean",
           "default": true,
-          "description": "Draw typed characters immediately in a terminal whose shell runs on another machine (cmux ssh, Cloud, remote tmux) when the link is slow, underlined until the remote echo confirms them, and withdraw them if the remote disagrees. Local terminals, password prompts and full-screen apps are excluded."
+          "description": "Draw typed characters immediately in a terminal whose shell runs on another machine (cmux ssh, remote tmux) when the link is slow, underlined until the remote echo confirms them, and withdraw them if the remote disagrees. Local terminals, password prompts and full-screen apps are excluded."
         },
         "autoResumeAgentSessions": {
           "type": "boolean",
@@ -1655,18 +1519,6 @@ enum CmuxEmbeddedConfigSchema {
           "additionalProperties": false,
           "description": "Experimental sidebar features.",
           "properties": {
-            "conversations": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "default": false,
-                  "descriptionKey": "schemaDescriptions.sidebar.beta.conversations.enabled",
-                  "description": "Show the unified Conversations view in the sidebar picker."
-                }
-              }
-            },
             "workspaceTodos": {
               "type": "object",
               "additionalProperties": false,
@@ -1732,12 +1584,6 @@ enum CmuxEmbeddedConfigSchema {
           "type": "boolean",
           "default": true,
           "description": "Show the workspace working directory."
-        },
-        "showCloudDeviceIcons": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show Cloud machine and device icons beside remote workspace titles independently of Git branch and directory details.",
-          "descriptionKey": "schemaDescriptions.sidebar.showCloudDeviceIcons"
         },
         "showPullRequests": {
           "type": "boolean",
@@ -2388,33 +2234,6 @@ enum CmuxEmbeddedConfigSchema {
         }
       }
     },
-    "mobile": {
-      "x-cmux-scopes": ["global"],
-      "title": "mobile",
-      "description": "Mac-side settings for cmux on iOS.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "artifactFolderAccess": {
-          "type": "string",
-          "enum": ["subtree", "oneLevel"],
-          "default": "subtree",
-          "description": "Controls whether a referenced or terminal-visible directory authorizes its full canonical subtree or only immediate children."
-        },
-        "browserTunnel": {
-          "type": "object",
-          "additionalProperties": false,
-          "description": "The iOS \"On iPhone\" browser for this Mac's workspaces, which loads pages on the phone through this Mac.",
-          "properties": {
-            "allowOtherHosts": {
-              "type": "boolean",
-              "default": false,
-              "description": "Allow the iOS browser to reach hosts other than this Mac's own localhost through this Mac (LAN, VPN, and internet hosts, resolved on this Mac). When off, only this Mac's localhost is reachable and the phone loads other sites over its own network. Link-local and cloud metadata addresses are always refused."
-            }
-          }
-        }
-      }
-    },
     "markdown": {
       "x-cmux-scopes": ["global"],
       "title": "markdown",
@@ -2591,7 +2410,6 @@ enum CmuxEmbeddedConfigSchema {
           "propertyNames": {
             "enum": [
               "openSettings",
-              "openTeamPicker",
               "reloadConfiguration",
               "showHideAllWindows",
               "globalSearch",
@@ -2603,18 +2421,14 @@ enum CmuxEmbeddedConfigSchema {
               "newTab",
               "newLocalWorkspace",
               "newBrowserWorkspace",
-              "newCloudWorkspace",
-              "newCloudMachine",
               "saveLayoutTemplate",
               "openFolder",
               "reopenPreviousSession",
               "goToWorkspace",
               "commandPalette",
-              "agentInbox",
               "openChief",
               "commandPaletteNext",
               "commandPalettePrevious",
-              "sendFeedback",
               "showNotifications",
               "jumpToUnread",
               "jumpToLastPrompt",
@@ -2630,7 +2444,6 @@ enum CmuxEmbeddedConfigSchema {
               "switchRightSidebarToSessions",
               "switchRightSidebarToFeed",
               "switchRightSidebarToDock",
-              "switchRightSidebarToMachines",
               "triggerFlash",
               "nextSurface",
               "prevSurface",

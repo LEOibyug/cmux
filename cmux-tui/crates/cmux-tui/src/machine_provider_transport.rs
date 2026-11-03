@@ -6,12 +6,14 @@
 //! `machine_provider_client`; this module only owns endpoints and lifetimes.
 
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, DirBuilder};
+#[cfg(test)]
+use std::fs;
 use std::io::{self, Read, Write};
-use std::os::unix::fs::DirBuilderExt;
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::path::Path;
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender};
@@ -29,7 +31,6 @@ use crate::process_diagnostics::BoundedDiagnosticBuffer;
 const PROVIDER_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const COMMAND_TERMINATION_GRACE: Duration = Duration::from_millis(250);
 const COMMAND_DIAGNOSTIC_BYTES: usize = 16 * 1024;
-const PRIVATE_PATH_ATTEMPTS: usize = 16;
 
 /// Creates a fresh authenticated provider-control generation.
 pub(crate) trait MachineProviderConnector: Send + Sync {
@@ -284,180 +285,6 @@ impl MachineStreamConnector for CommandMachineStreamConnector {
     }
 }
 
-/// OpenSSH connector used by the built-in cmux.cloud configuration.
-///
-/// The control command owns a private master socket. Stream commands request
-/// that exact socket, while the server-side registry remains a safe fallback
-/// if OpenSSH has to establish a separate connection.
-pub(crate) struct SshProviderConnector {
-    ssh_program: OsString,
-    destination: OsString,
-    port: Option<u16>,
-    identity_file: Option<PathBuf>,
-}
-
-impl SshProviderConnector {
-    /// Test-only raw-destination constructor. Runtime callers use `cloud`.
-    #[cfg(test)]
-    pub(crate) fn new(destination: impl Into<OsString>) -> io::Result<Self> {
-        Self::with_program("ssh", destination)
-    }
-
-    pub(crate) fn cloud(
-        host: &str,
-        user: Option<&str>,
-        port: Option<u16>,
-        identity_file: Option<PathBuf>,
-    ) -> io::Result<Self> {
-        Self::cloud_with_program("ssh", host, user, port, identity_file)
-    }
-
-    fn cloud_with_program(
-        ssh_program: impl Into<OsString>,
-        host: &str,
-        user: Option<&str>,
-        port: Option<u16>,
-        identity_file: Option<PathBuf>,
-    ) -> io::Result<Self> {
-        let ssh_program = ssh_program.into();
-        if ssh_program.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "SSH program is empty"));
-        }
-        validate_ssh_host(host)?;
-        if let Some(user) = user {
-            validate_ssh_user(user)?;
-        }
-        if port == Some(0) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "SSH port cannot be zero"));
-        }
-        if identity_file.as_ref().is_some_and(|path| path.as_os_str().is_empty()) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "SSH identity file is empty"));
-        }
-        let destination = user.map_or_else(|| host.to_string(), |user| format!("{user}@{host}"));
-        Ok(Self { ssh_program, destination: OsString::from(destination), port, identity_file })
-    }
-
-    #[cfg(test)]
-    fn with_program(
-        ssh_program: impl Into<OsString>,
-        destination: impl Into<OsString>,
-    ) -> io::Result<Self> {
-        let ssh_program = ssh_program.into();
-        if ssh_program.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "SSH program is empty"));
-        }
-        let destination = destination.into();
-        validate_ssh_destination(&destination)?;
-        Ok(Self { ssh_program, destination, port: None, identity_file: None })
-    }
-}
-
-impl MachineProviderConnector for SshProviderConnector {
-    fn connect(&self) -> io::Result<ProviderConnection> {
-        let token = random_bearer_token()?;
-        let redactions = Arc::new(vec![token.expose().to_string()]);
-        let control_socket = Arc::new(PrivateControlSocket::create()?);
-        let streams = Arc::new(SshMachineStreamConnector {
-            ssh_program: self.ssh_program.clone(),
-            destination: self.destination.clone(),
-            port: self.port,
-            identity_file: self.identity_file.clone(),
-            control_socket,
-            redactions,
-        });
-        let control = streams.open_role(CommandRole::Control)?;
-        Ok(ProviderConnection { token, control, streams })
-    }
-}
-
-struct SshMachineStreamConnector {
-    ssh_program: OsString,
-    destination: OsString,
-    port: Option<u16>,
-    identity_file: Option<PathBuf>,
-    control_socket: Arc<PrivateControlSocket>,
-    redactions: Arc<Vec<String>>,
-}
-
-impl SshMachineStreamConnector {
-    fn open_role(&self, role: CommandRole) -> io::Result<ProviderIo> {
-        let master = match role {
-            CommandRole::Control => "yes",
-            CommandRole::Stream => "no",
-        };
-        let path_option = format!("ControlPath={}", self.control_socket.path().display());
-        let mut arguments = vec![
-            OsString::from("-T"),
-            OsString::from("-o"),
-            OsString::from("BatchMode=yes"),
-            OsString::from("-o"),
-            OsString::from("StrictHostKeyChecking=yes"),
-            OsString::from("-o"),
-            OsString::from("ForwardAgent=no"),
-            OsString::from("-o"),
-            OsString::from("ForwardX11=no"),
-            OsString::from("-o"),
-            OsString::from("ClearAllForwardings=yes"),
-            OsString::from("-o"),
-            OsString::from("PermitLocalCommand=no"),
-            OsString::from("-o"),
-            OsString::from(format!("ControlMaster={master}")),
-            OsString::from("-o"),
-            OsString::from("ControlPersist=no"),
-            OsString::from("-o"),
-            OsString::from(path_option),
-        ];
-        if let Some(port) = self.port {
-            arguments.push(OsString::from("-p"));
-            arguments.push(OsString::from(port.to_string()));
-        }
-        if let Some(identity_file) = &self.identity_file {
-            arguments.push(OsString::from("-i"));
-            arguments.push(identity_file.as_os_str().to_os_string());
-        }
-        arguments.extend([
-            OsString::from("--"),
-            self.destination.clone(),
-            OsString::from("cmux"),
-            OsString::from("provider"),
-            OsString::from(role.as_str()),
-        ]);
-        let io = spawn_command(&self.ssh_program, &arguments, Arc::clone(&self.redactions))?;
-        // Every process guard retains the directory until its process exits.
-        let ProviderIoParts { reader, writer, guard } = io.into_parts();
-        let guard = ProviderIoGuard::new(Arc::new(CompositeCleanup {
-            process: guard,
-            _control_socket: Arc::clone(&self.control_socket),
-        }));
-        Ok(ProviderIo { reader, writer, guard })
-    }
-}
-
-impl MachineStreamConnector for SshMachineStreamConnector {
-    fn open(&self) -> io::Result<ProviderIo> {
-        self.open_role(CommandRole::Stream)
-    }
-}
-
-struct CompositeCleanup {
-    process: ProviderIoGuard,
-    _control_socket: Arc<PrivateControlSocket>,
-}
-
-impl ProviderIoCleanup for CompositeCleanup {
-    fn close(&self) {
-        self.process.close();
-    }
-
-    fn add_diagnostic_redaction(&self, secret: &str) {
-        self.process.add_diagnostic_redaction(secret);
-    }
-
-    fn diagnostic(&self) -> Option<String> {
-        self.process.diagnostic()
-    }
-}
-
 #[derive(Clone)]
 struct CommandTemplate {
     program: OsString,
@@ -635,50 +462,6 @@ impl Drop for ProcessCleanup {
     }
 }
 
-struct PrivateControlSocket {
-    directory: PathBuf,
-    path: PathBuf,
-}
-
-impl PrivateControlSocket {
-    fn create() -> io::Result<Self> {
-        let base = if cfg!(target_os = "macos") {
-            Path::new("/tmp").to_path_buf()
-        } else {
-            std::env::temp_dir()
-        };
-        for _ in 0..PRIVATE_PATH_ATTEMPTS {
-            let suffix = random_hex(16)?;
-            let directory = base.join(format!("cmux-provider-{suffix}"));
-            let mut builder = DirBuilder::new();
-            builder.mode(0o700);
-            match builder.create(&directory) {
-                Ok(()) => {
-                    let path = directory.join("master.sock");
-                    return Ok(Self { directory, path });
-                }
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "could not allocate a private SSH control directory",
-        ))
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl Drop for PrivateControlSocket {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-        let _ = fs::remove_dir(&self.directory);
-    }
-}
-
 fn random_bearer_token() -> io::Result<BearerToken> {
     let mut bytes = [0_u8; 32];
     getrandom::fill(&mut bytes)
@@ -688,57 +471,9 @@ fn random_bearer_token() -> io::Result<BearerToken> {
     BearerToken::new(encoded).map_err(|_| io::Error::other("generated bearer token was invalid"))
 }
 
-fn random_hex(byte_count: usize) -> io::Result<String> {
-    let mut bytes = vec![0_u8; byte_count];
-    getrandom::fill(&mut bytes)
-        .map_err(|_| io::Error::other("cryptographic randomness is unavailable"))?;
-    let mut encoded = String::with_capacity(byte_count * 2);
-    for byte in &bytes {
-        use std::fmt::Write as _;
-        let _ = write!(encoded, "{byte:02x}");
-    }
-    bytes.zeroize();
-    Ok(encoded)
-}
 
-#[cfg(test)]
-fn validate_ssh_destination(destination: &OsStr) -> io::Result<()> {
-    let Some(destination) = destination.to_str() else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "SSH destination is not valid UTF-8",
-        ));
-    };
-    if destination.is_empty()
-        || destination.starts_with('-')
-        || destination.chars().any(char::is_control)
-    {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "SSH destination is invalid"));
-    }
-    Ok(())
-}
 
-fn validate_ssh_host(host: &str) -> io::Result<()> {
-    if host.is_empty()
-        || host.starts_with('-')
-        || host.contains('@')
-        || host.chars().any(|character| character.is_control() || character.is_whitespace())
-    {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "SSH host is invalid"));
-    }
-    Ok(())
-}
 
-fn validate_ssh_user(user: &str) -> io::Result<()> {
-    if user.is_empty()
-        || user.starts_with('-')
-        || user.contains('@')
-        || user.chars().any(|character| character.is_control() || character.is_whitespace())
-    {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "SSH user is invalid"));
-    }
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {
@@ -1124,105 +859,7 @@ mod tests {
         drop(control);
     }
 
-    #[test]
-    fn ssh_connector_uses_one_private_master_path_and_fixed_remote_commands() {
-        let directory = TestDirectory::new();
-        let records = directory.path.join("ssh-arguments");
-        let fake_ssh = directory.script(
-            "ssh",
-            "records=$(dirname \"$0\")/ssh-arguments; printf '%s\\t%s\\n' \"$$\" \"$*\" >> \"$records\"; while IFS= read -r _line; do :; done",
-        );
 
-        let connector = SshProviderConnector::with_program(fake_ssh, "cmux.cloud")
-            .expect("create SSH connector");
-        let connection = connector.connect().expect("open SSH control");
-        let (token, control, streams) = connection.into_parts();
-        let stream = streams.open().expect("open SSH stream");
-        let deadline = Instant::now() + Duration::from_secs(10);
-        let lines = loop {
-            let lines = fs::read_to_string(&records).unwrap_or_default();
-            if lines.lines().count() >= 2 {
-                break lines;
-            }
-            assert!(Instant::now() < deadline, "timed out waiting for SSH argv records");
-            thread::sleep(Duration::from_millis(10));
-        };
-        let lines = lines.lines().collect::<Vec<_>>();
-        let control_line = lines
-            .iter()
-            .find(|line| line.ends_with("cmux provider control"))
-            .expect("control command");
-        let stream_line = lines
-            .iter()
-            .find(|line| line.ends_with("cmux provider stream"))
-            .expect("stream command");
-        assert!(control_line.contains("ControlMaster=yes"));
-        assert!(stream_line.contains("ControlMaster=no"));
-        let control_path = control_line
-            .split_whitespace()
-            .find(|argument| argument.starts_with("ControlPath="))
-            .expect("control path");
-        assert!(stream_line.split_whitespace().any(|argument| argument == control_path));
-        let path = PathBuf::from(control_path.trim_start_matches("ControlPath="));
-        let control_directory = path.parent().expect("control directory").to_path_buf();
-        let directory_mode = fs::metadata(&control_directory)
-            .expect("control directory metadata")
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(directory_mode, 0o700);
-        assert!(!lines.join("\n").contains(token.expose()));
-        drop((stream, control, streams));
-        assert!(!control_directory.exists());
-    }
-
-    #[test]
-    fn cloud_ssh_connector_emits_host_user_port_identity_and_exact_remote_command() {
-        let directory = TestDirectory::new();
-        let records = directory.path.join("cloud-ssh-arguments");
-        let fake_ssh = directory.script(
-            "cloud-ssh",
-            "records=$(dirname \"$0\")/cloud-ssh-arguments; temporary=$records.$$; printf '%s\\n' \"$@\" > \"$temporary\"; mv \"$temporary\" \"$records\"; while IFS= read -r _line; do :; done",
-        );
-        let identity = directory.path.join("cloud identity");
-        let connector = SshProviderConnector::cloud_with_program(
-            fake_ssh,
-            "edge.example.com",
-            Some("dev"),
-            Some(2200),
-            Some(identity.clone()),
-        )
-        .expect("create configured cloud SSH connector");
-
-        let connection = connector.connect().expect("open cloud SSH control");
-        let (token, control, _) = connection.into_parts();
-        wait_for_nonempty_file(&records);
-        let arguments = fs::read_to_string(records).expect("read cloud SSH argv");
-        let arguments = arguments.lines().collect::<Vec<_>>();
-
-        for option in [
-            "BatchMode=yes",
-            "StrictHostKeyChecking=yes",
-            "ForwardAgent=no",
-            "ForwardX11=no",
-            "ClearAllForwardings=yes",
-        ] {
-            assert!(arguments.windows(2).any(|pair| pair == ["-o", option]), "{arguments:?}");
-        }
-        assert!(arguments.windows(2).any(|pair| pair == ["-p", "2200"]));
-        assert!(
-            arguments
-                .windows(2)
-                .any(|pair| { pair[0] == "-i" && pair[1] == identity.to_string_lossy().as_ref() })
-        );
-        assert!(
-            arguments.windows(5).any(|tail| {
-                tail == ["--", "dev@edge.example.com", "cmux", "provider", "control"]
-            })
-        );
-        assert!(!arguments.iter().any(|argument| argument.contains(token.expose())));
-        drop(control);
-    }
 
     #[test]
     fn unix_connector_preserves_fixed_token_and_opens_distinct_sockets() {
@@ -1266,14 +903,6 @@ mod tests {
         drop((first_control, second_control));
     }
 
-    #[test]
-    fn rejects_ssh_option_injection_in_destination() {
-        assert!(SshProviderConnector::new("-oProxyCommand=bad").is_err());
-        assert!(SshProviderConnector::new(OsString::new()).is_err());
-        assert!(SshProviderConnector::cloud("-oProxyCommand=bad", None, None, None).is_err());
-        assert!(SshProviderConnector::cloud("cmux.cloud", Some("bad user"), None, None).is_err());
-        assert!(SshProviderConnector::cloud("cmux.cloud", None, Some(0), None).is_err());
-    }
 
     #[test]
     fn deadline_interrupts_a_blocked_provider_pipe() {

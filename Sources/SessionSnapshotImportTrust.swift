@@ -103,17 +103,16 @@ enum SessionSnapshotImportTrust {
             var window = sanitized.windows[windowIndex]
             for workspaceIndex in window.tabManager.workspaces.indices {
                 var workspace = window.tabManager.workspaces[workspaceIndex]
-                if workspace.remote != nil || workspace.cloudVM != nil
+                if workspace.remote != nil || workspace.remoteWorkspace != nil
                     || workspace.environment?.isEmpty == false
                     || workspace.surfaceProjections?.isEmpty == false
-                    || workspace.cloudMachineTeams?.isEmpty == false {
+                    {
                     report.droppedRemoteWorkspaceCount += 1
                 }
                 workspace.remote = nil
-                workspace.cloudVM = nil
+                workspace.remoteWorkspace = nil
                 workspace.environment = nil
                 workspace.surfaceProjections = nil
-                workspace.cloudMachineTeams = nil
                 workspace.panels = sanitize(workspace.panels)
                 if var dock = workspace.dock {
                     dock.panels = sanitize(dock.panels)
@@ -287,8 +286,7 @@ enum SessionSnapshotImportTrust {
         sanitized.backHistoryURLStrings = browser.backHistoryURLStrings?.filter(isAllowedImportedURL)
         sanitized.forwardHistoryURLStrings = browser.forwardHistoryURLStrings?.filter(isAllowedImportedURL)
         sanitized.profileID = nil
-        sanitized.cloudResource = nil
-        sanitized.cloudTeamID = nil
+        sanitized.remoteResource = nil
         sanitized.diffViewerToken = nil
         sanitized.diffViewerRequestPath = nil
         // WebKit's interaction state holds its own back/forward list, which
@@ -301,8 +299,7 @@ enum SessionSnapshotImportTrust {
             || sanitized.backHistoryURLStrings != browser.backHistoryURLStrings
             || sanitized.forwardHistoryURLStrings != browser.forwardHistoryURLStrings
             || browser.profileID != nil
-            || browser.cloudResource != nil
-            || browser.cloudTeamID != nil
+            || browser.remoteResource != nil
             || browser.diffViewerToken != nil
             || browser.diffViewerRequestPath != nil
             || browser.interactionState != nil

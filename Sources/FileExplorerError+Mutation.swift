@@ -36,10 +36,9 @@ extension FileExplorerError {
         }
     }
 
-    /// Maps the exit status of a remote (SSH or Cloud) mutation script.
-    ///
-    /// Both remote paths use ``SSHFileExplorerMutationCommand/alreadyExistsStatus``
-    /// and ``SSHFileExplorerMutationCommand/permissionDeniedStatus``.
+    /// Maps the exit status of an SSH mutation script using
+    /// ``SSHFileExplorerMutationCommand/alreadyExistsStatus`` and
+    /// ``SSHFileExplorerMutationCommand/permissionDeniedStatus``.
     static func mutationError(exitStatus: Int32) -> FileExplorerError {
         switch exitStatus {
         case SSHFileExplorerMutationCommand.alreadyExistsStatus:

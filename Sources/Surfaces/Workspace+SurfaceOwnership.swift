@@ -1,5 +1,5 @@
 import CmuxSSHClipboardTrust
-import CmuxCloud
+import CmuxRemoteSession
 import AppKit
 import Bonsplit
 import CmuxSurfaceCatalogModel
@@ -42,7 +42,7 @@ extension Workspace {
     }
 
     var surfaceOwnershipPolicy: SurfaceOwnershipPolicy {
-        SurfaceOwnershipPolicy(cloudMachine: cloudVMBinding.map { SurfaceMachineID(rawValue: $0.vmID) } ?? cloudVMID.map(SurfaceMachineID.cloud))
+        SurfaceOwnershipPolicy(remoteMachine: remoteWorkspaceBinding.flatMap { SurfaceMachineID(rawValue: $0.machineID) })
     }
 
     /// A pane's projection or remote transport owns its machine, never its title
@@ -51,12 +51,8 @@ extension Workspace {
         let catalog = catalog ?? SurfaceCatalog.shared
         guard panels[panelID] != nil else { return nil }
         if let machine = catalog.machineOwningPanel(panelID), !machine.isLocal { return machine }
-        if let resource = (panels[panelID] as? DeferredBrowserPanel)?.sessionPanelSnapshot.browser?.cloudResource { return resource.machine }
-        if let reservation = cloudPendingCreations[panelID] { return reservation.machine }
-        if activeRemoteTerminalSurfaceIds.contains(panelID),
-           let machine = remoteConfiguration?.managedCloudVMID {
-            return .cloud(machine)
-        }
+        if let resource = (panels[panelID] as? DeferredBrowserPanel)?.sessionPanelSnapshot.browser?.remoteResource { return resource.machine }
+        if let reservation = tuiPendingCreations[panelID] { return reservation.machine }
         return panels[panelID]?.transferredSurfaceMachine ?? .local
     }
 
@@ -78,7 +74,7 @@ extension Workspace {
         // Optimistic SSH cmux-tui panes are owned before their catalog
         // projection/provider session exists. Preserve that exact reservation
         // identity even when they are inserted into another remote workspace.
-        if let reservation = cloudPendingCreations[panelID] {
+        if let reservation = tuiPendingCreations[panelID] {
             return reservation.machine
         }
 
@@ -86,8 +82,8 @@ extension Workspace {
         // while a restored or moved pane is being attached. Use the provider's
         // machine identity only for that live session; an arbitrary manual
         // mirror must not inherit the workspace's SSH configuration.
-        if let session = tuiMirrorSession(for: panelID) {
-            let machine = SurfaceMachineID(rawValue: session.machineID)
+        if let session = tuiMirrorSession(for: panelID),
+           let machine = SurfaceMachineID(rawValue: session.machineID) {
             if machine.isSSH {
                 return machine
             }
@@ -114,12 +110,8 @@ extension Workspace {
             // identity of the workspace it happens to be displayed in.
             return panel.transferredSurfaceMachine
         }
-        if let resource = (panel as? DeferredBrowserPanel)?.sessionPanelSnapshot.browser?.cloudResource {
+        if let resource = (panel as? DeferredBrowserPanel)?.sessionPanelSnapshot.browser?.remoteResource {
             return resource.machine
-        }
-        if activeRemoteTerminalSurfaceIds.contains(panelID),
-           let machine = remoteConfiguration?.managedCloudVMID {
-            return .cloud(machine)
         }
         return panel.transferredSurfaceMachine ?? catalogMachine ?? .local
     }
@@ -149,7 +141,7 @@ extension Workspace {
         _ transfer: PaneDragTransfer,
         source: PaneTransferSourceResolver.Source
     ) -> SurfaceTransferRejection? {
-        guard surfaceOwnershipPolicy.cloudMachine != nil else { return nil }
+        guard surfaceOwnershipPolicy.remoteMachine != nil else { return nil }
         switch source {
         case .surfaceResources(let group):
             return SurfaceCatalog.shared.ownershipRejection(for: group.resources, policy: surfaceOwnershipPolicy)
@@ -189,8 +181,6 @@ extension Workspace {
         if transfer.origin == .workspace(id) { return true }
         let machine = transfer.surfaceMachine
             ?? SurfaceCatalog.shared.machineOwningPanel(transfer.panelId)
-            ?? transfer.remoteRelayNamespaceConfiguration?.managedCloudVMID.map(SurfaceMachineID.cloud)
-            ?? transfer.remoteCleanupConfiguration?.managedCloudVMID.map(SurfaceMachineID.cloud)
             ?? .local
         return surfaceOwnershipPolicy.rejection(for: machine, kind: AppDelegate.shared?.surfaceResourceKind(for: transfer.panel)) == nil
     }

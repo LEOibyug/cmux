@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Bonsplit
 import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
@@ -21,88 +21,39 @@ extension Workspace {
     /// Device layout reconciliation builds this once per pass and uses the same
     /// reservation for the pane it projects into and the pane it adopts, so the
     /// terminal lands in its final pane instead of the focused tab first.
-    /// `cloudPendingCreations` is the only request-to-terminal record: an
+    /// `tuiPendingCreations` is the only request-to-terminal record: an
     /// unbound or sibling reservation never lends its pane or queued input to
     /// another terminal.
-    func pendingCloudTerminalReservations(
+    func pendingTuiTerminalReservations(
         remoteWorkspaceID: String
-    ) -> [CloudTerminalReservationKey: CloudTerminalPaneReservation] {
-        var index: [CloudTerminalReservationKey: CloudTerminalPaneReservation] = [:]
-        for reservation in cloudPendingCreations.values where reservation.remoteWorkspaceID == remoteWorkspaceID {
+    ) -> [TuiTerminalReservationKey: TuiTerminalPaneReservation] {
+        var index: [TuiTerminalReservationKey: TuiTerminalPaneReservation] = [:]
+        for reservation in tuiPendingCreations.values where reservation.remoteWorkspaceID == remoteWorkspaceID {
             guard let resource = reservation.boundResourceID else { continue }
-            let key = CloudTerminalReservationKey(resource: resource, remoteTabID: reservation.remoteTabID)
+            let key = TuiTerminalReservationKey(resource: resource, remoteTabID: reservation.remoteTabID)
             if index[key] == nil { index[key] = reservation }
         }
         return index
     }
 
-    /// Hands a device provider the native pane without requiring a Cloud
-    /// attachment object. Device mirrors share the optimistic reservation path,
-    /// but their attachment status has a different type from Cloud VMs.
-    ///
-    /// Adoption binds the pane; it does not retire the request. As with
-    /// `adoptReservedCloudTerminalPane`, the reservation stays pending until its
-    /// owner calls `completeReservedCloudTerminalPane`. The owner checks that its
-    /// reservation is still pending after the projection returns, so retiring it
-    /// here made a successful adoption look like a closed pane and tore down the
-    /// workspace a device workspace row had just opened.
-    func adoptPendingDeviceTerminalPane(
-        _ reservation: CloudTerminalPaneReservation,
-        machine: SurfaceMachineID,
-        remoteWorkspaceID: String,
-        resource: SurfaceResource
-    ) -> (workspaceID: UUID, panelID: UUID, surface: TerminalSurface)? {
-        guard reservation.machine == machine,
-              reservation.remoteWorkspaceID == remoteWorkspaceID,
-              reservation.boundResourceID == resource.id,
-              cloudPendingCreations[reservation.panelID] === reservation,
-              let panel = panels[reservation.panelID] as? TerminalPanel,
-              panel.surface.ioMode == .manualMirror,
-              // A pane binds one mirror session; a second adoption must not replace it.
-              panel.deviceAttachment == nil else { return nil }
-        return (id, panel.id, panel.surface)
-    }
 
-    /// Binds a device create receipt to the reservation that owns its pane.
-    /// This identity is established before layout reconciliation can adopt the
-    /// pane, so a different terminal can never claim its queued input.
-    func bindPendingDeviceTerminal(
-        requestID: UUID,
-        remoteWorkspaceID: String,
-        resource: SurfaceResource
-    ) -> Bool {
-        guard let reservation = cloudPendingCreations.values.first(where: {
-            $0.requestID == requestID && $0.machine == resource.machine
-                && $0.remoteWorkspaceID == remoteWorkspaceID
-        }) else { return false }
-        let tabID = resource.remoteViews?.first(where: { $0.workspace.id == remoteWorkspaceID })?.tabID
-        reservation.bind(sourcePlacement: CloudTerminalSourcePlacement(
-            machine: reservation.machine,
-            resource: resource,
-            remoteWorkspaceID: remoteWorkspaceID,
-            remoteTabID: tabID,
-            pendingCreation: reservation.sourcePlacement.pendingCreation
-        ))
-        return true
-    }
 
     /// A device may adopt this pane, and its router sends bytes only, so
     /// Ghostty must encode Enter, arrows and the other named keys itself.
     static func reservationKeyNameResolver(
         for machine: SurfaceMachineID
     ) -> (@MainActor @Sendable (ghostty_input_key_s) -> String?)? {
-        if machine.isDevice { return nil }
         return { event in RemoteTmuxKeyName(inputEvent: event)?.value }
     }
 
-    func reserveRestoredCloudTerminalPane(
+    func reserveRestoredTuiTerminalPane(
         snapshot: SessionPanelSnapshot,
         projection: SurfaceProjectionRecord,
         inPane pane: PaneID
     ) -> UUID? {
         guard projection.resource.kind == .terminal,
               !projection.resource.machine.isLocal else { return nil }
-        let relay = CloudOptimisticInputRelay()
+        let relay = TuiOptimisticInputRelay()
         guard let panel = makeRemoteTmuxPanePanel(
             onInput: { input in relay.send(input) },
             keyNameResolver: Self.reservationKeyNameResolver(for: projection.resource.machine),
@@ -111,14 +62,14 @@ extension Workspace {
         ) else { return nil }
         panel.surface.setManualIONoReflow(false)
         do {
-            let panelID = try insertCloudManualMirrorPanel(
+            let panelID = try insertTuiManualMirrorPanel(
                 panel,
                 at: .tab(workspaceID: id, paneID: pane.id.uuidString, index: nil),
                 focus: false,
                 isLoading: false
             )
             applySessionPanelMetadata(snapshot, toPanelId: panelID)
-            cloudPendingCreations[panelID] = CloudTerminalPaneReservation(
+            tuiPendingCreations[panelID] = TuiTerminalPaneReservation(
                 workspaceID: id,
                 panelID: panelID,
                 machine: projection.resource.machine,
@@ -137,19 +88,19 @@ extension Workspace {
 
     /// Inserts the pane a Cloud terminal will occupy before the machine has created it.
     /// Returns nil when the destination no longer exists.
-    func reserveCloudTerminalPane(
+    func reserveTuiTerminalPane(
         machine: SurfaceMachineID,
         at destination: SurfaceDestination,
         focus: Bool,
-        sourcePlacement: CloudTerminalSourcePlacement? = nil,
+        sourcePlacement: TuiTerminalSourcePlacement? = nil,
         attachmentPlacement: SurfaceResourcePlacement? = nil,
         requestID: UUID? = nil
-    ) -> CloudTerminalPaneReservation? {
+    ) -> TuiTerminalPaneReservation? {
         guard !isRetiredFromOwningTabManager,
               sourcePlacement.map({ $0.machine == machine }) ?? true,
               attachmentPlacement.map({ $0.resource.machine == machine }) ?? true,
               surfaceOwnershipPolicy.rejection(for: machine) == nil else { return nil }
-        let relay = CloudOptimisticInputRelay()
+        let relay = TuiOptimisticInputRelay()
         guard let panel = makeRemoteTmuxPanePanel(
             onInput: { input in relay.send(input) },
             keyNameResolver: Self.reservationKeyNameResolver(for: machine),
@@ -157,58 +108,58 @@ extension Workspace {
                 .allowsRemoteClipboardWrites(for: machine)
         ) else { return nil }
         panel.surface.setManualIONoReflow(false)
-        let reservation = CloudTerminalPaneReservation(
+        let reservation = TuiTerminalPaneReservation(
             workspaceID: id, panelID: panel.id, machine: machine,
             sourcePlacement: sourcePlacement, attachmentPlacement: attachmentPlacement,
             inputRelay: relay, requestID: requestID
         )
         // Insertion can synchronously publish focus/selection. Establish Cloud
         // identity first so a reentrant action cannot observe a local surface.
-        cloudPendingCreations[panel.id] = reservation
+        tuiPendingCreations[panel.id] = reservation
         do {
-            _ = try insertCloudManualMirrorPanel(panel, at: destination, focus: focus, isLoading: false)
+            _ = try insertTuiManualMirrorPanel(panel, at: destination, focus: focus, isLoading: false)
         } catch {
-            cloudPendingCreations.removeValue(forKey: panel.id)
+            tuiPendingCreations.removeValue(forKey: panel.id)
             relay.discard()
             panel.close()
             return nil
         }
-        guard cloudPendingCreations[panel.id] === reservation else { return nil }
+        guard tuiPendingCreations[panel.id] === reservation else { return nil }
         if focus { panel.surface.requestInputDemandSurfaceStartIfNeeded() }
         return reservation
     }
 
     /// Binds a resolved attachment to the reserved pane. Returns nil when the
     /// user already closed the pane, in which case the caller cancels.
-    func adoptReservedCloudTerminalPane(
-        _ reservation: CloudTerminalPaneReservation,
+    func adoptReservedTuiTerminalPane(
+        _ reservation: TuiTerminalPaneReservation,
         onResize: @escaping @MainActor @Sendable (TerminalSurfaceRawSizingSample) -> Void,
         onRuntimeReady: @escaping @MainActor @Sendable () -> Void,
         onFocus: @escaping @MainActor @Sendable () -> Void,
-        attachment: CloudTerminalAttachmentStatus
+        attachment: RemoteTerminalAttachmentStatus
     ) -> (workspaceID: UUID, panelID: UUID, surface: TerminalSurface)? {
         guard !isRetiredFromOwningTabManager,
-              cloudPendingCreations[reservation.panelID] === reservation,
+              tuiPendingCreations[reservation.panelID] === reservation,
               attachment.machineID == reservation.machine.tuiMachineID,
               let panel = panels[reservation.panelID] as? TerminalPanel,
               panel.surface.ioMode == .manualMirror else { return nil }
-        Self.bindCloudManualMirrorCallbacks(
+        Self.bindTuiManualMirrorCallbacks(
             panel: panel,
             onResize: onResize,
             onRuntimeReady: onRuntimeReady,
             onFocus: onFocus,
             attachment: attachment
         )
-        clearCloudMaterializationFailure(surfaceID: reservation.panelID)
+        clearTuiMaterializationFailure(surfaceID: reservation.panelID)
         panel.surface.flushPendingManualSizeReportIfAttached()
         return (id, panel.id, panel.surface)
     }
 
     /// The request completed: the projection either adopted the reserved pane or
     /// reused another one, in which case the now-redundant reservation closes.
-    func completeReservedCloudTerminalPane(_ reservation: CloudTerminalPaneReservation, adoptedPanelID: UUID) {
-        guard cloudPendingCreations[reservation.panelID] === reservation else { return }
-        cloudPendingCreations.removeValue(forKey: reservation.panelID)
+    func completeReservedTuiTerminalPane(_ reservation: TuiTerminalPaneReservation, adoptedPanelID: UUID) {
+        guard tuiPendingCreations[reservation.panelID] === reservation else { return }
+        tuiPendingCreations.removeValue(forKey: reservation.panelID)
         reservation.closeAttachHandshake()
         if let resource = SurfaceCatalog.shared.resource(forPanel: adoptedPanelID) {
             reservation.creationReceipt.finish(.success(resource))
@@ -231,12 +182,12 @@ extension Workspace {
 
     /// Creation or projection failed: keep the pane where the user put it and
     /// explain inside it, with Reconnect wired to the same request's retry.
-    func failReservedCloudTerminalPane(_ reservation: CloudTerminalPaneReservation, error: Error) {
-        guard cloudPendingCreations[reservation.panelID] === reservation else { return }
+    func failReservedTuiTerminalPane(_ reservation: TuiTerminalPaneReservation, error: Error) {
+        guard tuiPendingCreations[reservation.panelID] === reservation else { return }
         reservation.creationReceipt.finish(.failure(error))
         reservation.closeAttachHandshake()
-        let failure = CloudPaneCreationFailure(machine: reservation.machine, error: error, context: CloudOperationContext.current)
-        setCloudMaterializationFailure(
+        let failure = TuiPaneCreationFailure(machine: reservation.machine, error: error)
+        setTuiMaterializationFailure(
             surfaceID: reservation.panelID,
             detail: failure.errorText,
             reference: failure.copyableText
@@ -244,27 +195,27 @@ extension Workspace {
     }
 
     /// A retry started: the pane is pending again.
-    func restartReservedCloudTerminalPane(_ reservation: CloudTerminalPaneReservation) {
-        guard cloudPendingCreations[reservation.panelID] === reservation else { return }
-        clearCloudMaterializationFailure(surfaceID: reservation.panelID)
+    func restartReservedTuiTerminalPane(_ reservation: TuiTerminalPaneReservation) {
+        guard tuiPendingCreations[reservation.panelID] === reservation else { return }
+        clearTuiMaterializationFailure(surfaceID: reservation.panelID)
         // Keep the reserved tab visually stable while retrying. The pane itself
         // reports any failure through its reconnect affordance.
     }
 
     /// Reconnect pressed on a reserved pane's failure card replays the request.
-    func retryReservedCloudTerminalPane(surfaceId: UUID) -> Bool {
-        guard let reservation = cloudPendingCreations[surfaceId], let retry = reservation.retry else { return false }
+    func retryReservedTuiTerminalPane(surfaceId: UUID) -> Bool {
+        guard let reservation = tuiPendingCreations[surfaceId], let retry = reservation.retry else { return false }
         retry()
         return true
     }
 
     /// The pane left the workspace: end the local request. A remote terminal
     /// the machine already created stays alive, like closing any other pane.
-    func cancelReservedCloudTerminalPane(panelID: UUID) {
-        guard let reservation = cloudPendingCreations.removeValue(forKey: panelID) else { return }
+    func cancelReservedTuiTerminalPane(panelID: UUID) {
+        guard let reservation = tuiPendingCreations.removeValue(forKey: panelID) else { return }
         reservation.closeAttachHandshake()
         reservation.inputRelay.discard()
-        reservation.creationReceipt.finish(.failure(CloudDiagnosticFailure.placement))
+        reservation.creationReceipt.finish(.failure(TuiTransportError.placementMismatch))
         let cancel = reservation.cancel
         reservation.cancel = nil
         reservation.retry = nil
@@ -274,12 +225,12 @@ extension Workspace {
     /// Drops a reservation when its remote workspace is invalidated before the
     /// provider create can begin. The pane is owned by this request, so leaving
     /// it visible would strand a loading surface after cancellation.
-    func discardReservedCloudTerminalPane(_ reservation: CloudTerminalPaneReservation) {
-        guard cloudPendingCreations[reservation.panelID] === reservation else { return }
-        cloudPendingCreations.removeValue(forKey: reservation.panelID)
+    func discardReservedTuiTerminalPane(_ reservation: TuiTerminalPaneReservation) {
+        guard tuiPendingCreations[reservation.panelID] === reservation else { return }
+        tuiPendingCreations.removeValue(forKey: reservation.panelID)
         reservation.closeAttachHandshake()
         reservation.inputRelay.discard()
-        reservation.creationReceipt.finish(.failure(CloudDiagnosticFailure.placement))
+        reservation.creationReceipt.finish(.failure(TuiTransportError.placementMismatch))
         let cancel = reservation.cancel
         reservation.cancel = nil
         reservation.retry = nil
@@ -288,9 +239,9 @@ extension Workspace {
     }
 
     /// Workspace teardown: every pending request ends without touching remote terminals.
-    func cancelAllReservedCloudTerminalPanes() {
-        for panelID in Array(cloudPendingCreations.keys) {
-            cancelReservedCloudTerminalPane(panelID: panelID)
+    func cancelAllReservedTuiTerminalPanes() {
+        for panelID in Array(tuiPendingCreations.keys) {
+            cancelReservedTuiTerminalPane(panelID: panelID)
         }
     }
 }

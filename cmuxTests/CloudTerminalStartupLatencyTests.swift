@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Foundation
 import Testing
 
@@ -22,7 +22,7 @@ struct CloudTerminalStartupLatencyTests {
 
     @Test @MainActor
     func unresolvedSurfaceCannotStartAnAttachStream() {
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine",
             terminalID: "term_new-machine",
             remoteSurfaceID: 0,

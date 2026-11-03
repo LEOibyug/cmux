@@ -15,13 +15,6 @@ public struct BetaFeaturesCatalogSection: SettingCatalogSection {
         userDefaultsKey: "rightSidebar.beta.feed.enabled"
     )
 
-    /// Conversations: opt-in unified coding-agent session navigation in the
-    /// left sidebar. Disabling it hides the provider while preserving sessions.
-    public let conversationSidebar = DefaultsKey<Bool>(
-        id: "sidebar.beta.conversations.enabled",
-        defaultValue: false,
-        userDefaultsKey: "sidebar.beta.conversations.enabled"
-    )
 
     /// Extensions: the experimental ExtensionKit sidebar-extension surface
     /// (puzzle button, sidebar-toggle provider menu, installed-extension
@@ -35,8 +28,7 @@ public struct BetaFeaturesCatalogSection: SettingCatalogSection {
     )
 
     /// Click by Hint: hint mode (Cmd-J labels every clickable control in the
-    /// window; typing a label clicks it) as an opt-in preview. Defaults off;
-    /// a remote rollout flag can turn it on even while this is off.
+    /// window; typing a label clicks it) as a local opt-in preview. Defaults off.
     public let windowHints = DefaultsKey<Bool>(
         id: "windowHints.beta.enabled",
         defaultValue: false,
@@ -56,8 +48,7 @@ public struct BetaFeaturesCatalogSection: SettingCatalogSection {
 
     /// Workspace todo controls: the experimental UI that lets users add
     /// checklist items and set workspace completion/status lanes. Defaults off
-    /// so the todo summary remains read-only unless the user opts in or the
-    /// remote rollout flag enables it.
+    /// so the todo summary remains read-only unless the user opts in.
     public let workspaceTodoControls = DefaultsKey<Bool>(
         id: "sidebar.beta.workspaceTodos.controls.enabled",
         defaultValue: false,
@@ -72,18 +63,6 @@ public struct BetaFeaturesCatalogSection: SettingCatalogSection {
         defaultValue: .popover,
         userDefaultsKey: "sidebarWorkspaceTodosChecklistStyle"
     )
-
-    /// Cloud Machines' persisted first-use activation marker. The row moved out
-    /// of Beta Features when Cloud graduated; this storage key remains stable
-    /// so installed users keep their activation and existing configuration
-    /// domains migrate without a destructive reset.
-    public let cloudMachines = DefaultsKey<Bool>(
-        id: "cloud.beta.machines.enabled",
-        defaultValue: Self.cloudMachinesDefault,
-        userDefaultsKey: "cloud.beta.machines.enabled"
-    )
-
-    private static let cloudMachinesDefault = false
 
     /// Remote tmux: mirror a remote host's tmux sessions in the cmux sidebar
     /// over `ssh … tmux -CC` (iTerm2-style control mode). Sessions appear as

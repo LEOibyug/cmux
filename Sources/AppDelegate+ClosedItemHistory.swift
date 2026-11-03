@@ -100,7 +100,7 @@ extension AppDelegate {
                 if let workspaceId = workspaceSnapshot.workspaceId {
                     return workspaceId
                 }
-                guard windowEntry.workspaceIds.indices.contains(index) else { return nil }
+                guard windowEntry.workspaceIds.count == windowSnapshot.tabManager.workspaces.count else { return nil }
                 return windowEntry.workspaceIds[index]
             }
             let excludedStableIdentities = liveStableIdentitySet()

@@ -11,7 +11,7 @@ import Testing
 /// binds its ``TerminalSurface``. The prompt intentionally has no newline, the
 /// same shape as the partial-line report in #3079.
 @Suite("Cloud manual mirror startup rendering")
-struct CloudManualMirrorStartupRenderingTests {
+struct TuiManualMirrorStartupRenderingTests {
     @Test @MainActor
     func partialPromptReceivedBeforeSurfaceBindingIsRendered() async throws {
         let fixture = try CloudRestoreReplayFixture(bindSurface: false)

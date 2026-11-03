@@ -15,13 +15,12 @@ struct SettingsTaxonomyTests {
 
     /// Locks the intended concept-to-leaf mapping for the browse sidebar.
     @Test func groupsFollowTheBrowseTaxonomy() {
-        #expect(SettingsTaxonomyGroup.general.sections == [.account, .app, .themes, .sleepyMode])
+        #expect(SettingsTaxonomyGroup.general.sections == [.app, .themes, .sleepyMode])
         #expect(SettingsTaxonomyGroup.terminal.sections == [.terminal, .textBox])
         #expect(SettingsTaxonomyGroup.workspace.sections == [.workspaceColors])
         #expect(SettingsTaxonomyGroup.sidebarAndDock.sections == [.sidebarAppearance, .customSidebars])
         #expect(SettingsTaxonomyGroup.agentsAndAutomation.sections == [.automation, .computerUse])
         #expect(SettingsTaxonomyGroup.browserAndFiles.sections == [.browser, .browserImport])
-        #expect(SettingsTaxonomyGroup.remoteAndDevices.sections == [.mobile, .cloudMachines, .computers, .networking])
         #expect(
             SettingsTaxonomyGroup.keyboardAndAdvanced.sections
                 == [.globalHotkey, .keyboardShortcuts, .betaFeatures, .settingsJSON, .reset]

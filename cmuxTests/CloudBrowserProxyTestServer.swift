@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CryptoKit
 import Foundation
 import Network
@@ -12,7 +12,35 @@ import Network
 /// Authenticated loopback CONNECT/WebSocket peer shared by browser integration tests.
 /// Network callbacks enter the main actor before recording or accepting a peer.
 @MainActor
-final class CloudBrowserProxyTestServer {
+final class RemoteBrowserProxyTestServer {
+    nonisolated private static func relay(_ client: NWConnection, _ upstream: NWConnection) async {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask { await pump(from: client, to: upstream) }
+            group.addTask { await pump(from: upstream, to: client) }
+            for await endedCleanly in group where !endedCleanly {
+                client.cancel()
+                upstream.cancel()
+            }
+        }
+        client.cancel()
+        upstream.cancel()
+    }
+
+    nonisolated private static func pump(from source: NWConnection, to sink: NWConnection) async -> Bool {
+        do {
+            while true {
+                let (data, isComplete) = try await source.receiveChunk()
+                if let data, !data.isEmpty { try await sink.sendAll(data) }
+                if isComplete {
+                    try await sink.finishSending()
+                    return true
+                }
+            }
+        } catch {
+            return false
+        }
+    }
+
     struct Request: Sendable {
         let method: String
         let target: String
@@ -24,7 +52,7 @@ final class CloudBrowserProxyTestServer {
     let marker: String
     private let servicePort: Int
     private let pageHTML: String?
-    private let styles: CloudLinkFirstValue<Bool>?
+    private let styles: RemoteLinkFirstValue<Bool>?
     private let securePort: UInt16?
     private let listener: NWListener
     private let queue = DispatchQueue(label: "cmux.tests.cloud-browser-connect")
@@ -37,11 +65,11 @@ final class CloudBrowserProxyTestServer {
     var authorizedTargets: [String] { capturedTargets }
     private var capturedBridgeRequests: [String] = []
     var bridgeRequests: [String] { capturedBridgeRequests }
-    var endpoint: CloudBrowserProxyEndpoint {
-        CloudBrowserProxyEndpoint(host: "127.0.0.1", port: port, username: marker, password: "fixture-\(marker)", websocketToken: "ws-token")
+    var endpoint: RemoteBrowserProxyEndpoint {
+        RemoteBrowserProxyEndpoint(host: "127.0.0.1", port: port, username: marker, password: "fixture-\(marker)", websocketToken: "ws-token")
     }
 
-    init(address: String, marker: String, styles: CloudLinkFirstValue<Bool>? = nil, securePort: UInt16? = nil, servicePort: Int = 8000, pageHTML: String? = nil) throws {
+    init(address: String, marker: String, styles: RemoteLinkFirstValue<Bool>? = nil, securePort: UInt16? = nil, servicePort: Int = 8000, pageHTML: String? = nil) throws {
         self.address = address
         self.marker = marker
         self.servicePort = servicePort
@@ -54,7 +82,7 @@ final class CloudBrowserProxyTestServer {
     }
 
     func start() async throws {
-        let ready = CloudLinkFirstValue<UInt16>()
+        let ready = RemoteLinkFirstValue<UInt16>()
         listener.stateUpdateHandler = { [listener] state in
             switch state {
             case .ready: ready.resolve(listener.port?.rawValue)
@@ -70,9 +98,9 @@ final class CloudBrowserProxyTestServer {
             }
         }
         listener.start(queue: queue)
-        guard let bound = await CloudBrowserProxyTestDeadline.value(ready), bound != 0 else {
+        guard let bound = await RemoteBrowserProxyTestDeadline.value(ready), bound != 0 else {
             stop()
-            throw NSError(domain: "CloudBrowserProxyTestServer", code: 1)
+            throw NSError(domain: "RemoteBrowserProxyTestServer", code: 1)
         }
         port = bound
     }
@@ -145,7 +173,7 @@ final class CloudBrowserProxyTestServer {
                 defer { upstream.cancel() }
                 try await upstream.startAndWaitUntilReady(queue: queue)
                 if !buffered.isEmpty { try await upstream.sendAll(buffered) }
-                await CloudPortForwardRelay.relay(connection, upstream)
+                await Self.relay(connection, upstream)
                 return
             }
             guard connect.target == "\(address):\(servicePort)" else { return }
@@ -199,7 +227,7 @@ final class CloudBrowserProxyTestServer {
     private func readRequest(_ connection: NWConnection, buffered: inout Data) async throws -> ParsedRequest {
         let separator = Data("\r\n\r\n".utf8)
         while buffered.range(of: separator) == nil {
-            guard buffered.count < 32_768 else { throw NSError(domain: "CloudBrowserProxyTestServer", code: 2) }
+            guard buffered.count < 32_768 else { throw NSError(domain: "RemoteBrowserProxyTestServer", code: 2) }
             let chunk = try await connection.receiveChunk(maximumLength: 16_384)
             if let bytes = chunk.data { buffered.append(bytes) }
             if chunk.isComplete && buffered.range(of: separator) == nil { throw NWConnection.StreamError.endedEarly }
@@ -209,14 +237,14 @@ final class CloudBrowserProxyTestServer {
         buffered.removeSubrange(..<boundary.upperBound)
         let lines = text.components(separatedBy: "\r\n")
         let first = (lines.first ?? "").split(separator: " ")
-        guard first.count == 3 else { throw NSError(domain: "CloudBrowserProxyTestServer", code: 3) }
+        guard first.count == 3 else { throw NSError(domain: "RemoteBrowserProxyTestServer", code: 3) }
         var headers: [String: String] = [:]
         for line in lines.dropFirst() {
             guard let colon = line.firstIndex(of: ":") else { continue }
             headers[String(line[..<colon]).lowercased()] = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
         }
         let count = Int(headers["content-length"] ?? "0") ?? 0
-        guard count >= 0, count <= 65_536 else { throw NSError(domain: "CloudBrowserProxyTestServer", code: 4) }
+        guard count >= 0, count <= 65_536 else { throw NSError(domain: "RemoteBrowserProxyTestServer", code: 4) }
         while buffered.count < count {
             let chunk = try await connection.receiveChunk(maximumLength: 65_536)
             if let bytes = chunk.data { buffered.append(bytes) }

@@ -137,13 +137,6 @@ public struct KeyboardShortcutsSection: View {
             subtitle: String(localized: "settings.shortcuts.chords.subtitle", defaultValue: "Add tmux-style multi-step shortcuts in cmux.json, for example [\"ctrl+b\", \"c\"].")
         ) {
             HStack(spacing: 8) {
-                Link(
-                    String(localized: "settings.shortcuts.chords.docsButton", defaultValue: "Chord docs"),
-                    destination: URL(string: "https://cmux.com/docs/keyboard-shortcuts#shortcut-chords")!
-                )
-                .cmuxFont(.caption)
-                .accessibilityIdentifier("SettingsKeyboardShortcutsChordDocsLink")
-
                 Button(String(localized: "settings.app.settingsFile.openButton", defaultValue: "Open cmux.json")) {
                     hostActions.openConfigInExternalEditor()
                 }

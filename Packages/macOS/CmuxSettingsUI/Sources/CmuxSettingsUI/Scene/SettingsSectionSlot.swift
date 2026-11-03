@@ -18,9 +18,6 @@ struct SettingsSectionSlot<Content: View>: View {
     /// and gives the window true one-pane-at-a-time behavior.
     let isActive: Bool
     let isMounted: Bool
-    /// `false` renders nothing while unmounted, for sections that hide
-    /// themselves entirely (Cloud before it is available).
-    let showsPlaceholder: Bool
     let onMountedAppear: @MainActor () -> Void
     @ViewBuilder let content: () -> Content
 
@@ -33,7 +30,7 @@ struct SettingsSectionSlot<Content: View>: View {
                     if isMounted {
                         content()
                             .onAppear { onMountedAppear() }
-                    } else if showsPlaceholder {
+                    } else {
                         SettingsSectionPlaceholder(section: section)
                     }
                 }

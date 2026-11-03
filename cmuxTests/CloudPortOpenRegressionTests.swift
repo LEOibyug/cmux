@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -16,7 +16,7 @@ import CmuxWorkspaces
 @MainActor
 @Suite("Cloud VM port discovery and opening")
 struct CloudPortOpenRegressionTests {
-    private let machine = SurfaceMachineID.cloud("port-vm")
+    private let machine = SurfaceMachineID.ssh("65fa04ea0cd5435972d702f0dec4a23cc6cbb538c9887a1dc94bb2d88e46c905")
     private let workspace = SurfaceRemoteWorkspace(id: "ws_app", name: "app", index: 0, focused: true)
     @MainActor
     private final class FakeProvider: SurfaceProvider {
@@ -34,7 +34,7 @@ struct CloudPortOpenRegressionTests {
                 name: machine.rawValue,
                 status: "running",
                 image: "cmux-devbox",
-                hasDesktop: false,
+                
                 memoryMb: nil,
                 diskMb: nil,
                 linkState: .connected,
@@ -75,24 +75,13 @@ struct CloudPortOpenRegressionTests {
         }
         func projectionDidEnd(_ projection: SurfaceProjection) {}
     }
-    private func machineSnapshot() -> MachineSnapshot {
-        MachineSnapshot(
-            id: machine.rawValue,
-            provider: "freestyle",
-            image: "cmux-devbox",
-            isDesktop: false,
-            activity: .ready,
-            createdAt: nil,
-            label: nil
-        )
-    }
     private func machineInfo(workspaces: [SurfaceRemoteWorkspace] = []) -> SurfaceMachineInfo {
         SurfaceMachineInfo(
             id: machine,
             name: machine.rawValue,
             status: "running",
             image: "cmux-devbox",
-            hasDesktop: false,
+            
             memoryMb: nil,
             diskMb: nil,
             linkState: .connected,
@@ -139,32 +128,20 @@ struct CloudPortOpenRegressionTests {
             resources: [port, second, terminal()],
             projections: []
         )
-        let nodes = CloudTreeNodeBuilder.flattened(CloudTreeNodeBuilder.nodes(
-            machines: [machineSnapshot()],
-            snapshot: snapshot,
-            localWorkspaces: [],
-            includeLocalMachine: false
-        ))
-        let byID = Dictionary(nodes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let portsGroup = try #require(byID["machine:port-vm/ports"])
-        #expect(portsGroup.children.map(\.id) == [
-            "resource:port-vm/browser/port:3000",
-            "resource:port-vm/browser/port:8000",
-        ])
-        #expect(byID["machine:port-vm/ws/ws_app/resource:port-vm/browser/port:8000/tab:tab_port_8000"] != nil)
-        #expect(portsGroup.children.last?.dragResource?.id == port.id)
+        let catalog = SurfaceCatalog()
+        catalog.register(FakeProvider(machine: machine, supportsPortPreviews: true))
+        catalog.replaceResources(snapshot.resources, on: machine, info: machineInfo(workspaces: [workspace]))
+        let members = try catalog.remoteWorkspaceGroup(machine: machine, workspaceID: workspace.id)
+        #expect(Set(members.resources) == Set([terminal().id, port.id]))
+        #expect(members.placements.first { $0.resource == port.id }?.remoteTabID == "tab_port_8000")
+        #expect(snapshot.resources(on: machine).filter { $0.id.isForwardedPort }.map(\.id) == [port.id, second.id])
         #expect(SurfaceResourceID(machine: machine, kind: .browser, key: "port:08000").forwardedPort == nil)
 
         // An authoritative empty snapshot removes the row; it cannot leave a
         // stale port attached to the next machine/workspace rebuild.
-        let empty = SurfaceCatalogSnapshot(machines: [machineInfo(workspaces: [workspace])], resources: [], projections: [])
-        let emptyNodes = CloudTreeNodeBuilder.flattened(CloudTreeNodeBuilder.nodes(
-            machines: [machineSnapshot()],
-            snapshot: empty,
-            localWorkspaces: [],
-            includeLocalMachine: false
-        ))
-        #expect(emptyNodes.first { $0.structureTag == "portsGroup" }?.children.first?.structureTag == "placeholder")
+        catalog.replaceResources([], on: machine, info: machineInfo(workspaces: [workspace]))
+        #expect(catalog.snapshot.resources.isEmpty)
+        #expect(try catalog.remoteWorkspaceGroup(machine: machine, workspaceID: workspace.id).resources.isEmpty)
     }
 
     @Test("A localhost browser view is folded into the canonical port in its cloud workspace")
@@ -218,23 +195,12 @@ struct CloudPortOpenRegressionTests {
         #expect(loopbackOnly.contains { $0.id.key == "browser_http_tab" })
         #expect(loopbackOnly.contains { $0.id.isForwardedPort } == false)
 
-        let tree = CloudTreeNodeBuilder.flattened(CloudTreeNodeBuilder.nodes(
-            machines: [machineSnapshot()],
-            snapshot: SurfaceCatalogSnapshot(
-                machines: [machineInfo(workspaces: [workspace])],
-                resources: merged,
-                projections: []
-            ),
-            localWorkspaces: [],
-            includeLocalMachine: false
-        ))
-        let portsGroup = try #require(tree.first { $0.id == "machine:port-vm/ports" })
-        #expect(portsGroup.children.compactMap { $0.dragResource?.id } == [port.id])
-        let workspacePort = try #require(tree.first { $0.id == "machine:port-vm/ws/ws_app/resource:port-vm/browser/port:8000/tab:tab_port" })
-        guard case .port = workspacePort.kind else {
-            Issue.record("the workspace pointer should retain the port row kind")
-            return
-        }
+        let catalog = SurfaceCatalog()
+        catalog.register(FakeProvider(machine: machine, supportsPortPreviews: true))
+        catalog.replaceResources(merged, on: machine, info: machineInfo(workspaces: [workspace]))
+        let members = try catalog.remoteWorkspaceGroup(machine: machine, workspaceID: workspace.id)
+        #expect(members.resources == [port.id])
+        #expect(members.placements.map(\.remoteTabID) == ["tab_port"])
 
         // A complete snapshot with no browser view retires the old workspace
         // membership but keeps the listening port in the machine pool.
@@ -265,7 +231,7 @@ struct CloudPortOpenRegressionTests {
         #expect(port.remoteViews?.map(\.tabID) == ["tab_port_8000", "tab_port_second"])
     }
 
-    @Test("SSH and display transport listeners are not advertised as web previews")
+    @Test("SSH and daemon transport listeners are not advertised as web previews")
     func infrastructureListenersAreNotWebPorts() {
         let bindings = """
         State Recv-Q Send-Q Local Address:Port Peer Address:Port
@@ -276,57 +242,29 @@ struct CloudPortOpenRegressionTests {
         LISTEN 0 128 0.0.0.0:6901 0.0.0.0:*
         LISTEN 0 128 0.0.0.0:3000 0.0.0.0:*
         """
-        let scan = VMExecResult(exitCode: 0, stdout: bindings, stderr: "")
-        // #13196 (178d35e5da) scoped the RFB/noVNC range to machines whose
-        // display catalog owns it; SSH and the daemon are always filtered.
-        #expect(CmuxTuiSurfaceProvider.ports(
-            from: scan,
-            privateAddress: "10.16.179.6",
-            displayPortsOwned: true
-        ) == [3000])
-        // Without a desktop, 5901 and 6901 are ordinary listeners; the browser
-        // proxy reaches the loopback-only 5901 on guest loopback.
-        #expect(CmuxTuiSurfaceProvider.ports(
-            from: scan,
-            privateAddress: "10.16.179.6"
-        ) == [3000, 5901, 6901])
+        #expect(CmuxTuiSurfaceProvider.ports(from: bindings) == [3000, 5901, 6901])
     }
 
     @Test("Loopback services remain discoverable independently of private-address metadata")
     func loopbackDiscoveryIsIndependentOfAddress() {
         let listing = "State Recv-Q Send-Q Local Address:Port Peer Address:Port\nLISTEN 0 128 127.0.0.1:8000 0.0.0.0:*\n"
-        #expect(CmuxTuiSurfaceProvider.ports(
-            from: VMExecResult(exitCode: 0, stdout: listing, stderr: ""),
-            privateAddress: nil
-        ) == [8000])
+        #expect(CmuxTuiSurfaceProvider.ports(from: listing) == [8000])
     }
 
     @Test("Unavailable scans retain ports while an authoritative empty scan retires them")
     func portScanCompletenessControlsRefresh() throws {
-        #expect(CmuxTuiSurfaceProvider.ports(from: VMExecResult(exitCode: 127, stdout: "", stderr: "ss unavailable")) == nil)
-        #expect(CmuxTuiSurfaceProvider.ports(from: VMExecResult(
-            exitCode: 0,
-            stdout: "State Recv-Q Send-Q Local Address:Port Peer Address:Port\n",
-            stderr: ""
-        )) == [])
+        #expect(CmuxTuiSurfaceProvider.ports(from: "ss unavailable") == nil)
+        #expect(CmuxTuiSurfaceProvider.ports(from: "State Recv-Q Send-Q Local Address:Port Peer Address:Port\n") == [])
         let bindings = """
         State Recv-Q Send-Q Local Address:Port Peer Address:Port
         LISTEN 0 128 127.0.0.1:8000 0.0.0.0:*
         LISTEN 0 128 0.0.0.0:9000 0.0.0.0:*
         LISTEN 0 128 [::1]:9100 [::]:*
         """
-        #expect(CmuxTuiSurfaceProvider.ports(
-            from: VMExecResult(exitCode: 0, stdout: bindings, stderr: ""),
-            privateAddress: "10.0.0.7"
-        ) == [8000, 9000])
-        #expect(CmuxTuiSurfaceProvider.ports(
-            from: VMExecResult(
-                exitCode: 0,
-                stdout: "State Recv-Q Send-Q Local Address:Port Peer Address:Port\nLISTEN 0 128 [::ffff:127.0.0.1]:9200 [::]:*\n",
-                stderr: ""
-            ),
-            privateAddress: "10.0.0.7"
-        ) == [9200], "the browser proxy opens the service on guest loopback")
+        #expect(CmuxTuiSurfaceProvider.ports(from: bindings) == [8000, 9000, 9100])
+        #expect(CmuxTuiSurfaceProvider.ports(from:
+            "State Recv-Q Send-Q Local Address:Port Peer Address:Port\nLISTEN 0 128 [::ffff:127.0.0.1]:9200 [::]:*\n"
+        ) == [9200], "the SSH browser proxy opens the service on host loopback")
         let previous = [discoveredPort(8000, in: workspace)]
         let retained = CmuxTuiSurfaceProvider.portResources(
             machine: machine,
@@ -378,7 +316,7 @@ struct CloudPortOpenRegressionTests {
     @Test("Port discovery uses the private cmux-tui link")
     func portDiscoveryUsesPrivateMachineLink() throws {
         let arguments = try #require(
-            CloudTuiCommandLine.listeningPortsArguments(socketPath: "/tmp/cmux-cloud.sock")
+            TuiCommandLine.listeningPortsArguments(socketPath: "/tmp/cmux-cloud.sock")
         )
         #expect(arguments == [
             "--socket", "/tmp/cmux-cloud.sock",
@@ -406,22 +344,9 @@ struct CloudPortOpenRegressionTests {
             reuseExisting: false
         )
 
-        var completion: AsyncStream<Void>.Continuation!
-        let completionStream = AsyncStream<Void> { completion = $0 }
-        let actions = CloudTreeNodeActions.bound(
-            navigationHost: AppDelegate.makeCloudTerminalNavigationHost(),
-            catalog: { catalog },
-            selectedWorkspaceID: { unrelatedWorkspaceID },
-            selectLocalWorkspace: { _ in },
-            onWillMutate: { _ in },
-            onDidMutate: { completion.yield(()) },
-            onFailure: { message in Issue.record(Comment(rawValue: message)) },
-            refresh: {}
-        )
-        actions.project(port.id, SurfacePlacement.split, true)
-        var iterator = completionStream.makeAsyncIterator()
-        _ = await iterator.next()
-        completion.finish()
+        let destination = try #require(catalog.preferredLocalWorkspaceID(for: port, fallback: unrelatedWorkspaceID))
+        _ = try await catalog.openTuiPort(machine: machine, port: 8000,
+            into: .workspace(id: destination, placement: .split), focus: true)
 
         #expect(provider.materialized.last?.resource == port.id)
         #expect(provider.materialized.last?.destination == .workspace(id: ownerWorkspaceID, placement: .split))
@@ -432,7 +357,7 @@ struct CloudPortOpenRegressionTests {
         catalog.remove(port.id)
         #expect(catalog.preferredLocalWorkspaceID(for: port.id, fallback: unrelatedWorkspaceID) == ownerWorkspaceID)
 
-        let second = try await catalog.openCloudPort(
+        let second = try await catalog.openTuiPort(
             machine: machine,
             port: 8000,
             into: .workspace(id: unrelatedWorkspaceID, placement: .split),
@@ -445,7 +370,7 @@ struct CloudPortOpenRegressionTests {
 
         // A scoped sidebar open must not reuse the owner's pane when the caller
         // explicitly asks for another local workspace.
-        let scoped = try await catalog.openCloudPort(
+        let scoped = try await catalog.openTuiPort(
             machine: machine,
             port: 8000,
             into: .workspace(id: unrelatedWorkspaceID, placement: .split),
@@ -485,7 +410,7 @@ struct CloudPortOpenRegressionTests {
         await #expect(throws: SurfaceCatalogError.unsupported(
             SurfaceCatalog.portPreviewUnavailableMessage(machineID: machine.rawValue)
         )) {
-            try await catalog.openCloudPort(
+            try await catalog.openTuiPort(
                 machine: machine,
                 port: 8000,
                 into: .workspace(id: destination, placement: .split),
@@ -500,7 +425,7 @@ struct CloudPortOpenRegressionTests {
     @Test("Machine-scoped refresh does not wait on another cloud provider")
     func scopedRefreshOnlyTouchesRequestedMachine() async {
         let catalog = SurfaceCatalog()
-        let otherMachine = SurfaceMachineID.cloud("other-port-vm")
+        let otherMachine = SurfaceMachineID.ssh("39b2b053cd653579199fcbcaba118329c155313886f14cc1d365602ad984875c")
         let target = FakeProvider(machine: machine, supportsPortPreviews: true)
         let other = FakeProvider(machine: otherMachine, supportsPortPreviews: true)
         catalog.register(target)
@@ -515,11 +440,11 @@ struct CloudPortOpenRegressionTests {
     @Test("Unsupported endpoint placeholders do not instruct a permanent retry")
     func unsupportedPlaceholderIsNonRetryable() {
         let html = SurfaceBrowserPlaceholder.failed(
-            "port-vm:8000",
-            error: "HTTP 501 vm_operation_unsupported",
+            "ssh-host:8000",
+            error: "This provider cannot open port previews.",
             retryable: false
         )
-        #expect(html.contains("Do not retry"))
+        #expect(html.contains("Connect to the SSH host directly"))
         #expect(!html.contains("open it again from the sidebar"))
     }
 }

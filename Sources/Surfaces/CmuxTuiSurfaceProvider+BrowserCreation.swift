@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -11,8 +11,8 @@ extension CmuxTuiSurfaceProvider {
     @Sendable
     #endif
     private nonisolated static func performRemoteBrowserCreation(
-        link: CloudMachineLink,
-        request: CloudTuiRequest
+        link: RemoteMachineLink,
+        request: TuiRequest
     ) async throws -> CmuxTuiSnapshotParser.CreatedBrowserPath? {
         let data = try await link.run(arguments: request)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -39,9 +39,9 @@ extension CmuxTuiSurfaceProvider {
             let connected = try await self.links.connected(machineID: self.machineID)
             try self.validateTerminalMutationLifecycle(lifecycle)
             guard let link = await self.links.link(machineID: self.machineID) else {
-                throw ProviderError.machineAsleep(self.machineID)
+                throw ProviderError.connectionUnavailable(self.machineID)
             }
-            let request = CloudTuiRequests.createBrowserArguments(
+            let request = TuiRequests.createBrowserArguments(
                 socketPath: connected.socketPath,
                 workspaceID: remoteWorkspaceID,
                 screenID: screenID,
@@ -80,13 +80,10 @@ extension CmuxTuiSurfaceProvider {
         name: String?,
         expectedLifecycle: UInt64? = nil
     ) throws -> SurfaceResource {
-        // Account or machine teardown is not a reconnect. The previous provider
-        // may already be suspended; only a live replacement for this machine and
-        // team may adopt its committed receipt.
+        // Only a live provider for this SSH identity may adopt its committed receipt.
         guard let activeProvider = catalog.provider(for: machine) as? CmuxTuiSurfaceProvider,
-              activeProvider.isRegisteredInCatalog(), !activeProvider.hasLostAccess,
-              !activeProvider.isFeatureSuspended,
-              activeProvider.ownerTeamID == ownerTeamID,
+              activeProvider.isRegisteredInCatalog(),
+              !activeProvider.isRetired,
               activeProvider !== self || expectedLifecycle == nil || activeProvider.lifecycleGeneration == expectedLifecycle else {
             throw ProviderError.stateUnavailable(machineID)
         }
@@ -104,7 +101,7 @@ extension CmuxTuiSurfaceProvider {
         url: URL,
         name: String?
     ) -> SurfaceResource {
-        let remoteWorkspace = cloudState?.workspaces.first(where: { $0.id == workspaceID }).map {
+        let remoteWorkspace = tuiState?.workspaces.first(where: { $0.id == workspaceID }).map {
             SurfaceRemoteWorkspace(id: $0.id, name: $0.name, index: $0.index, focused: $0.focused)
         } ?? info.remoteWorkspaces?.first(where: { $0.id == workspaceID })
             ?? SurfaceRemoteWorkspace(

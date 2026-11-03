@@ -96,7 +96,7 @@ extension TerminalController {
             ControlSimulatorWebInspectorReceipt
         ) async -> Void
     ) -> ControlSimulatorWebInspectorStartResolution {
-        guard CmuxFeatureFlags.shared.isSimulatorEnabled else { return .unavailable }
+        
         switch resolveSimulatorPanel(routing: routing) {
         case .unavailable:
             return .unavailable

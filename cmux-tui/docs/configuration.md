@@ -270,38 +270,25 @@ SSH machine targets currently require macOS or Linux because the remote daemon u
 }
 ```
 
-The SSH target uses the same managed connection as `cmux-tui ssh`. It probes `binary`, starts or reuses the named remote mux and sidecar, and retains a reconnecting local bridge while that machine is selected. Packaged releases can install their pinned binary when the probe reports it missing or incompatible. Source builds require the exact matching binary to be preinstalled. SSH is noninteractive with strict host-key checking, disabled agent and X11 forwarding, and disabled port forwarding. See [Machines](machines.md) for rail behavior and setup details.
+The SSH target uses the same managed connection as `cmux-tui ssh`. It probes `binary`, starts or reuses the named remote mux and sidecar, and retains a reconnecting local bridge while that machine is selected. A compatible local helper must be explicitly preinstalled at that path; connections never install or replace it. SSH is noninteractive with strict host-key checking, disabled agent and X11 forwarding, and disabled port forwarding. See [Machines](machines.md) for rail behavior and setup details.
 
 ### Dynamic machine provider
 
-Dynamic provider startup is disabled by default. Persistent configuration currently covers the built-in cloud SSH transport:
+Dynamic provider startup is disabled by default. A provider is always an explicit user-selected Unix socket or command; no built-in hosted provider is available.
 
 | Key | Type | Default | Effect |
 | --- | --- | --- | --- |
 | `machine_provider.command` | array of strings or null | `null` | Argv of a provider process to spawn, like `--machine-provider-command program arg --` (no shell). Explicit CLI provider modes override it |
-| `machine_provider.cloud.enabled` | boolean | `false` | Starts the dynamic provider through SSH |
-| `machine_provider.cloud.host` | string | `"cmux.cloud"` | SSH host |
-| `machine_provider.cloud.user` | string or null | `null` | Optional SSH user |
-| `machine_provider.cloud.port` | integer or null | `null` | Optional nonzero SSH port |
-| `machine_provider.cloud.identity_file` | string or null | `null` | Optional local SSH identity path |
 
 ```json
 {
   "machine_provider": {
-    "cloud": {
-      "enabled": true,
-      "host": "cmux.cloud",
-      "user": "lawrence",
-      "port": 22,
-      "identity_file": "/Users/me/.ssh/id_ed25519"
-    }
+    "command": ["/opt/local/bin/my-provider", "--profile", "personal"]
   }
 }
 ```
 
-`--cloud-host`, `--cloud-user`, `--cloud-port`, and `--cloud-identity` override their matching config values and imply `--cloud`. A local Cloud client composes the static `machines` array with the provider catalog. Static entries stay client-local. `+ ssh host` is provider-owned when `connect-external-machine-v1` and the current snapshot bit are both enabled; otherwise its temporary `host` or `user@host` targets stay client-local and use local SSH credentials. Explicit `--machine-provider <socket>` or `--machine-provider-command <argv...> --` overrides an enabled cloud config; those provider-only modes reject a nonempty `machines` array. Every dynamic provider rejects another provider transport, `attach`, server socket/listener flags, `--headless`, and `--term`.
-
-The cloud connector runs `cmux provider control` and `cmux provider stream` remotely. These are provider service commands, not cmux-tui control-socket verbs. See [Machines](machines.md#dynamic-providers).
+`--machine-provider <socket>` or `--machine-provider-command <argv...> --` overrides the configured command. Provider modes reject a simultaneous nonempty `machines` array and do not borrow the caller's local SSH credentials. See [Machines](machines.md#dynamic-providers).
 
 ## Browser
 

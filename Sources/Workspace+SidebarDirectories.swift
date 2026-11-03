@@ -23,9 +23,9 @@ extension Workspace {
         }
         let activeRemotePanelIds = panels.keys.filter {
             isRemoteTerminalSurface($0) ||
-                (cloudVMBinding != nil && terminalPanel(for: $0) != nil) ||
-                cloudBindingState.projectedResources[$0]?.kind == .terminal ||
-                cloudProjectedResource(forPanel: $0)?.kind == .terminal
+                (remoteWorkspaceBinding != nil && terminalPanel(for: $0) != nil) ||
+                remoteBindingState.projectedResources[$0]?.kind == .terminal ||
+                tuiProjectedResource(forPanel: $0)?.kind == .terminal
         }
         guard !activeRemotePanelIds.isEmpty else { return nil }
         let reportedDirectories = activeRemotePanelIds.compactMap { trustedReportedPanelDirectory(panelId: $0) }
@@ -42,32 +42,30 @@ extension Workspace {
         reportedRemoteCurrentDirectory(allowLocalFallback: false)
     }
 
-    /// Directory metadata for a cloud-bound or cloud-projected panel is remote
-    /// state, even though its transport is not SSH.
+    /// SSH attachments and projections own cwd reports, never the local renderer.
     var usesRemoteDirectoryProvenance: Bool {
-        isRemoteWorkspace || isRemoteTmuxMirror || cloudVMBinding != nil ||
-            panels.keys.contains(where: { cloudDirectoryProvenanceRequired(panelId: $0) })
+        isRemoteWorkspace || isRemoteTmuxMirror || remoteWorkspaceBinding != nil ||
+            panels.keys.contains(where: { remoteDirectoryProvenanceRequired(panelId: $0) })
     }
 
     /// A workspace can host a local terminal when its own lifecycle is local.
-    /// Mixed local/cloud workspaces remain eligible when they contain at least
-    /// one local surface; a cloud-only projection is not a safe staging target
-    /// until it has a local host pane.
+    /// Mixed local/SSH workspaces remain eligible when they contain at least
+    /// one local surface; a remote-only projection needs a local host pane.
     var canHostLocalTerminal: Bool {
-        guard !isRemoteWorkspace, !isRemoteTmuxMirror, cloudVMBinding == nil else { return false }
-        let hasCloudProjection = panels.keys.contains { cloudDirectoryProvenanceRequired(panelId: $0) }
-        return !hasCloudProjection || panels.keys.contains { machineOwningSurface($0)?.isLocal == true }
+        guard !isRemoteWorkspace, !isRemoteTmuxMirror, remoteWorkspaceBinding == nil else { return false }
+        let hasTuiProjection = panels.keys.contains { remoteDirectoryProvenanceRequired(panelId: $0) }
+        return !hasTuiProjection || panels.keys.contains { machineOwningSurface($0)?.isLocal == true }
     }
 
-    /// Returns whether a panel's directory belongs to a Cloud machine rather than this Mac.
-    func cloudDirectoryProvenanceRequired(panelId: UUID) -> Bool {
-        cloudVMBinding != nil || cloudBindingState.projectedResources[panelId] != nil ||
-            SurfaceCatalog.shared.hasCloudProjection(panelID: panelId, workspaceID: id)
+    /// A daemon-bound terminal cannot use local paths as remote cwd evidence.
+    func remoteDirectoryProvenanceRequired(panelId: UUID) -> Bool {
+        remoteWorkspaceBinding != nil || remoteBindingState.projectedResources[panelId] != nil ||
+            SurfaceCatalog.shared.hasTuiProjection(panelID: panelId, workspaceID: id)
     }
 
-    /// Applies the cwd carried by a terminal in an accepted cloud snapshot.
-    /// Branch and PR metadata remain absent until the cloud transport reports them.
-    func updateCloudPanelDirectory(panelId: UUID, directory: String?) {
+    /// Applies the cwd carried by a terminal in an accepted SSH daemon snapshot.
+    /// Branch and PR metadata remain absent until the remote transport reports them.
+    func updateTuiPanelDirectory(panelId: UUID, directory: String?) {
         guard let directory = normalizedSidebarDirectory(directory) else {
             if panelDirectories[panelId] != nil || remoteDirectoryReportPanelIds.contains(panelId) {
                 clearRemotePanelDirectory(panelId: panelId)
@@ -108,7 +106,7 @@ extension Workspace {
 
     func allowsLocalDirectoryFallback(panelId: UUID) -> Bool {
         if !usesRemoteDirectoryProvenance { return true }
-        if cloudDirectoryProvenanceRequired(panelId: panelId) { return false }
+        if remoteDirectoryProvenanceRequired(panelId: panelId) { return false }
         guard !remoteDirectoryTrustRequiredPanelIds.contains(panelId),
               !isRemoteTerminalSurface(panelId),
               !isRemoteTmuxMirror else { return false }
@@ -149,10 +147,10 @@ extension Workspace {
     }
 
     func restoresLegacyRemoteDirectoryWithoutProvenance(_ snapshot: SessionPanelSnapshot) -> Bool {
-        guard remoteConfiguration != nil || cloudVMBinding != nil,
+        guard remoteConfiguration != nil || remoteWorkspaceBinding != nil,
               snapshot.directoryIsTrustedRemoteReport == nil,
               snapshot.directoryRequiresRemoteTrust == nil else { return false }
-        if cloudVMBinding != nil { return true }
+        if remoteWorkspaceBinding != nil { return true }
         if let terminal = snapshot.terminal { return terminal.isRemoteTerminal != false }
         return snapshot.agentSession != nil
     }
@@ -320,13 +318,13 @@ extension Workspace {
     }
 
     var presentedGitBranch: SidebarGitBranchState? {
-        if let focusedPanelId, cloudDirectoryProvenanceRequired(panelId: focusedPanelId) { return nil }
+        if let focusedPanelId, remoteDirectoryProvenanceRequired(panelId: focusedPanelId) { return nil }
         if usesRemoteDirectoryProvenance, presentedCurrentDirectory == nil { return nil }
         return gitBranch
     }
 
     func reportedPanelGitBranch(panelId: UUID) -> SidebarGitBranchState? {
-        guard !cloudDirectoryProvenanceRequired(panelId: panelId) else { return nil }
+        guard !remoteDirectoryProvenanceRequired(panelId: panelId) else { return nil }
         guard let branch = panelGitBranches[panelId] else { return nil }
         if usesRemoteDirectoryProvenance, effectivePanelDirectory(panelId: panelId) == nil { return nil }
         return branch

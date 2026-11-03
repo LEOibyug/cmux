@@ -96,13 +96,13 @@ extension KeyboardShortcutSettings.Action {
              .diffViewerNextHunk, .diffViewerPreviousHunk, .diffViewerToggleViewed:
             .focusResolved
 
-        case .openSettings, .openTeamPicker, .reloadConfiguration,
+        case .openSettings, .reloadConfiguration,
              .showHideAllWindows, .globalSearch,
              .newWindow, .closeWindow, .toggleFullScreen, .quit,
-             .toggleSidebar, .focusSidebar, .showWindowHints, .newTab, .newLocalWorkspace, .newBrowserWorkspace, .newCloudWorkspace, .newCloudMachine,
+             .toggleSidebar, .focusSidebar, .showWindowHints, .newTab, .newLocalWorkspace, .newBrowserWorkspace,
              .saveLayoutTemplate, .openFolder,
              .reopenPreviousSession, .goToWorkspace,
-             .commandPalette, .agentInbox, .openChief, .sendFeedback,
+             .commandPalette, .openChief,
              .showNotifications, .jumpToUnread, .jumpToLastPrompt, .toggleUnread,
              .markOldestUnreadAndJumpNext,
              .markAllNotificationsRead, .clearAllNotifications,
@@ -112,7 +112,6 @@ extension KeyboardShortcutSettings.Action {
              .switchRightSidebarToSessions,
              .switchRightSidebarToFeed,
              .switchRightSidebarToDock,
-             .switchRightSidebarToMachines,
              .nextSidebarTab, .prevSidebarTab,
              .nextSidebarTabInGroup, .prevSidebarTabInGroup,
              .moveWorkspaceUp, .moveWorkspaceDown,

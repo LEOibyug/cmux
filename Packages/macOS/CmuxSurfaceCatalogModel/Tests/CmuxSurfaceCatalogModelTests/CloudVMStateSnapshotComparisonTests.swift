@@ -2,9 +2,9 @@ import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
 
-struct CloudVMStateSnapshotComparisonTests {
+struct TuiStateSnapshotComparisonTests {
     /// Builds a versioned graph whose terminal has live output metadata.
-    private func state(streamRevision: String, futureField: String? = nil) throws -> CloudVMState {
+    private func state(streamRevision: String, futureField: String? = nil) throws -> TuiState {
         var terminal: [String: Any] = [
             "id": "term-1",
             "title": "bash",
@@ -24,7 +24,7 @@ struct CloudVMStateSnapshotComparisonTests {
             "terminals": [terminal],
             "browsers": [],
             "agents": [],
-        ], machine: .cloud("vm-test")))
+        ], machine: .ssh("vm-test")))
     }
 
     /// Keeps terminal stream observations out of equal-cursor conflict checks.
@@ -70,7 +70,7 @@ struct CloudVMStateSnapshotComparisonTests {
         ]
         let before = try #require(CmuxTuiSnapshotParser.state(
             fromSnapshot: exitGraph(revision: "22", attached: true, terminal: running),
-            machine: .cloud("vm-test")
+            machine: .ssh("vm-test")
         ))
         let exit: [String: Any] = [
             "outcome": ["kind": "exit", "code": 0], "exited_at": "1790570877173", "revision": "23",
@@ -86,7 +86,7 @@ struct CloudVMStateSnapshotComparisonTests {
             ["kind": "delete", "sequence": 3, "resource": "screen", "id": "screen-1"],
         ]
         let payload = try JSONSerialization.data(withJSONObject: ["changes": changes])
-        let cursor = CloudVMCursor(generation: "daemon-1", revision: 23)
+        let cursor = TuiCursor(generation: "daemon-1", revision: 23)
         let fromDelta = try #require(CmuxTuiSnapshotParser.applying(
             deltaPayload: payload, cursor: cursor, to: before
         ))
@@ -98,7 +98,7 @@ struct CloudVMStateSnapshotComparisonTests {
         fullRow["title"] = ""
         let fullSnapshot = try #require(CmuxTuiSnapshotParser.state(
             fromSnapshot: exitGraph(revision: "23", attached: false, terminal: fullRow),
-            machine: .cloud("vm-test")
+            machine: .ssh("vm-test")
         ))
         #expect(fromDelta.hasSameRevisionedContent(as: fullSnapshot))
         #expect(fullSnapshot.hasSameRevisionedContent(as: fromDelta))
@@ -109,7 +109,7 @@ struct CloudVMStateSnapshotComparisonTests {
         fullRow["tab_ids"] = ["tab-other"]
         let moved = try #require(CmuxTuiSnapshotParser.state(
             fromSnapshot: exitGraph(revision: "23", attached: false, terminal: fullRow),
-            machine: .cloud("vm-test")
+            machine: .ssh("vm-test")
         ))
         #expect(!fromDelta.hasSameRevisionedContent(as: moved))
 
@@ -119,7 +119,7 @@ struct CloudVMStateSnapshotComparisonTests {
         fullRow["exit"] = ["outcome": ["kind": "exit", "code": 1], "exited_at": "1790570877173", "revision": "23"]
         let differentExit = try #require(CmuxTuiSnapshotParser.state(
             fromSnapshot: exitGraph(revision: "23", attached: false, terminal: fullRow),
-            machine: .cloud("vm-test")
+            machine: .ssh("vm-test")
         ))
         #expect(!fromDelta.hasSameRevisionedContent(as: differentExit))
     }

@@ -34,14 +34,12 @@ public struct SessionRemoteWorkspaceSnapshot: Codable, Equatable, Sendable {
     public var agentSocketPathOverrideIsSet: Bool? = nil
     /// Whether remote PTY sessions outlive their local terminal surface.
     public var preserveAfterTerminalExit: Bool?
-    /// Whether daemon bootstrap is skipped (pre-baked Cloud VM images).
+    /// Whether daemon bootstrap is skipped for this user-controlled host.
     public var skipDaemonBootstrap: Bool?
     /// The CLI relay port captured for persistent-PTY restore.
     public var relayPort: Int? = nil
     /// The persistent daemon slot captured for persistent-PTY restore.
     public var persistentDaemonSlot: String? = nil
-    /// Provider-issued Cloud VM id for cmux-managed Cloud VM workspaces.
-    public var managedCloudVMID: String? = nil
 
     /// Creates a snapshot value; mirrors the synthesized memberwise initializer.
     public init(
@@ -58,8 +56,7 @@ public struct SessionRemoteWorkspaceSnapshot: Codable, Equatable, Sendable {
         preserveAfterTerminalExit: Bool? = nil,
         skipDaemonBootstrap: Bool? = nil,
         relayPort: Int? = nil,
-        persistentDaemonSlot: String? = nil,
-        managedCloudVMID: String? = nil
+        persistentDaemonSlot: String? = nil
     ) {
         self.transport = transport
         self.terminalTransport = terminalTransport
@@ -75,6 +72,5 @@ public struct SessionRemoteWorkspaceSnapshot: Codable, Equatable, Sendable {
         self.skipDaemonBootstrap = skipDaemonBootstrap
         self.relayPort = relayPort
         self.persistentDaemonSlot = persistentDaemonSlot
-        self.managedCloudVMID = managedCloudVMID
     }
 }

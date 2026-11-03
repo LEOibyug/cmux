@@ -34,15 +34,15 @@ extension TerminalController {
             // Subscribe, then reread, so output that lands between the last
             // read and the subscription still answers the wait.
             guard let output = try? await v2MainAsync({
-                MobileTerminalByteTee.shared.outputUpdates(surfaceID: outputSurfaceID)
+                TerminalOutputUpdateHub.shared.outputUpdates(surfaceID: outputSurfaceID)
             }) else { break }
             reading = await waitTextChangeRead(wait)
             if let answer = waitTextChangeAnswer(reading, wait: wait) {
                 return Self.v2Encoder.response(id: request.id, answer)
             }
             // Iterating `output` in a child task ties the subscription to the
-            // group: cancelling the losing child ends the stream and releases
-            // the byte tee's demand.
+            // group: cancelling the losing child ends the stream and removes
+            // its output demand.
             let outcome = await withTaskGroup(of: WaitTextChangeOutcome.self) { group in
                 group.addTask {
                     for await _ in output {
@@ -52,8 +52,7 @@ extension TerminalController {
                             return .answered(answer)
                         }
                     }
-                    // The stream ended: the surface closed, or this reader
-                    // fell behind a burst of output. Subscribe again.
+                    // The surface closed, ending its output subscription.
                     return .streamEnded
                 }
                 group.addTask {

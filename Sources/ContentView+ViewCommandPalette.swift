@@ -48,13 +48,6 @@ extension ContentView {
                 keywords: ["sleepy", "screensaver", "caffeinate", "keep awake", "do not sleep", "lock", "pets", "night"]
             ),
             CommandPaletteCommandContribution(
-                commandId: "palette.showAgentInbox",
-                title: constant(String(localized: "agentInbox.command.title", defaultValue: "Show Agent Inbox")),
-                subtitle: constant(String(localized: "agentInbox.command.subtitle", defaultValue: "Agents")),
-                keywords: ["agent", "inbox", "message", "question", "permission", "feed"],
-                when: { _ in CmuxFeatureFlags.shared.isAgentInboxQuickViewEnabled }
-            ),
-            CommandPaletteCommandContribution(
                 commandId: "palette.openChief",
                 title: constant(String(localized: "command.openChief.title", defaultValue: "Open Chief")),
                 subtitle: constant(String(localized: "command.openChief.subtitle", defaultValue: "Chief")),
@@ -168,9 +161,6 @@ extension ContentView {
         }
         registry.register(commandId: "palette.sleepyMode") {
             SleepyModeController.shared.activate()
-        }
-        registry.register(commandId: "palette.showAgentInbox") {
-            AppDelegate.shared?.requestAgentInbox(source: "commandPalette.showAgentInbox")
         }
         registry.register(commandId: "palette.openChief") {
             if AppDelegate.shared?.openChiefHome(preferredWindow: observedWindow, source: "commandPalette.openChief") != true {

@@ -175,14 +175,14 @@ extension TextBoxInputContainer {
                 using: preparationService
             )
             publishComposerContent(from: textView)
-        case .pasteCloudImages:
-            guard insertPreparedCloudComposerImages(
+        case .pasteTuiImages:
+            guard insertPreparedTuiComposerImages(
                 preparedAttachments,
                 into: textView,
                 replacingPlaceholderID: placeholderID
             ) else {
                 // Read the reason before cleanup deletes the files it checks.
-                let refusal = Self.cloudComposerImageRefusal(
+                let refusal = Self.tuiComposerImageRefusal(
                     for: preparedAttachments.map(\.fileURL)
                 )
                 _ = textView.removePendingAttachmentUploadPlaceholder(
@@ -193,7 +193,7 @@ extension TextBoxInputContainer {
                     using: preparationService
                 )
                 publishComposerContent(from: textView)
-                refuseCloudComposerImage(refusal ?? .useTerminal)
+                refuseTuiComposerImage(refusal ?? .useTerminal)
                 return
             }
         }

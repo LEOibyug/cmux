@@ -432,12 +432,12 @@ struct SessionSnapshotImportTrustTests {
         )
         snapshot.windows[0].dock = dock
         snapshot.windows[0].tabManager.workspaces[0].dock = dock
-        snapshot.windows[0].tabManager.workspaces[0].cloudVM = SessionCloudVMBindingSnapshot(vmID: "vm-1", isBase: false)
+        snapshot.windows[0].tabManager.workspaces[0].remoteWorkspace = SessionRemoteWorkspaceBindingSnapshot(machineID: "ssh:" + String(repeating: "a", count: 64))
 
         let (restored, report) = SessionSnapshotImportTrust.snapshotForRestore(snapshot, source: Self.fileImport)
 
         let workspace = try #require(restored.windows.first?.tabManager.workspaces.first)
-        #expect(workspace.cloudVM == nil)
+        #expect(workspace.remoteWorkspace == nil)
         #expect(workspace.surfaceProjections == nil)
         for dockTerminal in [
             restored.windows.first?.dock?.panels.first?.terminal,

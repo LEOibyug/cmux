@@ -2,7 +2,7 @@ import AppKit
 import CmuxWorkspaces
 import Foundation
 
-/// Opens workspace-group configuration and documentation surfaces.
+/// Opens workspace-group configuration in the user's editor.
 enum SidebarWorkspaceGroupConfigOpener {
     /// Opens the cmux config file (`~/.config/cmux/cmux.json`) in the user's
     /// configured editor, materializing an empty config first if none exists.
@@ -53,10 +53,4 @@ enum SidebarWorkspaceGroupConfigOpener {
         return configURL
     }
 
-    static func openWorkspaceGroupsDocs() {
-        guard let url = URL(
-            string: "https://github.com/manaflow-ai/cmux/blob/main/docs/workspace-groups.md"
-        ) else { return }
-        NSWorkspace.shared.open(url)
-    }
 }

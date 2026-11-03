@@ -2,25 +2,27 @@
 
 Tagged builds isolate app name, bundle ID, debug socket, and DerivedData path so multiple agents and the user's normal app do not collide.
 
-For the local backend used by outside contributors:
+For this local-only personal fork, build the explicit local helper first:
 
 ```bash
-CMUX_DEV_BACKEND_MODE=local ./scripts/reload.sh --tag <tag>
-CMUX_DEV_BACKEND_MODE=local ./scripts/reload.sh --tag <tag> --launch
-CMUX_DEV_BACKEND_MODE=local ./scripts/reload.sh --tag <tag> --build-only
+(cd cmux-tui && cargo build --release --locked -p cmux-tui --bin cmux-tui)
+./scripts/reload.sh --tag <tag> --no-global-cli-links
+./scripts/reload.sh --tag <tag> --launch --no-global-cli-links
+./scripts/reload.sh --tag <tag> --build-only --no-global-cli-links
 ```
 
-Without `CMUX_DEV_BACKEND_MODE=local`, tagged builds require the shared dev backend
-from a cmuxterm-hq checkout. See [contributor setup](../../../CONTRIBUTING.md#getting-started).
+No backend, account, service credentials or official helper download is required.
+`CMUX_TUI_CLIENT_LOCAL` may select another compatible local executable. Zig 0.16.0
+and the pinned Rust toolchain remain build prerequisites. See [contributor setup](../../../CONTRIBUTING.md#getting-started).
 
 A normal reload builds, then terminates the running app with the same tag; `--launch`
 also opens the replacement. `--build-only` validates a separately staged bundle
 without replacing the app or changing its daemon or tag state, then removes that
 validation artifact. It cannot be combined with `--launch`.
 
-For Release variants, `reloads.sh --tag <tag>` uses an isolated staging identity.
-`reloadp.sh` uses the stable identity, and `reload2.sh --tag <tag>` also invokes
-`reloadp.sh`; both are subject to the running-app restrictions below.
+For an optimized native-architecture build, use `reload.sh --release --tag <tag>`.
+Reuse the tag and `--derived-data` cache; no full tests or release/fleet pipeline
+is implied. Stable installation remains subject to the restrictions below.
 
 ## The user's running cmux
 
@@ -39,8 +41,8 @@ For prebuilt GhosttyKit, run `./scripts/download-prebuilt-ghosttykit.sh` (it ver
 ## Compile-only checks
 
 Use the tagged `reload.sh --build-only` command above. Reuse the same tag to retain
-its DerivedData cache; a new tag starts a cold build. Tags are lowercased and runs
-of other characters become `-` (`Fix/ABC-1` becomes `fix-abc-1`).
+its DerivedData cache. Tags must contain 1–40 ASCII letters, digits, underscores
+or hyphens; socket slugs lowercase letters and replace underscores with hyphens.
 
 An app build does not compile or execute the test targets; use the
 [test verification guide](../../cmux-testing/references/local-vs-ci-validation.md#native-app-versus-test-compilation)

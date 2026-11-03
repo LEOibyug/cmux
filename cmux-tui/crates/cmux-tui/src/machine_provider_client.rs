@@ -60,7 +60,7 @@ use crate::session::{
 mod machine_provider_transport;
 #[cfg(unix)]
 pub(crate) use machine_provider_transport::{
-    CommandProviderConnector, MachineProviderConnector, SshProviderConnector, UnixProviderConnector,
+    CommandProviderConnector, MachineProviderConnector, UnixProviderConnector,
 };
 #[cfg(unix)]
 use machine_provider_transport::{

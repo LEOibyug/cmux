@@ -1,0 +1,339 @@
+import Foundation
+import Testing
+#if canImport(cmux_DEV)
+@testable import cmux_DEV
+#elseif canImport(cmux)
+@testable import cmux
+#endif
+
+/// Remote SSH text may notify and run global hooks, but cannot borrow local
+/// agent identity, project hooks, reply permissions or local file actions.
+@Suite("SSH notification delivery", .serialized)
+@MainActor
+struct SSHNotificationDeliveryTests {
+    private let remoteWorkspaceID = UUID(uuidString: "24ec0052-450c-4914-b1dd-2ee80d4bc84b")!
+    private struct Harness {
+        let store: TerminalNotificationStore
+        let workspace: Workspace
+        let restore: @MainActor () -> Void
+    }
+
+    private func makeHarness() -> Harness {
+        let store = TerminalNotificationStore.shared
+        let originalAppDelegate = AppDelegate.shared
+        let appDelegate = originalAppDelegate ?? AppDelegate()
+        let manager = appDelegate.tabManager ?? TabManager()
+        let originalTabManager = appDelegate.tabManager
+        let originalNotificationStore = appDelegate.notificationStore
+        let originalAppFocusOverride = AppFocusState.overrideIsFocused
+
+        store.replaceNotificationsForTesting([])
+        store.configureNotificationDeliveryHandlerForTesting { _, _ in }
+        store.configureSuppressedNotificationFeedbackHandlerForTesting { _, _ in }
+        appDelegate.tabManager = manager
+        appDelegate.notificationStore = store
+        if AppDelegate.shared == nil {
+            AppDelegate.shared = appDelegate
+        }
+        AppFocusState.overrideIsFocused = false
+
+        // This suite only exercises delivery ownership, not selection. Avoid
+        // the queued selection side effect, which dismisses focused-panel
+        // notifications after the fixture starts. A selected workspace mounts
+        // its terminal in the app-host window and can dismiss notifications
+        // while their hooks are still resolving.
+        let workspace = manager.addWorkspace(select: false)
+        return Harness(store: store, workspace: workspace) {
+            if manager.tabs.contains(where: { $0.id == workspace.id }) {
+                manager.closeWorkspace(workspace)
+            }
+            store.replaceNotificationsForTesting([])
+            store.resetNotificationDeliveryHandlerForTesting()
+            store.resetSuppressedNotificationFeedbackHandlerForTesting()
+            appDelegate.tabManager = originalTabManager
+            appDelegate.notificationStore = originalNotificationStore
+            AppDelegate.shared = originalAppDelegate
+            AppFocusState.overrideIsFocused = originalAppFocusOverride
+        }
+    }
+
+    private func makeScratchDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cmux-ssh-notify-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private func waitForFile(_ url: URL, timeout: Duration = .seconds(10)) async throws -> String? {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if let contents = try? String(contentsOf: url, encoding: .utf8) {
+                return contents
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        return nil
+    }
+
+    private func waitForNotification(
+        titled title: String,
+        in store: TerminalNotificationStore,
+        timeout: Duration = .seconds(2)
+    ) async throws -> TerminalNotification? {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if let notification = store.notifications.first(where: { $0.title == title }) {
+                return notification
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        return nil
+    }
+
+    @Test func remoteOriginIsClampedToDisplayOnly() throws {
+        let harness = makeHarness()
+        defer { harness.restore() }
+        let surfaceId = try #require(harness.workspace.focusedPanelId)
+
+        harness.store.addNotification(
+            tabId: harness.workspace.id,
+            surfaceId: surfaceId,
+            title: "Build failed",
+            subtitle: "vivid-newt",
+            body: "api tests failed",
+            replyShape: .text,
+            clickAction: .revealInFinder(path: "/etc"),
+            resolvedHooks: nil,
+            origin: .sshRelay(ownerWorkspaceID: remoteWorkspaceID)
+        )
+        let remote = try #require(harness.store.notifications.first)
+        #expect(remote.origin == .sshRelay(ownerWorkspaceID: remoteWorkspaceID))
+        #expect(remote.replyShape == .none, "no reply affordance that types into a pane")
+        #expect(remote.clickAction == nil, "no click action that opens a local path")
+        #expect(remote.subtitle == "vivid-newt")
+        #expect(remote.title == "Build failed")
+        #expect(remote.body == "api tests failed")
+        #expect(remote.tabId == harness.workspace.id)
+        #expect(remote.surfaceId == surfaceId)
+
+        // The same call from a local origin keeps every affordance.
+        harness.store.replaceNotificationsForTesting([])
+        harness.store.addNotification(
+            tabId: harness.workspace.id,
+            surfaceId: surfaceId,
+            title: "Local",
+            subtitle: "",
+            body: "reply allowed",
+            replyShape: .text,
+            clickAction: .revealInFinder(path: "/etc"),
+            resolvedHooks: []
+        )
+        let local = try #require(harness.store.notifications.first)
+        #expect(local.origin == .local)
+        #expect(local.replyShape == .text)
+        #expect(local.clickAction == .revealInFinder(path: "/etc"))
+    }
+
+    @Test func remoteOriginNeverConsultsProjectHooksInTheLocalDirectory() async throws {
+        let harness = makeHarness()
+        defer { harness.restore() }
+        let directory = try makeScratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let marker = directory.appendingPathComponent("project-hook-ran")
+        let config = """
+        {
+          "notifications": {
+            "hooks": [{ "id": "project-marker", "command": "touch '\(marker.path)'; cat" }]
+          }
+        }
+        """
+        try config.write(to: directory.appendingPathComponent("cmux.json"), atomically: true, encoding: .utf8)
+
+        // The directory really does carry a hook: a local emitter in this cwd would run it.
+        let unusedGlobal = directory.appendingPathComponent("no-global.json").path
+        let projectHooks = await harness.store.notificationHookCache.hooks(startingFrom: directory.path, globalConfigPath: unusedGlobal)
+        #expect(projectHooks.map(\.id) == ["project-marker"])
+
+        // Record read targets while hooks resolve: any read of this surface
+        // discards the pending notification, so name it if one happens.
+        var readTargets: [String] = []
+        let previousObserver = harness.store.readTargetObserver
+        harness.store.readTargetObserver = { readTargets.append(String(describing: $0)) }
+        await harness.store.addDesktopNotificationResolvingHooks(
+            tabId: harness.workspace.id,
+            // This assertion covers workspace-level cloud delivery. A freshly
+            // created test workspace has no rendered surface owner yet, so a
+            // surface-scoped target would be correctly rejected by the live
+            // delivery resolver before hook policy is evaluated.
+            surfaceId: nil,
+            hookDirectory: directory.path,
+            title: "from the machine",
+            body: "hello",
+            subtitle: "vivid-newt",
+            origin: .sshRelay(ownerWorkspaceID: remoteWorkspaceID)
+        )
+        let notification = try await waitForNotification(titled: "from the machine", in: harness.store)
+        harness.store.readTargetObserver = previousObserver
+        #expect(
+            harness.store.notifications.map(\.title) == ["from the machine"],
+            "read targets during hook resolution: \(readTargets)"
+        )
+        #expect(notification?.origin == .sshRelay(ownerWorkspaceID: remoteWorkspaceID))
+        #expect(notification?.subtitle == "vivid-newt")
+        #expect(
+            !FileManager.default.fileExists(atPath: marker.path),
+            "a project cmux.json next to the local pane's cwd must never run for a machine's text"
+        )
+    }
+
+    @Test func hookEnvironmentCarriesOriginAndHooksCannotPatchIt() async throws {
+        let directory = try makeScratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let originFile = directory.appendingPathComponent("origin.txt")
+        let envelopeFile = directory.appendingPathComponent("envelope.json")
+        let capturingHook = CmuxResolvedNotificationHook(
+            id: "origin-capture",
+            command: "printf '%s' \"$CMUX_NOTIFICATION_ORIGIN\" > '\(originFile.path)'; "
+                + "printf '%s' \"$CMUX_NOTIFICATION_POLICY_JSON\" > '\(envelopeFile.path)'; "
+                + "sed 's/\"kind\":\"ssh-relay\"/\"kind\":\"local\"/; s/\"value\":\"ssh-relay:\(remoteWorkspaceID.uuidString.lowercased())\"/\"value\":\"local\"/'",
+            timeoutSeconds: 10,
+            sourcePath: nil,
+            cwd: directory.path
+        )
+        let remoteRequest = TerminalNotificationPolicyRequest(
+            tabId: UUID(),
+            surfaceId: nil,
+            title: "Build failed",
+            subtitle: "vivid-newt",
+            body: "api tests failed",
+            cwd: nil,
+            isAppFocused: false,
+            isFocusedPanel: false,
+            origin: .sshRelay(ownerWorkspaceID: remoteWorkspaceID)
+        )
+        let remoteResult = await TerminalNotificationPolicyEngine.evaluate(request: remoteRequest, hooks: [capturingHook])
+        guard case .success(let remoteEnvelope) = remoteResult else {
+            Issue.record("hook evaluation failed: \(remoteResult)")
+            return
+        }
+        #expect(remoteEnvelope.origin?.kind == "ssh-relay", "a hook cannot rewrite where a notification came from")
+        #expect(remoteEnvelope.origin?.value == "ssh-relay:\(remoteWorkspaceID.uuidString.lowercased())")
+        #expect(remoteEnvelope.notification.title == "Build failed")
+        #expect(try String(contentsOf: originFile, encoding: .utf8) == "ssh-relay:\(remoteWorkspaceID.uuidString.lowercased())")
+        let stdinJSON = try String(contentsOf: envelopeFile, encoding: .utf8)
+        #expect(stdinJSON.contains("\"origin\""))
+        #expect(stdinJSON.contains("ssh-relay:\(remoteWorkspaceID.uuidString.lowercased())"))
+
+        // A local notification reads as local and carries no origin block at all.
+        let localHook = CmuxResolvedNotificationHook(
+            id: "local-capture",
+            command: "printf '%s' \"$CMUX_NOTIFICATION_ORIGIN\" > '\(originFile.path)'; "
+                + "printf '%s' \"$CMUX_NOTIFICATION_POLICY_JSON\" > '\(envelopeFile.path)'; cat",
+            timeoutSeconds: 10,
+            sourcePath: nil,
+            cwd: directory.path
+        )
+        let localRequest = TerminalNotificationPolicyRequest(
+            tabId: UUID(),
+            surfaceId: nil,
+            title: "Local",
+            subtitle: "",
+            body: "b",
+            cwd: directory.path,
+            isAppFocused: false,
+            isFocusedPanel: false
+        )
+        let localResult = await TerminalNotificationPolicyEngine.evaluate(request: localRequest, hooks: [localHook])
+        guard case .success(let localEnvelope) = localResult else {
+            Issue.record("hook evaluation failed: \(localResult)")
+            return
+        }
+        #expect(localEnvelope.origin == nil)
+        #expect(try String(contentsOf: originFile, encoding: .utf8) == "local")
+        #expect(!(try String(contentsOf: envelopeFile, encoding: .utf8)).contains("\"origin\""))
+    }
+
+    @Test func notificationsCommandEnvironmentCarriesOrigin() async throws {
+        let suiteName = "cmux-ssh-notify-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = try makeScratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let outputURL = directory.appendingPathComponent("command-origin.txt")
+        defaults.set(
+            "printf '%s|%s' \"$CMUX_NOTIFICATION_ORIGIN\" \"$CMUX_NOTIFICATION_TITLE\" > '\(outputURL.path)'",
+            forKey: NotificationSoundSettings.customCommandKey
+        )
+
+        NotificationSoundSettings.runCustomCommand(
+            title: "Build failed",
+            subtitle: "vivid-newt",
+            body: "api tests failed",
+            origin: .sshRelay(ownerWorkspaceID: remoteWorkspaceID),
+            defaults: defaults
+        )
+        let captured = try await waitForFile(outputURL)
+        #expect(captured == "ssh-relay:\(remoteWorkspaceID.uuidString.lowercased())|Build failed")
+    }
+
+    @Test func ingressDeliversRemoteOriginWithHostOwnedSubtitleAndAttribution() async throws {
+        let harness = makeHarness()
+        defer { harness.restore() }
+        let surfaceId = try #require(harness.workspace.focusedPanelId)
+        let ingress = GhosttyDesktopNotificationIngress()
+
+        #expect(ingress.submit(GhosttyDesktopNotificationRequest(
+            tabId: harness.workspace.id,
+            surfaceId: surfaceId,
+            hookDirectory: nil,
+            title: "Build failed",
+            body: "api tests failed",
+            subtitle: "vivid-newt",
+            origin: .sshRelay(ownerWorkspaceID: remoteWorkspaceID)
+        )))
+        let deadline = ContinuousClock.now + .seconds(10)
+        while harness.store.notifications.isEmpty, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let notification = try #require(harness.store.notifications.first)
+        #expect(notification.origin == .sshRelay(ownerWorkspaceID: remoteWorkspaceID))
+        #expect(notification.subtitle == "vivid-newt")
+        #expect(notification.tabId == harness.workspace.id)
+        #expect(notification.surfaceId == surfaceId)
+        #expect(notification.replyShape == .none)
+        #expect(notification.clickAction == nil)
+    }
+
+    @Test func feedHistoryKeepsOrigin() throws {
+        let notification = TerminalNotification(
+            id: UUID(),
+            tabId: UUID(),
+            surfaceId: nil,
+            title: "t",
+            subtitle: "",
+            body: "b",
+            createdAt: Date(),
+            isRead: false,
+            origin: .sshRelay(ownerWorkspaceID: remoteWorkspaceID)
+        )
+        let record = NotificationFeedHistoryRecord(notification: notification)
+        #expect(record.origin == .sshRelay(ownerWorkspaceID: remoteWorkspaceID))
+        #expect(record.boundedForHistory().origin == .sshRelay(ownerWorkspaceID: remoteWorkspaceID))
+        let encoded = try JSONEncoder().encode(record)
+        #expect(try JSONDecoder().decode(NotificationFeedHistoryRecord.self, from: encoded).origin == .sshRelay(ownerWorkspaceID: remoteWorkspaceID))
+
+        // Local notifications do not require remote attribution.
+        let localRecord = NotificationFeedHistoryRecord(notification: TerminalNotification(
+            id: UUID(), tabId: UUID(), surfaceId: nil, title: "t", subtitle: "", body: "b", createdAt: Date(), isRead: false
+        ))
+        #expect(localRecord.origin == nil)
+
+        let workspaceID = UUID()
+        #expect(TerminalNotificationOrigin(wireValue: "ssh-relay:\(remoteWorkspaceID.uuidString.lowercased())") == .sshRelay(ownerWorkspaceID: remoteWorkspaceID))
+        #expect(TerminalNotificationOrigin(wireValue: "ssh-relay:\(workspaceID.uuidString)") == .sshRelay(ownerWorkspaceID: workspaceID))
+        #expect(TerminalNotificationOrigin(wireValue: "local") == .local)
+        #expect(TerminalNotificationOrigin.sshRelay(ownerWorkspaceID: workspaceID).wireValue == "ssh-relay:" + workspaceID.uuidString.lowercased())
+        #expect(TerminalNotificationOrigin.sshRelay(ownerWorkspaceID: workspaceID).isRemote)
+        #expect(!TerminalNotificationOrigin.local.isRemote)
+    }
+}

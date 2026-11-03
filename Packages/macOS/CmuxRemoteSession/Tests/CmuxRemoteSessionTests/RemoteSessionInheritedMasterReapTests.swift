@@ -273,7 +273,7 @@ struct RemoteSessionInheritedMasterReapTests {
                     cloudNotificationClearSurfaceInvalid: ""
                 ),
                 strings: RemoteSessionStrings(
-                    connectedVMNoProxyFormat: "%@",
+                    connectedWithoutDaemonFormat: "%@",
                     suspendedDetailFormat: "%@",
                     reverseRelayUnavailableRetrying:
                         "test relay unavailable",

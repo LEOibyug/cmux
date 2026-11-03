@@ -9,6 +9,6 @@ import Foundation
 @MainActor
 protocol SurfaceWorkspaceLayoutSyncing: AnyObject {
     /// Converges `remoteWorkspaceID` to `desired` and returns the final planner step:
-    /// ``CloudLayoutSyncStep/done`` on success, or the reason nothing (more) was written.
-    func syncWorkspaceLayout(_ desired: CloudLayoutSyncTree, remoteWorkspaceID: String) async throws -> CloudLayoutSyncStep
+    /// ``TuiLayoutSyncStep/done`` on success, or the reason nothing (more) was written.
+    func syncWorkspaceLayout(_ desired: TuiLayoutSyncTree, remoteWorkspaceID: String) async throws -> TuiLayoutSyncStep
 }

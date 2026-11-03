@@ -82,8 +82,7 @@ extension CMUXCLI {
                 "error_count": errorCount,
                 "findings": findings.map(\.payload),
                 "reload_command": "cmux reload-config",
-                "docs_url": CMUXCLI.settingsDocsURL,
-                "schema_url": CMUXCLI.settingsSchemaURL,
+                "schema_source": "embedded",
             ]
         }
     }
@@ -451,8 +450,6 @@ extension CMUXCLI {
             "config.validation.cli.doctor.report.reload",
             defaultValue: "Reload"
         )
-        print("\(docsLabel): \(Self.settingsDocsURL)")
-        print("\(schemaLabel): \(Self.settingsSchemaURL)")
         print("\(reloadLabel): cmux reload-config")
     }
 

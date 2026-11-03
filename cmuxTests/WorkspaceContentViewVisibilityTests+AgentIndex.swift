@@ -44,14 +44,13 @@ extension WorkspaceContentViewVisibilityTests {
             withIntermediateDirectories: true
         )
         defer { try? FileManager.default.removeItem(at: projectRoot) }
-        let tabManager = TabManager(autoWelcomeIfNeeded: false, createInitialWorkspace: false)
+        let tabManager = TabManager(createInitialWorkspace: false)
         defer { tabManager.finalizeAllWorkspacesForWindowClose() }
         for index in 0..<3 {
             tabManager.addWorkspace(
                 workingDirectory: projectRoot.path,
-                initialSurface: .cloudVMLoading,
-                select: index == 0,
-                autoWelcomeIfNeeded: false
+                initialSurface: .remoteLoading,
+                select: index == 0
             )
         }
         for workspace in tabManager.tabs {

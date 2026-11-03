@@ -470,11 +470,10 @@ extension Workspace {
         if closePanel, !preservesTerminalForTransfer {
             journalClosedAgentSessions(panelId: panelId)
         }
-        clearCloudMaterializationFailure(surfaceID: panelId)
-        cancelReservedCloudTerminalPane(panelID: panelId)
-        cloudBrowserCreationTasks.removeValue(forKey: panelId)?.cancel()
-        pendingCloudBrowserPanelIDs.remove(panelId)
-        appLinkHandoffCoordinator.cancel(sourcePanelID: panelId)
+        clearTuiMaterializationFailure(surfaceID: panelId)
+        cancelReservedTuiTerminalPane(panelID: panelId)
+        tuiBrowserCreationTasks.removeValue(forKey: panelId)?.cancel()
+        pendingTuiBrowserPanelIDs.remove(panelId)
         if publishSurfaceClosedEvent {
             publishCmuxSurfaceClosed(panelId, paneId: paneId, panel: panel, origin: origin)
         }

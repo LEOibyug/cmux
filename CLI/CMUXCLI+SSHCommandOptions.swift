@@ -31,11 +31,11 @@ extension CMUXCLI {
         let passwordCredential: String?
         let localSocketPath: String
         let remoteRelayPort: Int
-        let pinWorkspaceToTop: Bool
-        let daemonWebSocketEndpoint: VMDaemonWebSocketEndpoint?
+        
+        
         /// True when the remote is a cloud VM with cmuxd-remote pre-baked in the image.
         /// Set by `cmux vm new/shell/attach`; false for plain `cmux ssh`.
-        let skipDaemonBootstrap: Bool
+        
 
         /// Explicit TTY flags, or cmux's forced-PTY default when no caller
         /// `RequestTTY` option controls the interactive session.
@@ -65,10 +65,9 @@ extension CMUXCLI {
             agentSocketPath: String? = nil,
             passwordCredential: String? = nil,
             localSocketPath: String,
-            remoteRelayPort: Int,
-            pinWorkspaceToTop: Bool = false,
-            daemonWebSocketEndpoint: VMDaemonWebSocketEndpoint? = nil,
-            skipDaemonBootstrap: Bool = false
+            remoteRelayPort: Int
+            
+            
         ) {
             self.destination = destination
             self.displayDestination = displayDestination ?? destination
@@ -86,9 +85,9 @@ extension CMUXCLI {
             self.passwordCredential = passwordCredential
             self.localSocketPath = localSocketPath
             self.remoteRelayPort = remoteRelayPort
-            self.pinWorkspaceToTop = pinWorkspaceToTop
-            self.daemonWebSocketEndpoint = daemonWebSocketEndpoint
-            self.skipDaemonBootstrap = skipDaemonBootstrap
+            
+            
+            
         }
     }
 }

@@ -3,27 +3,27 @@ import Foundation
 
 extension CmuxTuiSurfaceProvider {
     func isCurrentLifecycleGeneration(_ generation: UInt64) -> Bool {
-        !isFeatureSuspended && lifecycleGeneration == generation
+        !isRetired && lifecycleGeneration == generation
     }
     /// The generation to capture before detached work that touches panes.
     var currentLifecycleGeneration: UInt64 { lifecycleGeneration }
     func isCurrentRefresh(lifecycle: UInt64, refresh: UInt64) -> Bool {
-        !isFeatureSuspended && lifecycleGeneration == lifecycle
+        !isRetired && lifecycleGeneration == lifecycle
             && refreshGeneration == refresh
             && isRegisteredInCatalog()
     }
 
     /// Suspended work cannot publish through a replacement provider.
     func isRegisteredInCatalog() -> Bool {
-        guard !isFeatureSuspended, let current = catalog.provider(for: machine) else { return false }
+        guard !isRetired, let current = catalog.provider(for: machine) else { return false }
         return ObjectIdentifier(current) == ObjectIdentifier(self)
     }
 
     /// A link acknowledgement can suspend between installing and publishing a graph.
     /// Only the current graph may update catalog rows or restored local titles.
-    func canPublishCloudState(_ candidate: CloudVMState) -> Bool {
+    func canPublishTuiState(_ candidate: TuiState) -> Bool {
         guard isRegisteredInCatalog(), candidate.machine == machine,
-              let current = cloudState else { return false }
+              let current = tuiState else { return false }
         if let cursor = current.cursor {
             return candidate.cursor == cursor
         }
@@ -37,7 +37,6 @@ extension CmuxTuiSurfaceProvider {
     // Matches the protocol's Void return type so existential catalog reads
     // preserve force instead of falling through to its legacy default.
     func refresh(force: Bool) async {
-        if force { await refreshDisplays() }
         await refreshCurrentGraph(force: force)
     }
 

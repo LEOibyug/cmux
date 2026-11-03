@@ -73,7 +73,7 @@ enum SurfacePaneFactory {
     /// A browser pane an existing Cloud resource (a display or a port) is about
     /// to bind. Restoration policy keeps it out of a Cloud workspace's new-browser
     /// lane, which would start a daemon browser in the pane instead.
-    static func makeCloudResourceBrowserPane(at destination: SurfaceDestination, focus: Bool) throws -> (workspaceID: UUID, panelID: UUID) {
+    static func makeTuiResourceBrowserPane(at destination: SurfaceDestination, focus: Bool) throws -> (workspaceID: UUID, panelID: UUID) {
         try makeBrowserPane(url: nil, at: destination, focus: focus, creationPolicy: .restoration)
     }
 
@@ -347,7 +347,7 @@ enum SurfaceBrowserPlaceholder {
     /// the desktop's own loading state rather than a blank tab.
     static func connecting(_ label: String) -> String {
         let title = String(
-            format: String(localized: "cloudTree.pane.connecting", defaultValue: "Connecting to %@…"),
+            format: String(localized: "tuiTree.pane.connecting", defaultValue: "Connecting to %@…"),
             label
         )
         return page(title: title, detail: nil, spinner: true)
@@ -358,17 +358,17 @@ enum SurfaceBrowserPlaceholder {
     /// truthful about a permanent capability gap instead of inviting a retry loop.
     static func failed(_ label: String, error: String, retryable: Bool = true) -> String {
         let title = String(
-            format: String(localized: "cloudTree.pane.failed", defaultValue: "Couldn’t open %@"),
+            format: String(localized: "tuiTree.pane.failed", defaultValue: "Couldn’t open %@"),
             label
         )
         let hint = retryable
             ? String(
-                localized: "cloudTree.pane.retryHint",
+                localized: "tuiTree.pane.retryHint",
                 defaultValue: "Close this pane and open it again from the sidebar."
             )
             : String(
-                localized: "cloudTree.pane.unsupportedHint",
-                defaultValue: "This provider cannot open port previews. Do not retry; use `cmux vm exec` inside the machine or choose another machine."
+                localized: "tuiTree.pane.unsupportedHint",
+                defaultValue: "This provider cannot open port previews. Connect to the SSH host directly or choose another host."
             )
         return page(title: title, detail: "\(error)\n\(hint)", spinner: false)
     }

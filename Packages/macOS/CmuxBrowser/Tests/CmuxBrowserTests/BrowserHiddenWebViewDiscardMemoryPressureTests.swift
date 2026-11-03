@@ -63,7 +63,6 @@ private func makeMemoryPressureHiddenWebViewDiscardBlockerSnapshot(
         isReactGrabActive: false,
         isDesignModeActive: isDesignModeActive,
         isVisualAutomationCaptureActive: false,
-        isMobileBrowserStreamActive: false,
         hasPopups: false,
         isCapturingMedia: false,
         isPlayingMedia: false

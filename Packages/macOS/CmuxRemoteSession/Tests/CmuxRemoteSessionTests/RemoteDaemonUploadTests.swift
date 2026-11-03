@@ -467,7 +467,7 @@ struct RemoteDaemonUploadTests {
                 cloudNotificationClearSurfaceInvalid: ""
             ),
             strings: RemoteSessionStrings(
-                connectedVMNoProxyFormat: "%@",
+                connectedWithoutDaemonFormat: "%@",
                 suspendedDetailFormat: "%@",
                 reverseRelayUnavailableRetrying: "",
                 reverseRelayPortUnavailableRetrying: "",
@@ -651,7 +651,7 @@ struct RemoteDaemonUploadTests {
                 cloudNotificationClearSurfaceInvalid: ""
             ),
             strings: RemoteSessionStrings(
-                connectedVMNoProxyFormat: "%@",
+                connectedWithoutDaemonFormat: "%@",
                 suspendedDetailFormat: "%@",
                 reverseRelayUnavailableRetrying: "",
                 reverseRelayPortUnavailableRetrying: "",

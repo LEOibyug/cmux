@@ -375,7 +375,7 @@ extension Workspace {
         // and therefore has no nested control projection to resolve.
         if focusedPanelId == surfaceID,
            let panel = panels[surfaceID] as? TerminalPanel,
-           panel.cloudAttachment != nil,
+           panel.remoteAttachment != nil,
            !isRemoteTmuxControlContainer(surfaceID) {
             return true
         }

@@ -23,7 +23,6 @@ final class ComputerUseMenuBarSnapshotStore: ObservableObject {
     private let configStore: JSONConfigStore
     private let showInMenuBarKey: JSONKey<Bool>
     private let workspaceTitle: @MainActor (UUID) -> String?
-    private let featureEnabled: @MainActor () -> Bool
     private let refreshPolicy: ComputerUseMenuBarRefreshPolicy
 
     private var showInMenuBar: Bool
@@ -46,7 +45,6 @@ final class ComputerUseMenuBarSnapshotStore: ObservableObject {
         configStore: JSONConfigStore,
         showInMenuBarKey: JSONKey<Bool>,
         workspaceTitle: @escaping @MainActor (UUID) -> String?,
-        featureEnabled: @escaping @MainActor () -> Bool,
         refreshPolicy: ComputerUseMenuBarRefreshPolicy = .live
     ) {
         self.liveSessionProjection = liveSessionProjection
@@ -56,7 +54,6 @@ final class ComputerUseMenuBarSnapshotStore: ObservableObject {
         self.configStore = configStore
         self.showInMenuBarKey = showInMenuBarKey
         self.workspaceTitle = workspaceTitle
-        self.featureEnabled = featureEnabled
         self.refreshPolicy = refreshPolicy
         self.showInMenuBar = configStore.snapshotValue(for: showInMenuBarKey)
     }
@@ -78,12 +75,6 @@ final class ComputerUseMenuBarSnapshotStore: ObservableObject {
                     self?.liveRowsNeedRebuild = true
                     self?.refresh()
                 }
-            }
-            .store(in: &cancellables)
-        NotificationCenter.default.publisher(for: .cmuxFeatureFlagsDidChange)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
             }
             .store(in: &cancellables)
 
@@ -113,7 +104,6 @@ final class ComputerUseMenuBarSnapshotStore: ObservableObject {
 
     func refresh() {
         let currentShowInMenuBar = showInMenuBar
-        let currentFeatureEnabled = featureEnabled()
         refreshGeneration += 1
         let generation = refreshGeneration
         refreshTask?.cancel()
@@ -122,18 +112,14 @@ final class ComputerUseMenuBarSnapshotStore: ObservableObject {
 
         guard let reloadDeadline = refreshPolicy.reloadDeadline(
             forEventAt: Date(),
-            featureEnabled: currentFeatureEnabled,
             showInMenuBar: currentShowInMenuBar
         ) else {
             #if DEBUG
             cmuxDebugLog(
-                "computerUse.menuBar.hidden gates featureEnabled=\(currentFeatureEnabled) showInMenuBar=\(currentShowInMenuBar)"
+                "computerUse.menuBar.hidden showInMenuBar=\(currentShowInMenuBar)"
             )
             #endif
-            hideSnapshot(
-                showInMenuBar: currentShowInMenuBar,
-                featureEnabled: currentFeatureEnabled
-            )
+            hideSnapshot(showInMenuBar: currentShowInMenuBar)
             return
         }
         if liveRowsNeedRebuild {
@@ -146,10 +132,7 @@ final class ComputerUseMenuBarSnapshotStore: ObservableObject {
                 "computerUse.menuBar.hidden noLiveAgentRows"
             )
             #endif
-            hideSnapshot(
-                showInMenuBar: currentShowInMenuBar,
-                featureEnabled: currentFeatureEnabled
-            )
+            hideSnapshot(showInMenuBar: currentShowInMenuBar)
             return
         }
         startWatchingStateDirectory()
@@ -265,8 +248,7 @@ final class ComputerUseMenuBarSnapshotStore: ObservableObject {
             self.snapshot = ComputerUseMenuBarSnapshot(
                 rows: rows,
                 hasRecentStateFiles: result.hasRecentStateFiles,
-                showInMenuBar: currentShowInMenuBar,
-                featureEnabled: currentFeatureEnabled
+                showInMenuBar: currentShowInMenuBar
             )
             if !rows.isEmpty, let activeState = result.activeState {
                 self.scheduleExpiryRefresh(
@@ -296,21 +278,19 @@ final class ComputerUseMenuBarSnapshotStore: ObservableObject {
             snapshot = ComputerUseMenuBarSnapshot(
                 rows: remainingRows,
                 hasRecentStateFiles: snapshot.hasRecentStateFiles,
-                showInMenuBar: snapshot.showInMenuBar,
-                featureEnabled: snapshot.featureEnabled
+                showInMenuBar: snapshot.showInMenuBar
             )
         }
         refresh()
     }
 
-    private func hideSnapshot(showInMenuBar: Bool, featureEnabled: Bool) {
+    private func hideSnapshot(showInMenuBar: Bool) {
         stopWatchingStateDirectory()
         refreshTask = nil
         snapshot = ComputerUseMenuBarSnapshot(
             rows: [],
             hasRecentStateFiles: false,
-            showInMenuBar: showInMenuBar,
-            featureEnabled: featureEnabled
+            showInMenuBar: showInMenuBar
         )
     }
 

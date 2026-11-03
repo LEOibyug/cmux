@@ -2214,7 +2214,7 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         XCTAssertNil(store.override(for: .newTab))
 
         let contents = try String(contentsOf: settingsFileURL, encoding: .utf8)
-        XCTAssertTrue(contents.contains(#""$schema": "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json""#))
+        XCTAssertFalse(contents.contains(#""$schema""#))
         XCTAssertTrue(contents.contains(#""schemaVersion": 1,"#))
         XCTAssertTrue(contents.contains(#"//   "app" : {"#))
         XCTAssertTrue(contents.contains(#"//     "colors" : {"#))
@@ -3618,11 +3618,10 @@ final class WorkspaceCreationWorkingDirectoryInheritanceTests: XCTestCase {
             let sourceCwd = "/tmp/cmux-source-\(UUID().uuidString)"
             let manager = TabManager(
                 initialWorkingDirectory: sourceCwd,
-                autoWelcomeIfNeeded: false,
                 settings: settings
             )
 
-            let inserted = manager.addWorkspace(autoWelcomeIfNeeded: false)
+            let inserted = manager.addWorkspace()
 
             XCTAssertEqual(inserted.focusedTerminalPanel?.requestedWorkingDirectory, sourceCwd)
             XCTAssertEqual(inserted.currentDirectory, sourceCwd)
@@ -3635,12 +3634,11 @@ final class WorkspaceCreationWorkingDirectoryInheritanceTests: XCTestCase {
             let fallbackCwd = "/tmp/cmux-ghostty-default-\(UUID().uuidString)"
             let manager = TabManager(
                 initialWorkingDirectory: sourceCwd,
-                autoWelcomeIfNeeded: false,
                 settings: settings,
                 defaultWorkspaceWorkingDirectoryProvider: { fallbackCwd }
             )
 
-            let inserted = manager.addWorkspace(autoWelcomeIfNeeded: false)
+            let inserted = manager.addWorkspace()
 
             XCTAssertEqual(inserted.focusedTerminalPanel?.requestedWorkingDirectory, fallbackCwd)
             XCTAssertEqual(inserted.currentDirectory, fallbackCwd)
@@ -3653,14 +3651,12 @@ final class WorkspaceCreationWorkingDirectoryInheritanceTests: XCTestCase {
             let fallbackCwd = "/tmp/cmux-ghostty-default-\(UUID().uuidString)"
             let manager = TabManager(
                 initialWorkingDirectory: sourceCwd,
-                autoWelcomeIfNeeded: false,
                 settings: settings,
                 defaultWorkspaceWorkingDirectoryProvider: { fallbackCwd }
             )
 
             let inserted = manager.addWorkspace(
-                inheritWorkingDirectory: false,
-                autoWelcomeIfNeeded: false
+                inheritWorkingDirectory: false
             )
 
             XCTAssertEqual(inserted.focusedTerminalPanel?.requestedWorkingDirectory, fallbackCwd)
@@ -3674,13 +3670,11 @@ final class WorkspaceCreationWorkingDirectoryInheritanceTests: XCTestCase {
             let explicitCwd = "/tmp/cmux-explicit-\(UUID().uuidString)"
             let manager = TabManager(
                 initialWorkingDirectory: sourceCwd,
-                autoWelcomeIfNeeded: false,
                 settings: settings
             )
 
             let inserted = manager.addWorkspace(
-                workingDirectory: explicitCwd,
-                autoWelcomeIfNeeded: false
+                workingDirectory: explicitCwd
             )
 
             XCTAssertEqual(inserted.focusedTerminalPanel?.requestedWorkingDirectory, explicitCwd)
@@ -3693,7 +3687,6 @@ final class WorkspaceCreationWorkingDirectoryInheritanceTests: XCTestCase {
             let sourceCwd = "/tmp/cmux-source-\(UUID().uuidString)"
             let manager = TabManager(
                 initialWorkingDirectory: sourceCwd,
-                autoWelcomeIfNeeded: false,
                 settings: settings
             )
             let source = try XCTUnwrap(manager.selectedWorkspace)
@@ -3715,7 +3708,6 @@ final class WorkspaceCreationWorkingDirectoryInheritanceTests: XCTestCase {
             let fallbackCwd = FileManager.default.homeDirectoryForCurrentUser.path
             let manager = TabManager(
                 initialWorkingDirectory: sourceCwd,
-                autoWelcomeIfNeeded: false,
                 settings: settings
             )
             let source = try XCTUnwrap(manager.selectedWorkspace)
@@ -3737,7 +3729,6 @@ final class WorkspaceCreationWorkingDirectoryInheritanceTests: XCTestCase {
             let transferCwd = "/tmp/cmux-detached-\(UUID().uuidString)"
             let manager = TabManager(
                 initialWorkingDirectory: sourceCwd,
-                autoWelcomeIfNeeded: false,
                 settings: settings
             )
             let source = try XCTUnwrap(manager.selectedWorkspace)
@@ -3758,8 +3749,7 @@ final class WorkspaceCreationWorkingDirectoryInheritanceTests: XCTestCase {
 
     func testDetachedWorkspaceDoesNotPersistProcessDetectedResumeBinding() throws {
         let manager = TabManager(
-            initialWorkingDirectory: "/tmp/cmux-source-\(UUID().uuidString)",
-            autoWelcomeIfNeeded: false
+            initialWorkingDirectory: "/tmp/cmux-source-\(UUID().uuidString)"
         )
         let source = try XCTUnwrap(manager.selectedWorkspace)
         let binding = SurfaceResumeBindingSnapshot(
@@ -5522,7 +5512,7 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
         await AppContextSerialGate.withExclusiveAppContext {
             let originalAppDelegate = AppDelegate.shared
             let appDelegate = originalAppDelegate ?? AppDelegate()
-            let manager = TabManager(autoWelcomeIfNeeded: false)
+            let manager = TabManager()
             let originalTabManager = appDelegate.tabManager
             let window = makeWindow()
             defer { window.orderOut(nil) }
@@ -5853,41 +5843,39 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
 
 @MainActor
 final class WorkspaceSidebarExtensionBrowserSurfaceTests: XCTestCase {
-    func testCloudVMLoadingWorkspaceStartsWithoutTerminalAndDoesNotPersist() {
+    func testRemoteLoadingWorkspaceStartsWithoutTerminalAndDoesNotPersist() {
         let manager = TabManager()
         let workspace = manager.addWorkspace(
-            title: "Cloud VM",
-            initialSurface: .cloudVMLoading,
-            inheritWorkingDirectory: false,
-            autoWelcomeIfNeeded: false
+            title: "SSH",
+            initialSurface: .remoteLoading,
+            inheritWorkingDirectory: false
         )
 
         guard let focusedPanelId = workspace.focusedPanelId,
-              let loadingPanel = workspace.panels[focusedPanelId] as? CloudVMLoadingPanel else {
-            XCTFail("Expected initial Cloud VM loading panel")
+              let loadingPanel = workspace.panels[focusedPanelId] as? RemoteLoadingPanel else {
+            XCTFail("Expected initial SSH loading panel")
             return
         }
 
-        XCTAssertEqual(loadingPanel.panelType, .cloudVMLoading)
+        XCTAssertEqual(loadingPanel.panelType, .remoteLoading)
         XCTAssertNil(workspace.focusedTerminalPanel)
         XCTAssertTrue(workspace.sessionSnapshot(includeScrollback: false).panels.isEmpty)
     }
 
-    func testCloudVMLoadingSurfaceSwapsToTerminalInPlace() throws {
+    func testRemoteLoadingSurfaceSwapsToTerminalInPlace() throws {
         let manager = TabManager()
         let workspace = manager.addWorkspace(
-            title: "Cloud VM",
-            initialSurface: .cloudVMLoading,
-            inheritWorkingDirectory: false,
-            autoWelcomeIfNeeded: false
+            title: "SSH",
+            initialSurface: .remoteLoading,
+            inheritWorkingDirectory: false
         )
 
         let loadingPanelId = try XCTUnwrap(workspace.focusedPanelId)
         let loadingSurfaceId = try XCTUnwrap(workspace.surfaceIdFromPanelId(loadingPanelId))
         let stableSurfaceId = try XCTUnwrap(workspace.panels[loadingPanelId]).stableSurfaceId
 
-        let command = "cmux vm-pty-connect --config /tmp/cmux.json --id vm_123"
-        let terminal = workspace.replaceCloudVMLoadingSurfaceWithTerminal(
+        let command = "ssh user@example.test"
+        let terminal = workspace.replaceRemoteLoadingSurfaceWithTerminal(
             workspaceId: workspace.id,
             initialCommand: command,
             focus: true
@@ -5901,29 +5889,6 @@ final class WorkspaceSidebarExtensionBrowserSurfaceTests: XCTestCase {
         XCTAssertEqual(terminal?.surface.initialCommand, command)
     }
 
-    func testCloudVMLoadingFailureSummarizesRetrySpam() {
-        let panel = CloudVMLoadingPanel(
-            workspaceId: UUID(),
-            startedAt: Date(timeIntervalSinceNow: -42)
-        )
-        panel.showFailure("""
-        Created Cloud VM in066h50tkjqapx042qn
-        \u{001B}[2K[cmux] Waiting for the Cloud VM service. Retrying in 2s (attempt 1/120).
-        \u{001B}[2K[cmux] Waiting for the Cloud VM service. Retrying in 2s (attempt 2/120).
-        \u{001B}[2K[cmux] Waiting for the Cloud VM service. Retrying in 2s (attempt 3/120).
-        """)
-
-        guard case .failed(let message, let elapsedSeconds) = panel.phase else {
-            XCTFail("Expected failed loading panel")
-            return
-        }
-        XCTAssertTrue(message.contains("could not create a VM yet"), message)
-        XCTAssertTrue(message.contains("same VM"), message)
-        XCTAssertEqual(elapsedSeconds, 42)
-        XCTAssertFalse(message.contains("[cmux]"))
-        XCTAssertFalse(message.contains("[2K"))
-        XCTAssertFalse(message.contains("in066h50"))
-    }
 
     func testCreatesExtensionBrowserTabInFocusedPane() {
         let manager = TabManager()

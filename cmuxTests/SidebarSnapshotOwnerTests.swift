@@ -1,6 +1,5 @@
 import AppKit
 import CmuxNotifications
-import CmuxUpdater
 import Observation
 import SwiftUI
 import Testing
@@ -56,28 +55,24 @@ struct SidebarSnapshotOwnerTests {
         #expect(cache.revision == revision)
     }
 
-    @Test(arguments: [true, false])
-    func mountedSidebarUsesOneOwnerAcrossUpdatesAndWorkspaceRemoval(appKit: Bool) async throws {
+    @Test
+    func mountedSidebarUsesOneOwnerAcrossUpdatesAndWorkspaceRemoval() async throws {
         _ = NSApplication.shared
         let suiteName = "SidebarSnapshotOwnerTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(CmuxExtensionSidebarSelection.defaultProviderId, forKey: CmuxExtensionSidebarSelection.defaultsKey)
-        let flags = CmuxFeatureFlags(defaults: defaults, remoteFlagValueProvider: { _ in nil })
-        flags.setOverride(appKit, for: CmuxFeatureFlags.appKitSidebarListFlag)
         let cache = SidebarRowSnapshotCache()
         let manager = TabManager(autoWelcomeIfNeeded: false)
         let initialCoalescing = WindowTerminalPortal.usesCoalescedAnchorFailsafe
         defer { WindowTerminalPortal.usesCoalescedAnchorFailsafe = initialCoalescing }
         let root = VerticalTabsSidebar(
-            updateViewModel: UpdateStateModel(),
             fileExplorerState: FileExplorerState(),
             sessionIndexStore: SessionIndexStore(),
-            featureFlags: flags,
             sidebarUnread: SidebarUnreadModel(),
             titlebarControlsLayoutModel: TitlebarControlsLayoutModel(),
             windowId: UUID(),
-            onSendFeedback: {}, onToggleSidebar: {}, onNewTab: {},
+            onToggleSidebar: {}, onNewTab: {},
             observedWindowReference: WeakWindowReference(),
             chromeBackgroundColor: .black,
             selection: .constant(.tabs),
@@ -102,14 +97,14 @@ struct SidebarSnapshotOwnerTests {
         #expect(await converge(window) { Set(cache.snapshotsById.keys) == Set(manager.tabs.map(\.id)) })
         for cycle in 0..<5 {
             let workspace = manager.addWorkspace(
-                initialSurface: .cloudVMLoading, select: false,
+                initialSurface: .remoteLoading, select: false,
                 autoWelcomeIfNeeded: false, autoRefreshMetadata: false
             )
             #expect(await converge(window) { cache.value(for: workspace.id) != nil })
             workspace.setCustomTitle("Updated \(cycle)")
             // Membership reconciliation must preserve an already queued title update.
             let sibling = manager.addWorkspace(
-                initialSurface: .cloudVMLoading, select: false,
+                initialSurface: .remoteLoading, select: false,
                 autoWelcomeIfNeeded: false, autoRefreshMetadata: false
             )
             #expect(await converge(window) { cache.value(for: workspace.id)?.title == "Updated \(cycle)" })
@@ -118,7 +113,7 @@ struct SidebarSnapshotOwnerTests {
             #expect(await converge(window) { cache.value(for: workspace.id) == nil })
             #expect(Set(cache.snapshotsById.keys) == Set(manager.tabs.map(\.id)))
         }
-        print("SIDEBAR_SNAPSHOT_LIFETIME renderer=\(appKit ? "appkit" : "swiftui") cycles=5 retained=\(cache.snapshotsById.count) live=\(manager.tabs.count)")
+        print("SIDEBAR_SNAPSHOT_LIFETIME renderer=appkit cycles=5 retained=\(cache.snapshotsById.count) live=\(manager.tabs.count)")
     }
 
     private func converge(_ window: NSWindow, until condition: () -> Bool) async -> Bool {

@@ -107,7 +107,7 @@ extension RemoteSessionReadinessParkingTests {
                 cloudNotificationClearSurfaceInvalid: ""
             ),
             strings: RemoteSessionStrings(
-                connectedVMNoProxyFormat: "%@",
+                connectedWithoutDaemonFormat: "%@",
                 suspendedDetailFormat: "%@",
                 reverseRelayUnavailableRetrying: "test relay unavailable",
                 reverseRelayPortUnavailableRetrying: "test relay port unavailable",

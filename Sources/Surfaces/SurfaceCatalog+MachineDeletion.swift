@@ -13,7 +13,7 @@ extension SurfaceCatalog {
     func closeURLBackedPanes(on machine: SurfaceMachineID) {
         let urlBacked = projections.filter {
             $0.resource.machine == machine
-                && ($0.resource.kind == .display || $0.resource.kind == .browser)
+                && $0.resource.kind == .browser
         }
         let provider = provider(for: machine)
         for projection in urlBacked {

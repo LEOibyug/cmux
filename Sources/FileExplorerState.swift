@@ -52,8 +52,6 @@ final class FileExplorerState: ObservableObject {
     /// persisted).
     @Published var rightSidebarOwnsInputFocus: Bool = false
 
-    /// The right-sidebar Cloud picker belongs to this window, even before it mounts.
-    @MainActor lazy var cloudTeamPickerPresentation = CloudTeamPickerPresentation()
 
     /// Active mode for the right sidebar (file tree, search, sessions, or enabled beta modes).
     /// Explicit sets come from people and their tools (tab bar, palette, CLI);
@@ -61,9 +59,7 @@ final class FileExplorerState: ObservableObject {
     var mode: RightSidebarMode {
         get { storedMode }
         set {
-            let previous = storedMode
             setMode(newValue)
-            if isVisible, storedMode != previous { ProductAnalytics.app.featureUsed(storedMode.productFeature) }
         }
     }
 
@@ -114,11 +110,9 @@ final class FileExplorerState: ObservableObject {
         setVisible(!isVisible)
     }
 
-    /// The person's show/hide (toggle, shortcut, menu). Narrow-window
-    /// auto-collapse sets `isVisible` directly and is not counted as use.
+    /// The person's show/hide action (toggle, shortcut, or menu).
     func setVisible(_ nextValue: Bool) {
         guard isVisible != nextValue else { return }
-        if nextValue { ProductAnalytics.app.featureUsed(storedMode.productFeature) }
 
         // Suppress both SwiftUI transactions and AppKit/Core Animation implicit layout changes.
         NSAnimationContext.beginGrouping()

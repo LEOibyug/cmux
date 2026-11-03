@@ -73,7 +73,6 @@ struct ComputerUseWatchTargetRuntimeTests {
                 ($0.surfaceID, $0)
             }
         )
-        var featureEnabled = false
         var reportScannedSession = false
         let scannedSessions = AsyncStream.makeStream(
             of: String.self,
@@ -91,7 +90,6 @@ struct ComputerUseWatchTargetRuntimeTests {
         ] = []
         let controller = ComputerUseWatchTargetController(
             stateDirectoryURL: directory,
-            featureEnabled: { featureEnabled },
             liveDriverSessions: { sessions },
             currentLiveDriverSession: { scannedSession in
                 if reportScannedSession {
@@ -186,11 +184,7 @@ struct ComputerUseWatchTargetRuntimeTests {
         )
 
         reportScannedSession = true
-        featureEnabled = true
-        NotificationCenter.default.post(
-            name: .cmuxFeatureFlagsDidChange,
-            object: nil
-        )
+        controller.refresh()
         var scannedIterator = scannedSessions.stream.makeAsyncIterator()
         var scannedLogicalSessionID: String?
         while let logicalSessionID = await scannedIterator.next() {

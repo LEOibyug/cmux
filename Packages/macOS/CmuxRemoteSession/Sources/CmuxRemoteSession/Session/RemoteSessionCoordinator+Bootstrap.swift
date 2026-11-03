@@ -3,13 +3,9 @@ internal import CmuxFoundation
 internal import CryptoKit
 public import Foundation
 
-// cmuxd-remote bootstrap: probe the remote platform and existing install,
-// acquire a binary (explicit override, verified manifest download, or the
-// dev-only local `go build` fallback), upload + install it atomically, and
-// perform the stdio `hello` handshake. Faithful lift: probe/upload/install
-// script text, the hello request line, every NSError domain/code/message,
-// and the reinstall-on-missing-capability flow are pinned legacy behavior.
-// `Bundle.main` reads ride the injected ``RemoteSessionBuildInfoProviding``.
+// Probe the remote prerequisite and use only explicitly supplied or locally
+// built/bundled artifacts for a missing daemon. Existing remote installations
+// are never removed, repaired, downloaded, or upgraded automatically.
 extension RemoteSessionCoordinator {
     static let remotePlatformProbeHomeMarker = "__CMUX_REMOTE_HOME__="
     static let remotePlatformProbeOSMarker = "__CMUX_REMOTE_OS__="
@@ -29,104 +25,22 @@ extension RemoteSessionCoordinator {
             homeDirectory: bootstrapState.homeDirectory
         )
         let remotePath = remoteLocation.absolutePath
-        let explicitOverrideBinary = Self.explicitRemoteDaemonBinaryURL()
-        let forceExplicitOverrideInstall = explicitOverrideBinary != nil
-        debugLog(
-            "remote.bootstrap.platform os=\(platform.goOS) arch=\(platform.goArch) " +
-            "version=\(version) remotePath=\(remotePath) relativePath=\(remoteLocation.relativePath) " +
-            "allowLocalBuildFallback=\(Self.allowLocalDaemonBuildFallback() ? 1 : 0) " +
-            "explicitOverride=\(forceExplicitOverrideInstall ? 1 : 0)"
-        )
-
-        let hadExistingBinary = bootstrapState.binaryExists
-        var installedThisAttempt = false
-        debugLog(
-            "remote.bootstrap.binaryExists remotePath=\(remotePath) exists=\(hadExistingBinary ? 1 : 0) " +
-            "size=\(bootstrapState.binarySize.map(String.init) ?? "unknown")"
-        )
-        if forceExplicitOverrideInstall || !hadExistingBinary {
+        if !bootstrapState.binaryExists {
             let localBinary = try buildLocalDaemonBinary(goOS: platform.goOS, goArch: platform.goArch, version: version)
             try uploadRemoteDaemonBinaryLocked(localBinary: localBinary, location: remoteLocation)
-            installedThisAttempt = true
         }
-
-        var hello: DaemonHello
+        let hello: DaemonHello
         do {
             hello = try helloRemoteDaemonLocked(remotePath: remotePath)
         } catch {
             let diagnostic = remoteDaemonDiagnosticsLocked(remotePath: remotePath, version: version)
-            Self.logHelloRetry(remotePath: remotePath, error: error, diagnostic: diagnostic)
-            if installedThisAttempt || !hadExistingBinary {
-                // A just-installed artifact passed transport verification but
-                // failed its hello contract. Never leave it to strand the next
-                // reconnect behind a path-only probe.
-                try? removeRemoteDaemonInstallLocked(remotePath: remotePath)
-                throw Self.annotatedRemoteDaemonBootstrapError(
-                    error,
-                    remotePath: remotePath,
-                    diagnostic: diagnostic
-                )
-            }
-            try? removeRemoteDaemonInstallLocked(remotePath: remotePath)
-            let localBinary = try buildLocalDaemonBinary(goOS: platform.goOS, goArch: platform.goArch, version: version)
-            try uploadRemoteDaemonBinaryLocked(localBinary: localBinary, location: remoteLocation)
-            installedThisAttempt = true
-            do {
-                hello = try helloRemoteDaemonLocked(remotePath: remotePath)
-            } catch {
-                let retryDiagnostic = remoteDaemonDiagnosticsLocked(remotePath: remotePath, version: version)
-                Self.logHelloRetry(remotePath: remotePath, error: error, diagnostic: retryDiagnostic)
-                try? removeRemoteDaemonInstallLocked(remotePath: remotePath)
-                throw Self.annotatedRemoteDaemonBootstrapError(
-                    error,
-                    remotePath: remotePath,
-                    diagnostic: retryDiagnostic ?? diagnostic
-                )
-            }
+            throw Self.annotatedRemoteDaemonBootstrapError(error, remotePath: remotePath, diagnostic: diagnostic)
         }
-        var missingCapabilities = Self.missingRequiredCapabilities(requiredCapabilities, in: hello.capabilities)
-        if !missingCapabilities.isEmpty, !installedThisAttempt {
-            debugLog(
-                "remote.bootstrap.capabilityMissing remotePath=\(remotePath) " +
-                "missing=\(missingCapabilities.joined(separator: ",")) capabilities=\(hello.capabilities.joined(separator: ","))"
-            )
-            let diagnostic = remoteDaemonDiagnosticsLocked(remotePath: remotePath, version: version)
-            Self.logHelloRetry(remotePath: remotePath, error: NSError(domain: "cmux.remote.daemon", code: 43, userInfo: [
-                NSLocalizedDescriptionKey: "remote daemon missing required capabilities: \(missingCapabilities.joined(separator: ","))",
-            ]), diagnostic: diagnostic)
-            try? removeRemoteDaemonInstallLocked(remotePath: remotePath)
-            let localBinary = try buildLocalDaemonBinary(goOS: platform.goOS, goArch: platform.goArch, version: version)
-            try uploadRemoteDaemonBinaryLocked(localBinary: localBinary, location: remoteLocation)
-            installedThisAttempt = true
-            do {
-                hello = try helloRemoteDaemonLocked(remotePath: remotePath)
-            } catch {
-                let retryDiagnostic = remoteDaemonDiagnosticsLocked(remotePath: remotePath, version: version)
-                Self.logHelloRetry(remotePath: remotePath, error: error, diagnostic: retryDiagnostic)
-                try? removeRemoteDaemonInstallLocked(remotePath: remotePath)
-                throw Self.annotatedRemoteDaemonBootstrapError(
-                    error,
-                    remotePath: remotePath,
-                    diagnostic: retryDiagnostic ?? diagnostic
-                )
-            }
-            missingCapabilities = Self.missingRequiredCapabilities(
-                requiredCapabilities,
-                in: hello.capabilities
-            )
-        }
-        if !missingCapabilities.isEmpty {
-            let capabilityError = NSError(domain: "cmux.remote.daemon", code: 43, userInfo: [
-                NSLocalizedDescriptionKey: "remote daemon missing required capabilities: \(missingCapabilities.joined(separator: ","))",
+        let missingCapabilities = Self.missingRequiredCapabilities(requiredCapabilities, in: hello.capabilities)
+        guard missingCapabilities.isEmpty else {
+            throw NSError(domain: "cmux.remote.daemon", code: 43, userInfo: [
+                NSLocalizedDescriptionKey: "The installed remote daemon at \(remotePath) is missing required capabilities: \(missingCapabilities.joined(separator: ",")). Install a compatible daemon explicitly; cmux will not upgrade it.",
             ])
-            let diagnostic = remoteDaemonDiagnosticsLocked(remotePath: remotePath, version: version)
-            Self.logHelloRetry(remotePath: remotePath, error: capabilityError, diagnostic: diagnostic)
-            try? removeRemoteDaemonInstallLocked(remotePath: remotePath)
-            throw Self.annotatedRemoteDaemonBootstrapError(
-                capabilityError,
-                remotePath: remotePath,
-                diagnostic: diagnostic
-            )
         }
 
         debugLog(
@@ -274,7 +188,6 @@ extension RemoteSessionCoordinator {
     }
 
     static func explicitRemoteDaemonBinaryURL(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
-        guard allowLocalDaemonBuildFallback(environment: environment) else { return nil }
         guard let path = environment["CMUX_REMOTE_DAEMON_BINARY"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               !path.isEmpty else {
             return nil
@@ -305,14 +218,14 @@ extension RemoteSessionCoordinator {
                 debugLog("remote.build.cached path=\(cacheURL.path)")
                 return cacheURL
             }
-            let download = try manifestRepository.downloadBinary(entry: entry, version: manifest.appVersion)
-            debugLog("remote.build.downloaded path=\(download.binaryURL.path)")
-            return download.binaryURL
+            if let bundled = try manifestRepository.bundledBinary(entry: entry, version: manifest.appVersion) {
+                return bundled
+            }
         }
 
         guard Self.allowLocalDaemonBuildFallback() else {
             throw NSError(domain: "cmux.remote.daemon", code: 20, userInfo: [
-                NSLocalizedDescriptionKey: "this build does not include a verified cmuxd-remote manifest for \(goOS)-\(goArch). Use a release/nightly build, or set CMUX_REMOTE_DAEMON_ALLOW_LOCAL_BUILD=1 for a dev-only fallback.",
+                NSLocalizedDescriptionKey: "No local cmuxd-remote artifact is available for \(goOS)-\(goArch). Supply CMUX_REMOTE_DAEMON_BINARY, bundle a locally built artifact, or install the compatible daemon on the SSH host. cmux will not download a helper.",
             ])
         }
 

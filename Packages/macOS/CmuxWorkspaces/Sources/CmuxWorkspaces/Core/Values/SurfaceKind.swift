@@ -37,18 +37,10 @@ public struct SurfaceKind: RawRepresentable, Hashable, Sendable {
     public static let extensionBrowser = SurfaceKind(rawValue: "extensionBrowser")
     /// A workspace todo pane.
     public static let todo = SurfaceKind(rawValue: "todo")
-    /// A CodeRouter guide pane.
-    public static let coderouterGuide = SurfaceKind(rawValue: "coderouterGuide")
     /// A notifications pane.
     public static let notifications = SurfaceKind(rawValue: "notifications")
-    /// A transient Cloud VM loading pane.
-    public static let cloudVMLoading = SurfaceKind(rawValue: "cloudVMLoading")
-    /// A transient iPhone pairing pane.
-    public static let mobilePairing = SurfaceKind(rawValue: "mobilePairing")
-    /// A transient Stack account sign-in pane.
-    public static let accountSignIn = SurfaceKind(rawValue: "accountSignIn")
-    /// A transient Cloud VPN setup pane.
-    public static let cloudVPNSetup = SurfaceKind(rawValue: "cloudVPNSetup")
+    /// A transient SSH loading pane.
+    public static let remoteLoading = SurfaceKind(rawValue: "remoteLoading")
     /// A Chief conversation pane.
     public static let chief = SurfaceKind(rawValue: "chief")
 }

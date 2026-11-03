@@ -1,7 +1,6 @@
 import AppKit
 import Combine
 import CmuxAppKitSupportUI
-import CmuxCloudMachines
 import SwiftUI
 
 @MainActor
@@ -10,10 +9,6 @@ final class RightSidebarToolPanel: Panel, ObservableObject {
     let stableSurfaceIdentity = PanelStableSurfaceIdentity()
     let panelType: PanelType = .rightSidebarTool
     let mode: RightSidebarMode
-    /// The panel keeps this store for its full lifetime. A panel can move to a
-    /// different window while a removal is running; swapping to that window's
-    /// store would lose the tombstone before the authoritative read confirms it.
-    let coderouterStore: CoderouterAccountStore
 
     @Published private(set) var focusFlashToken: Int = 0
 
@@ -30,8 +25,6 @@ final class RightSidebarToolPanel: Panel, ObservableObject {
     init(workspace: Workspace, mode: RightSidebarMode) {
         self.id = UUID()
         self.mode = mode
-        self.coderouterStore = workspace.owningTabManager?.coderouterAccountStore
-            ?? CoderouterAccountStore()
         reattach(to: workspace)
     }
 
@@ -95,7 +88,7 @@ final class RightSidebarToolPanel: Panel, ObservableObject {
         case .sessions:
             guard let store = sessionIndexStoreStorage else { return }
             syncSessionIndexRoot(from: workspace, store: store)
-        case .feed, .dock, .machines, .customSidebar:
+        case .feed, .dock, .customSidebar:
             break
         }
     }
@@ -136,7 +129,7 @@ final class RightSidebarToolPanel: Panel, ObservableObject {
             guard let anchor = sessionIndexFocusAnchorView,
                   let window = anchor.window else { return }
             _ = window.makeFirstResponder(anchor)
-        case .feed, .dock, .machines, .customSidebar:
+        case .feed, .dock, .customSidebar:
             break
         }
     }
@@ -158,7 +151,7 @@ final class RightSidebarToolPanel: Panel, ObservableObject {
         case .sessions:
             guard sessionIndexFocusAnchorView?.ownsKeyboardFocus(responder) == true else { return nil }
             return .panel
-        case .feed, .dock, .machines, .customSidebar:
+        case .feed, .dock, .customSidebar:
             return nil
         }
     }
@@ -272,17 +265,6 @@ struct RightSidebarToolPanelView: View {
                 RightSidebarToolFocusAnchor(onViewChange: panel.attachSessionIndexFocusAnchor)
                     .frame(width: 0, height: 0)
             )
-        case .machines:
-            if isVisibleInUI, RightSidebarMode.machines.isAvailable() {
-                MachinesPanelView(
-                    chromeBackgroundColor: resolvedChromeBackgroundColor,
-                    machinePinStore: AppDelegate.shared?.cloudMachinePinStore,
-                    tabManager: tabManager,
-                    activationCoordinator: AppDelegate.shared?.cloudActivationCoordinator
-                        ?? CloudActivationCoordinator.unconfigured(),
-                    coderouterStore: panel.coderouterStore
-                )
-            }
         case .feed, .dock, .customSidebar:
             EmptyView()
         }

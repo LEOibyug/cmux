@@ -16,13 +16,13 @@ final class CloudRestoreReplayFixture {
     private let workspace = TerminalPortalTestWorkspace()
     let surface: TerminalSurface
     private let window: NSWindow
-    let socket: CloudManualMirrorSocketFixture
-    private let session: CloudTuiManualMirrorSession
+    let socket: TuiManualMirrorSocketFixture
+    private let session: TuiManualMirrorSession
 
     init(initiallyClaimsGeometry: Bool = true, bindSurface: Bool = true) throws {
         _ = NSApplication.shared
-        socket = try CloudManualMirrorSocketFixture()
-        session = CloudTuiManualMirrorSession(
+        socket = try TuiManualMirrorSocketFixture()
+        session = TuiManualMirrorSession(
             machineID: "restore-grid-test", terminalID: "term_restore_grid",
             remoteSurfaceID: 17, initiallyClaimsGeometry: initiallyClaimsGeometry,
             onNeedsReconnect: {}
@@ -86,7 +86,7 @@ final class CloudRestoreReplayFixture {
 
     /// Answers identify and client registration on the session's newest
     /// connection and returns its unanswered attach-surface request.
-    func answerHandshake() async throws -> CloudManualMirrorFixtureCommand {
+    func answerHandshake() async throws -> TuiManualMirrorFixtureCommand {
         let identify = try #require(await socket.nextCommand(timeout: .seconds(5)))
         #expect(identify.cmd == "identify")
         socket.send(["id": identify.id, "ok": true, "data": ["capabilities": ["attach-initial-size", "terminal-pending-sequence-v1"]]])

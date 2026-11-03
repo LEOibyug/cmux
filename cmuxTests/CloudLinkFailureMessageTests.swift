@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Testing
 
@@ -8,42 +8,30 @@ import Testing
 @testable import cmux
 #endif
 
-@Suite("Cloud link failure messages")
-struct CloudLinkFailureMessageTests {
+@Suite("SSH link failure messages")
+struct TuiLinkFailureMessageTests {
     @Test("states and diagnostics produce user-facing link failure copy")
     func linkFailureMessageUsesStateAndProse() {
-        let asleep = machineInfo(linkState: .asleep)
-        #expect(asleep.linkFailureMessage == "This machine is asleep. Wake it to connect.")
-
-        let asleepError = CloudMachineLink.LinkError.failureMessage(asleep.linkFailureMessage)
-        #expect(CloudMachineLink.errorText(asleepError) == asleep.linkFailureMessage)
-
-        let unavailable = machineInfo(linkState: .unavailable, linkError: "cloud_api_unavailable")
-        #expect(unavailable.linkFailureMessage == "cmux cannot reach the Cloud service for this machine right now.")
-
-        let unavailableError = CloudMachineLink.LinkError.failureMessage(unavailable.linkFailureMessage)
-        #expect(CloudMachineLink.errorText(unavailableError) == unavailable.linkFailureMessage)
-
-        let unavailableReason = machineInfo(linkState: .error, linkError: "cloud_api_unavailable")
-        #expect(unavailableReason.linkFailureMessage == unavailable.linkFailureMessage)
-
+        let unavailable = machineInfo(linkState: .unavailable)
+        #expect(unavailable.linkFailureMessage == "cmux cannot reach this SSH host. Check the host and reconnect.")
+        let unavailableError = RemoteMachineLink.LinkError.failureMessage(unavailable.linkFailureMessage)
+        #expect(RemoteMachineLink.errorText(unavailableError) == unavailable.linkFailureMessage)
         let reasonCode = machineInfo(linkState: .error, linkError: "daemon_not_ready")
-        #expect(reasonCode.linkFailureMessage == CloudDiagnosticFailure.network.label)
+        #expect(reasonCode.linkFailureMessage == TuiTransportError.connectionClosed.localizedDescription)
 
         let prose = machineInfo(linkState: .error, linkError: "The remote daemon did not respond before the timeout.")
         #expect(prose.linkFailureMessage == "The remote daemon did not respond before the timeout.")
 
         let empty = machineInfo(linkState: .error, linkError: "")
-        #expect(empty.linkFailureMessage == CloudDiagnosticFailure.network.label)
-        #expect(machineInfo(linkState: .error).linkFailureMessage == CloudDiagnosticFailure.network.label)
+        #expect(empty.linkFailureMessage == TuiTransportError.connectionClosed.localizedDescription)
+        #expect(machineInfo(linkState: .error).linkFailureMessage == TuiTransportError.connectionClosed.localizedDescription)
     }
 
     private func machineInfo(linkState: SurfaceLinkState, linkError: String? = nil) -> SurfaceMachineInfo {
         SurfaceMachineInfo(
-            id: .cloud("link-copy-test"),
+            id: .ssh("1aff7397771028e602bc6c858b709ac4a595822ad6d0607c3402ba9e47c35cd0"),
             name: "Link copy test",
             status: "running",
-            hasDesktop: false,
             linkState: linkState,
             linkError: linkError
         )

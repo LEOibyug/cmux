@@ -1,29 +1,29 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxCore
 import CmuxSurfaceCatalogModel
 import Foundation
 
 extension CmuxTuiSurfaceProvider {
     /// Rebind active browser panes when the VM private address changes.
-    func refreshCloudBrowserRoutes() {
+    func refreshTuiBrowserRoutes() {
         for resource in catalog.snapshot.resources(on: machine) where resource.kind != .terminal {
             for projection in catalog.projections(of: resource.id) {
                 guard let browser = SurfacePaneFactory.browserPanel(panelID: projection.panelID, in: projection.workspaceID) else { continue }
-                if let loopbackURL = cloudLoopbackBrowserURL(for: resource) {
-                    let configured = configureBrowser(browser, url: browser.cloudRestoreURL(on: loopbackURL), resourceID: resource.id)
-                    if configured { browser.pendingCloudRestoreURL = nil }
+                if let loopbackURL = remoteLoopbackBrowserURL(for: resource) {
+                    let configured = configureBrowser(browser, url: browser.remoteRestoreURL(on: loopbackURL), resourceID: resource.id)
+                    if configured { browser.pendingRemoteRestoreURL = nil }
                     continue
                 }
-                if let browserURL = cloudBrowserOriginURL(for: resource, restoring: browser) {
-                    let configured = configureBrowser(browser, url: browser.cloudRestoreURL(on: browserURL), resourceID: resource.id)
-                    if configured { browser.pendingCloudRestoreURL = nil }
+                if let browserURL = remoteBrowserOriginURL(for: resource, restoring: browser) {
+                    let configured = configureBrowser(browser, url: browser.remoteRestoreURL(on: browserURL), resourceID: resource.id)
+                    if configured { browser.pendingRemoteRestoreURL = nil }
                     continue
                 }
-                switch CloudPortRoutePlan.plan(resource: resource, privateAddress: info.privateAddress) {
+                switch TuiPortRoutePlan.plan(resource: resource, privateAddress: info.privateAddress) {
                 case .privateDirect(let raw):
                     if let url = URL(string: raw) {
-                        let configured = configureBrowser(browser, url: browser.cloudRestoreURL(on: url), resourceID: resource.id)
-                        if configured { browser.pendingCloudRestoreURL = nil }
+                        let configured = configureBrowser(browser, url: browser.remoteRestoreURL(on: url), resourceID: resource.id)
+                        if configured { browser.pendingRemoteRestoreURL = nil }
                     }
                 case .unsupported(let message):
                     showPortUnavailable(message, resourceID: resource.id, browser: browser)
@@ -44,27 +44,21 @@ extension CmuxTuiSurfaceProvider {
         try catalog.validateOwnership(of: [resource.id], at: destination)
         guard isRegisteredInCatalog() else { throw CancellationError() }
         let pane = try existingPane
-            ?? CloudDisplayPaneReservation.current?.pane(for: resource)
-            ?? SurfacePaneFactory.makeCloudResourceBrowserPane(at: destination, focus: focus)
+            ?? SurfacePaneFactory.makeTuiResourceBrowserPane(at: destination, focus: focus)
         guard let browser = SurfacePaneFactory.browserPanel(panelID: pane.panelID, in: pane.workspaceID) else {
             throw ProviderError.localForwardURLUnavailable
         }
-        if resource.kind == .display, let workspace = Workspace.liveWorkspace(id: pane.workspaceID) {
-            // The tab shows the display's name, not the noVNC page title.
-            workspace.setPanelCustomTitle(panelId: pane.panelID, title: resource.title,
-                                          source: .remote, propagateToCloud: false, catalog: catalog)
-        }
-        if let loopbackURL = cloudLoopbackBrowserURL(for: resource) {
+        if let loopbackURL = remoteLoopbackBrowserURL(for: resource) {
             let configured = configureBrowser(browser, url: loopbackURL, resourceID: resource.id)
             guard configured else { throw ProviderError.localForwardURLUnavailable }
             return pane
         }
-        if let browserURL = cloudBrowserOriginURL(for: resource, restoring: browser) {
+        if let browserURL = remoteBrowserOriginURL(for: resource, restoring: browser) {
             let configured = configureBrowser(browser, url: browserURL, resourceID: resource.id)
             guard configured else { throw ProviderError.localForwardURLUnavailable }
             return pane
         }
-        switch CloudPortRoutePlan.plan(resource: resource, privateAddress: info.privateAddress) {
+        switch TuiPortRoutePlan.plan(resource: resource, privateAddress: info.privateAddress) {
         case .privateDirect(let raw):
             guard let url = URL(string: raw) else { throw ProviderError.localForwardURLUnavailable }
             configureBrowser(browser, url: url, resourceID: resource.id)
@@ -79,32 +73,28 @@ extension CmuxTuiSurfaceProvider {
     func configureBrowser(_ browser: BrowserPanel, url: URL, resourceID: SurfaceResourceID? = nil,
                           preserveCurrentNavigation: Bool = false, request: URLRequest? = nil) -> Bool {
         if url == SurfacePaneFactory.blankURL, let resourceID,
-           resourceID.machine == machine, machine.cloudMachineID != nil,
+           resourceID.machine == machine, machine.tuiMachineID != nil,
            let resource = catalog.resources[resourceID], resource.kind == .browser,
            !resourceID.isForwardedPort, resource.remoteViews?.isEmpty == false {
-            guard isRegisteredInCatalog(), !hasLostAccess,
-                  browser.cloudAccess.resourceID?.machine == nil || browser.cloudAccess.resourceID?.machine == machine,
+            guard isRegisteredInCatalog(),
+                  browser.remoteAccess.resourceID?.machine == nil || browser.remoteAccess.resourceID?.machine == machine,
                   (try? catalog.validateOwnership(of: [resourceID], at: .workspace(id: browser.workspaceId, placement: .tab))) != nil else { return false }
-            browser.cloudAccess.leave()
-            browser.cloudAccess.retainResource(resourceID)
+            browser.remoteAccess.leave()
+            browser.remoteAccess.retainResource(resourceID)
             browser.retainTransferredSurfaceMachine(machine)
-            browser.prepareCloudBrowserStore(machineID: machineID)
+            browser.prepareRemoteBrowserStore(machineID: machineID)
             browser.webView.stopLoading()
             browser.shouldRenderWebView = false
-            browser.showCloudAddress(url)
+            browser.showRemoteAddress(url)
             materializedPanels.insert(browser.id)
             return true
         }
         let requestedPort = url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80)
-        let fallbackID: SurfaceResourceID = if info.hasDesktop, (CmuxTuiSnapshotParser.desktopPort...6916).contains(requestedPort) {
-            SurfaceResourceID(machine: machine, kind: .display, key: "display:\(requestedPort - 6900)")
-        } else {
-            SurfaceResourceID(machine: machine, kind: .browser, key: "port:\(requestedPort)")
-        }
+        let fallbackID = SurfaceResourceID(machine: machine, kind: .browser, key: "port:\(requestedPort)")
         let projectedResource = catalog.projectionRecord(forPanel: browser.id).flatMap {
             $0.resource.machine.isLocal ? nil : $0.resource
         }
-        let retainedResource = browser.cloudAccess.resourceID ?? projectedResource
+        let retainedResource = browser.remoteAccess.resourceID ?? projectedResource
         let explicitResource: SurfaceResourceID?
         if let resourceID {
             explicitResource = resourceID
@@ -120,13 +110,7 @@ extension CmuxTuiSurfaceProvider {
         if let explicitResource,
            let expectedPort = Self.port(for: explicitResource, catalog: catalog),
            expectedPort != requestedPort {
-            browser.cloudAccess.showUnavailable(CloudGuestDisplaySnapshot.unavailableMessage)
-            return false
-        }
-        if explicitResource == nil, fallbackID.kind == .display,
-           fallbackID.key != SurfaceResourceID.desktopDisplayKey,
-           catalog.resources[fallbackID] == nil {
-            browser.cloudAccess.showUnavailable(CloudGuestDisplaySnapshot.unavailableMessage)
+            browser.remoteAccess.showUnavailable(String(localized: "ssh.browser.portMismatch", defaultValue: "This browser route no longer matches the requested SSH port. Reopen the port from its host."))
             return false
         }
         let resourceID = explicitResource ?? fallbackID
@@ -134,53 +118,53 @@ extension CmuxTuiSurfaceProvider {
         let destinationOwned = isGlobalDock
             || (try? catalog.validateOwnership(of: [resourceID], at: .workspace(id: browser.workspaceId, placement: .tab))) != nil
         guard resourceID.machine == machine,
-              browser.cloudAccess.resourceID?.machine == nil || browser.cloudAccess.resourceID?.machine == machine,
+              browser.remoteAccess.resourceID?.machine == nil || browser.remoteAccess.resourceID?.machine == machine,
               destinationOwned else {
-            browser.cloudAccess.showUnavailable(SurfaceTransferRejection.cloudMachineMismatch.message)
+            browser.remoteAccess.showUnavailable(SurfaceTransferRejection.remoteMachineMismatch.message)
             return false
         }
-        let isCloudLoopback = machine.cloudMachineID != nil
+        let isTuiLoopback = machine.tuiMachineID != nil
             && RemoteLoopbackProxyAlias.isLoopbackHost(url.host ?? "")
-        let isCloudBrowserOrigin = machine.cloudMachineID != nil
+        let isTuiBrowserOrigin = machine.tuiMachineID != nil
             && resourceID.kind == .browser
             && catalog.resources[resourceID]?.remoteViews?.isEmpty == false
-            && !isCloudLoopback
-        let address = if isCloudLoopback {
+            && !isTuiLoopback
+        let address = if isTuiLoopback {
             RemoteLoopbackProxyAlias.aliasHost
-        } else if isCloudBrowserOrigin {
+        } else if isTuiBrowserOrigin {
             url.host
         } else {
             info.privateAddress
         }
-        let isHTTPSLoopback = isCloudLoopback && url.scheme?.lowercased() == "https"
-        let route: CloudPortAccessRoute = isCloudLoopback || isCloudBrowserOrigin ? .remoteBrowser : .browserProxy
+        let isHTTPSLoopback = isTuiLoopback && url.scheme?.lowercased() == "https"
+        let route: RemotePortAccessRoute = isTuiLoopback || isTuiBrowserOrigin ? .remoteBrowser : .browserProxy
         let routedURL: URL?
-        if isCloudLoopback {
+        if isTuiLoopback {
             routedURL = url
-        } else if isCloudBrowserOrigin {
+        } else if isTuiBrowserOrigin {
             let validScheme = ["http", "https"].contains(url.scheme?.lowercased() ?? "")
             routedURL = validScheme && url.host?.isEmpty == false ? url : nil
         } else {
             routedURL = address.flatMap {
-                CloudPortRoutePolicy().privateURL(
+                RemotePortRoutePolicy().privateURL(
                     url.absoluteString,
                     address: $0,
-                    allowLoopback: machine.isSSH || isCloudLoopback
+                    allowLoopback: machine.isSSH || isTuiLoopback
                 )
             }
         }
         guard let address, let privateURL = routedURL else {
-            browser.cloudAccess.showUnavailable(String(localized: "cloud.portAccess.invalidURL", defaultValue: "This port does not have a valid HTTP or HTTPS address."))
+            browser.remoteAccess.showUnavailable(String(localized: "cloud.portAccess.invalidURL", defaultValue: "This port does not have a valid HTTP or HTTPS address."))
             return false
         }
         if machine.isSSH, privateURL.scheme?.lowercased() == "https" {
-            browser.cloudAccess.showUnavailable(String(localized: "ssh.tui.browserForward.httpsUnsupported", defaultValue: "HTTPS services on an SSH host can't open in the browser yet. Use http:// instead."))
+            browser.remoteAccess.showUnavailable(String(localized: "ssh.tui.browserForward.httpsUnsupported", defaultValue: "HTTPS services on an SSH host can't open in the browser yet. Use http:// instead."))
             return false
         }
         // Check the VM origin before rewriting it to localhost. Otherwise the
         // implicit localhost allowance could bypass a private-origin deny rule.
         guard browserPolicy().allowsTrustedInternalURL(privateURL) else {
-            browser.cloudAccess.showUnavailable(String(localized: "browser.error.urlAllowlist.userMessage", defaultValue: "This URL is not allowed by the embedded-browser URL policy."))
+            browser.remoteAccess.showUnavailable(String(localized: "browser.error.urlAllowlist.userMessage", defaultValue: "This URL is not allowed by the embedded-browser URL policy."))
             return false
         }
         if let existing = catalog.projectionRecord(forPanel: browser.id), existing.resource != resourceID {
@@ -191,10 +175,10 @@ extension CmuxTuiSurfaceProvider {
         let model = accessModel(
             port: port,
             address: address,
-            targetHost: isCloudBrowserOrigin ? url.host : address,
+            targetHost: isTuiBrowserOrigin ? url.host : address,
             scheme: privateURL.scheme ?? "http",
             route: route,
-            preservesRemoteHost: isCloudLoopback || isHTTPSLoopback || isCloudBrowserOrigin
+            preservesRemoteHost: isTuiLoopback || isHTTPSLoopback || isTuiBrowserOrigin
         )
         browser.retainTransferredSurfaceMachine(machine)
         // Keep the URL the user opened as the browser's logical service
@@ -203,25 +187,21 @@ extension CmuxTuiSurfaceProvider {
         // detail and must not replace `localhost:<port>` in the address bar.
         let logicalURL = machine.isSSH ? url : privateURL
         if preserveCurrentNavigation {
-            browser.prepareCloudBrowserStore(machineID: machineID)
-            browser.bindCloudBrowserNavigation()
-            browser.cloudAccess.adoptCommittedRoute(model: model, url: logicalURL, resourceID: resourceID)
+            browser.prepareRemoteBrowserStore(machineID: machineID)
+            browser.bindRemoteBrowserNavigation()
+            browser.remoteAccess.adoptCommittedRoute(model: model, url: logicalURL, resourceID: resourceID)
             model.connect()
         } else {
-            browser.configureCloudBrowser(model: model, url: logicalURL, resourceID: resourceID, request: request)
+            browser.configureRemoteBrowser(model: model, url: logicalURL, resourceID: resourceID, request: request)
         }
         materializedPanels.insert(browser.id)
-        catalog.cloudBrowserDocumentDidChange(browser)
+        catalog.tuiBrowserDocumentDidChange(browser)
         return true
     }
 
     private static func port(for resource: SurfaceResourceID, catalog: SurfaceCatalog) -> Int? {
         if resource.kind == .browser, !resource.key.hasPrefix("port:") { return nil }
         if let port = catalog.resources[resource]?.port { return port }
-        if resource.kind == .display,
-           let number = Int(resource.key.split(separator: ":").last ?? ""), (1...16).contains(number) {
-            return 6900 + number
-        }
         if resource.kind == .browser, resource.key.hasPrefix("port:"),
            let port = Int(resource.key.dropFirst("port:".count)) {
             return port
@@ -237,34 +217,34 @@ extension CmuxTuiSurfaceProvider {
     /// The retry refreshes the machine metadata before resolving the resource,
     /// which repairs stale or missing private addresses during session restore.
     func showPortUnavailable(_ message: String, resourceID: SurfaceResourceID, browser: BrowserPanel) {
-        browser.cloudAccess.showUnavailable(message) { [weak self, weak browser] request in
+        browser.remoteAccess.showUnavailable(message) { [weak self, weak browser] request in
             guard let self, let browser, self.isRegisteredInCatalog() else { return }
             let lifecycle = self.currentLifecycleGeneration
             do {
-                try await self.refreshPortMetadata()
+                await self.refresh(force: true)
                 guard self.isCurrentLifecycleGeneration(lifecycle), self.isRegisteredInCatalog(),
-                      browser.cloudAccess.isCurrentUnavailableRetry(request) else { return }
+                      browser.remoteAccess.isCurrentUnavailableRetry(request) else { return }
                 let resource = self.catalog.resources[resourceID]
                     ?? resourceID.forwardedPort.map { CmuxTuiSnapshotParser.portBrowser(machine: self.machine, port: $0) }
                 guard let resource, resource.machine == self.machine else { throw SurfaceCatalogError.unknownResource(resourceID) }
-                if let browserURL = self.cloudBrowserOriginURL(for: resource, restoring: browser) {
+                if let browserURL = self.remoteBrowserOriginURL(for: resource, restoring: browser) {
                     let configured = self.configureBrowser(browser, url: browserURL, resourceID: resourceID)
-                    if configured { browser.pendingCloudRestoreURL = nil }
+                    if configured { browser.pendingRemoteRestoreURL = nil }
                     return
                 }
-                switch CloudPortRoutePlan.plan(resource: resource, privateAddress: self.info.privateAddress) {
+                switch TuiPortRoutePlan.plan(resource: resource, privateAddress: self.info.privateAddress) {
                 case .privateDirect(let raw):
                     guard let url = URL(string: raw) else { throw ProviderError.invalidPreviewURL }
-                    let restoredURL = browser.cloudRestoreURL(on: url)
+                    let restoredURL = browser.remoteRestoreURL(on: url)
                     let configured = self.configureBrowser(browser, url: restoredURL, resourceID: resourceID)
-                    if configured { browser.pendingCloudRestoreURL = nil }
+                    if configured { browser.pendingRemoteRestoreURL = nil }
                 case .unsupported(let nextMessage):
                     self.showPortUnavailable(nextMessage, resourceID: resourceID, browser: browser)
                 }
             } catch {
                 guard self.isCurrentLifecycleGeneration(lifecycle), self.isRegisteredInCatalog(),
-                      browser.cloudAccess.isCurrentUnavailableRetry(request) else { return }
-                self.showPortUnavailable(CloudDiagnosticFailure.classify(error).label, resourceID: resourceID, browser: browser)
+                      browser.remoteAccess.isCurrentUnavailableRetry(request) else { return }
+                self.showPortUnavailable(RemoteMachineLink.errorText(error), resourceID: resourceID, browser: browser)
             }
         }
     }
@@ -274,108 +254,28 @@ extension CmuxTuiSurfaceProvider {
         address: String,
         targetHost: String? = nil,
         scheme: String = "http",
-        route: CloudPortAccessRoute = .browserProxy,
+        route: RemotePortAccessRoute = .loopback,
         preservesRemoteHost: Bool = false
-    ) -> CloudPortAccessModel {
-        let target = CloudPortForwardTarget(host: targetHost ?? address, port: port)
-        if machine.isSSH, let sshLinks = links as? SSHTuiLinkManager {
-            // WebKit never sends loopback hosts through a proxy, so an SSH
-            // service is served from a local listener forwarded over SSH.
-            return portAccessStore.model(machineID: machineID, target: target, scheme: scheme) {
-                CloudPortAccessModel(
-                    target: target,
-                    coordinator: nil,
-                    wake: { [weak self] in
-                        guard let self, self.isRegisteredInCatalog() else { throw CancellationError() }
-                    },
-                    startForward: { [machine, machineID] target in
-                        try await sshLinks.loopbackForward(machineID: machineID, port: target.port) {
-                            Task { @MainActor in
-                                (SurfaceCatalog.shared.provider(for: machine) as? CmuxTuiSurfaceProvider)?
-                                    .restartSSHForward(port: target.port)
-                            }
-                        }
-                    },
-                    stopForward: { [machineID] in
-                        await sshLinks.closeLoopbackForward(machineID: machineID, port: port)
-                    },
-                    route: .loopback
-                )
-            }
-        }
-        let startBrowserProxy: (@MainActor () async throws -> CloudBrowserProxyEndpoint)? = if route == .browserProxy || route == .remoteBrowser {
-            { [weak self] in
-                guard let self, self.isRegisteredInCatalog() else { throw ProviderError.hubUnavailable }
-                let generation = self.currentLifecycleGeneration
-#if DEBUG
-                let desktopStartedAt = Date()
-                cmuxDebugLog("cloud.desktop.proxy.begin machine=\(self.machineID) port=\(port)")
-#endif
-                let endpoint = try await self.links.browserProxy(machineID: self.machineID, remoteNetwork: route == .remoteBrowser)
-#if DEBUG
-                cmuxDebugLog("cloud.desktop.proxy.endpoint machine=\(self.machineID) port=\(port) elapsedMs=\(Int(Date().timeIntervalSince(desktopStartedAt) * 1000))")
-#endif
-                // Repair only a desktop the probe saw answer with an error. A probe
-                // that timed out (a busy carrier) used to start this repair, a guest
-                // exec of about 12s, on a healthy desktop: display 1 then showed
-                // "Loading Cloud page" for 20s or more.
-                if self.providerID == "freestyle", port == CmuxTuiSnapshotParser.desktopPort,
-                   try await CloudBrowserRouting.desktopReachability(endpoint: endpoint, address: address, port: port) == .unreachable {
-                    try Task.checkCancellation()
-                    guard self.isCurrentLifecycleGeneration(generation), self.isRegisteredInCatalog() else { throw CancellationError() }
-                    guard let client = VMClient.shared else { throw ProviderError.notSignedIn }
-#if DEBUG
-                    cmuxDebugLog("cloud.desktop.proxy.heal.begin machine=\(self.machineID) port=\(port)")
-#endif
-                    _ = try await client.openPort(id: self.machineID, port: port, teamID: self.ownerTeamID)
-#if DEBUG
-                    cmuxDebugLog("cloud.desktop.proxy.heal.complete machine=\(self.machineID) port=\(port) elapsedMs=\(Int(Date().timeIntervalSince(desktopStartedAt) * 1000))")
-#endif
-                }
-#if DEBUG
-                cmuxDebugLog("cloud.desktop.proxy.ready machine=\(self.machineID) port=\(port) elapsedMs=\(Int(Date().timeIntervalSince(desktopStartedAt) * 1000))")
-#endif
-                guard self.isCurrentLifecycleGeneration(generation), self.isRegisteredInCatalog() else { throw CancellationError() }
-                return endpoint
-            }
-        } else {
-            nil
-        }
-        return portAccessStore.model(machineID: machineID, target: target, scheme: scheme, route: route) {
-            CloudPortAccessModel(
+    ) -> RemotePortAccessModel {
+        let target = RemotePortForwardTarget(host: targetHost ?? address, port: port)
+        return portAccessStore.model(machineID: machineID, target: target, scheme: scheme) {
+            RemotePortAccessModel(
                 target: target,
-                coordinator: portAccessStore.coordinator,
                 wake: { [weak self] in
                     guard let self, self.isRegisteredInCatalog() else { throw CancellationError() }
-                    let generation = self.currentLifecycleGeneration
-                    // Sleeping machines need the control plane to wake. An awake
-                    // desktop is checked through the existing browser carrier below.
-                    if !self.isAwake {
-                        guard let client = VMClient.shared else { throw ProviderError.notSignedIn }
-                        _ = try await client.openPort(id: self.machineID, port: target.port, teamID: self.ownerTeamID)
-                    }
-                    guard self.isCurrentLifecycleGeneration(generation), self.isRegisteredInCatalog() else { throw CancellationError() }
                 },
-                startForward: { [weak self] target in
-                    guard let self, let portForwards = self.portForwards, self.isRegisteredInCatalog() else { throw ProviderError.hubUnavailable }
-                    var target = target
-                    target.fallbackHosts = await self.links.privateAddresses(for: self.machineID)
-                    let forward = try await portForwards.forward(machineID: self.machineID, to: target)
-                    do {
-                        try await forward.warmUpHub()
-                        try Task.checkCancellation()
-                        return await forward.localPort
-                    } catch {
-                        await portForwards.close(machineID: self.machineID, port: target.port)
-                        throw error
+                startForward: { [links, machine, machineID] target in
+                    try await links.loopbackForward(machineID: machineID, port: target.port) {
+                        Task { @MainActor in
+                            (SurfaceCatalog.shared.provider(for: machine) as? CmuxTuiSurfaceProvider)?
+                                .restartSSHForward(port: target.port)
+                        }
                     }
                 },
-                stopForward: { [portForwards, machineID] in
-                    await portForwards?.close(machineID: machineID, port: port)
+                stopForward: { [links, machineID] in
+                    await links.closeLoopbackForward(machineID: machineID, port: port)
                 },
-                route: route,
-                startBrowserProxy: startBrowserProxy,
-                preservesRemoteHost: preservesRemoteHost
+                route: .loopback
             )
         }
     }
@@ -411,12 +311,11 @@ extension CmuxTuiSurfaceProvider {
             // Scans omit internal and display ports, so their absence proves nothing.
             guard let port = projection.resource.forwardedPort, !scanned.contains(port),
                   !CmuxTuiSnapshotParser.internalPorts.contains(port),
-                  !CmuxTuiSnapshotParser.displayPorts.contains(port),
                   let browser = SurfacePaneFactory.browserPanel(panelID: projection.panelID, in: projection.workspaceID)
             else { continue }
-            browser.cloudAccess.failRestore(String(
-                localized: "cloud.display.restoreUnavailable",
-                defaultValue: "This Cloud display or browser is unavailable. Refresh its machine to reconnect."
+            browser.remoteAccess.failRestore(String(
+                localized: "ssh.browser.restoreUnavailable",
+                defaultValue: "This SSH browser service is unavailable. Refresh its host to reconnect."
             ))
         }
     }
@@ -429,44 +328,43 @@ extension CmuxTuiSurfaceProvider {
             for projection in (resourceIDs == nil ? catalog.projections(of: resource.id) : projectionsByResource?[resource.id] ?? []) where !materializedPanels.contains(projection.panelID) {
                 guard let browser = SurfacePaneFactory.browserPanel(panelID: projection.panelID, in: projection.workspaceID),
                       isCurrentLifecycleGeneration(generation), catalog.canRestoreProjection(projection) else { continue }
-                if let loopbackURL = cloudLoopbackBrowserURL(for: resource) {
-                    let configured = configureBrowser(browser, url: browser.cloudRestoreURL(on: loopbackURL), resourceID: resource.id)
+                if let loopbackURL = remoteLoopbackBrowserURL(for: resource) {
+                    let configured = configureBrowser(browser, url: browser.remoteRestoreURL(on: loopbackURL), resourceID: resource.id)
                     if configured {
-                        browser.pendingCloudRestoreURL = nil
+                        browser.pendingRemoteRestoreURL = nil
                         materializedPanels.insert(projection.panelID)
                     }
                     continue
                 }
-                if let browserURL = cloudBrowserOriginURL(for: resource, restoring: browser) {
+                if let browserURL = remoteBrowserOriginURL(for: resource, restoring: browser) {
                     let configured = configureBrowser(
                         browser,
-                        url: browser.cloudRestoreURL(on: browserURL),
+                        url: browser.remoteRestoreURL(on: browserURL),
                         resourceID: resource.id
                     )
                     if configured {
-                        browser.pendingCloudRestoreURL = nil
+                        browser.pendingRemoteRestoreURL = nil
                         materializedPanels.insert(projection.panelID)
                     }
                     continue
                 }
-                switch CloudPortRoutePlan.plan(resource: resource, privateAddress: info.privateAddress) {
+                switch TuiPortRoutePlan.plan(resource: resource, privateAddress: info.privateAddress) {
                 case .privateDirect(let raw):
                     guard let url = URL(string: raw) else { continue }
                     let configured = configureBrowser(
                         browser,
-                        url: browser.cloudRestoreURL(on: url),
+                        url: browser.remoteRestoreURL(on: url),
                         resourceID: resource.id
                     )
                     if configured {
-                        browser.pendingCloudRestoreURL = nil
+                        browser.pendingRemoteRestoreURL = nil
                         materializedPanels.insert(projection.panelID)
                     }
                 case .unsupported(let message):
                     if resource.id.isForwardedPort {
                         showPortUnavailable(message, resourceID: resource.id, browser: browser)
                     }
-                    // Keep the placeholder eligible for a later explicit display
-                    // discovery; its target may be supplied by the guest catalog.
+                    // A later SSH port scan may resolve this saved service route.
                     continue
                 }
             }
@@ -476,33 +374,21 @@ extension CmuxTuiSurfaceProvider {
     /// Copying a link is read-only and always returns the private address.
     func portLinkURL(port: Int) async throws -> String {
         let resource = CmuxTuiSnapshotParser.portBrowser(machine: machine, port: port)
-        switch CloudPortRoutePlan.plan(resource: resource, privateAddress: info.privateAddress) {
+        switch TuiPortRoutePlan.plan(resource: resource, privateAddress: info.privateAddress) {
         case .privateDirect(let url): return url
         case .unsupported(let message): throw SurfaceCatalogError.unsupported(message)
         }
     }
 
-    /// Inspect an explicit forward without creating one.
-    func localPortURL(port: Int) async throws -> String? {
-        guard let localPort = await portForwards?.localPort(machineID: machineID, port: port) else { return nil }
-        return "http://127.0.0.1:\(localPort)"
-    }
 
-    /// Explicit provider preview API retained for diagnostic callers only.
-    func controlPlanePreviewURL(port: Int) async throws -> URL {
-        guard let client = VMClient.shared else { throw ProviderError.notSignedIn }
-        let endpoint = try await client.openPort(id: machineID, port: port, teamID: ownerTeamID)
-        guard let url = URL(string: endpoint.openUrl), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { throw ProviderError.invalidPreviewURL }
-        return url
-    }
 }
 
 
 extension CmuxTuiSurfaceProvider {
     /// A Cloud daemon browser keeps its loopback origin and uses the authenticated
     /// loopback forward instead of rewriting it to the machine private address.
-    func cloudLoopbackBrowserURL(for resource: SurfaceResource) -> URL? {
-        guard machine.cloudMachineID != nil, resource.kind == .browser,
+    func remoteLoopbackBrowserURL(for resource: SurfaceResource) -> URL? {
+        guard machine.tuiMachineID != nil, resource.kind == .browser,
               let raw = resource.url, let url = URL(string: raw),
               RemoteLoopbackProxyAlias.isLoopbackHost(url.host ?? "") else { return nil }
         return url
@@ -511,12 +397,12 @@ extension CmuxTuiSurfaceProvider {
     /// A daemon browser restores its saved document before resolving a route.
     /// The catalog can still contain the about:blank URL used at creation while
     /// the native pane has since navigated to a guest-local or public origin.
-    func cloudBrowserOriginURL(for resource: SurfaceResource, restoring browser: BrowserPanel? = nil) -> URL? {
-        guard machine.cloudMachineID != nil, resource.kind == .browser,
+    func remoteBrowserOriginURL(for resource: SurfaceResource, restoring browser: BrowserPanel? = nil) -> URL? {
+        guard machine.tuiMachineID != nil, resource.kind == .browser,
               !resource.id.key.hasPrefix("port:"), resource.remoteViews?.isEmpty == false else { return nil }
-        let resource = catalog.resourceWithCloudBrowserDocument(resource)
+        let resource = catalog.resourceWithTuiBrowserDocument(resource)
         let catalogURL = resource.url.flatMap { URL(string: $0) } ?? SurfacePaneFactory.blankURL
-        let url = browser?.cloudRestoreURL(on: catalogURL) ?? catalogURL
+        let url = browser?.remoteRestoreURL(on: catalogURL) ?? catalogURL
         if url == SurfacePaneFactory.blankURL { return url }
         guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
               url.host?.isEmpty == false else { return nil }

@@ -1595,11 +1595,6 @@ struct DockShortcutRoutingTests {
     func simulatorShortcutTargetsFocusedDock() async throws {
         try await AppContextSerialGate.withExclusiveAppContext {
             try await Self.withHarness { harness in
-                let flags = CmuxFeatureFlags.shared
-                let simulatorFlag = CmuxFeatureFlags.simulatorFlag
-                let previousOverride = flags.overrideValue(for: simulatorFlag)
-                flags.setOverride(true, for: simulatorFlag)
-                defer { flags.setOverride(previousOverride, for: simulatorFlag) }
 
                 let panel = try harness.dock.seedSimulatorPanel(inPane: harness.rootPane)
                 defer { panel.close() }
@@ -1621,11 +1616,6 @@ struct DockShortcutRoutingTests {
     func simulatorToolEditorRetainsPanelFocus() async throws {
         try await AppContextSerialGate.withExclusiveAppContext {
             try await Self.withHarness { harness in
-                let flags = CmuxFeatureFlags.shared
-                let simulatorFlag = CmuxFeatureFlags.simulatorFlag
-                let previousOverride = flags.overrideValue(for: simulatorFlag)
-                flags.setOverride(true, for: simulatorFlag)
-                defer { flags.setOverride(previousOverride, for: simulatorFlag) }
 
                 let panel = try harness.dock.seedSimulatorPanel(inPane: harness.rootPane)
                 defer { panel.close() }

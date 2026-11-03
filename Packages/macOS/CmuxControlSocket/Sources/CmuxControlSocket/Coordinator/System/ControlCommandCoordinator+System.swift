@@ -37,8 +37,6 @@ extension ControlCommandCoordinator {
             return sessionExport(request.params)
         case "settings.open":
             return settingsOpen(request.params)
-        case "feedback.open":
-            return feedbackOpen(request.params)
         case "extension.sidebar.snapshot":
             return extensionSidebarSnapshot(request.params)
         case "workspace.action":
@@ -48,8 +46,6 @@ extension ControlCommandCoordinator {
         case "surface.drag_to_split", "surface.split_off":
             return surfaceSplitOff(request.params)
 #if DEBUG
-        case "mobile.dev_stack_auth.configure":
-            return mobileDevStackAuthConfigure(request.params)
 #endif
         default:
             return nil

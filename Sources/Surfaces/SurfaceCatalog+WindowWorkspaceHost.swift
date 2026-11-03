@@ -8,8 +8,8 @@ extension SurfaceCatalog.NewWorkspaceHost {
         create = { [weak tabManager] title, _ in
             guard let tabManager,
                   let workspace = tabManager.addWorkspaceIfActive(
-                    title: title, titleSource: .auto, initialSurface: .cloudVMLoading,
-                    inheritWorkingDirectory: false, select: false, autoWelcomeIfNeeded: false
+                    title: title, titleSource: .auto, initialSurface: .remoteLoading,
+                    inheritWorkingDirectory: false, select: false
                   ) else { throw CancellationError() }
             return (workspace.id, workspace.focusedPanelId)
         }

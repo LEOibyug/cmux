@@ -8,7 +8,7 @@ import Foundation
 
 @MainActor
 final class CloudWorkspaceDeleteTestProvider: SurfaceProvider {
-    let machine = SurfaceMachineID.cloud("optimistic-delete")
+    let machine = SurfaceMachineID.ssh("305ea2ddea987cf9e56007652f96f70d181171f04ec850234e2829f8de6ecf84")
     let workspace = SurfaceRemoteWorkspace(id: "ws-delete", name: "Delete me", index: 0, focused: true)
     var onRefresh: () -> Void = {}
     var beforeClose: () throws -> Void = {}
@@ -18,7 +18,7 @@ final class CloudWorkspaceDeleteTestProvider: SurfaceProvider {
     var closedTerminals: [SurfaceResourceID] = []
     var info: SurfaceMachineInfo {
         SurfaceMachineInfo(id: machine, name: "Test machine", status: "running", image: nil,
-            hasDesktop: false, memoryMb: nil, diskMb: nil, linkState: .connected,
+            memoryMb: nil, diskMb: nil, linkState: .connected,
             linkError: nil, cpuPercent: nil, memoryUsedMb: nil, diskUsedMb: nil,
             remoteWorkspaces: [workspace])
     }

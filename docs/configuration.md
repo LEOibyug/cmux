@@ -2,6 +2,11 @@
 
 Global app preferences live in `~/.config/cmux/cmux.json`.
 
+The canonical schema is local `web/data/cmux.schema.json` and is embedded in the
+app for offline validation. Newly created configs omit `$schema`; no remote
+schema URL is required. Existing files retain their editor-selected schema URLs
+when copied from the legacy settings path.
+
 For themes, fonts, transparency, and other appearance settings across Ghostty config and `cmux.json`, see [Customizing cmux's look](customizing-appearance.md).
 
 ## Automation socket trust boundary
@@ -37,42 +42,6 @@ button that opens the file at the offending line. The notice appears once per di
 of errors: reloads that keep the same errors stay quiet, fixing them hides the notice, and
 reintroducing an error shows it again. `cmux config doctor` validates `cmux.json` only.
 
-## `mobile.artifactFolderAccess`
-
-Controls which files and folders cmux on iOS may browse after a chat references a directory or a directory path appears in a terminal.
-
-```json
-{
-  "mobile": {
-    "artifactFolderAccess": "subtree"
-  }
-}
-```
-
-- `subtree` (default): authorize the referenced directory and its full subtree.
-- `oneLevel`: preserve the previous rule, authorizing only immediate children and listing only the referenced directory itself.
-
-Authorization compares canonical paths after resolving symlinks. A symlink inside an authorized folder cannot grant access to a target outside that folder.
-
-## `mobile.browserTunnel.allowOtherHosts`
-
-Controls where the iOS "On iPhone" browser can reach through this Mac. The browser loads pages on the phone, and connections for this Mac's workspaces leave from this Mac.
-
-```json
-{
-  "mobile": {
-    "browserTunnel": {
-      "allowOtherHosts": false
-    }
-  }
-}
-```
-
-- `false` (default): only this Mac's `localhost` (`localhost`, `*.localhost`, `127.0.0.0/8`, `::1`) is reachable through the Mac. Other sites load over the phone's own network.
-- `true`: LAN, VPN, and internet hosts are also reachable through this Mac, with names resolved on this Mac.
-
-Link-local addresses, including the cloud metadata service at `169.254.169.254`, never go through this Mac either way; the phone loads those over its own network, as it does any host this Mac refuses. Only a phone signed in to the same account and admitted to this Mac can open connections, and they end when that phone disconnects. Turning off the embedded browser by configuration profile turns this off too.
-
 ## `paneBorderColor` and `activePaneBorderColor`
 
 Customize split-workspace pane boundaries controlled by cmux.
@@ -107,7 +76,7 @@ Supported placeholders:
 - `{windowToken}`: the first 8 characters of the persisted window UUID.
 - `{activeWorkspace}`: the active workspace title, falling back to the default title when the workspace title is blank.
 - `{activeDirectory}`: the active workspace's current directory.
-- `{defaultTitle}`: the title cmux would have used without a template. For `cmux ssh` and Cloud workspaces it ends with the host, as in `build · big-red`.
+- `{defaultTitle}`: the title cmux would have used without a template. For `cmux ssh` workspaces it ends with the host, as in `build · big-red`.
 - `{appName}`: `cmux`.
 
 For tiling window managers such as AeroSpace or yabai, match on the stable token in the title. For example, the template above gives each restored macOS window a title containing `[cmux:abcd1234]`, so a rule can match `\\[cmux:abcd1234\\]`. The token is stable across relaunches for restored windows because it comes from the persisted window UUID.
@@ -272,11 +241,11 @@ Change any of them with `sidebar.compactStatusIcons`, a map from state to an [SF
 
 Cmd+Ctrl+= and Cmd+Ctrl+- increase or decrease every terminal in the selected workspace by one point. Cmd+Ctrl+0 resets them to the current Ghostty font size. Hidden, hibernated, and Dock terminals change with visible terminals, and newly created terminals inherit the workspace size. Rebind them with `shortcuts.bindings.increaseWorkspaceTerminalFontSize`, `shortcuts.bindings.decreaseWorkspaceTerminalFontSize`, and `shortcuts.bindings.resetWorkspaceTerminalFontSize`.
 
-## New Cloud Workspace shortcut and the plus-button menu
+## New Workspace shortcut and the plus-button menu
 
-Cmd+Y creates a workspace on the machine that owns the most recently selected Cloud workspace, or the first usable machine in the right-hand Cloud sidebar. If no usable Cloud workspace or machine is available, it opens the New Cloud Machine flow. When a remembered selection is stale, the resolver uses the current right-hand Cloud sidebar order, including pins and manual reordering; an empty or still-loading fleet deterministically stays on the New Cloud Machine flow. Cmd+Shift+Y always opens the New Cloud Machine flow. Cmd+N always creates a local workspace on this Mac. Rebind or unbind these shortcuts from Settings > Keyboard Shortcuts or with `shortcuts.bindings.newCloudWorkspace` and `shortcuts.bindings.newCloudMachine`.
+Cmd+N creates a local workspace on this Mac. Rebind or unbind it from Settings > Keyboard Shortcuts or with `shortcuts.bindings.newTab`.
 
-When `ui.newWorkspace.contextMenu` is not set, the plus-button menu lists `cmux.newWorkspace` (Cmd+N, local), `cmux.newCloudWorkspace` (Cmd+Y), `cmux.newCloudMachine` (Cmd+Shift+Y), `cmux.newTerminal` (Cmd+T), and `cmux.newBrowser` (Cmd+Shift+L). Each row shows its current shortcut, so a rebind in Settings or `cmux.json` appears the next time the menu opens; unbound and chord shortcuts show no hint. Cloud rows appear only when Cloud Machines is enabled. A configured menu keeps your order and still shows hints for built-in rows and for actions with a `shortcut`.
+When `ui.newWorkspace.contextMenu` is not set, the plus-button menu lists `cmux.newWorkspace` (Cmd+N), `cmux.newTerminal` (Cmd+T), and `cmux.newBrowser` (Cmd+Shift+L). Each row shows its current shortcut, so a rebind in Settings or `cmux.json` appears the next time the menu opens; unbound and chord shortcuts show no hint. A configured menu keeps your order and still shows hints for built-in rows and for actions with a `shortcut`.
 
 ## `terminal.textBoxSubmitActions`
 

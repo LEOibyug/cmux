@@ -212,7 +212,7 @@ enum SessionRestorePolicy {
     static func isRunningUnderAutomatedTests(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
-        if environment["CMUX_TEST_PROCESS"] == "1" {
+        if environment["CMUX_TEST_PROCESS"] == "1" || environment["TEST_RUNNER_CMUX_TEST_PROCESS"] == "1" {
             return true
         }
         if environment["CMUX_UI_TEST_MODE"] == "1" {
@@ -1348,6 +1348,7 @@ enum SurfaceResumeApprovalStore {
             try fileManager.createDirectory(
                 at: fileURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
+
             )
             try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fileURL.deletingLastPathComponent().path)
             let encoder = JSONEncoder()
@@ -1431,7 +1432,6 @@ enum SurfaceResumeApprovalStore {
             switch rootLoadResult {
             case .missing:
                 let root: [String: Any] = [
-                    "$schema": CmuxSettingsFileStore.schemaURLString,
                     "schemaVersion": CmuxSettingsFileStore.currentSchemaVersion,
                     settingsTerminalSectionKey: [
                         settingsRecordsKey: recordsValue,
@@ -1720,8 +1720,6 @@ struct SessionFilePreviewPanelSnapshot: Codable, Sendable {
 /// Marker for a workspace todo pane; the pane has no content of its own (the checklist
 /// persists on the workspace), so the panel `type` plus this empty marker is enough to restore it.
 struct SessionWorkspaceTodoPanelSnapshot: Codable, Sendable {}
-/// Marker for a CodeRouter guide pane; the guide content is static and needs no payload.
-struct SessionCoderouterGuidePanelSnapshot: Codable, Sendable {}
 /// Marker for the global notifications pane; its feed lives in the notification store.
 struct SessionNotificationsPanelSnapshot: Codable, Sendable {}
 /// A Chief pane: the messages live in Chief's own store, so only the shown conversation is kept.
@@ -1787,7 +1785,6 @@ struct SessionPanelSnapshot: Codable, Sendable {
     var agentSession: SessionAgentSessionPanelSnapshot? = nil
     var project: SessionProjectPanelSnapshot?
     var workspaceTodo: SessionWorkspaceTodoPanelSnapshot? = nil
-    var coderouterGuide: SessionCoderouterGuidePanelSnapshot? = nil
     var notificationsPanel: SessionNotificationsPanelSnapshot? = nil
     var chief: SessionChiefPanelSnapshot? = nil
 }
@@ -1818,19 +1815,10 @@ struct SessionCanvasPaneSnapshot: Codable, Equatable, Sendable {
     var selectedPanelId: UUID? = nil
 }
 
-/// A cloud machine bound to a workspace through the cmux-tui remote daemon, persisted so a
-/// restored `vm:<id>` workspace stays that machine's workspace (`workspace(forCloudVMID:)`,
-/// the sidebar cloud button's Base reuse, `vm.terminal_open` targeting). Only the binding is
-/// persisted: the pane's link is a process and is not replayed on restore.
-struct SessionCloudVMBindingSnapshot: Codable, Sendable, Equatable {
-    var vmID: String
-    var isBase: Bool
-    /// The machine's cmux-tui workspace this local workspace stands for; absent in
-    /// legacy snapshots and for machine-only bindings (`vm shell`).
+/// The user-controlled SSH machine and existing remote workspace to reconnect.
+struct SessionRemoteWorkspaceBindingSnapshot: Codable, Sendable, Equatable {
+    var machineID: String
     var remoteWorkspaceID: String? = nil
-    /// The team that owns the machine. Absent in snapshots written before
-    /// multi-team Cloud; restore then adopts the selected team.
-    var teamID: String? = nil
 }
 
 struct SessionWorkspaceSnapshot: Codable, Sendable {
@@ -1876,16 +1864,10 @@ struct SessionWorkspaceSnapshot: Codable, Sendable {
     var progress: SessionProgressSnapshot?
     var gitBranch: SessionGitBranchSnapshot?
     var remote: SessionRemoteWorkspaceSnapshot?
-    /// cmux-tui cloud machine binding; absent in manifests written before the Cloud tree and for
-    /// workspaces that are not cloud machines.
-    var cloudVM: SessionCloudVMBindingSnapshot? = nil
+    var remoteWorkspace: SessionRemoteWorkspaceBindingSnapshot? = nil
     /// Remote surfaces this workspace's panes projected (`SurfaceCatalog`); absent for
     /// workspaces that only ever showed local panes, so older manifests decode unchanged.
     var surfaceProjections: [SurfaceProjectionRecord]? = nil
-    /// The team that owns each Cloud machine this workspace shows, by machine
-    /// id. Restore reconnects those panes with that team even when another
-    /// team is selected. Absent in manifests written before multi-team Cloud.
-    var cloudMachineTeams: [String: String]? = nil
     /// Optional so manifests written before this field decode cleanly.
     var environment: [String: String]? = nil
     /// Manual task-status override raw values and the persisted checklist. Optional-with-nil-default
@@ -1946,13 +1928,18 @@ struct SessionWorkspaceGroupSnapshot: Codable, Sendable, Equatable {
 
 extension SessionWorkspaceSnapshot {
     var hasRestorablePanels: Bool {
-        !panels.isEmpty || dock != nil
+        !panels.isEmpty || dock?.panels.isEmpty == false
+    }
+
+    /// Remote restore starts process-free until its saved SSH owner reconnects.
+    var requiresRemoteRestoreScaffold: Bool {
+        remote != nil || remoteWorkspace != nil || surfaceProjections?.contains { !$0.resource.machine.isLocal } == true
     }
 }
 
 extension SessionWindowSnapshot {
     var hasRestorablePanels: Bool {
-        dock != nil || tabManager.workspaces.contains { $0.hasRestorablePanels }
+        dock?.panels.isEmpty == false || tabManager.workspaces.contains { $0.hasRestorablePanels }
     }
 }
 

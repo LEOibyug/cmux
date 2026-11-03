@@ -35,29 +35,6 @@ import Testing
             anchorID: "setting:keyboardShortcuts:shortcuts",
             anchor: .center
         ))
-        let devicesRow = SettingsDetailScrollPlacement.resolve(
-            target: .computers,
-            anchorID: "setting:computers:discovery"
-        )
-        #expect(devicesRow.anchor == .center)
-    }
-
-    @Test func legacyDevicesAnchorsOpenTheDevicesPaneAtTheTop() {
-        for (requested, anchor) in [
-            (SettingsSectionID.mobile, "setting:mobile:computers"),
-            (SettingsSectionID.computers, "setting:computers:pair"),
-        ] {
-            let destination = requested.navigationDestination(providedAnchor: anchor)
-            #expect(destination.section == .computers, "\(anchor)")
-            let placement = SettingsDetailScrollPlacement.resolve(
-                target: destination.section,
-                anchorID: destination.anchorID
-            )
-            #expect(placement == SettingsDetailScrollPlacement(
-                anchorID: SettingsDetailScrollPlacement.topAnchorID,
-                anchor: .top
-            ), "\(anchor)")
-        }
     }
 
     @Test func restoreUsesTheSectionNeverAPersistedRow() {

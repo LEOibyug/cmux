@@ -177,37 +177,33 @@ struct ComputerUseUXTests {
     @MainActor
     @Test func onboardingAppearsUntilDirectCaptureIsReady() {
         #expect(ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: true, featureEnabled: true, permissionStatusIsKnown: true,
+            seen: true, permissionStatusIsKnown: true,
             accessibilityGranted: false, screenRecordingGranted: true,
             directCaptureReady: false))
         #expect(ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: true, featureEnabled: true, permissionStatusIsKnown: false,
+            seen: true, permissionStatusIsKnown: false,
             accessibilityGranted: true, screenRecordingGranted: true,
             directCaptureReady: false))
         #expect(ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: false, featureEnabled: true, permissionStatusIsKnown: true,
+            seen: false, permissionStatusIsKnown: true,
             accessibilityGranted: false, screenRecordingGranted: true,
             directCaptureReady: false))
         #expect(ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: false, featureEnabled: true, permissionStatusIsKnown: true,
+            seen: false, permissionStatusIsKnown: true,
             accessibilityGranted: true, screenRecordingGranted: false,
             directCaptureReady: false))
         #expect(ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: false, featureEnabled: true, permissionStatusIsKnown: false,
+            seen: false, permissionStatusIsKnown: false,
             accessibilityGranted: true, screenRecordingGranted: true,
             directCaptureReady: false))
         #expect(ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: false, featureEnabled: true, permissionStatusIsKnown: true,
+            seen: false, permissionStatusIsKnown: true,
             accessibilityGranted: true, screenRecordingGranted: true,
             directCaptureReady: false))
         #expect(!ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: false, featureEnabled: true, permissionStatusIsKnown: true,
+            seen: false, permissionStatusIsKnown: true,
             accessibilityGranted: true, screenRecordingGranted: true,
             directCaptureReady: true))
-        #expect(!ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: false, featureEnabled: false, permissionStatusIsKnown: false,
-            accessibilityGranted: false, screenRecordingGranted: false,
-            directCaptureReady: false))
     }
 
     /// Configured users retain the fail-closed permission readiness predicate;
@@ -215,20 +211,20 @@ struct ComputerUseUXTests {
     @MainActor
     @Test func configuredHelperReadinessRemainsFailClosedUntilReady() {
         #expect(ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: true, featureEnabled: true, permissionStatusIsKnown: true,
+            seen: true, permissionStatusIsKnown: true,
             accessibilityGranted: false, screenRecordingGranted: true,
             directCaptureReady: true))
         #expect(ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: true, featureEnabled: true, permissionStatusIsKnown: true,
+            seen: true, permissionStatusIsKnown: true,
             accessibilityGranted: true, screenRecordingGranted: false,
             directCaptureReady: true))
         // Unknown TCC status is fail-safe: the protected call remains gated.
         #expect(ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: true, featureEnabled: true, permissionStatusIsKnown: false,
+            seen: true, permissionStatusIsKnown: false,
             accessibilityGranted: true, screenRecordingGranted: true,
             directCaptureReady: true))
         #expect(!ComputerUseOnboardingWindowController.shouldPresentAutomatically(
-            seen: true, featureEnabled: true, permissionStatusIsKnown: true,
+            seen: true, permissionStatusIsKnown: true,
             accessibilityGranted: true, screenRecordingGranted: true,
             directCaptureReady: true))
     }
@@ -356,7 +352,6 @@ struct ComputerUseUXTests {
             runtimeService: runtimeService,
             userDefaults: defaults,
             workspaceTitle: { _ in nil },
-            featureEnabled: { true },
             onboardingCoordinator: presentationCoordinator
         )
         let reportPrompt = WorkstreamEvent(
@@ -985,7 +980,6 @@ struct ComputerUseUXTests {
         #expect(
             ComputerUseOnboardingWindowController.shouldPresentAutomatically(
                 seen: true,
-                featureEnabled: true,
                 permissionStatusIsKnown: true,
                 accessibilityGranted: true,
                 screenRecordingGranted: true,
@@ -2354,8 +2348,7 @@ struct ComputerUseUXTests {
         let unmatchedRecentState = ComputerUseMenuBarSnapshot(
             rows: [],
             hasRecentStateFiles: true,
-            showInMenuBar: true,
-            featureEnabled: true
+            showInMenuBar: true
         )
 
         #expect(!unmatchedRecentState.shouldShowStatusItem)
@@ -2393,7 +2386,6 @@ struct ComputerUseUXTests {
             configStore: JSONConfigStore(fileURL: root.appendingPathComponent("cmux.json")),
             showInMenuBarKey: catalog.computerUse.showInMenuBar,
             workspaceTitle: { _ in nil },
-            featureEnabled: { true },
             refreshPolicy: ComputerUseMenuBarRefreshPolicy(minimumEventReloadInterval: 60)
         )
 
@@ -2408,7 +2400,7 @@ struct ComputerUseUXTests {
         store.stop()
     }
 
-    @Test func menuRefreshPolicyDebouncesOnlyWhenFeatureAndMenuAreVisible() throws {
+    @Test func menuRefreshPolicyDebouncesOnlyWhenMenuIsVisible() throws {
         let policy = ComputerUseMenuBarRefreshPolicy(minimumEventReloadInterval: 0.2)
         let firstEvent = Date(timeIntervalSince1970: 1_900_000_000)
         let secondEvent = firstEvent.addingTimeInterval(0.05)
@@ -2416,27 +2408,14 @@ struct ComputerUseUXTests {
 
         #expect(policy.reloadDeadline(
             forEventAt: firstEvent,
-            featureEnabled: false,
             showInMenuBar: false
-        ) == nil)
-        #expect(policy.reloadDeadline(
-            forEventAt: firstEvent,
-            featureEnabled: true,
-            showInMenuBar: false
-        ) == nil)
-        #expect(policy.reloadDeadline(
-            forEventAt: firstEvent,
-            featureEnabled: false,
-            showInMenuBar: true
         ) == nil)
         let firstDeadline = try #require(policy.reloadDeadline(
             forEventAt: firstEvent,
-            featureEnabled: true,
             showInMenuBar: true
         ))
         let secondDeadline = try #require(policy.reloadDeadline(
             forEventAt: secondEvent,
-            featureEnabled: true,
             showInMenuBar: true
         ))
         #expect(firstDeadline == firstEvent.addingTimeInterval(0.2))
@@ -2636,7 +2615,6 @@ struct ComputerUseUXTests {
 
         let controller = ComputerUseWatchTargetController(
             stateDirectoryURL: directory,
-            featureEnabled: { true },
             liveDriverSessions: { [driverSessionID: liveSession] },
             currentLiveDriverSession: { _ in liveSession },
             feed: ComputerUseWatchTargetFeed(
@@ -2727,7 +2705,6 @@ struct ComputerUseUXTests {
                 ($0.surfaceID, $0)
             }
         )
-        var featureEnabled = false
         let terminalFocusEvents = AsyncStream<UUID>.makeStream()
         var terminalFocusIterator = terminalFocusEvents.stream.makeAsyncIterator()
         defer { terminalFocusEvents.continuation.finish() }
@@ -2751,7 +2728,6 @@ struct ComputerUseUXTests {
         ] = []
         let controller = ComputerUseWatchTargetController(
             stateDirectoryURL: directory,
-            featureEnabled: { featureEnabled },
             liveDriverSessions: { sessions },
             currentLiveDriverSession: { scannedSession in
                 sessionsBySurfaceID[scannedSession.surfaceID]
@@ -2848,11 +2824,7 @@ struct ComputerUseUXTests {
             options: .atomic
         )
 
-        featureEnabled = true
-        NotificationCenter.default.post(
-            name: .cmuxFeatureFlagsDidChange,
-            object: nil
-        )
+        controller.refresh()
         #expect(await cursorEventIterator.next() == backgroundDriverSessionID)
         // The activity still pins the helper cursor to its target window.
         let reassertion = await cursorReassertionIterator.next()
@@ -2997,7 +2969,6 @@ struct ComputerUseUXTests {
         var focusEffects: [String] = []
         let controller = ComputerUseWatchTargetController(
             stateDirectoryURL: FileManager.default.temporaryDirectory,
-            featureEnabled: { false },
             liveDriverSessions: { [driverSessionID: liveSession] },
             currentLiveDriverSession: { _ in liveSession },
             feed: ComputerUseWatchTargetFeed(
@@ -3083,7 +3054,6 @@ struct ComputerUseUXTests {
             (@MainActor @Sendable () -> Bool)?
         let controller = ComputerUseWatchTargetController(
             stateDirectoryURL: FileManager.default.temporaryDirectory,
-            featureEnabled: { false },
             liveDriverSessions: { [driverSessionID: liveSession] },
             currentLiveDriverSession: { _ in liveSession },
             feed: ComputerUseWatchTargetFeed(
@@ -3192,7 +3162,6 @@ struct ComputerUseUXTests {
         var keyedLookupCount = 0
         let controller = ComputerUseWatchTargetController(
             stateDirectoryURL: FileManager.default.temporaryDirectory,
-            featureEnabled: { false },
             liveDriverSessions: {
                 fullLookupCount += 1
                 return liveDriverSessions
@@ -3253,7 +3222,6 @@ struct ComputerUseUXTests {
 
         let staleController = ComputerUseWatchTargetController(
             stateDirectoryURL: FileManager.default.temporaryDirectory,
-            featureEnabled: { false },
             liveDriverSessions: { liveDriverSessions },
             currentLiveDriverSession: { scannedSession in
                 ComputerUseLiveDriverSession(
@@ -3601,7 +3569,6 @@ struct ComputerUseUXTests {
 
         let controller = ComputerUseCursorOverlayController(
             stateDirectoryURL: directory,
-            featureEnabled: { true },
             pollInterval: 60,
             glideDuration: 0
         )

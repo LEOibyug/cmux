@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import AppKit
 import Bonsplit
 import CmuxHomeCore
@@ -12,7 +12,7 @@ import Foundation
 protocol PaneDropContainer: AnyObject {
     var surfaceOwnershipPolicy: SurfaceOwnershipPolicy { get }
     /// Whether this container accepts pane-transfer payloads (surfaces, Vault
-    /// sessions, Cloud rows, sidebar tools). File drops are routed separately.
+    /// sessions, SSH resources, sidebar tools). File drops are routed separately.
     var acceptsPaneTransfers: Bool { get }
     func surfaceDropRejection(
         _ transfer: PaneDragTransfer,
@@ -48,7 +48,7 @@ protocol PaneDropContainer: AnyObject {
         destination: BonsplitController.ExternalTabDropRequest.Destination
     ) -> Bool
 
-    /// Projects a Cloud tree row (one resource, or a workspace's collection) at this destination.
+    /// Projects an SSH resource row or workspace collection at this destination.
     func performPortalSurfaceResourceDrop(
         group: SurfaceResourceGroup,
         destination: BonsplitController.ExternalTabDropRequest.Destination
@@ -102,7 +102,7 @@ protocol PaneDropContainer: AnyObject {
 }
 
 extension PaneDropContainer {
-    var surfaceOwnershipPolicy: SurfaceOwnershipPolicy { .init(cloudMachine: nil) }
+    var surfaceOwnershipPolicy: SurfaceOwnershipPolicy { .init(remoteMachine: nil) }
     var acceptsPaneTransfers: Bool { true }
     func surfaceDropRejection(
         _ transfer: PaneDragTransfer,
@@ -257,7 +257,7 @@ extension PaneDropContainer {
         nil
     }
 
-    /// Declines Cloud rows for containers that cannot host a projected surface (the Dock).
+    /// Declines SSH resource rows for containers that cannot host projections (the Dock).
     func performPortalSurfaceResourceDrop(
         group _: SurfaceResourceGroup,
         destination _: BonsplitController.ExternalTabDropRequest.Destination
@@ -310,8 +310,8 @@ extension PaneDropContainer {
             }
             return .editor
         case .browser, .markdown, .rightSidebarTool, .customSidebar, .simulator,
-             .agentSession, .project, .extensionBrowser, .workspaceTodo, .coderouterGuide,
-             .notifications, .cloudVMLoading, .mobilePairing, .accountSignIn, .cloudVPNSetup, .chief:
+             .agentSession, .project, .extensionBrowser, .workspaceTodo,
+             .notifications, .remoteLoading, .chief:
             return nil
         }
     }
@@ -424,7 +424,7 @@ extension Workspace: PaneDropContainer {
         handleSessionDrop(entry: entry, destination: destination)
     }
 
-    /// Projects a dragged Cloud row through the surface catalog.
+    /// Projects a dragged SSH resource through the surface catalog.
     func performPortalSurfaceResourceDrop(
         group: SurfaceResourceGroup,
         destination: BonsplitController.ExternalTabDropRequest.Destination

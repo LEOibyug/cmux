@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import CmuxWorkspaces
 import Foundation
@@ -15,9 +15,9 @@ struct CloudWorkspaceRestoreNamesTests {
 
     @Test("Machine summaries preserve acknowledged names and only known pending workspace overlays")
     func machineSummaryCannotInventWorkspaceRows() throws {
-        let machine = SurfaceMachineID.cloud("metadata")
+        let machine = SurfaceMachineID.ssh("45447b7afbd5e544f7d0f1df0fccd26014d9850130abd3f020b89ff96b82079f")
         let catalog = SurfaceCatalog()
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let provider = TuiPlacementTestProvider(machine: machine)
         catalog.register(provider)
         defer { catalog.unregister(machine: machine) }
         let graph = try state(machine, workspace: "Saved name", names: ["Build"], revision: 2)
@@ -30,7 +30,7 @@ struct CloudWorkspaceRestoreNamesTests {
             remoteViews: [SurfaceRemoteView(tabID: "tab_pending", workspace: pendingWorkspace)],
             port: nil, url: nil
         )
-        catalog.replaceCloudState(graph, resources: canonicalResources + [pendingResource], info: provider.info)
+        catalog.replaceTuiState(graph, resources: canonicalResources + [pendingResource], info: provider.info)
         var stale = provider.info
         stale.remoteWorkspaces = [
             SurfaceRemoteWorkspace(id: "ws_main", name: "Old name", index: 0, focused: true),
@@ -39,23 +39,23 @@ struct CloudWorkspaceRestoreNamesTests {
         catalog.updateMachine(stale, from: provider)
         let canonicalWorkspace = SurfaceRemoteWorkspace(id: "ws_main", name: "Saved name", index: 0, focused: false)
         #expect(catalog.machines[machine]?.remoteWorkspaces == [canonicalWorkspace, pendingWorkspace])
-        #expect(catalog.cloudStates[machine] == graph)
+        #expect(catalog.tuiStates[machine] == graph)
         // Once the authoritative resource transaction removes the overlay, a stale
         // summary cannot resurrect either that provisional row or a deleted workspace.
-        catalog.replaceCloudState(graph, resources: canonicalResources, info: stale)
+        catalog.replaceTuiState(graph, resources: canonicalResources, info: stale)
         catalog.updateMachine(stale, from: provider)
         #expect(catalog.machines[machine]?.remoteWorkspaces == [canonicalWorkspace])
     }
 
     @Test("Checkpoint waits for the latest workspace and placement names, including clears")
     func checkpointWaitsForNames() async throws {
-        let machine = SurfaceMachineID.cloud("checkpoint")
-        let coordinator = CloudRenameCoordinator()
+        let machine = SurfaceMachineID.ssh("47320987f9a49d5b00119b960f247a956773f57543982b8bfcb6da5bb3afd9ef")
+        let coordinator = TuiRenameCoordinator()
         var persisted = ["workspace": "Old", "build": "Old build", "logs": "Old logs"]
         for (key, name) in [("workspace", "API – 東京 🚀"), ("build", "Build & test"), ("logs", "")] {
             let identity = key == "workspace"
-                ? CloudRenameCoordinator.Key.workspace(machine: machine, id: key)
-                : CloudRenameCoordinator.Key.tab(machine: machine, id: key)
+                ? TuiRenameCoordinator.Key.workspace(machine: machine, id: key)
+                : TuiRenameCoordinator.Key.tab(machine: machine, id: key)
             coordinator.enqueue(key: identity, pendingName: name) { persisted[key] = name }
         }
         try await coordinator.waitForPendingRenames(on: machine)
@@ -66,8 +66,8 @@ struct CloudWorkspaceRestoreNamesTests {
 
     @Test("A successful terminal rename cannot hide a failed workspace rename from a checkpoint")
     func checkpointRejectsFailedName() async {
-        let machine = SurfaceMachineID.cloud("checkpoint")
-        let coordinator = CloudRenameCoordinator()
+        let machine = SurfaceMachineID.ssh("47320987f9a49d5b00119b960f247a956773f57543982b8bfcb6da5bb3afd9ef")
+        let coordinator = TuiRenameCoordinator()
         let workspace = coordinator.enqueue(key: .workspace(machine: machine, id: "ws"), pendingName: "New") {
             throw RenameFailure()
         }
@@ -79,9 +79,9 @@ struct CloudWorkspaceRestoreNamesTests {
 
     @Test("A corrected name supersedes its failed predecessor and unrelated machines do not block capture")
     func checkpointUsesLatestIntentPerIdentity() async throws {
-        let machine = SurfaceMachineID.cloud("checkpoint")
-        let coordinator = CloudRenameCoordinator()
-        let unrelated = coordinator.enqueue(key: .workspace(machine: .cloud("other"), id: "ws"), pendingName: "Other") {
+        let machine = SurfaceMachineID.ssh("47320987f9a49d5b00119b960f247a956773f57543982b8bfcb6da5bb3afd9ef")
+        let coordinator = TuiRenameCoordinator()
+        let unrelated = coordinator.enqueue(key: .workspace(machine: .ssh("d9298a10d1b0735837dc4bd85dac641b0f3cef27a47e5d53a54f2f3f5b2fcffa"), id: "ws"), pendingName: "Other") {
             throw RenameFailure()
         }
         let first = coordinator.enqueue(key: .workspace(machine: machine, id: "ws"), pendingName: "Failed") {
@@ -98,18 +98,19 @@ struct CloudWorkspaceRestoreNamesTests {
     @Test("Checkpoint names survive restore, delayed publications, and refresh",
           arguments: ["snapshot", "delta", "topology"], [false, true])
     func restoredNamesSurviveRefresh(path: String, daemonRestarted: Bool) async throws {
-        let machine = SurfaceMachineID.cloud("restore-\(UUID().uuidString)")
-        let manager = TabManager(autoWelcomeIfNeeded: false, createInitialWorkspace: false)
+        let host = TuiTestHost(destination: "restore-\(UUID()).example.test")
+        let machine = host.machine
+        let manager = TabManager(createInitialWorkspace: false)
         let source = Workspace()
         let pane = try #require(source.bonsplitController.allPaneIds.first)
         let first = try #require(source.focusedPanelId)
         let second = try #require(source.newTerminalSurface(inPane: pane, focus: false)).id
-        source.cloudVMBinding = WorkspaceCloudVMBinding(
-            vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "ws_main"
+        source.remoteWorkspaceBinding = RemoteWorkspaceBinding(
+            machineID: machine.rawValue, remoteWorkspaceID: "ws_main"
         )
         source.setCustomTitle("API – 東京 🚀", source: .remote)
-        source.setPanelCustomTitle(panelId: first, title: "Build & test", propagateToCloud: false)
-        source.setPanelCustomTitle(panelId: second, title: "Logs / 本番", propagateToCloud: false)
+        source.setPanelCustomTitle(panelId: first, title: "Build & test", propagateToRemoteWorkspace: false)
+        source.setPanelCustomTitle(panelId: second, title: "Logs / 本番", propagateToRemoteWorkspace: false)
         let saved = try roundTrip(source.sessionSnapshot(includeScrollback: false))
         #expect(saved.effectiveCustomTitleSource == .remote)
         let restored = Workspace()
@@ -120,17 +121,15 @@ struct CloudWorkspaceRestoreNamesTests {
         let names = ["Build & test", "Logs / 本番"]
         expectNames(saved.customTitle, names, workspace: restored, panels: restoredPanels)
 
-        let catalog = SurfaceCatalog(cloudWorkspaceRenameService: CloudWorkspaceRenameService(
-            environment: CloudWorkspaceRenameEnvironment(
+        let catalog = SurfaceCatalog(tuiWorkspaceRenameService: TuiWorkspaceRenameService(
+            environment: TuiWorkspaceRenameEnvironment(
                 workspace: { manager.workspacesById[$0] },
                 tabManager: { manager.workspacesById[$0] == nil ? nil : manager },
                 workspaces: { manager.tabs }
             )
         ))
         let provider = CmuxTuiSurfaceProvider(
-            summary: VMSummary(id: machine.rawValue, provider: "freestyle", status: "running",
-                               image: "cmux-devbox", createdAt: 0, base: nil),
-            links: CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil }), catalog: catalog
+            summary: host.summary, links: host.links(), catalog: catalog
         )
         catalog.register(provider)
         defer {
@@ -167,12 +166,12 @@ struct CloudWorkspaceRestoreNamesTests {
             if path == "snapshot" {
                 provider.publish(stale, ports: [])
             } else {
-                provider.publishDelta(stale, impact: CloudVMStateDeltaImpact(
+                provider.publishDelta(stale, impact: TuiStateDeltaImpact(
                     resourceIDs: Set((0..<2).map { SurfaceResourceID(machine: machine, kind: .terminal, key: "term_\($0)") }),
                     requiresFullResourceRebuild: path == "topology"
                 ), ports: [], reconcileTitles: true)
             }
-            #expect(catalog.cloudStates[machine] == graph)
+            #expect(catalog.tuiStates[machine] == graph)
             expectNames(saved.customTitle, names, workspace: restored, panels: restoredPanels)
             let resaved = try roundTrip(restored.sessionSnapshot(includeScrollback: false))
             #expect(resaved.customTitle == saved.customTitle)
@@ -209,7 +208,7 @@ struct CloudWorkspaceRestoreNamesTests {
     }
 
     private func state(_ machine: SurfaceMachineID, workspace: String, names: [String?],
-                       revision: UInt64, generation: String = "daemon") throws -> CloudVMState {
+                       revision: UInt64, generation: String = "daemon") throws -> TuiState {
         try #require(CmuxTuiSnapshotParser.state(fromSnapshot: [
             "cursor": ["generation": generation, "revision": String(revision)],
             "workspaces": [["id": "ws_main", "name": workspace]],

@@ -1,8 +1,6 @@
-import CmuxProductAnalytics
 import CmuxSSHClipboardTrust
 import AppKit
 import CmuxAgentChat
-import CmuxCloudMachines
 import CmuxFoundation
 import CmuxTerminalCore
 import SwiftUI
@@ -226,10 +224,6 @@ class TabManager: ObservableObject {
         (windowDockTitleRoutingStores.objectEnumerator()?.allObjects as? [DockSplitStore]) ?? []
     }
     let workspaceSwitchCoordinator = WorkspaceSwitchCoordinator()
-    let cloudWorkspaceSelection: CloudWorkspaceSelectionState
-    /// Shared by the inline Cloud sidebar and any Cloud tool pane in this
-    /// window so CodeRouter reads and removals never overlap.
-    let coderouterAccountStore = CoderouterAccountStore()
 
     var tabs: [Workspace] {
         get { workspaces.tabs }
@@ -281,16 +275,6 @@ class TabManager: ObservableObject {
     func workspaceTabsWillChange(to newValue: [Workspace]) {
         objectWillChange.send()
         tabsPublisher.send(newValue)
-        if newValue.count != tabs.count, ProductAnalytics.app.isEnabled {
-            // A window that already had a workspace gaining one, outside
-            // restore, is a created workspace (whatever entrypoint created it).
-            // A new window's first workspace is not.
-            if newValue.count > tabs.count, !tabs.isEmpty, !isRestoringSessionSnapshot {
-                ProductAnalytics.app.reach(.firstWorkspace)
-            }
-            // After the commit, so the count reads the new list. Reorders skip this.
-            Task { @MainActor in AppDelegate.shared?.refreshProductAnalyticsActivityContext() }
-        }
     }
 
     /// Legacy `@Published workspaceGroups` willSet.
@@ -302,7 +286,6 @@ class TabManager: ObservableObject {
     /// Legacy `@Published selectedTabId` willSet; `selectedTabId` still
     /// reads the old value here, exactly like the original property observer.
     func selectedWorkspaceIdWillChange(to newValue: UUID?) {
-        recordCloudWorkspaceSelection()
         if !isRestoringSessionSnapshot {
             let terminalTarget = newValue
                 .flatMap { workspacesById[$0] }
@@ -353,7 +336,6 @@ class TabManager: ObservableObject {
     /// chain, run synchronously after storage changed.
     func selectedWorkspaceIdDidChange(from oldValue: UUID?) {
             guard selectedTabId != oldValue else { return }
-            recordCloudWorkspaceSelection()
             defer {
                 workspaceSwitchCoordinator.selectionDidCommit(
                     from: oldValue,
@@ -367,9 +349,6 @@ class TabManager: ObservableObject {
             if let selectedTabId {
                 workspacesById[selectedTabId]?.admitStartupRestoresAwaitingFirstVisit()
             }
-            sentryBreadcrumb("workspace.switch", data: [
-                "tabCount": tabs.count
-            ])
             let previousTabId = oldValue
             if let previousTabId,
                let previousPanelId = focusedPanelId(for: previousTabId) {
@@ -563,27 +542,13 @@ class TabManager: ObservableObject {
     /// The fallback initializer is retained for isolated `TabManager` tests.
     let pullRequestProbeService: PullRequestProbeService
 
-    private let managedDevicePolicy: ManagedDevicePolicy
     let sshClipboardWriteTrustStore: SSHClipboardWriteTrustStore
 
-    /// Picks how the automatic first-launch welcome reaches the new terminal.
-    /// Tests replace it to exercise each delivery without depending on the host shell.
-    var welcomeBannerDeliveryResolver: @MainActor () -> WelcomeBannerDelivery = { WelcomeBannerDelivery.current() }
-    /// Types the welcome fallback into `workspace` once its terminal is ready.
-    /// Tests replace it to observe the typed-fallback path.
-    lazy var typedWelcomeSender: @MainActor (Workspace) -> Void = { [weak self] workspace in
-        if let appDelegate = AppDelegate.shared {
-            appDelegate.sendWelcomeCommandWhenReady(to: workspace, markShownOnSend: true)
-        } else {
-            self?.sendWelcomeWhenReady(to: workspace)
-        }
-    }
 
     init(
         initialWorkspaceTitle: String? = nil,
         initialWorkingDirectory: String? = nil,
         initialTerminalInput: String? = nil,
-        autoWelcomeIfNeeded: Bool = true,
         createInitialWorkspace: Bool = true,
         tabDragTransferRegistry: TabDragTransferRegistry? = nil,
         commandRunner: any CommandRunning = CommandRunner(),
@@ -611,15 +576,11 @@ class TabManager: ObservableObject {
         nativeSSHConnectionBroker: NativeSSHConnectionBroker = NativeSSHConnectionBroker(),
         agentChatResumeIntentRecorder: any AgentChatResumeIntentRecording = AgentChatTranscriptResumeIntentRecorder(),
         closeTabWarningDefaults: UserDefaults = .standard,
-        managedDevicePolicy: ManagedDevicePolicy = ManagedDevicePolicy(),
         fileContentChangeCoordinator: FileContentChangeCoordinator? = nil,
-        cloudWorkspaceSelection: CloudWorkspaceSelectionState? = nil,
         sshClipboardWriteTrustStore: SSHClipboardWriteTrustStore? = nil
     ) {
         let tabDragTransferRegistry = tabDragTransferRegistry ?? TabDragTransferRegistry()
-        self.managedDevicePolicy = managedDevicePolicy
         self.sshClipboardWriteTrustStore = sshClipboardWriteTrustStore ?? SSHClipboardWriteTrustStore(defaults: .standard)
-        self.cloudWorkspaceSelection = cloudWorkspaceSelection ?? CloudWorkspaceSelectionState(scopeProvider: { nil })
         self.settings = settings
         self.defaultWorkspaceWorkingDirectoryProvider = defaultWorkspaceWorkingDirectoryProvider
         self.ghosttyWorkingDirectoryInheritanceProvider = ghosttyWorkingDirectoryInheritanceProvider
@@ -701,8 +662,7 @@ class TabManager: ObservableObject {
                 title: initialWorkspaceTitle,
                 titleSource: .auto,
                 workingDirectory: initialWorkingDirectory,
-                initialTerminalInput: initialTerminalInput,
-                autoWelcomeIfNeeded: autoWelcomeIfNeeded
+                initialTerminalInput: initialTerminalInput
             )
         }
         observers.append(NotificationCenter.default.addObserver(
@@ -888,8 +848,8 @@ class TabManager: ObservableObject {
     }
 
     func gitProbeDirectory(for workspace: Workspace, panelId: UUID) -> String? {
-        // Cloud cwd belongs to another machine and is never a local git/gh probe target.
-        if workspace.cloudDirectoryProvenanceRequired(panelId: panelId) { return nil }
+        // Remote cwd belongs to another machine and is never a local git/gh probe target.
+        if workspace.remoteDirectoryProvenanceRequired(panelId: panelId) { return nil }
         if let directory = workspace.reportedPanelDirectory(panelId: panelId) { return normalizedWorkingDirectory(directory) }
         guard workspace.allowsLocalDirectoryFallback(panelId: panelId) else { return nil }
         let rawDirectory = workspace.terminalPanel(for: panelId)?.requestedWorkingDirectory ?? (!workspace.usesRemoteDirectoryProvenance && workspace.focusedPanelId == panelId ? workspace.currentDirectory : nil)
@@ -1190,6 +1150,7 @@ class TabManager: ObservableObject {
         if let markdownPanel = focusedMarkdownPanel {
             markdownPanel.hideFind()
             return
+
         }
         focusedTextFilePreviewPanel?.hideFind()
     }
@@ -1392,8 +1353,7 @@ class TabManager: ObservableObject {
         title: String?,
         titleSource: Workspace.CustomTitleSource,
         workingDirectory: String?,
-        initialTerminalInput: String?,
-        autoWelcomeIfNeeded: Bool
+        initialTerminalInput: String?
     ) {
         precondition(
             !isFinalizedForWindowClose,
@@ -1403,8 +1363,7 @@ class TabManager: ObservableObject {
             title: title,
             titleSource: titleSource,
             workingDirectory: workingDirectory,
-            initialTerminalInput: initialTerminalInput,
-            autoWelcomeIfNeeded: autoWelcomeIfNeeded
+            initialTerminalInput: initialTerminalInput
         ) != nil else {
             preconditionFailure("Initial workspace creation failed for an active window manager")
         }
@@ -1431,7 +1390,6 @@ class TabManager: ObservableObject {
         eagerLoadTerminal: Bool = false,
         initialTerminalStartsOnFirstVisit: Bool = false,
         placementOverride: WorkspacePlacement? = nil,
-        autoWelcomeIfNeeded: Bool = true,
         autoRefreshMetadata: Bool = true,
         normalizeWorkspaceGroupsAfterInsert: Bool = true,
         applyCreationTitleAsCustomTitle: Bool = true,
@@ -1468,7 +1426,6 @@ class TabManager: ObservableObject {
             maybeMutateSelectionDuringWorkspaceCreationForDev(snapshot: snapshot)
 #endif
             let nextTabCount = snapshot.tabs.count + 1
-            sentryBreadcrumb("workspace.create", data: ["tabCount": nextTabCount])
             let explicitWorkingDirectory = normalizedWorkingDirectory(overrideWorkingDirectory)
             let workingDirectory = WorkspaceCreationWorkingDirectoryPolicy(
                 inheritanceEnabled: inheritanceEnabled
@@ -1484,24 +1441,6 @@ class TabManager: ObservableObject {
             // boots terminal state. The ssh/new-workspace path can otherwise crash while
             // reading @Published placement state from existing workspaces mid-creation.
             let insertIndex = newTabInsertIndex(snapshot: snapshot, placementOverride: placementOverride)
-            var welcomeDelivery: WelcomeBannerDelivery?
-            var resolvedInitialTerminalEnvironment = initialTerminalEnvironment
-            // An explicit command runs via `shell -lc`, which never loads cmux's
-            // interactive shell integration, so it could not print the banner.
-            let hasInitialTerminalCommand = !(initialTerminalCommand?
-                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-            if autoWelcomeIfNeeded && select && initialSurface == .terminal
-                && !hasInitialTerminalCommand
-                && !UserDefaults.standard.bool(forKey: AccountCatalogSection().welcomeShown.userDefaultsKey) {
-                let launch = WelcomeBannerDelivery.prepareLaunch(welcomeBannerDeliveryResolver())
-                welcomeDelivery = launch.delivery
-                if launch.delivery == .shellStartup {
-                    resolvedInitialTerminalEnvironment.merge(launch.environment, uniquingKeysWith: { current, _ in current })
-                    // The token file makes shell-startup delivery at most once,
-                    // so mark it shown now; the typed fallback marks on send.
-                    UserDefaults.standard.set(true, forKey: AccountCatalogSection().welcomeShown.userDefaultsKey)
-                }
-            }
             let ordinal = Self.nextPortOrdinal
             Self.nextPortOrdinal += 1
             let defaultTitle: String
@@ -1513,8 +1452,8 @@ class TabManager: ObservableObject {
                 // single-panel title sync keeps the workspace title following
                 // the page title once the user navigates.
                 defaultTitle = String(localized: "browser.newTab", defaultValue: "New tab")
-            case .cloudVMLoading:
-                defaultTitle = String(localized: "workspace.cloudVM.defaultTitle", defaultValue: "Cloud VM")
+            case .remoteLoading:
+                defaultTitle = String(localized: "workspace.remote.defaultTitle", defaultValue: "Remote workspace")
             }
             let newWorkspace = makeWorkspaceForCreation(
                 id: id,
@@ -1528,7 +1467,7 @@ class TabManager: ObservableObject {
                 initialTerminalInput: initialTerminalInput,
                 initialTerminalStartupRestoreAgent: initialTerminalStartupRestoreAgent,
                 initialTerminalStartsOnFirstVisit: initialTerminalStartsOnFirstVisit,
-                initialTerminalEnvironment: resolvedInitialTerminalEnvironment,
+                initialTerminalEnvironment: initialTerminalEnvironment,
                 initialBrowserURL: initialBrowserURL,
                 initialBrowserOmnibarVisible: initialBrowserOmnibarVisible,
                 initialBrowserTransparentBackground: initialBrowserTransparentBackground,
@@ -1600,72 +1539,10 @@ class TabManager: ObservableObject {
                 "selectedTabId": select ? newWorkspace.id.uuidString : (snapshot.selectedTabId?.uuidString ?? "")
             ])
 #endif
-            if welcomeDelivery == .typedCommand {
-                typedWelcomeSender(newWorkspace)
-            }
             return newWorkspace
         }
     }
 
-    @MainActor
-    private func sendWelcomeWhenReady(to workspace: Workspace) {
-        if let terminalPanel = workspace.focusedTerminalPanel,
-           terminalPanel.surface.surface != nil {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                UserDefaults.standard.set(true, forKey: AccountCatalogSection().welcomeShown.userDefaultsKey)
-                terminalPanel.sendText(WelcomeBannerDelivery.typedCommandText)
-            }
-            return
-        }
-
-        var resolved = false
-        var readyObserver: NSObjectProtocol?
-        var panelsCancellable: AnyCancellable?
-
-        func finishIfReady() {
-            guard !resolved,
-                  let terminalPanel = workspace.focusedTerminalPanel,
-                  terminalPanel.surface.surface != nil else { return }
-            resolved = true
-            if let readyObserver {
-                NotificationCenter.default.removeObserver(readyObserver)
-            }
-            panelsCancellable?.cancel()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                UserDefaults.standard.set(true, forKey: AccountCatalogSection().welcomeShown.userDefaultsKey)
-                terminalPanel.sendText(WelcomeBannerDelivery.typedCommandText)
-            }
-        }
-
-        panelsCancellable = workspace.panelsPublisher
-            .map { _ in () }
-            .sink { _ in
-                Task { @MainActor in
-                    finishIfReady()
-                }
-            }
-        readyObserver = NotificationCenter.default.addObserver(
-            forName: .terminalSurfaceDidBecomeReady,
-            object: nil,
-            queue: .main
-        ) { note in
-            guard let workspaceId = note.userInfo?["workspaceId"] as? UUID,
-                  workspaceId == workspace.id else { return }
-            Task { @MainActor in
-                finishIfReady()
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            Task { @MainActor in
-                if let readyObserver, !resolved {
-                    NotificationCenter.default.removeObserver(readyObserver)
-                }
-                if !resolved {
-                    panelsCancellable?.cancel()
-                }
-            }
-        }
-    }
 
     func requestBackgroundWorkspaceLoad(for workspaceId: UUID) {
         guard !pendingBackgroundWorkspaceLoadIds.contains(workspaceId) else { return }
@@ -1754,7 +1631,6 @@ class TabManager: ObservableObject {
         select: Bool = true,
         eagerLoadTerminal: Bool = false,
         placementOverride: WorkspacePlacement? = nil,
-        autoWelcomeIfNeeded: Bool = true,
         autoRefreshMetadata: Bool = true,
         normalizeWorkspaceGroupsAfterInsert: Bool = true,
         applyCreationTitleAsCustomTitle: Bool = true,
@@ -1778,7 +1654,6 @@ class TabManager: ObservableObject {
             select: select,
             eagerLoadTerminal: eagerLoadTerminal,
             placementOverride: placementOverride,
-            autoWelcomeIfNeeded: autoWelcomeIfNeeded,
             autoRefreshMetadata: autoRefreshMetadata,
             normalizeWorkspaceGroupsAfterInsert: normalizeWorkspaceGroupsAfterInsert,
             applyCreationTitleAsCustomTitle: applyCreationTitleAsCustomTitle,
@@ -2476,6 +2351,7 @@ class TabManager: ObservableObject {
         workspaceGrouping.setWorkspaceGroupIcon(groupId: groupId, symbol: symbol)
     }
 
+
     func setWorkspaceGroupAnchor(groupId: UUID, workspaceId: UUID) {
         guard workspaceGroupAnchor(for: groupId)?.isChiefHome != true else { return }
         workspaceGrouping.setWorkspaceGroupAnchor(groupId: groupId, workspaceId: workspaceId)
@@ -2505,7 +2381,6 @@ class TabManager: ObservableObject {
             inheritWorkingDirectory: inheritWorkingDirectory,
             select: select,
             placementOverride: .top,
-            autoWelcomeIfNeeded: false,
             normalizeWorkspaceGroupsAfterInsert: false
         )
     }
@@ -2545,7 +2420,6 @@ class TabManager: ObservableObject {
             initialBrowserTransparentBackground: initialBrowserTransparentBackground,
             inheritWorkingDirectory: inheritWorkingDirectory,
             select: select,
-            autoWelcomeIfNeeded: false,
             applyCreationTitleAsCustomTitle: applyCreationTitleAsCustomTitle
         )
     }
@@ -2667,9 +2541,7 @@ class TabManager: ObservableObject {
         // manager may close its own live workspaces; stale or foreign objects must
         // never tear down terminals or publish a second close.
         guard tabs.contains(where: { $0.id == workspace.id }) else { return }
-        MachineCreateCoordinator.shared.cancelOperations(forPresentationWorkspace: workspace.id)
         panelTitleUpdateCoalescer.flushNow()
-        sentryBreadcrumb("workspace.close", data: ["tabCount": tabs.count - 1])
         // Closing a mirrored remote tmux workspace DETACHES from the remote session,
         // leaving it alive on the server for resume. Killing the session is never a
         // side effect of closing a tab (PR #7264 review); it is only ever an explicit
@@ -2761,7 +2633,6 @@ class TabManager: ObservableObject {
         panelTitleUpdateCoalescer.flushNow()
         sidebarGitMetadataService.resetAllWorkspaceGitProbeTracking()
 
-        MachineCreateCoordinator.shared.cancelOperations(forPresentationWorkspaces: Set(closingWorkspaces.map(\.id)))
         for workspace in closingWorkspaces {
             finalizeWorkspaceForRemoval(workspace, clearsWorkspaceGitProbes: false)
         }
@@ -3615,6 +3486,7 @@ class TabManager: ObservableObject {
         if workspace.panels.count == 1 {
             return workspace.panels.keys.first
         }
+
 
         let candidatePane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first
         if let candidatePane,
@@ -4855,6 +4727,7 @@ class TabManager: ObservableObject {
     }
 
     private func panelIdForFocusHistorySurface(_ surfaceId: UUID, workspaceId: UUID) -> UUID {
+
         guard let workspace = tabs.first(where: { $0.id == workspaceId }) else { return surfaceId }
         return panelId(forSurfaceOrPanelId: surfaceId, in: workspace) ?? surfaceId
     }
@@ -5285,10 +5158,6 @@ class TabManager: ObservableObject {
         excludingStableIdentities callerExcludedStableIdentities: Set<UUID> = [],
         excludingWorkspaceIds callerExcludedWorkspaceIds: Set<UUID> = []
     ) -> Bool {
-        guard !managedDevicePolicy.isEnforced(.disableCloud)
-                || !Self.isCloudVMWorkspaceSnapshotForManagedPolicy(entry.snapshot) else {
-            return false
-        }
         let promptBatch = SurfaceResumeRunPromptBatch.shared
         promptBatch.beginRestorePass()
         defer { promptBatch.endRestorePass() }
@@ -5310,11 +5179,23 @@ class TabManager: ObservableObject {
             id: restoredWorkspaceId,
             title: entry.snapshot.customTitle ?? entry.snapshot.processTitle,
             workingDirectory: entry.snapshot.currentDirectory,
+            initialSurface: entry.snapshot.requiresRemoteRestoreScaffold ? .remoteLoading : .terminal,
             select: false,
-            autoWelcomeIfNeeded: false,
             applyCreationTitleAsCustomTitle: false
         ) else { return false }
-        let restoredPanelIds = workspace.restoreSessionSnapshot(entry.snapshot, excludingStableIdentities: excludedStableIdentities)
+        var restoredPanelIds = workspace.restoreSessionSnapshot(entry.snapshot, excludingStableIdentities: excludedStableIdentities)
+        if let dock = entry.snapshot.dock, let store = workspace.dockSplit {
+            let dockIDs = store.restoreSessionSnapshot(
+                dock, excludingStableIdentities: excludedStableIdentities,
+                sourceWorkspaceResolver: { originalID in
+                    if originalID == entry.workspaceId || originalID == entry.snapshot.workspaceId {
+                        return sourceWorkspaceIdIsAmbiguous ? nil : workspace
+                    }
+                    return self.tabs.first { $0.id == originalID }
+                }
+            )
+            restoredPanelIds.merge(dockIDs, uniquingKeysWith: { existing, _ in existing })
+        }
         guard !entry.snapshot.hasRestorablePanels || !restoredPanelIds.isEmpty else {
             closeWorkspace(workspace, recordHistory: false)
             return false
@@ -6023,6 +5904,7 @@ class TabManager: ObservableObject {
                         }),
                         (frame: secondCloseFrame, action: {
                             tab.focusPanel(topRight.id)
+
                             tab.closePanel(topRight.id, force: true)
                         }),
                     ]
@@ -7093,53 +6975,15 @@ extension TabManager {
         }
         workspace.retireFromOwningTabManager()
     }
-    /// - Parameter cloudDisabledByPolicy: The `DisableCloud` managed policy.
-    ///   While forced, no Cloud workspace is restored at all: a restored Cloud
-    ///   tab is a dead pane at best and an attach entrypoint at worst.
-    static func normalizedCloudVMSessionRestoreWorkspaces<S: Sequence>(
+    /// Materializes saved workspaces and their selection/index mapping.
+    static func normalizedSessionRestoreWorkspaces<S: Sequence>(
         _ snapshots: S,
-        selectedWorkspaceIndex: Int?,
-        cloudDisabledByPolicy: Bool = ManagedDevicePolicy().isEnforced(.disableCloud)
-    ) -> ([SessionWorkspaceSnapshot], Int?) where S.Element == SessionWorkspaceSnapshot {
-        let snapshots = Array(snapshots)
-        if cloudDisabledByPolicy {
-            var indexMap: [Int: Int] = [:]
-            var filtered: [SessionWorkspaceSnapshot] = []
-            for (index, snapshot) in snapshots.enumerated()
-            where !isCloudVMWorkspaceSnapshotForManagedPolicy(snapshot) {
-                indexMap[index] = filtered.count
-                filtered.append(snapshot)
-            }
-            // Selection follows the same local workspace; a dropped Cloud
-            // selection falls back to the first survivor (the caller creates a
-            // fresh local workspace when nothing survives).
-            let remappedSelection = selectedWorkspaceIndex.flatMap { indexMap[$0] }
-                ?? (filtered.isEmpty ? nil : 0)
-            return (filtered, remappedSelection)
-        }
-        let cloudIndexes = snapshots.indices.filter { isCloudVMSessionRestoreWorkspace(snapshots[$0]) }
-        guard !cloudIndexes.isEmpty else {
-            return (snapshots, selectedWorkspaceIndex)
-        }
-
-        let managedCloudIndexes = cloudIndexes.filter { isManagedCloudVMSessionRestoreWorkspace(snapshots[$0]) }
-        let selectedManagedCloudIndex = selectedWorkspaceIndex.flatMap { selected in
-            managedCloudIndexes.contains(selected) ? selected : nil
-        }
-        let keptCloudIndex = selectedManagedCloudIndex ?? managedCloudIndexes.first
-        var indexMap: [Int: Int] = [:]
-        var filtered: [SessionWorkspaceSnapshot] = []
-        for (index, snapshot) in snapshots.enumerated() {
-            if cloudIndexes.contains(index), index != keptCloudIndex {
-                continue
-            }
-            indexMap[index] = filtered.count
-            filtered.append(snapshot)
-        }
-
-        let remappedSelection = selectedWorkspaceIndex.flatMap { indexMap[$0] }
-            ?? keptCloudIndex.flatMap { indexMap[$0] }
-        return (filtered, remappedSelection)
+        selectedWorkspaceIndex: Int?
+    ) -> (workspaces: [SessionWorkspaceSnapshot], selection: Int?, originalIndices: [Int]) where S.Element == SessionWorkspaceSnapshot {
+        let workspaces = Array(snapshots)
+        let selection = selectedWorkspaceIndex.flatMap { workspaces.indices.contains($0) ? $0 : nil }
+            ?? (workspaces.isEmpty ? nil : 0)
+        return (workspaces, selection, Array(workspaces.indices))
     }
 
     /// Restores all workspaces, panels, groups, and Dock state from a session snapshot.
@@ -7147,6 +6991,7 @@ extension TabManager {
     /// - Parameter deferBrowserPanels: Keeps restored browser tabs lightweight until
     ///   their panes are visible, avoiding a launch-time WebKit construction burst.
     @discardableResult
+
     func restoreSessionSnapshot(
         _ snapshot: SessionTabManagerSnapshot,
         remapClosedPanelHistory: Bool = true,
@@ -7184,10 +7029,9 @@ extension TabManager {
         // mountedWorkspaceIds empty and cause a frozen blank launch state (#399).
         var newTabs: [Workspace] = []
         var restoredPanelIdsByWorkspaceIndex: [[UUID: UUID]] = []
-        let (normalizedWorkspaceSnapshots, selectedWorkspaceIndex) = Self.normalizedCloudVMSessionRestoreWorkspaces(
+        let (normalizedWorkspaceSnapshots, selectedWorkspaceIndex, originalWorkspaceIndices) = Self.normalizedSessionRestoreWorkspaces(
             snapshot.workspaces.prefix(SessionPersistencePolicy.maxWorkspacesPerWindow),
-            selectedWorkspaceIndex: snapshot.selectedWorkspaceIndex,
-            cloudDisabledByPolicy: managedDevicePolicy.isEnforced(.disableCloud)
+            selectedWorkspaceIndex: snapshot.selectedWorkspaceIndex
         )
         let workspaceSnapshots = normalizedWorkspaceSnapshots
             .prefix(SessionPersistencePolicy.maxWorkspacesPerWindow)
@@ -7214,6 +7058,7 @@ extension TabManager {
                 title: workspaceSnapshot.processTitle,
                 workingDirectory: workspaceSnapshot.currentDirectory,
                 portOrdinal: ordinal,
+                initialSurface: workspaceSnapshot.requiresRemoteRestoreScaffold ? .remoteLoading : .terminal,
                 tabDragTransferRegistry: tabDragTransferRegistry,
                 settings: settings,
                 sshClipboardWriteTrustStore: sshClipboardWriteTrustStore,
@@ -7279,13 +7124,18 @@ extension TabManager {
         for workspace in newTabs {
             workspace.terminalStartupRestoreCoordinator.commitPendingRestores()
         }
-        restoreWorkspaceDockSessionSnapshots(
+        let restoredDockPanelIDs = restoreWorkspaceDockSessionSnapshots(
             from: snapshot,
             excludingStableIdentities: excludingStableIdentities,
             deferBrowserPanels: deferBrowserPanels
         )
+        for (index, workspace) in newTabs.enumerated() where restoredPanelIdsByWorkspaceIndex.indices.contains(index) {
+            if let dockIDs = restoredDockPanelIDs[workspace.id] {
+                restoredPanelIdsByWorkspaceIndex[index].merge(dockIDs, uniquingKeysWith: { existing, _ in existing })
+            }
+        }
         let restoredGroups: [WorkspaceGroup] = {
-            guard let groupSnapshots = snapshot.workspaceGroups else { return [] }
+            guard let savedGroups = snapshot.workspaceGroups else { return [] }
             let workspaceIdsByGroupId: [UUID: [UUID]] = {
                 var map: [UUID: [UUID]] = [:]
                 for workspace in newTabs {
@@ -7296,7 +7146,7 @@ extension TabManager {
                 return map
             }()
             var seen: Set<UUID> = []
-            return groupSnapshots.compactMap { groupSnapshot in
+            return savedGroups.compactMap { groupSnapshot in
                 guard seen.insert(groupSnapshot.id).inserted else { return nil }
                 let members = workspaceIdsByGroupId[groupSnapshot.id] ?? []
                 if members.isEmpty {
@@ -7390,7 +7240,11 @@ extension TabManager {
                 userInfo: [GhosttyNotificationKey.tabId: selectedTabId]
             )
         }
-        return restoredPanelIdsByWorkspaceIndex
+        var alignedPanelMaps = Array(repeating: [UUID: UUID](), count: snapshot.workspaces.count)
+        for (survivor, original) in originalWorkspaceIndices.enumerated() where restoredPanelIdsByWorkspaceIndex.indices.contains(survivor) {
+            alignedPanelMaps[original] = restoredPanelIdsByWorkspaceIndex[survivor]
+        }
+        return alignedPanelMaps
     }
 
     func remapClosedPanelHistoryAfterSessionRestore(
@@ -7519,75 +7373,6 @@ enum BrowserFirstResponderNotificationUserInfoKey {
     static let pointerInitiated = CmuxWebView.firstResponderPointerInitiatedUserInfoKey
 }
 
-/// How the first-launch welcome banner reaches the new workspace's terminal.
-///
-/// cmux shell integration prints the banner from inside the shell's startup
-/// when ``environmentKey`` names a one-shot token file, so no command is typed
-/// and nothing lands in the user's shell history. Typing ``typedCommandText``
-/// is the fallback for shells that do not load cmux shell integration.
-///
-/// Delivery is at most once: every integration unsets the variable, skips
-/// printing inside tmux, and prints only when its `rm` of the token file
-/// succeeds, so a child that inherits the variable (for example `exec tmux`
-/// or `exec zsh` from `.bashrc`, before the bash bootstrap runs) cannot print
-/// it a second time. If no integrated shell consumes the token, the banner is
-/// skipped rather than repeated on a later launch.
-enum WelcomeBannerDelivery: Equatable {
-    case shellStartup
-    case typedCommand
-
-    /// Holds the path of the one-shot token file the bundled zsh, bash, fish
-    /// and nushell integrations consume to print `cmux welcome` at startup.
-    static let environmentKey = "CMUX_SHOW_WELCOME_FILE"
-    /// Typed fallback. The leading space keeps it out of history only for zsh
-    /// with HIST_IGNORE_SPACE, bash with HISTCONTROL=ignorespace or ignoreboth,
-    /// and fish; other shells may still record it (best effort).
-    static let typedCommandText = " cmux welcome\n"
-    private static let tokenDirectoryName = "cmux-welcome-banner"
-    private static let integratedShellNames: Set<String> = ["zsh", "bash", "fish", "nu"]
-
-    static func resolve(
-        shellIntegrationEnabled: Bool,
-        resolvedShell: String?,
-        hasUserGhosttyCommand: Bool
-    ) -> WelcomeBannerDelivery {
-        guard shellIntegrationEnabled,
-              !hasUserGhosttyCommand,
-              let resolvedShell,
-              integratedShellNames.contains(URL(fileURLWithPath: resolvedShell).lastPathComponent) else {
-            return .typedCommand
-        }
-        return .shellStartup
-    }
-
-    @MainActor
-    static func current(defaults: UserDefaults = .standard) -> WelcomeBannerDelivery {
-        resolve(
-            shellIntegrationEnabled: defaults.object(forKey: "sidebarShellIntegration") as? Bool ?? true,
-            resolvedShell: GhosttyApp.shared.resolvedUserShell,
-            hasUserGhosttyCommand: GhosttyApp.shared.hasUserGhosttyCommand
-        )
-    }
-
-    /// Resolves the startup environment for `delivery`. Shell startup writes a
-    /// fresh token file and returns its path under ``environmentKey``; if the
-    /// token cannot be written the launch falls back to ``typedCommand``.
-    static func prepareLaunch(
-        _ delivery: WelcomeBannerDelivery,
-        tempDirectory: URL = FileManager.default.temporaryDirectory
-    ) -> (delivery: WelcomeBannerDelivery, environment: [String: String]) {
-        guard delivery == .shellStartup else { return (.typedCommand, [:]) }
-        let directory = tempDirectory.appendingPathComponent(tokenDirectoryName, isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let token = directory.appendingPathComponent(UUID().uuidString, isDirectory: false)
-            try Data().write(to: token, options: .atomic)
-            return (.shellStartup, [environmentKey: token.path])
-        } catch {
-            return (.typedCommand, [:])
-        }
-    }
-}
 
 /// The "Don't ask again" checkbox shared by the close confirmation dialogs.
 /// Ticking it turns off the warnings that made the dialog appear, whichever

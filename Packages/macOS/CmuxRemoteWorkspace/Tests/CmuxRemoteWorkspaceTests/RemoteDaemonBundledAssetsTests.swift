@@ -35,12 +35,12 @@ struct RemoteDaemonBundledAssetsTests {
         let entry = try makeEntry(os: os, arch: arch)
         try compressedFixture.write(to: root.appendingPathComponent(entry.assetName + ".deflate"))
         let repository = RemoteDaemonManifestRepository(homeDirectory: root, bundledAssetsDirectory: root)
-        let download = try repository.downloadBinary(entry: entry, version: "test-nightly.12301")
-        #expect(try Data(contentsOf: download.binaryURL) == binaryFixture)
-        #expect(FileManager.default.isExecutableFile(atPath: download.binaryURL.path))
-        #expect(try repository.validatedCachedBinary(entry: entry, version: "test-nightly.12301") == download.binaryURL)
+        let binary = try #require(repository.bundledBinary(entry: entry, version: "test-nightly.12301"))
+        #expect(try Data(contentsOf: binary) == binaryFixture)
+        #expect(FileManager.default.isExecutableFile(atPath: binary.path))
+        #expect(try repository.validatedCachedBinary(entry: entry, version: "test-nightly.12301") == binary)
         // A second workspace may reach installation after another filled the cache.
-        #expect(try repository.downloadBinary(entry: entry, version: "test-nightly.12301").binaryURL == download.binaryURL)
+        #expect(try repository.bundledBinary(entry: entry, version: "test-nightly.12301") == binary)
     }
 
     @Test("a corrupt or missing bundled binary cannot bypass checksum verification", arguments: ["checksum", "deflate", "missing"])
@@ -54,7 +54,7 @@ struct RemoteDaemonBundledAssetsTests {
         }
         let repository = RemoteDaemonManifestRepository(homeDirectory: root, bundledAssetsDirectory: root)
         #expect(throws: (any Error).self) {
-            try repository.downloadBinary(entry: entry, version: "test-nightly.12301")
+            try repository.bundledBinary(entry: entry, version: "test-nightly.12301")
         }
         let cache = try repository.cachedBinaryURL(version: "test-nightly.12301", goOS: entry.goOS, goArch: entry.goArch)
         #expect(!FileManager.default.fileExists(atPath: cache.path))

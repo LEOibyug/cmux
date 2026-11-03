@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -9,7 +9,7 @@ extension CmuxTuiSurfaceProvider {
     func guestURLContext(terminalID: String) -> TerminalLinkOpenRequest? {
         let id = SurfaceResourceID(machine: machine, kind: .terminal, key: terminalID)
         let projections = catalog.projections(of: id)
-        guard isRegisteredInCatalog(), !isFeatureSuspended,
+        guard isRegisteredInCatalog(), !isRetired,
               projections.count == 1, let projection = projections.first,
               AppDelegate.shared?.workspaceFor(tabId: projection.workspaceID)?.panels[projection.panelID] != nil else { return nil }
         return TerminalLinkOpenRequest(rawValue: "", sourceWorkspaceId: projection.workspaceID,
@@ -24,9 +24,9 @@ extension CmuxTuiSurfaceProvider {
         guestURLService?.updateTerminals(guestURLTerminalIDs)
     }
 
-    func configureGuestURLOpen(link: CloudMachineLink, socketPath: String) {
+    func configureGuestURLOpen(link: RemoteMachineLink, socketPath: String) {
         if guestURLService == nil {
-            guestURLService = CloudGuestURLService(machineID: machineID, executable: CloudTuiClientPaths.clientURL()) { [weak self] in
+            guestURLService = TuiGuestURLService(machineID: machineID, executable: TuiClientPaths.clientURL()) { [weak self] in
                 self?.guestURLContext(terminalID: $0)
             }
         }

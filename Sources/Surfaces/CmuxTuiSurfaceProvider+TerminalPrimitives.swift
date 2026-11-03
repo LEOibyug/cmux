@@ -1,4 +1,4 @@
-import CmuxCloudTui
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -8,7 +8,7 @@ extension CmuxTuiSurfaceProvider {
     /// its native mirror has resolved a numeric surface id.
     @discardableResult
     func bindOptimisticTerminalInput(
-        _ relay: CloudOptimisticInputRelay,
+        _ relay: TuiOptimisticInputRelay,
         terminalID: String
     ) async throws -> Bool {
         relay.setRemoteRebinder { [weak self, weak relay] in
@@ -45,16 +45,16 @@ extension CmuxTuiSurfaceProvider {
     /// Press named keys (`enter`, `ctrl+c`, …) in the remote terminal, in order.
     func sendKeys(terminalID: String, keys: [String]) async throws {
         let connected = try await links.connected(machineID: machineID)
-        guard let link = await links.link(machineID: machineID) else { throw ProviderError.machineAsleep(machineID) }
-        _ = try await link.run(arguments: CloudTuiRequests.keysArguments(socketPath: connected.socketPath, terminalID: terminalID, keys: keys))
+        guard let link = await links.link(machineID: machineID) else { throw ProviderError.connectionUnavailable(machineID) }
+        _ = try await link.run(arguments: TuiRequests.keysArguments(socketPath: connected.socketPath, terminalID: terminalID, keys: keys))
     }
 
     /// The remote terminal's visible screen, as the daemon reports it
     /// (`cols`, `rows`, `cursor_row`, `cursor_col`, `cursor_visible`, `text`).
     func readScreen(terminalID: String) async throws -> [String: Any] {
         let connected = try await links.connected(machineID: machineID)
-        guard let link = await links.link(machineID: machineID) else { throw ProviderError.machineAsleep(machineID) }
-        let data = try await link.run(arguments: CloudTuiRequests.screenReadArguments(socketPath: connected.socketPath, terminalID: terminalID))
+        guard let link = await links.link(machineID: machineID) else { throw ProviderError.connectionUnavailable(machineID) }
+        let data = try await link.run(arguments: TuiRequests.screenReadArguments(socketPath: connected.socketPath, terminalID: terminalID))
         return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }
 
@@ -62,14 +62,14 @@ extension CmuxTuiSurfaceProvider {
     /// `{matched, text}`. The link call itself is given headroom beyond the timeout.
     func waitForScreen(terminalID: String, pattern: String, timeoutMs: Int?) async throws -> [String: Any] {
         let connected = try await links.connected(machineID: machineID)
-        guard let link = await links.link(machineID: machineID) else { throw ProviderError.machineAsleep(machineID) }
+        guard let link = await links.link(machineID: machineID) else { throw ProviderError.connectionUnavailable(machineID) }
         // Non-positive requests mean the daemon default, so the link headroom is computed
         // from the same value the daemon will use; huge requests are clamped so the
         // Duration math cannot overflow.
         let effectiveMs = Self.clampedWaitTimeoutMs(timeoutMs)
         let linkTimeout = Duration.milliseconds(effectiveMs + 5_000)
         let data = try await link.run(
-            arguments: CloudTuiRequests.screenWaitArguments(socketPath: connected.socketPath, terminalID: terminalID, pattern: pattern, timeoutMs: effectiveMs),
+            arguments: TuiRequests.screenWaitArguments(socketPath: connected.socketPath, terminalID: terminalID, pattern: pattern, timeoutMs: effectiveMs),
             timeout: linkTimeout
         )
         return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
@@ -79,7 +79,7 @@ extension CmuxTuiSurfaceProvider {
     /// several views has no safe implicit placement. Returning nil keeps the projection
     /// placement-neutral until a caller supplies an exact tab id.
     static func defaultRemoteView(for resource: SurfaceResource) -> SurfaceRemoteView? {
-        guard resource.kind != .display, let views = resource.remoteViews, views.count == 1 else { return nil }
+        guard let views = resource.remoteViews, views.count == 1 else { return nil }
         return views[0]
     }
 

@@ -5,7 +5,6 @@ import Foundation
 import Bonsplit
 import AppKit
 import CmuxAppKitSupportUI
-import CmuxFeedback
 
 /// View that renders the appropriate panel view based on panel type
 struct PanelContentView: View {
@@ -149,23 +148,15 @@ struct PanelContentView: View {
             }
         case .simulator:
             if let simulatorPanel = panel as? SimulatorPanel {
-                if CmuxFeatureFlags.shared.isSimulatorEnabled,
-                   simulatorPanel.isFeatureReady {
-                    SimulatorPanelView(
-                        panel: simulatorPanel,
-                        isFocused: isFocused,
-                        isVisibleInUI: isVisibleInUI,
-                        allowsPointerInput: allowsPointerInput,
-                        pointerEntryEventFilter: pointerEntryEventFilter,
-                        appearance: appearance,
-                        onRequestPanelFocus: onRequestPanelFocus
-                    )
-                } else {
-                    SimulatorFeatureDisabledView(
-                        panel: simulatorPanel,
-                        appearance: appearance
-                    )
-                }
+                SimulatorPanelView(
+                    panel: simulatorPanel,
+                    isFocused: isFocused,
+                    isVisibleInUI: isVisibleInUI,
+                    allowsPointerInput: allowsPointerInput,
+                    pointerEntryEventFilter: pointerEntryEventFilter,
+                    appearance: appearance,
+                    onRequestPanelFocus: onRequestPanelFocus
+                )
             }
         case .agentSession:
             if let agentSessionPanel = panel as? AgentSessionPanel {
@@ -202,13 +193,6 @@ struct PanelContentView: View {
                     onRequestPanelFocus: onRequestPanelFocus
                 )
             }
-        case .coderouterGuide:
-            if panel is CoderouterGuidePanel {
-                CoderouterGuidePanelView(
-                    isFocused: isFocused,
-                    onRequestPanelFocus: onRequestPanelFocus
-                )
-            }
         case .notifications:
             if panel is NotificationsPanel {
                 NotificationsPage(
@@ -218,33 +202,9 @@ struct PanelContentView: View {
                     .contentShape(Rectangle())
                     .onTapGesture { onRequestPanelFocus() }
             }
-        case .cloudVMLoading:
-            if let loadingPanel = panel as? CloudVMLoadingPanel {
-                CloudVMLoadingPanelView(panel: loadingPanel)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        case .mobilePairing:
-            if panel is MobilePairingPanel {
-                MobilePairingPanelView(
-                    appearance: appearance,
-                    onRequestPanelFocus: onRequestPanelFocus
-                )
-            }
-        case .accountSignIn:
-            if let accountSignInPanel = panel as? AccountSignInPanel {
-                AccountSignInPanelView(
-                    panel: accountSignInPanel,
-                    appearance: appearance,
-                    onRequestPanelFocus: onRequestPanelFocus
-                )
-            }
-        case .cloudVPNSetup:
-            if let cloudVPNSetupPanel = panel as? CloudVPNSetupPanel {
-                CloudVPNSetupPanelView(
-                    model: cloudVPNSetupPanel.model,
-                    appearance: appearance,
-                    onRequestPanelFocus: onRequestPanelFocus
-                )
+        case .remoteLoading:
+            if let loadingPanel = panel as? RemoteLoadingPanel {
+                RemoteLoadingPanelView(panel: loadingPanel)
             }
         case .chief:
             if let chiefPanel = panel as? ChiefPanel {
@@ -275,7 +235,7 @@ struct PanelContentView: View {
     private var shouldInstallPaneDropTarget: Bool {
         guard isVisibleInUI else { return false }
         switch panel.panelType {
-        case .markdown, .filePreview, .rightSidebarTool, .customSidebar, .simulator, .agentSession, .project, .extensionBrowser, .workspaceTodo, .coderouterGuide, .notifications, .cloudVMLoading, .mobilePairing, .accountSignIn, .cloudVPNSetup, .chief:
+        case .markdown, .filePreview, .rightSidebarTool, .customSidebar, .simulator, .agentSession, .project, .extensionBrowser, .workspaceTodo, .notifications, .remoteLoading, .chief:
             return true
         case .terminal, .browser:
             return false

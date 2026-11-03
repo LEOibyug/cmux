@@ -1,21 +1,20 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Foundation
 
 /// Supplies a machine's shared cmux-tui carrier independently of its hosting provider.
 protocol RemoteTuiLinkManaging: Sendable {
-    var operations: CloudOperationRecorder? { get }
-    func connected(machineID: String) async throws -> CloudMachineLink.Connected
-    func link(machineID: String) async -> CloudMachineLink?
-    func status(machineID: String) async -> CloudMachineLinkManager.LinkStatus?
+    func connected(machineID: String) async throws -> RemoteMachineLink.Connected
+    func link(machineID: String) async -> RemoteMachineLink?
+    func status(machineID: String) async -> RemoteMachineLink.Status?
     func privateAddresses(for machineID: String) async -> [String]
-    func setPrivateAddresses(_ addresses: [String], for machineID: String) async
-    func browserProxy(machineID: String, remoteNetwork: Bool) async throws -> CloudBrowserProxyEndpoint
+    func loopbackForward(machineID: String, port: Int, onExit: @escaping @Sendable () -> Void) async throws -> UInt16
+    func closeLoopbackForward(machineID: String, port: Int) async
+    func browserProxy(machineID: String, remoteNetwork: Bool) async throws -> RemoteBrowserProxyEndpoint
 }
 
 extension RemoteTuiLinkManaging {
-    func browserProxy(machineID: String) async throws -> CloudBrowserProxyEndpoint {
+    func browserProxy(machineID: String) async throws -> RemoteBrowserProxyEndpoint {
         try await browserProxy(machineID: machineID, remoteNetwork: false)
     }
 }
 
-extension CloudMachineLinkManager: RemoteTuiLinkManaging {}

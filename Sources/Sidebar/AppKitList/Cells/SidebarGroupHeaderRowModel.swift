@@ -75,7 +75,6 @@ struct SidebarGroupHeaderRowActions {
     let onUngroup: () -> Void
     let onDelete: () -> Void
     let onEditConfig: () -> Void
-    let onOpenDocs: () -> Void
     /// Resolves current notification availability for retained rows.
     var notificationState: () -> NotificationState = { .unavailable }
 }

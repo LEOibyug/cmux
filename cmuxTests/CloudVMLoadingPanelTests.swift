@@ -8,9 +8,9 @@ import Testing
 #endif
 
 @MainActor
-struct CloudVMLoadingPanelTests {
+struct TuiLoadingPanelTests {
     @Test func loadingHeadlineReplacesBaseProgressCopyAndResets() {
-        let panel = CloudVMLoadingPanel(workspaceId: UUID())
+        let panel = TuiLoadingPanel(workspaceId: UUID())
         panel.configureLoadingHeadline("Creating a workspace on early-plum-alpaca…")
 
         guard case .loading(let headline) = panel.phase else {
@@ -27,7 +27,7 @@ struct CloudVMLoadingPanelTests {
     }
 
     @Test func failureReplacesLoadingHeadlineAndShowsFailurePhase() {
-        let panel = CloudVMLoadingPanel(workspaceId: UUID())
+        let panel = TuiLoadingPanel(workspaceId: UUID())
         panel.configureLoadingHeadline("Creating a workspace on early-plum-alpaca…")
 
         panel.showFailure("The Cloud VM service is unavailable")

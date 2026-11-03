@@ -41,21 +41,17 @@ final class SimulatorPanel: Panel {
     private var preferredRuntimeIdentifier: String?
     private var preferredDeviceTypeIdentifier: String?
     private var requiresExplicitDeviceSelection: Bool
-    @ObservationIgnored private var featureFlagsObserver: (any NSObjectProtocol)?
     @ObservationIgnored private var startupTask: Task<Void, Never>?
     @ObservationIgnored private var shutdownTask: Task<Void, Never>?
-    @ObservationIgnored private var featureEnableTask: Task<Void, Never>?
     @ObservationIgnored private var isClosingForApplicationTermination = false
     @ObservationIgnored private weak var focusOwnershipView: NSView?
     @ObservationIgnored private var directVisibleInUI = false
     @ObservationIgnored private var visibleUIHostIDs: Set<UUID> = []
-    @ObservationIgnored private var featureTransitionGeneration = 0
-    private var isFeatureDisabled = false
     private var isClosed = false
     private var isVisibleInUI = false
     private var canvasRendering: Bool?
 
-    var isFeatureReady: Bool { !isFeatureDisabled && !isClosed }
+    var isFeatureReady: Bool { !isClosed }
 
     var displayTitle: String {
         String(localized: "simulator.pane.title", defaultValue: "Simulator")
@@ -106,23 +102,9 @@ final class SimulatorPanel: Panel {
             preferredDeviceTypeIdentifier: preferredDeviceTypeIdentifier,
             requiresExplicitDeviceSelection: requiresExplicitDeviceSelection
         )
-        installFeatureFlagsObserver()
         Self.livePanelsTable.add(self)
-        reconcileRemoteFeatureFlag()
     }
 
-    private func installFeatureFlagsObserver() {
-        guard featureFlagsObserver == nil else { return }
-        featureFlagsObserver = NotificationCenter.default.addObserver(
-            forName: .cmuxFeatureFlagsDidChange,
-            object: CmuxFeatureFlags.shared,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.reconcileRemoteFeatureFlag()
-            }
-        }
-    }
 
     convenience init(
         preferredDeviceID: String? = nil,
@@ -140,51 +122,6 @@ final class SimulatorPanel: Panel {
         )
     }
 
-    func suspendForRemoteDisable() {
-        guard !isClosed else { return }
-        featureTransitionGeneration += 1
-        featureEnableTask?.cancel()
-        featureEnableTask = nil
-        guard !isFeatureDisabled else { return }
-        isFeatureDisabled = true
-        rememberSelection()
-        let coordinator = self.coordinator
-        let startupTask = self.startupTask
-        self.startupTask = nil
-        startupTask?.cancel()
-        let previousShutdown = shutdownTask
-        shutdownTask = Task {
-            await previousShutdown?.value
-            _ = await startupTask?.value
-            await coordinator.close()
-        }
-    }
-
-    func resumeAfterRemoteEnable() {
-        guard !isClosed, isFeatureDisabled, featureEnableTask == nil else { return }
-        featureTransitionGeneration += 1
-        let generation = featureTransitionGeneration
-        let shutdownTask = self.shutdownTask
-        featureEnableTask = Task { @MainActor [weak self] in
-            await shutdownTask?.value
-            guard let self,
-                  !self.isClosed,
-                  self.isFeatureDisabled,
-                  CmuxFeatureFlags.shared.isSimulatorEnabled,
-                  self.featureTransitionGeneration == generation else { return }
-            self.featureEnableTask = nil
-            self.shutdownTask = nil
-            self.coordinator = SimulatorPaneCoordinator(
-                client: self.clientFactory(),
-                preferredDeviceID: self.preferredDeviceID,
-                preferredRuntimeIdentifier: self.preferredRuntimeIdentifier,
-                preferredDeviceTypeIdentifier: self.preferredDeviceTypeIdentifier,
-                requiresExplicitDeviceSelection: self.requiresExplicitDeviceSelection
-            )
-            self.isFeatureDisabled = false
-            self.applyEffectiveVisibility()
-        }
-    }
 
     func setVisibleInUI(_ visible: Bool) {
         guard !isClosed else { return }
@@ -202,13 +139,6 @@ final class SimulatorPanel: Panel {
         applyRegisteredVisibility()
     }
 
-    /// Registers mobile framebuffer demand without making the panel logically
-    /// visible in AppKit. The coordinator remains the single publication owner.
-    func setMobileFrameDemand(_ active: Bool, consumerID: UUID) {
-        guard !isClosed else { return }
-        coordinator.setMobileFrameDemand(active, consumerID: consumerID)
-        if active { startCoordinator(requiresVisibility: false) }
-    }
 
     func setCanvasRendering(_ rendering: Bool?) {
         guard !isClosed else { return }
@@ -249,9 +179,7 @@ final class SimulatorPanel: Panel {
                 preferredDeviceTypeIdentifier: self.preferredDeviceTypeIdentifier,
                 requiresExplicitDeviceSelection: self.requiresExplicitDeviceSelection
             )
-            self.isFeatureDisabled = !CmuxFeatureFlags.shared.isSimulatorEnabled
             self.isClosed = false
-            self.installFeatureFlagsObserver()
             self.applyEffectiveVisibility()
         }
     }
@@ -261,13 +189,6 @@ final class SimulatorPanel: Panel {
             return shutdownTask ?? Task {}
         }
         isClosed = true
-        featureTransitionGeneration += 1
-        featureEnableTask?.cancel()
-        featureEnableTask = nil
-        if let featureFlagsObserver {
-            NotificationCenter.default.removeObserver(featureFlagsObserver)
-            self.featureFlagsObserver = nil
-        }
         let coordinator = self.coordinator
         let startupTask = self.startupTask
         self.startupTask = nil
@@ -370,7 +291,6 @@ final class SimulatorPanel: Panel {
 
     private func startCoordinator(requiresVisibility: Bool = true) {
         guard !isClosed,
-              !isFeatureDisabled,
               (!requiresVisibility || isEffectivelyVisible),
               startupTask == nil else { return }
         let coordinator = self.coordinator
@@ -392,11 +312,4 @@ final class SimulatorPanel: Panel {
         if visible { startCoordinator() }
     }
 
-    private func reconcileRemoteFeatureFlag() {
-        if CmuxFeatureFlags.shared.isSimulatorEnabled {
-            resumeAfterRemoteEnable()
-        } else {
-            suspendForRemoteDisable()
-        }
-    }
 }

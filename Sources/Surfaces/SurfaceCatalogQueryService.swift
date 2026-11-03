@@ -15,30 +15,28 @@ enum SurfaceCatalogReadMode: Equatable, Sendable {
     case forced
 }
 
-/// Reads the surface catalog and resolves providers for machines not yet discovered
-/// by the periodic Cloud fleet refresh. Socket entrypoints share this query owner.
+/// Reads the catalog and resolves providers for explicitly configured SSH machines.
 @MainActor
 struct SurfaceCatalogQueryService {
     private let catalog: SurfaceCatalog
     private let projectionIdentities: @MainActor ([SurfaceProjection]) -> [SurfaceProjection: SurfaceProjectionIdentity]
-    private let discoverCloudMachine: @MainActor (String) async -> Void
+    private let resolveSSHProvider: @MainActor (String) async -> Void
 
     init(
         catalog: SurfaceCatalog,
         projectionIdentities: @escaping @MainActor ([SurfaceProjection]) -> [SurfaceProjection: SurfaceProjectionIdentity] = { _ in [:] },
-        discoverCloudMachine: @escaping @MainActor (String) async -> Void
+        resolveSSHProvider: @escaping @MainActor (String) async -> Void
     ) {
         self.catalog = catalog
         self.projectionIdentities = projectionIdentities
-        self.discoverCloudMachine = discoverCloudMachine
+        self.resolveSSHProvider = resolveSSHProvider
     }
 
-    /// Existing providers are local lookups; only a missing Cloud machine needs
-    /// a control-plane discovery before its provider can be used.
+    /// Missing SSH providers are resolved from user-controlled connection definitions.
     func provider(for machine: SurfaceMachineID) async -> (any SurfaceProvider)? {
         if let provider = catalog.provider(for: machine) { return provider }
-        guard case .cloud(let id) = machine else { return nil }
-        await discoverCloudMachine(id)
+        guard machine.isSSH else { return nil }
+        await resolveSSHProvider(machine.rawValue)
         return catalog.provider(for: machine)
     }
 
@@ -54,8 +52,7 @@ struct SurfaceCatalogQueryService {
             // Only a machine-scoped read can ask for a link. An unfiltered
             // `.linked` read would connect every machine, which is `.forced`.
             if let machine, !isLinked(machine) {
-                // A create can finish before the fleet poll sees the machine.
-                // Discover it before an empty catalog is treated as unavailable.
+                // Resolve an explicitly configured SSH host before refreshing its graph.
                 _ = await provider(for: machine)
                 await catalog.refresh(machine: machine, force: false)
             }

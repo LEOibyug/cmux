@@ -46,9 +46,9 @@ struct CommandPaletteSearchEngineTests {
                 subtitle = "Layout"
                 keywords = ["toggle", "sidebar", "layout", "panel"]
             case 4:
-                title = "Apply Update If Available \(index)"
+                title = "Apply Configuration If Available \(index)"
                 subtitle = "Global"
-                keywords = ["apply", "update", "install", "upgrade"]
+                keywords = ["apply", "configuration", "load", "settings"]
             case 5:
                 title = "Restart CLI Listener \(index)"
                 subtitle = "Global"
@@ -157,25 +157,25 @@ struct CommandPaletteSearchEngineTests {
         ]
     }
 
-    private func makeUpdateCommandEntries() -> [FixtureEntry] {
+    private func makeConfigurationCommandEntries() -> [FixtureEntry] {
         [
             FixtureEntry(
-                id: "command.checkForUpdates",
+                id: "command.checkConfiguration",
                 rank: 0,
-                title: "Check for Updates",
-                searchableTexts: ["Check for Updates", "Global", "update", "upgrade", "release"]
+                title: "Check Configuration",
+                searchableTexts: ["Check Configuration", "Global", "config", "validate", "settings"]
             ),
             FixtureEntry(
-                id: "command.attemptUpdate",
+                id: "command.reloadConfiguration",
                 rank: 1,
-                title: "Attempt Update",
-                searchableTexts: ["Attempt Update", "Global", "attempt", "check", "update", "upgrade", "release"]
+                title: "Reload Configuration",
+                searchableTexts: ["Reload Configuration", "Global", "reload", "check", "config", "settings"]
             ),
             FixtureEntry(
-                id: "command.applyUpdateIfAvailable",
+                id: "command.applyConfigurationIfAvailable",
                 rank: 2,
-                title: "Apply Update (If Available)",
-                searchableTexts: ["Apply Update (If Available)", "Global", "apply", "install", "update", "available"]
+                title: "Apply Configuration (If Available)",
+                searchableTexts: ["Apply Configuration (If Available)", "Global", "apply", "load", "config", "available"]
             ),
         ]
     }
@@ -307,7 +307,7 @@ struct CommandPaletteSearchEngineTests {
             "toggle side",
             "open dir",
             "phoenix",
-            "apply update",
+            "apply configuration",
         ]
 
         for query in queries {
@@ -855,11 +855,11 @@ struct CommandPaletteSearchEngineTests {
     }
 
     @Test func searchPrefersTitleMatchOverKeywordOnlyMatchForCheckQuery() {
-        let results = optimizedResults(entries: makeUpdateCommandEntries(), query: "check")
+        let results = optimizedResults(entries: makeConfigurationCommandEntries(), query: "check")
 
         #expect(
             results.prefix(2).map(\.id) ==
-            ["command.checkForUpdates", "command.attemptUpdate"]
+            ["command.checkConfiguration", "command.reloadConfiguration"]
         )
     }
 
@@ -993,7 +993,7 @@ struct CommandPaletteSearchEngineTests {
             )
         }
         let queries = repeatedQueries(
-            ["rename", "rename tab", "open dir", "toggle side", "apply update", "notif", "split right", "cmux"],
+            ["rename", "rename tab", "open dir", "toggle side", "apply configuration", "notif", "split right", "cmux"],
             repetitions: 12
         )
 

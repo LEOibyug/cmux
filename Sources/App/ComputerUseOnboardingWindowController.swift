@@ -166,7 +166,6 @@ final class ComputerUseOnboardingWindowController: NSObject, NSWindowDelegate {
 
     static func shouldPresentAutomatically(
         seen: Bool,
-        featureEnabled: Bool,
         permissionStatusIsKnown: Bool,
         accessibilityGranted: Bool,
         screenRecordingGranted: Bool,
@@ -175,12 +174,9 @@ final class ComputerUseOnboardingWindowController: NSObject, NSWindowDelegate {
         // `seen` is only a presentation marker; it does not prove helper TCC
         // grants remain valid. Missing or unknown grants must fail closed.
         _ = seen
-        return featureEnabled
-            && (
-                !directCaptureReady
-                    || !permissionStatusIsKnown
-                    || !(accessibilityGranted && screenRecordingGranted)
-            )
+        return !directCaptureReady
+            || !permissionStatusIsKnown
+            || !(accessibilityGranted && screenRecordingGranted)
     }
 
     var isVisible: Bool {

@@ -13,7 +13,7 @@ extension TabManager {
     ) -> Bool {
         let catalog = catalog ?? SurfaceCatalog.shared
         guard let workspace = workspacesById[tabId] else { return false }
-        if workspace.cloudProjectedResource(forPanel: panelId, catalog: catalog)?.kind == .terminal {
+        if workspace.tuiProjectedResource(forPanel: panelId, catalog: catalog)?.kind == .terminal {
             return workspace.setPanelCustomTitle(panelId: panelId, title: title, source: .auto, catalog: catalog)
         }
         return updatePanelTitle(tabId: tabId, panelId: panelId, title: title)

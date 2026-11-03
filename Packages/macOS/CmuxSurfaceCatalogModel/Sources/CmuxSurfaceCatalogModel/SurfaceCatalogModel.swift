@@ -9,18 +9,10 @@ import Foundation
 
 public enum SurfaceResourceKind: String, Codable, Sendable, CaseIterable {
     case terminal
-    /// A VNC display on the machine ("display", never "screen": a cmux-tui `screen` is a
-    /// split tree inside a workspace, a different thing).
-    case display
     case browser
 
-    /// Wire-tolerant parse: pre-rename catalogs, persisted sessions, and older CLIs say
-    /// `screen` for a VNC display. Emit `display`, accept both.
+    /// Parses the retained terminal and browser resource wire kinds.
     public init?(wire: String) {
-        if wire == "screen" {
-            self = .display
-            return
-        }
         self.init(rawValue: wire)
     }
 
@@ -57,8 +49,11 @@ public struct SurfaceResourceID: Hashable, Codable, Sendable, CustomStringConver
 
     public init?(rawValue: String) {
         let parts = rawValue.split(separator: "/", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, let kind = SurfaceResourceKind(wire: String(parts[1])), !parts[2].isEmpty else { return nil }
-        self.init(machine: SurfaceMachineID(rawValue: String(parts[0])), kind: kind, key: String(parts[2]))
+        guard parts.count == 3,
+              let machine = SurfaceMachineID(rawValue: String(parts[0])),
+              let kind = SurfaceResourceKind(wire: String(parts[1])),
+              !parts[2].isEmpty else { return nil }
+        self.init(machine: machine, kind: kind, key: String(parts[2]))
     }
 }
 
@@ -88,7 +83,7 @@ public struct SurfaceAgentBadge: Hashable, Codable, Sendable {
 /// `revision` is encoded as a string because that is the cmux-tui wire form. The
 /// decoder accepts both strings and JSON numbers so a client can read snapshots
 /// from older daemon builds. A revision is meaningful only inside its generation.
-public struct CloudVMCursor: Hashable, Codable, Sendable {
+public struct TuiCursor: Hashable, Codable, Sendable {
     public var generation: String
     public var revision: UInt64
 
@@ -115,13 +110,13 @@ public struct CloudVMCursor: Hashable, Codable, Sendable {
     }
 
     private static func revision(_ raw: Any?) -> UInt64? {
-        CloudWireNumber.unsigned(raw)
+        TuiWireNumber.unsigned(raw)
     }
 
     /// Returns true only when both cursors belong to the same daemon
     /// generation. Generations are opaque identifiers, so callers must never
     /// impose an ordering across them.
-    public func isNewer(than other: CloudVMCursor?) -> Bool {
+    public func isNewer(than other: TuiCursor?) -> Bool {
         guard let other else { return true }
         return generation == other.generation && revision > other.revision
     }
@@ -158,7 +153,7 @@ public struct CloudVMCursor: Hashable, Codable, Sendable {
 /// overflowing values into a different cursor or index, which can make a delta
 /// look contiguous when it is not.
 /// lint:allow namespace-type — moved unchanged from the app target, where it was an internal static namespace; reshaping it is a separate change from this package move.
-public enum CloudWireNumber {
+public enum TuiWireNumber {
     public static func unsigned(_ raw: Any?) -> UInt64? {
         // A JSON number decodes as NSNumber, and `NSNumber(0) is Bool` is true,
         // so a plain `is Bool` test would reject every zero-based sequence on
@@ -194,7 +189,7 @@ public enum CloudWireNumber {
 
 /// A daemon entity not yet modeled by the desktop. Its exact JSON is retained so
 /// an agent or a future renderer can inspect it without waiting for a schema bump.
-public struct CloudVMEntity: Hashable, Codable, Sendable {
+public struct TuiEntity: Hashable, Codable, Sendable {
     public var kind: String
     public var id: String?
     public var payload: Data
@@ -208,7 +203,7 @@ public struct CloudVMEntity: Hashable, Codable, Sendable {
 
 /// A typed index of the cmux-tui session graph. The raw snapshot remains the
 /// authority; these values are immutable indexes used by the tree and agents.
-public struct CloudVMWorkspaceState: Hashable, Codable, Sendable {
+public struct TuiWorkspaceState: Hashable, Codable, Sendable {
     public var id: String
     public var name: String
     public var index: Int
@@ -222,7 +217,7 @@ public struct CloudVMWorkspaceState: Hashable, Codable, Sendable {
     }
 }
 
-public struct CloudVMScreenState: Hashable, Codable, Sendable {
+public struct TuiScreenState: Hashable, Codable, Sendable {
     public var id: String
     public var workspaceID: String
     public var name: String?
@@ -248,7 +243,7 @@ public struct CloudVMScreenState: Hashable, Codable, Sendable {
     }
 }
 
-public struct CloudVMPaneState: Hashable, Codable, Sendable {
+public struct TuiPaneState: Hashable, Codable, Sendable {
     public var id: String
     public var screenID: String
     public var name: String?
@@ -277,7 +272,7 @@ public struct CloudVMPaneState: Hashable, Codable, Sendable {
 /// The two valid remote tab-label states. The daemon uses an empty string to
 /// clear its optional label, so keep that state explicit at the app boundary
 /// instead of making every caller rediscover the trim-and-clear rule.
-public enum CloudRemoteRenameName: Hashable, Sendable {
+public enum TuiRemoteRenameName: Hashable, Sendable {
     case named(String)
     case cleared
 
@@ -296,7 +291,7 @@ public enum CloudRemoteRenameName: Hashable, Sendable {
 
 }
 
-public struct CloudVMTerminalState: Hashable, Codable, Sendable {
+public struct TuiTerminalState: Hashable, Codable, Sendable {
     public var id: String
     public var tabIDs: [String]
     public var title: String
@@ -327,7 +322,7 @@ public struct CloudVMTerminalState: Hashable, Codable, Sendable {
     }
 }
 
-public struct CloudVMBrowserState: Hashable, Codable, Sendable {
+public struct TuiBrowserState: Hashable, Codable, Sendable {
     public var id: String
     public var tabID: String
     public var url: String
@@ -343,7 +338,7 @@ public struct CloudVMBrowserState: Hashable, Codable, Sendable {
     }
 }
 
-public struct CloudVMAgentState: Hashable, Codable, Sendable {
+public struct TuiAgentState: Hashable, Codable, Sendable {
     public var id: String?
     public var terminalID: String
     public var state: String
@@ -378,14 +373,14 @@ public struct CloudVMAgentState: Hashable, Codable, Sendable {
 /// daemons publish the same graph without a cursor. Their snapshot is still useful
 /// for display and inspection, but it cannot prove ordering or authorize a
 /// revision-fenced mutation.
-public enum CloudVMStateSyncMode: String, Codable, Sendable {
+public enum TuiStateSyncMode: String, Codable, Sendable {
     case journaled
     case snapshotOnly = "snapshot_only"
 }
 
 /// The join key for a tab's content. A terminal and a browser may use the same
 /// daemon-local id, so the content kind is part of the identity.
-public struct CloudVMTabContentKey: Hashable, Sendable {
+public struct TuiTabContentKey: Hashable, Sendable {
     public var kind: String
     public var id: String
 
@@ -396,32 +391,32 @@ public struct CloudVMTabContentKey: Hashable, Sendable {
 }
 
 /// Materialized joins for one accepted daemon graph. The arrays on
-/// `CloudVMState` remain the ordered, agent-facing representation. This value is
+/// `TuiState` remain the ordered, agent-facing representation. This value is
 /// a derived lookup layer, rebuilt once at a snapshot boundary and changed only
 /// for entities named by a delta. It is deliberately not encoded: a cache must
 /// never become a second persisted source of truth.
-public struct CloudVMStateIndex: Sendable {
-    public var workspacesByID: [String: CloudVMWorkspaceState] = [:]
-    public var screensByID: [String: CloudVMScreenState] = [:]
-    public var panesByID: [String: CloudVMPaneState] = [:]
-    public var tabsByID: [String: CloudVMTabState] = [:]
-    public var terminalsByID: [String: CloudVMTerminalState] = [:]
-    public var browsersByID: [String: CloudVMBrowserState] = [:]
-    public var agentsByID: [String: CloudVMAgentState] = [:]
-    public var agentsByTerminalID: [String: CloudVMAgentState] = [:]
+public struct TuiStateIndex: Sendable {
+    public var workspacesByID: [String: TuiWorkspaceState] = [:]
+    public var screensByID: [String: TuiScreenState] = [:]
+    public var panesByID: [String: TuiPaneState] = [:]
+    public var tabsByID: [String: TuiTabState] = [:]
+    public var terminalsByID: [String: TuiTerminalState] = [:]
+    public var browsersByID: [String: TuiBrowserState] = [:]
+    public var agentsByID: [String: TuiAgentState] = [:]
+    public var agentsByTerminalID: [String: TuiAgentState] = [:]
     public var screenIDsByWorkspaceID: [String: [String]] = [:]
     public var paneIDsByScreenID: [String: [String]] = [:]
     public var tabIDsByPaneID: [String: [String]] = [:]
-    public var tabIDsByContent: [CloudVMTabContentKey: [String]] = [:]
+    public var tabIDsByContent: [TuiTabContentKey: [String]] = [:]
 
     public init(
-        workspaces: [CloudVMWorkspaceState],
-        screens: [CloudVMScreenState],
-        panes: [CloudVMPaneState],
-        tabs: [CloudVMTabState],
-        terminals: [CloudVMTerminalState],
-        browsers: [CloudVMBrowserState],
-        agents: [CloudVMAgentState]
+        workspaces: [TuiWorkspaceState],
+        screens: [TuiScreenState],
+        panes: [TuiPaneState],
+        tabs: [TuiTabState],
+        terminals: [TuiTerminalState],
+        browsers: [TuiBrowserState],
+        agents: [TuiAgentState]
     ) {
         for workspace in workspaces {
             workspacesByID[workspace.id] = workspace
@@ -448,35 +443,35 @@ public struct CloudVMStateIndex: Sendable {
         }
     }
 
-    public func workspace(id: String) -> CloudVMWorkspaceState? {
+    public func workspace(id: String) -> TuiWorkspaceState? {
         workspacesByID[id]
     }
 
-    public func screen(id: String) -> CloudVMScreenState? {
+    public func screen(id: String) -> TuiScreenState? {
         screensByID[id]
     }
 
-    public func pane(id: String) -> CloudVMPaneState? {
+    public func pane(id: String) -> TuiPaneState? {
         panesByID[id]
     }
 
-    public func tab(id: String) -> CloudVMTabState? {
+    public func tab(id: String) -> TuiTabState? {
         tabsByID[id]
     }
 
-    public func terminal(id: String) -> CloudVMTerminalState? {
+    public func terminal(id: String) -> TuiTerminalState? {
         terminalsByID[id]
     }
 
-    public func browser(id: String) -> CloudVMBrowserState? {
+    public func browser(id: String) -> TuiBrowserState? {
         browsersByID[id]
     }
 
-    public func agent(id: String) -> CloudVMAgentState? {
+    public func agent(id: String) -> TuiAgentState? {
         agentsByID[id]
     }
 
-    public func agent(terminalID: String) -> CloudVMAgentState? {
+    public func agent(terminalID: String) -> TuiAgentState? {
         agentsByTerminalID[terminalID]
     }
 
@@ -495,8 +490,8 @@ public struct CloudVMStateIndex: Sendable {
         orderedTabIDs(tabIDsByPaneID[paneID] ?? [])
     }
 
-    public func tabs(contentKind: String, contentID: String) -> [CloudVMTabState] {
-        let key = CloudVMTabContentKey(kind: contentKind, id: contentID)
+    public func tabs(contentKind: String, contentID: String) -> [TuiTabState] {
+        let key = TuiTabContentKey(kind: contentKind, id: contentID)
         return orderedTabIDs(tabIDsByContent[key] ?? []).compactMap { tabsByID[$0] }
     }
 
@@ -525,7 +520,7 @@ public struct CloudVMStateIndex: Sendable {
         }.map { $0.element }
     }
 
-    public mutating func upsertWorkspace(_ workspace: CloudVMWorkspaceState) {
+    public mutating func upsertWorkspace(_ workspace: TuiWorkspaceState) {
         workspacesByID[workspace.id] = workspace
     }
 
@@ -533,7 +528,7 @@ public struct CloudVMStateIndex: Sendable {
         workspacesByID.removeValue(forKey: id)
     }
 
-    public mutating func upsertScreen(_ screen: CloudVMScreenState) {
+    public mutating func upsertScreen(_ screen: TuiScreenState) {
         if let old = screensByID[screen.id], old.workspaceID != screen.workspaceID {
             remove(screen.id, from: &screenIDsByWorkspaceID, keyedBy: old.workspaceID)
         }
@@ -546,7 +541,7 @@ public struct CloudVMStateIndex: Sendable {
         remove(id, from: &screenIDsByWorkspaceID, keyedBy: old.workspaceID)
     }
 
-    public mutating func upsertPane(_ pane: CloudVMPaneState) {
+    public mutating func upsertPane(_ pane: TuiPaneState) {
         if let old = panesByID[pane.id], old.screenID != pane.screenID {
             remove(pane.id, from: &paneIDsByScreenID, keyedBy: old.screenID)
         }
@@ -565,7 +560,7 @@ public struct CloudVMStateIndex: Sendable {
         remove(id, from: &paneIDsByScreenID, keyedBy: old.screenID)
     }
 
-    public mutating func upsertTab(_ tab: CloudVMTabState) {
+    public mutating func upsertTab(_ tab: TuiTabState) {
         if let old = tabsByID[tab.id] {
             removeTabReferences(old)
         }
@@ -578,7 +573,7 @@ public struct CloudVMStateIndex: Sendable {
         removeTabReferences(old)
     }
 
-    public mutating func upsertTerminal(_ terminal: CloudVMTerminalState) {
+    public mutating func upsertTerminal(_ terminal: TuiTerminalState) {
         terminalsByID[terminal.id] = terminal
     }
 
@@ -586,7 +581,7 @@ public struct CloudVMStateIndex: Sendable {
         terminalsByID.removeValue(forKey: id)
     }
 
-    public mutating func upsertBrowser(_ browser: CloudVMBrowserState) {
+    public mutating func upsertBrowser(_ browser: TuiBrowserState) {
         browsersByID[browser.id] = browser
     }
 
@@ -594,7 +589,7 @@ public struct CloudVMStateIndex: Sendable {
         browsersByID.removeValue(forKey: id)
     }
 
-    public mutating func upsertAgent(_ agent: CloudVMAgentState) {
+    public mutating func upsertAgent(_ agent: TuiAgentState) {
         if let old = agentsByTerminalID[agent.terminalID] {
             removeAgent(old)
         }
@@ -604,7 +599,7 @@ public struct CloudVMStateIndex: Sendable {
         insertAgent(agent)
     }
 
-    public mutating func removeAgent(_ agent: CloudVMAgentState) {
+    public mutating func removeAgent(_ agent: TuiAgentState) {
         if agentsByTerminalID[agent.terminalID]?.id == agent.id {
             agentsByTerminalID.removeValue(forKey: agent.terminalID)
         }
@@ -613,33 +608,33 @@ public struct CloudVMStateIndex: Sendable {
         }
     }
 
-    private mutating func insertAgent(_ agent: CloudVMAgentState) {
+    private mutating func insertAgent(_ agent: TuiAgentState) {
         agentsByTerminalID[agent.terminalID] = agent
         if let id = agent.id {
             agentsByID[id] = agent
         }
     }
 
-    private mutating func insertTab(_ tab: CloudVMTabState) {
+    private mutating func insertTab(_ tab: TuiTabState) {
         tabsByID[tab.id] = tab
         insertTabReferences(tab)
     }
 
-    private mutating func insertTabReferences(_ tab: CloudVMTabState) {
+    private mutating func insertTabReferences(_ tab: TuiTabState) {
         appendUnique(tab.id, to: &tabIDsByPaneID, keyedBy: tab.paneID)
         appendUnique(
             tab.id,
             to: &tabIDsByContent,
-            keyedBy: CloudVMTabContentKey(kind: tab.contentKind, id: tab.contentID)
+            keyedBy: TuiTabContentKey(kind: tab.contentKind, id: tab.contentID)
         )
     }
 
-    private mutating func removeTabReferences(_ tab: CloudVMTabState) {
+    private mutating func removeTabReferences(_ tab: TuiTabState) {
         remove(tab.id, from: &tabIDsByPaneID, keyedBy: tab.paneID)
         remove(
             tab.id,
             from: &tabIDsByContent,
-            keyedBy: CloudVMTabContentKey(kind: tab.contentKind, id: tab.contentID)
+            keyedBy: TuiTabContentKey(kind: tab.contentKind, id: tab.contentID)
         )
     }
 
@@ -701,7 +696,7 @@ public struct CloudVMStateIndex: Sendable {
 /// scan and decode the whole collection. An unsupported compatibility field
 /// uses a bounded fallback scan so this internal API remains correct for future
 /// callers without pretending that arbitrary payload fields are identities.
-public struct CloudVMRawCollection: Hashable, Codable, Sendable {
+public struct TuiRawCollection: Hashable, Codable, Sendable {
     private struct IdentityKey: Hashable, Sendable {
         let field: String
         let value: String
@@ -859,7 +854,7 @@ public struct CloudVMRawCollection: Hashable, Codable, Sendable {
         try container.encode(rows, forKey: .rows)
     }
 
-    public static func == (lhs: CloudVMRawCollection, rhs: CloudVMRawCollection) -> Bool {
+    public static func == (lhs: TuiRawCollection, rhs: TuiRawCollection) -> Bool {
         lhs.order == rhs.order && lhs.rows == rhs.rows
     }
 
@@ -873,15 +868,15 @@ public struct CloudVMRawCollection: Hashable, Codable, Sendable {
 /// unknown top-level values share this document. Updating one row never parses
 /// or re-encodes unrelated rows; `object()` and `data()` are deliberate export
 /// boundaries that materialize the complete JSON document.
-public struct CloudVMStateDocument: Hashable, Codable, Sendable {
+public struct TuiStateDocument: Hashable, Codable, Sendable {
     private(set) var values: [String: Data] = [:]
-    private(set) var collections: [String: CloudVMRawCollection] = [:]
+    private(set) var collections: [String: TuiRawCollection] = [:]
     private var canonicalDataCache: Data?
 
     public init(snapshot: [String: Any]) {
         for (key, value) in snapshot {
             if let rows = value as? [[String: Any]] {
-                var collection = CloudVMRawCollection()
+                var collection = TuiRawCollection()
                 var valid = true
                 for (offset, row) in rows.enumerated() {
                     guard let data = Self.canonicalData(row) else {
@@ -950,7 +945,7 @@ public struct CloudVMStateDocument: Hashable, Codable, Sendable {
 
     /// Decodes one collection's rows without materializing the complete graph.
     /// The result follows the stable snapshot or storage order recorded in
-    /// `CloudVMRawCollection.order`. Semantic placement comes from row fields.
+    /// `TuiRawCollection.order`. Semantic placement comes from row fields.
     public func objects(forCollectionKey key: String) -> [[String: Any]]? {
         guard let collection = collections[key] else { return nil }
         var result: [[String: Any]] = []
@@ -982,34 +977,34 @@ public struct CloudVMStateDocument: Hashable, Codable, Sendable {
     /// identity returns nil instead of selecting the first row, so an agent can
     /// request a fresh authoritative snapshot rather than mutate an arbitrary
     /// remote object.
-    public func entity(forCollectionKey key: String, id: String) -> CloudVMEntity? {
+    public func entity(forCollectionKey key: String, id: String) -> TuiEntity? {
         let normalizedID = Self.nonEmptyString(id)
         if let collection = collections[key], let normalizedID {
             let candidates = collection.matchingRowIDs(id: normalizedID)
             guard candidates.count == 1, let rowID = candidates.first,
                   let data = collection.rows[rowID] else { return nil }
-            return CloudVMEntity(kind: key, id: Self.entityID(from: data), payload: data)
+            return TuiEntity(kind: key, id: Self.entityID(from: data), payload: data)
         }
         guard let data = values[key],
               let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? [String: Any],
               normalizedID != nil,
               Self.nonEmptyString(object["id"]) == normalizedID else { return nil }
-        return CloudVMEntity(kind: key, id: Self.entityID(from: data), payload: data)
+        return TuiEntity(kind: key, id: Self.entityID(from: data), payload: data)
     }
 
     /// Returns opaque entities directly from the canonical fragments. This is
     /// an export projection, not another mutable copy of the remote graph.
     /// Scalar values are retained too, so a future daemon field is never lost
     /// only because this client does not know its shape yet.
-    public func opaqueEntities(excluding excludedKeys: Set<String>) -> [CloudVMEntity] {
-        var result: [CloudVMEntity] = []
+    public func opaqueEntities(excluding excludedKeys: Set<String>) -> [TuiEntity] {
+        var result: [TuiEntity] = []
         for (key, data) in values where !excludedKeys.contains(key) {
-            result.append(CloudVMEntity(kind: key, id: Self.entityID(from: data), payload: data))
+            result.append(TuiEntity(kind: key, id: Self.entityID(from: data), payload: data))
         }
         for (key, collection) in collections where !excludedKeys.contains(key) {
             for rowID in collection.order {
                 guard let data = collection.rows[rowID] else { continue }
-                result.append(CloudVMEntity(kind: key, id: Self.entityID(from: data), payload: data))
+                result.append(TuiEntity(kind: key, id: Self.entityID(from: data), payload: data))
             }
         }
         return result.sorted {
@@ -1022,7 +1017,7 @@ public struct CloudVMStateDocument: Hashable, Codable, Sendable {
     }
 
     @discardableResult
-    public mutating func setCursor(_ cursor: CloudVMCursor) -> Bool {
+    public mutating func setCursor(_ cursor: TuiCursor) -> Bool {
         // Keep cursor extensions emitted by a newer daemon. The generation and
         // revision are the fields this client owns; every other field remains
         // lossless across a local delta.
@@ -1039,7 +1034,7 @@ public struct CloudVMStateDocument: Hashable, Codable, Sendable {
         // session.revision mirrors the public cursor (resource_api.rs). Keep
         // it aligned when a delta changes only resource rows.
         if var session = value(forKey: "session") as? [String: Any],
-           let revision = session["revision"], CloudWireNumber.unsigned(revision) != nil {
+           let revision = session["revision"], TuiWireNumber.unsigned(revision) != nil {
             session["revision"] = revision is String ? (String(cursor.revision) as Any) : NSNumber(value: cursor.revision)
             guard let sessionData = Self.canonicalData(session) else { return false }
             values["session"] = sessionData
@@ -1058,7 +1053,7 @@ public struct CloudVMStateDocument: Hashable, Codable, Sendable {
         alternateField: (name: String, value: String)? = nil
     ) -> Bool {
         guard let rowData = Self.canonicalData(value) else { return false }
-        var collection = collections[collectionKey] ?? CloudVMRawCollection()
+        var collection = collections[collectionKey] ?? TuiRawCollection()
         let explicitID = Self.nonEmptyString(value["id"])
         guard explicitID == nil || explicitID == id else { return false }
         // The collection index handles both explicit and positional storage
@@ -1183,7 +1178,7 @@ public struct CloudVMStateDocument: Hashable, Codable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         values = try container.decodeIfPresent([String: Data].self, forKey: .values) ?? [:]
-        collections = try container.decodeIfPresent([String: CloudVMRawCollection].self, forKey: .collections) ?? [:]
+        collections = try container.decodeIfPresent([String: TuiRawCollection].self, forKey: .collections) ?? [:]
         canonicalDataCache = nil
         guard values.keys.allSatisfy({ !collections.keys.contains($0) }),
               collections.values.allSatisfy(Self.isValidCollection),
@@ -1192,12 +1187,12 @@ public struct CloudVMStateDocument: Hashable, Codable, Sendable {
             throw DecodingError.dataCorruptedError(
                 forKey: .collections,
                 in: container,
-                debugDescription: "CloudVMStateDocument contains an invalid or colliding fragment"
+                debugDescription: "TuiStateDocument contains an invalid or colliding fragment"
             )
         }
     }
 
-    private static func isValidCollection(_ collection: CloudVMRawCollection) -> Bool {
+    private static func isValidCollection(_ collection: TuiRawCollection) -> Bool {
         let order = Set(collection.order)
         guard order.count == collection.order.count,
               order.count == collection.rows.count,
@@ -1216,7 +1211,7 @@ public struct CloudVMStateDocument: Hashable, Codable, Sendable {
         try container.encode(collections, forKey: .collections)
     }
 
-    public static func == (lhs: CloudVMStateDocument, rhs: CloudVMStateDocument) -> Bool {
+    public static func == (lhs: TuiStateDocument, rhs: TuiStateDocument) -> Bool {
         lhs.values == rhs.values && lhs.collections == rhs.collections
     }
 
@@ -1233,53 +1228,54 @@ public struct CloudVMStateDocument: Hashable, Codable, Sendable {
 /// independent write sources. This gives the agent a stable graph today and an
 /// accretive escape hatch for new daemon resources tomorrow. A nil cursor is an
 /// explicit legacy snapshot-only mode, not an invalid or partially parsed graph.
-public struct CloudVMState: Hashable, Codable, Sendable {
+public struct TuiState: Hashable, Codable, Sendable {
     private static let modeledSnapshotKeys: Set<String> = [
         "machine", "session", "cursor",
         "workspaces", "screens", "panes", "tabs", "terminals", "browsers", "agents",
     ]
 
     public var machine: SurfaceMachineID
-    public var cursor: CloudVMCursor?
+    public var cursor: TuiCursor?
     /// The canonical document owns both known and unknown remote fields. The
     /// byte form is materialized only when a caller crosses an export boundary.
-    public var document: CloudVMStateDocument
-    public var workspaces: [CloudVMWorkspaceState]
-    public var screens: [CloudVMScreenState]
-    public var panes: [CloudVMPaneState]
-    public var tabs: [CloudVMTabState]
-    public var terminals: [CloudVMTerminalState]
-    public var browsers: [CloudVMBrowserState]
-    public var agents: [CloudVMAgentState]
+    public var document: TuiStateDocument
+    public var workspaces: [TuiWorkspaceState]
+    public var screens: [TuiScreenState]
+    public var panes: [TuiPaneState]
+    public var tabs: [TuiTabState]
+    public var terminals: [TuiTerminalState]
+    public var browsers: [TuiBrowserState]
+    public var agents: [TuiAgentState]
     /// Derived joins are rebuilt at snapshot boundaries and updated transactionally
     /// with accepted deltas. They are excluded from Codable below.
-    public var lookupIndex: CloudVMStateIndex
+    public var lookupIndex: TuiStateIndex
 
     /// Future daemon resources are always projected from `document` on read.
     /// Keeping this computed prevents an opaque delta from creating a second,
     /// stale copy of state beside the canonical fragments.
-    public var otherEntities: [CloudVMEntity] {
+    public var otherEntities: [TuiEntity] {
         document.opaqueEntities(excluding: Self.modeledSnapshotKeys)
     }
 
     public init(
         machine: SurfaceMachineID,
-        cursor: CloudVMCursor?,
+        cursor: TuiCursor?,
         rawSnapshot: Data,
-        workspaces: [CloudVMWorkspaceState],
-        screens: [CloudVMScreenState],
-        panes: [CloudVMPaneState],
-        tabs: [CloudVMTabState],
-        terminals: [CloudVMTerminalState],
-        browsers: [CloudVMBrowserState],
-        agents: [CloudVMAgentState],
-        lookupIndex: CloudVMStateIndex? = nil,
-        document: CloudVMStateDocument? = nil
+        workspaces: [TuiWorkspaceState],
+        screens: [TuiScreenState],
+        panes: [TuiPaneState],
+        tabs: [TuiTabState],
+        terminals: [TuiTerminalState],
+
+        browsers: [TuiBrowserState],
+        agents: [TuiAgentState],
+        lookupIndex: TuiStateIndex? = nil,
+        document: TuiStateDocument? = nil
     ) {
         self.machine = machine
         self.cursor = cursor
-        guard let document = document ?? CloudVMStateDocument(data: rawSnapshot) else {
-            preconditionFailure("CloudVMState requires a valid canonical snapshot document")
+        guard let document = document ?? TuiStateDocument(data: rawSnapshot) else {
+            preconditionFailure("TuiState requires a valid canonical snapshot document")
         }
         self.document = document
         self.workspaces = workspaces
@@ -1289,7 +1285,7 @@ public struct CloudVMState: Hashable, Codable, Sendable {
         self.terminals = terminals
         self.browsers = browsers
         self.agents = agents
-        self.lookupIndex = lookupIndex ?? CloudVMStateIndex(
+        self.lookupIndex = lookupIndex ?? TuiStateIndex(
             workspaces: workspaces,
             screens: screens,
             panes: panes,
@@ -1313,12 +1309,12 @@ public struct CloudVMState: Hashable, Codable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let machine = try container.decode(SurfaceMachineID.self, forKey: .machine)
-        let encodedCursor = try container.decodeIfPresent(CloudVMCursor.self, forKey: .cursor)
-        let document: CloudVMStateDocument
+        let encodedCursor = try container.decodeIfPresent(TuiCursor.self, forKey: .cursor)
+        let document: TuiStateDocument
         if container.contains(.document) {
-            document = try container.decode(CloudVMStateDocument.self, forKey: .document)
+            document = try container.decode(TuiStateDocument.self, forKey: .document)
         } else if let rawSnapshot = try container.decodeIfPresent(Data.self, forKey: .rawSnapshot),
-                  let legacyDocument = CloudVMStateDocument(data: rawSnapshot) {
+                  let legacyDocument = TuiStateDocument(data: rawSnapshot) {
             // Read archives written before the fragment document existed. New
             // archives always write the document key below.
             document = legacyDocument
@@ -1326,7 +1322,7 @@ public struct CloudVMState: Hashable, Codable, Sendable {
             throw DecodingError.dataCorruptedError(
                 forKey: .document,
                 in: container,
-                debugDescription: "CloudVMState has no valid canonical document"
+                debugDescription: "TuiState has no valid canonical document"
             )
         }
         guard let object = document.object(),
@@ -1337,7 +1333,7 @@ public struct CloudVMState: Hashable, Codable, Sendable {
             throw DecodingError.dataCorruptedError(
                 forKey: .document,
                 in: container,
-                debugDescription: "CloudVMState document is invalid or its cursor disagrees with the state"
+                debugDescription: "TuiState document is invalid or its cursor disagrees with the state"
             )
         }
         self = parsed
@@ -1366,13 +1362,13 @@ public struct CloudVMState: Hashable, Codable, Sendable {
         hasher.combine(agents)
     }
 
-    public var syncMode: CloudVMStateSyncMode {
+    public var syncMode: TuiStateSyncMode {
         cursor == nil ? .snapshotOnly : .journaled
     }
 
     public var workspaceIDs: Set<String> { Set(workspaces.map(\.id)) }
 
-    public func entity(kind: String, id: String) -> CloudVMEntity? {
+    public func entity(kind: String, id: String) -> TuiEntity? {
         let key = Self.snapshotKey(for: kind)
         guard key != "cursor" else { return nil }
         if let entity = document.entity(forCollectionKey: key, id: id) {
@@ -1388,7 +1384,7 @@ public struct CloudVMState: Hashable, Codable, Sendable {
     /// Unified read access for agents and future features. Known typed kinds
     /// and opaque kinds use the same plural snapshot-key vocabulary; singular
     /// daemon resource names are accepted as aliases.
-    public func entities(kind: String) -> [CloudVMEntity] {
+    public func entities(kind: String) -> [TuiEntity] {
         let key = Self.snapshotKey(for: kind)
         guard key != "cursor" else { return [] }
         let objects: [[String: Any]]
@@ -1403,7 +1399,7 @@ public struct CloudVMState: Hashable, Codable, Sendable {
             guard let payload = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else {
                 return nil
             }
-            return CloudVMEntity(kind: key, id: object["id"] as? String, payload: payload)
+            return TuiEntity(kind: key, id: object["id"] as? String, payload: payload)
         }
     }
 
@@ -1440,7 +1436,7 @@ public struct CloudVMState: Hashable, Codable, Sendable {
         return Self.redact(snapshot, context: []) as? [String: Any]
     }
 
-    public func agentEntityObject(_ entity: CloudVMEntity) -> Any {
+    public func agentEntityObject(_ entity: TuiEntity) -> Any {
         guard let object = try? JSONSerialization.jsonObject(with: entity.payload, options: [.fragmentsAllowed]) else {
             return NSNull()
         }
@@ -1488,30 +1484,30 @@ public struct CloudVMState: Hashable, Codable, Sendable {
 /// Freshness of an accepted document is separate from the document itself.
 /// A sleeping or disconnected VM can still have useful last-known state, but
 /// that state must never be mistaken for a permission to mutate the VM.
-public enum CloudVMStateFreshness: String, Codable, Sendable {
+public enum TuiStateFreshness: String, Codable, Sendable {
     case current
     case stale
 }
 
-public struct CloudVMStateObservation: Hashable, Codable, Sendable {
-    public var freshness: CloudVMStateFreshness
+public struct TuiStateObservation: Hashable, Codable, Sendable {
+    public var freshness: TuiStateFreshness
     public var reason: String?
     /// Transient local writes whose commit cursor is ahead of the accepted
     /// graph. They are exported so an agent can distinguish a provisional row
     /// from authoritative daemon state. This field is never persisted in the
     /// daemon document and disappears when the receipt is observed.
-    public var pendingWrites: [CloudVMPendingMutation]? = nil
+    public var pendingWrites: [TuiPendingMutation]? = nil
 
-    public static let current = CloudVMStateObservation(freshness: .current, reason: nil, pendingWrites: nil)
+    public static let current = TuiStateObservation(freshness: .current, reason: nil, pendingWrites: nil)
 
     public static func stale(reason: String? = nil) -> Self {
         Self(freshness: .stale, reason: reason, pendingWrites: nil)
     }
 
     public init(
-        freshness: CloudVMStateFreshness,
+        freshness: TuiStateFreshness,
         reason: String? = nil,
-        pendingWrites: [CloudVMPendingMutation]? = nil
+        pendingWrites: [TuiPendingMutation]? = nil
     ) {
         self.freshness = freshness
         self.reason = reason
@@ -1524,14 +1520,14 @@ public struct CloudVMStateObservation: Hashable, Codable, Sendable {
 /// same-generation graph before the receipt is stale. At the exact receipt
 /// cursor, the named value must match. A later cursor is authoritative even
 /// when another writer changed the value after our mutation.
-public enum CloudVMRemoteMutationReceiptDecision: Equatable, Sendable {
+public enum TuiRemoteMutationReceiptDecision: Equatable, Sendable {
     case accept
     case rejectStale
     case rejectConflict
 
     public static func resolve(
-        receipt: CloudVMCursor,
-        incoming: CloudVMCursor?,
+        receipt: TuiCursor,
+        incoming: TuiCursor?,
         targetMatches: Bool
     ) -> Self {
         guard let incoming else { return .rejectStale }
@@ -1552,7 +1548,7 @@ public enum CloudVMRemoteMutationReceiptDecision: Equatable, Sendable {
 /// Decides whether a cursor belongs to a generation that this provider may
 /// still install. A generation is opaque, so the only safe old-link signal is
 /// that the same identifier was already accepted before another generation.
-public enum CloudVMGenerationAcceptanceDecision: Equatable, Sendable {
+public enum TuiGenerationAcceptanceDecision: Equatable, Sendable {
     case accept
     case rejectStale
 
@@ -1570,7 +1566,7 @@ public enum CloudVMGenerationAcceptanceDecision: Equatable, Sendable {
 /// A pending creation receipt is valid only when that same refresh established
 /// the current daemon generation. The tab command carries a revision, not a
 /// generation, so an old receipt cannot be used after a failed refresh.
-public enum CloudVMRemoteMutationAuthority: Equatable, Sendable {
+public enum TuiRemoteMutationAuthority: Equatable, Sendable {
     case currentGraph
     case pendingReceipt
     case snapshotOnly
@@ -1603,7 +1599,7 @@ public enum CloudVMRemoteMutationAuthority: Equatable, Sendable {
 /// A local read-your-write receipt. The remote daemon remains authoritative;
 /// this value only tells agents why a derived catalog row can temporarily be
 /// ahead of the last accepted complete graph.
-public struct CloudVMPendingMutation: Hashable, Codable, Sendable {
+public struct TuiPendingMutation: Hashable, Codable, Sendable {
     public enum Kind: String, Codable, Sendable {
         case terminalCreate = "terminal_create"
         case browserCreate = "browser_create"
@@ -1618,7 +1614,7 @@ public struct CloudVMPendingMutation: Hashable, Codable, Sendable {
     public var remoteWorkspaceID: String?
     public var remoteTabID: String?
     public var name: String?
-    public var receipt: CloudVMCursor?
+    public var receipt: TuiCursor?
 
     public init(
         kind: Kind,
@@ -1626,7 +1622,7 @@ public struct CloudVMPendingMutation: Hashable, Codable, Sendable {
         remoteWorkspaceID: String? = nil,
         remoteTabID: String? = nil,
         name: String? = nil,
-        receipt: CloudVMCursor? = nil
+        receipt: TuiCursor? = nil
     ) {
         self.kind = kind
         self.resource = resource
@@ -1641,9 +1637,9 @@ public struct CloudVMPendingMutation: Hashable, Codable, Sendable {
 /// event feed. Keep an existing transport warning until the versioned feed is
 /// running again, so an agent never mistakes a point-in-time read for live sync.
 /// lint:allow namespace-type — moved unchanged from the app target, where it was an internal static namespace; reshaping it is a separate change from this package move.
-public enum CloudVMEventFeedRecoveryDecision {
+public enum TuiEventFeedRecoveryDecision {
     public static func shouldClearWarning(
-        snapshotCursor: CloudVMCursor?,
+        snapshotCursor: TuiCursor?,
         subscriptionResumed: Bool
     ) -> Bool {
         snapshotCursor != nil && subscriptionResumed
@@ -1652,7 +1648,7 @@ public enum CloudVMEventFeedRecoveryDecision {
 
 /// The stream can carry a delta that the desktop does not understand, or it can
 /// end because its journal window overflowed. Both cases require a new snapshot.
-public enum CloudVMStateSyncDecision: Equatable, Sendable {
+public enum TuiStateSyncDecision: Equatable, Sendable {
     case ignoreStale
     case installSnapshot
     case fetchSnapshot
@@ -1664,8 +1660,8 @@ public enum CloudVMStateSyncDecision: Equatable, Sendable {
     /// revision is lower. A delta must join the exact cursor already installed;
     /// accepting a non-contiguous delta would silently lose an entity update.
     public static func forSnapshot(
-        incoming: CloudVMCursor?,
-        current: CloudVMCursor?
+        incoming: TuiCursor?,
+        current: TuiCursor?
     ) -> Self {
         // A snapshot without a cursor is a legacy, snapshot-only document. It has
         // no ordering information, so it may initialize an empty slot but must
@@ -1682,7 +1678,7 @@ public enum CloudVMStateSyncDecision: Equatable, Sendable {
         generation: String,
         previousRevision: UInt64,
         revision: UInt64,
-        current: CloudVMCursor?
+        current: TuiCursor?
     ) -> Self {
         guard let current,
               generation == current.generation else { return .fetchSnapshot }
@@ -1775,7 +1771,7 @@ public struct SurfaceRemoteView: Hashable, Codable, Sendable {
 }
 
 /// Stable identity from the creation receipt, checked again before attachment.
-public struct CloudCreationAttachment: Hashable, Codable, Sendable {
+public struct TuiCreationAttachment: Hashable, Codable, Sendable {
     public let generation: String
     public let terminalID: String
 
@@ -1791,7 +1787,7 @@ public struct SurfaceResource: Identifiable, Hashable, Codable, Sendable {
     /// cwd for terminals, URL for browsers, display name for screens.
     public var detail: String?
     public var lifecycle: SurfaceLifecycle
-    public var creationAttachment: CloudCreationAttachment? = nil
+    public var creationAttachment: TuiCreationAttachment? = nil
     public var agent: SurfaceAgentBadge?
     /// The workspace of the resource's first view (compat: pre-multi-view callers read
     /// one workspace). nil when the resource has zero views, or is local.
@@ -1844,7 +1840,7 @@ public struct SurfaceResource: Identifiable, Hashable, Codable, Sendable {
         title: String,
         detail: String? = nil,
         lifecycle: SurfaceLifecycle,
-        creationAttachment: CloudCreationAttachment? = nil,
+        creationAttachment: TuiCreationAttachment? = nil,
         agent: SurfaceAgentBadge? = nil,
         remoteWorkspace: SurfaceRemoteWorkspace? = nil,
         remoteViews: [SurfaceRemoteView]? = nil,
@@ -1919,12 +1915,8 @@ public enum SurfacePlacement: String, Codable, Sendable {
 public enum SurfaceLinkState: String, Codable, Sendable {
     case connected
     case connecting
-    case asleep
     case unavailable
     case error
-    /// Another Mac that the presence service reports offline (app quit, asleep, or
-    /// unreachable); its last known tree stays listed until it comes back.
-    case offline
     /// The local Mac needs no link.
     case notApplicable = "n/a"
 }
@@ -1935,24 +1927,24 @@ public enum SurfaceLinkState: String, Codable, Sendable {
 /// derived resource rows always describe one accepted state.
 public struct SurfaceCatalogExport: Sendable {
     public var catalog: SurfaceCatalogSnapshot
-    public var cloudStates: [CloudVMState]
+    public var tuiStates: [TuiState]
     /// Observation metadata is kept beside, not inside, the daemon document.
     /// This preserves cursor/raw-snapshot equality while making offline state
     /// explicit to agents.
-    public var cloudStateObservations: [SurfaceMachineID: CloudVMStateObservation] = [:]
+    public var tuiStateObservations: [SurfaceMachineID: TuiStateObservation] = [:]
     /// Existing stable local owner IDs, captured beside this read's runtime projections.
     /// Missing owners remain unknown; these values never become resource or mutation IDs.
     public var projectionIdentities: [SurfaceProjection: SurfaceProjectionIdentity] = [:]
 
     public init(
         catalog: SurfaceCatalogSnapshot,
-        cloudStates: [CloudVMState],
-        cloudStateObservations: [SurfaceMachineID: CloudVMStateObservation] = [:],
+        tuiStates: [TuiState],
+        tuiStateObservations: [SurfaceMachineID: TuiStateObservation] = [:],
         projectionIdentities: [SurfaceProjection: SurfaceProjectionIdentity] = [:]
     ) {
         self.catalog = catalog
-        self.cloudStates = cloudStates
-        self.cloudStateObservations = cloudStateObservations
+        self.tuiStates = tuiStates
+        self.tuiStateObservations = tuiStateObservations
         self.projectionIdentities = projectionIdentities
     }
 }

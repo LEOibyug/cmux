@@ -56,8 +56,7 @@ struct SessionRemoteWorkspaceSnapshotTests {
             preserveAfterTerminalExit: true,
             skipDaemonBootstrap: true,
             relayPort: 7000,
-            persistentDaemonSlot: "slot",
-            managedCloudVMID: "vm-123"
+            persistentDaemonSlot: "slot"
         )
         let data = try JSONEncoder().encode(snapshot)
         let decoded = try JSONDecoder().decode(SessionRemoteWorkspaceSnapshot.self, from: data)
@@ -89,7 +88,6 @@ struct SessionRemoteWorkspaceSnapshotTests {
         #expect(decoded.skipDaemonBootstrap == nil)
         #expect(decoded.relayPort == nil)
         #expect(decoded.persistentDaemonSlot == nil)
-        #expect(decoded.managedCloudVMID == nil)
     }
 
     @Test("a cmux-tui SSH snapshot keeps only a cmux-owned ControlPath")
@@ -110,7 +108,6 @@ struct SessionRemoteWorkspaceSnapshotTests {
     @Test("transport raw values are the persisted wire strings")
     func transportRawValues() {
         #expect(WorkspaceRemoteTransport.ssh.rawValue == "ssh")
-        #expect(WorkspaceRemoteTransport.websocket.rawValue == "websocket")
         #expect(WorkspaceRemoteTerminalTransport.ssh.rawValue == "ssh")
         #expect(WorkspaceRemoteTerminalTransport.mosh.rawValue == "mosh")
         #expect(WorkspaceRemoteTerminalProfile.Kind.tmux.rawValue == "tmux")

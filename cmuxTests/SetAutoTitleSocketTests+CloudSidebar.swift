@@ -17,11 +17,11 @@ extension SetAutoTitleSocketTests {
             let probe = try await callAsync(method: "surface.sync_codex_native_title", params: [
                 "workspace_id": workspace.id.uuidString, "panel_id": fixture.panelID.uuidString, "probe": true
             ])
-            let context = try #require((probe["result"] as? [String: Any])?["cloud_name_context"] as? [String: Any])
+            let context = try #require((probe["result"] as? [String: Any])?["tui_name_context"] as? [String: Any])
             let response = try await callAsync(method: "surface.sync_codex_native_title", params: [
                 "workspace_id": workspace.id.uuidString,
                 "panel_id": fixture.panelID.uuidString,
-                "title": "Calculate 2+2", "cloud_name_context": context
+                "title": "Calculate 2+2", "tui_name_context": context
             ])
             #expect(response["ok"] as? Bool == true)
             #expect((response["result"] as? [String: Any])?["applied"] as? Bool == true)
@@ -32,7 +32,7 @@ extension SetAutoTitleSocketTests {
             fixture.reconcile()
             try fixture.assertParity("Calculate 2+2")
             #expect(workspace.panelCustomTitleSources[fixture.panelID] == .remote)
-            #expect(fixture.catalog.cloudStates[fixture.machine]?.lookupIndex.tab(id: "tab_main")?.nameAuthority?.source == .auto)
+            #expect(fixture.catalog.tuiStates[fixture.machine]?.lookupIndex.tab(id: "tab_main")?.nameAuthority?.source == .auto)
             // Cmd+R's shared action resolves the workspace UUID, never its old title.
             #expect(manager.setCustomTitle(tabId: workspace.id, title: "Review / 本番"))
             try await fixture.drain()
@@ -49,7 +49,7 @@ extension SetAutoTitleSocketTests {
         try await withManagerAsync { manager, workspace in
             let fixture = try CloudSidebarRenameFixture(manager: manager, workspace: workspace, catalog: .shared)
             defer { fixture.close() }
-            let context = try #require(fixture.catalog.cloudAgentNameContext(workspaceID: workspace.id, panelID: fixture.panelID)?.wire)
+            let context = try #require(fixture.catalog.tuiAgentNameContext(workspaceID: workspace.id, panelID: fixture.panelID)?.wire)
             if userFirst {
                 #expect(workspace.setPanelCustomTitle(panelId: fixture.panelID, title: "Arbitrary / 名前"))
                 try await fixture.drain()
@@ -58,7 +58,7 @@ extension SetAutoTitleSocketTests {
             }
             let agent = try await callAsync(method: "surface.sync_codex_native_title", params: [
                 "workspace_id": workspace.id.uuidString, "panel_id": fixture.panelID.uuidString,
-                "title": "Calculate 2+2", "cloud_name_context": context
+                "title": "Calculate 2+2", "tui_name_context": context
             ])
             #expect((agent["result"] as? [String: Any])?["applied"] as? Bool == !userFirst)
             if !userFirst { #expect(workspace.setPanelCustomTitle(panelId: fixture.panelID, title: "Arbitrary / 名前")) }
@@ -68,7 +68,7 @@ extension SetAutoTitleSocketTests {
             fixture.reconcile()
             let delayed = try await callAsync(method: "surface.sync_codex_native_title", params: [
                 "workspace_id": workspace.id.uuidString, "panel_id": fixture.panelID.uuidString,
-                "title": "Delayed old task", "cloud_name_context": context
+                "title": "Delayed old task", "tui_name_context": context
             ])
             #expect((delayed["result"] as? [String: Any])?["applied"] as? Bool == false)
             try await fixture.drain()
@@ -76,7 +76,7 @@ extension SetAutoTitleSocketTests {
             fixture.reconcile()
             try fixture.assertParity("Arbitrary / 名前")
             #expect(workspace.panelCustomTitleSources[fixture.panelID] == .remote)
-            #expect(fixture.catalog.cloudStates[fixture.machine]?.lookupIndex.tab(id: "tab_main")?.nameAuthority?.source == .user)
+            #expect(fixture.catalog.tuiStates[fixture.machine]?.lookupIndex.tab(id: "tab_main")?.nameAuthority?.source == .user)
         }
     }
 
@@ -88,7 +88,7 @@ extension SetAutoTitleSocketTests {
         let other = try #require(fixture.snapshot().resources[1].remoteViews?.first)
         resource.remoteViews?.append(other)
         let projection = SurfaceProjection(resource: resource.id, workspaceID: UUID(), panelID: UUID(), remoteTabID: other.tabID)
-        let target = CloudWorkspaceRenameService().inferredRemoteWorkspaceTarget(projections: [projection], resources: [resource])
+        let target = TuiWorkspaceRenameService().inferredRemoteWorkspaceTarget(projections: [projection], resources: [resource])
         #expect(target?.machine == fixture.machine)
         #expect(target?.remoteWorkspaceID == other.workspace.id)
     }

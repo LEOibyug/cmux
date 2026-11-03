@@ -3,10 +3,10 @@
 /// tables (the package never localizes). Keys and default values are
 /// identical to the legacy controller's inline `String(localized:)` calls.
 public struct RemoteSessionStrings: Sendable, Equatable {
-    /// Format for the connected state of an SSH-only cloud VM whose proxy is
-    /// disabled (`remote.state.connected.vmNoProxy`); `%@` is the display
-    /// target.
-    public let connectedVMNoProxyFormat: String
+    /// Format for an attach-only SSH/mosh connection with the remote helper
+    /// deliberately disabled (`remote.state.connected.withoutDaemon`).
+    /// `%@` is the display target.
+    public let connectedWithoutDaemonFormat: String
     /// Format for the suspended-auto-reconnect state detail
     /// (`remote.state.suspended.detail`); `%@` is the display target.
     public let suspendedDetailFormat: String
@@ -22,20 +22,20 @@ public struct RemoteSessionStrings: Sendable, Equatable {
     /// Creates the app-resolved strings bundle.
     ///
     /// - Parameters:
-    ///   - connectedVMNoProxyFormat: Connected-without-proxy detail format.
+    ///   - connectedWithoutDaemonFormat: Attach-only connection detail format.
     ///   - suspendedDetailFormat: Suspended reconnect detail format.
     ///   - reverseRelayUnavailableRetrying: Generic relay retry detail.
     ///   - reverseRelayPortUnavailableRetrying: Port-conflict retry detail.
     ///   - controlMasterOwnershipUnavailable: Cross-process ownership detail.
     public init(
-        connectedVMNoProxyFormat: String,
+        connectedWithoutDaemonFormat: String,
         suspendedDetailFormat: String,
         reverseRelayUnavailableRetrying: String,
         reverseRelayPortUnavailableRetrying: String,
         controlMasterOwnershipUnavailable: String,
         remoteProxyUnavailable: String = "Remote proxy unavailable"
     ) {
-        self.connectedVMNoProxyFormat = connectedVMNoProxyFormat
+        self.connectedWithoutDaemonFormat = connectedWithoutDaemonFormat
         self.suspendedDetailFormat = suspendedDetailFormat
         self.reverseRelayUnavailableRetrying =
             reverseRelayUnavailableRetrying

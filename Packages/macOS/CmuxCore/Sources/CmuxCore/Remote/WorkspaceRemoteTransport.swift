@@ -4,6 +4,4 @@
 public enum WorkspaceRemoteTransport: String, Codable, Equatable, Sendable {
     /// Connect over SSH (interactive shells, daemon bootstrap, port forwards).
     case ssh
-    /// Connect through a brokered WebSocket daemon endpoint (Cloud VMs).
-    case websocket
 }

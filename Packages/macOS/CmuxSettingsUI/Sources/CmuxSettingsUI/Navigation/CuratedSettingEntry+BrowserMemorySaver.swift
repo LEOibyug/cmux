@@ -1,9 +1,8 @@
 import Foundation
 
 extension Array where Element == CuratedSettingEntry {
-    /// `leading`, then ``browserMemorySaverEntries``, then `trailing`. Like
-    /// ``appendingDevicesEntries(to:)``, a call rather than `+` keeps the
-    /// contextual type of ``cmuxDefault(catalog:)``'s large literals concrete.
+    /// `leading`, then ``browserMemorySaverEntries``, then `trailing`. A call
+    /// rather than `+` keeps the contextual type of the large literals concrete.
     static func insertingBrowserMemorySaverEntries(
         between leading: [CuratedSettingEntry],
         and trailing: [CuratedSettingEntry]

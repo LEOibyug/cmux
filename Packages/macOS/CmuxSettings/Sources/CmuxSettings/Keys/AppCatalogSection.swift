@@ -176,12 +176,6 @@ public struct AppCatalogSection: SettingCatalogSection {
         userDefaultsKey: "workspaceAutoReorderOnNotification"
     )
 
-    public let sendAnonymousTelemetry = DefaultsKey<Bool>(
-        id: "app.sendAnonymousTelemetry",
-        defaultValue: true,
-        userDefaultsKey: "sendAnonymousTelemetry"
-    )
-
     public let confirmQuitMode = DefaultsKey<ConfirmQuitMode>(
         id: "app.confirmQuit",
         defaultValue: .always,

@@ -1,4 +1,3 @@
-import CmuxCloud
 import AppKit
 import CmuxBrowser
 import CmuxCore
@@ -112,14 +111,7 @@ struct BrowserExternalNavigationHandler {
     }
 
     private static func isAppOwnedInternalURL(_ url: URL) -> Bool {
-        guard let scheme = url.scheme?.lowercased() else { return false }
-        if scheme == AuthEnvironment.callbackScheme.lowercased() {
-            return true
-        }
-        if BrowserURLAllowlistPolicy.trustedInternalSchemes.contains(scheme) {
-            return true
-        }
-        return BrowserAuthCallbackNavigationPolicy.shouldBlockExternalNavigation(url)
+        BrowserURLAllowlistPolicy.trustedInternalSchemes.contains(url.scheme?.lowercased() ?? "")
     }
 
     /// Maps the browser-only remote loopback alias back to its user-visible URL.

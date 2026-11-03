@@ -54,9 +54,6 @@ from typing import Any
 from cmux_jsonc_edit import JSONCEditError, remove_jsonc_path, set_jsonc_path
 
 DEFAULT_PATH = Path.home() / ".config" / "cmux" / "cmux.json"
-SCHEMA_URL = (
-    "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json"
-)
 
 
 def mutation_message(key: str) -> str:
@@ -180,7 +177,7 @@ def strip_trailing_commas_outside_strings(text: str) -> str:
 
 def load_settings(path: Path) -> dict[str, Any]:
     if not path.exists():
-        return {"$schema": SCHEMA_URL, "schemaVersion": 1}
+        return {"schemaVersion": 1}
     raw = path.read_text()
     try:
         return json.loads(strip_jsonc(raw))
@@ -979,7 +976,7 @@ def cmd_open(args: argparse.Namespace) -> int:
     if not path.exists():
         atomic_write(
             path,
-            {"$schema": SCHEMA_URL, "schemaVersion": 1},
+            {"schemaVersion": 1},
             expected_revision=None,
         )
     editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")

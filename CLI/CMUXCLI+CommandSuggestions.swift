@@ -1,7 +1,15 @@
 import Foundation
 
 extension CMUXCLI {
-    func unknownCommandError(_ command: String) -> CLIError {
+    /// Rejects unknown commands before socket discovery or authentication.
+    /// Path-opening arguments must be handled by the caller before validation.
+    static func validateTopLevelCommand(_ command: String) throws {
+        guard topLevelCommandNames.contains(command) else {
+            throw unknownCommandError(command)
+        }
+    }
+
+    static func unknownCommandError(_ command: String) -> CLIError {
         var message = "Unknown command '\(command)'."
         if let suggestion = suggestedCommandName(for: command) {
             message += " Did you mean '\(suggestion)'?"
@@ -10,7 +18,7 @@ extension CMUXCLI {
         return CLIError(message: message, exitCode: 2)
     }
 
-    private func suggestedCommandName(for command: String) -> String? {
+    private static func suggestedCommandName(for command: String) -> String? {
         var bestName: String?
         var bestDistance = Int.max
 
@@ -26,7 +34,7 @@ extension CMUXCLI {
         return bestName
     }
 
-    private func editDistance(_ lhs: String, _ rhs: String) -> Int {
+    private static func editDistance(_ lhs: String, _ rhs: String) -> Int {
         let left = Array(lhs)
         let right = Array(rhs)
         if left.isEmpty { return right.count }
@@ -50,10 +58,5 @@ extension CMUXCLI {
         return previous[right.count]
     }
 
-    static let topLevelCommandNames: Set<String> = {
-        var names = CmuxCommand.declaredCommandNames
-        // Chief remains a legacy-routed command until its facade migration.
-        names.insert("chief")
-        return names
-    }()
+    static let topLevelCommandNames = CmuxCommand.declaredCommandNames
 }

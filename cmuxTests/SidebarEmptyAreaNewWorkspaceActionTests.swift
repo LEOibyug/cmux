@@ -270,35 +270,6 @@ extension SidebarEmptyAreaNewWorkspaceActionTests {
         )
     }
 
-    /// A Cloud workspace being selected must not send Cmd+N to the Cloud,
-    /// with or without a configured action.
-    @Test func localOnlyNewWorkspaceWithConfiguredActionStaysOffTheSelectedCloudMachine() throws {
-        let appDelegate = try #require(AppDelegate.shared)
-        let fixture = try ConfigFixture(globalJSON: Self.configuredLayoutJSON)
-        defer { fixture.cleanUp() }
-
-        let windowId = appDelegate.createMainWindow()
-        defer { closeWindow(withId: windowId) }
-        let manager = try #require(appDelegate.tabManagerFor(windowId: windowId))
-        let context = try #require(
-            appDelegate.mainWindowContexts.values.first { $0.windowId == windowId }
-        )
-        context.cmuxConfigStore = fixture.store
-        let selected = try #require(manager.selectedWorkspace)
-        selected.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "cloud-machine", isBase: false)
-        let knownIds = Set(manager.tabs.map(\.id))
-
-        #expect(appDelegate.performNewWorkspaceAction(
-            tabManager: manager,
-            debugSource: "test.cmdN.configuredAction.cloudSelected",
-            localOnly: true
-        ))
-        let created = try createdWorkspace(in: manager, knownIds: knownIds)
-        waitUntil { created.customTitle != nil }
-
-        #expect(created.customTitle == "CmdNLayout")
-        #expect(created.cloudVMID == nil)
-    }
 
     @Test func localOnlyNewWorkspaceWithoutConfiguredActionCreatesPlainWorkspace() throws {
         let appDelegate = try #require(AppDelegate.shared)

@@ -8,7 +8,7 @@ extension Workspace {
     /// Reuses native panels and their byte attachments while applying daemon
     /// geometry. Workspaces containing local views retain their own split layout.
     @MainActor
-    func applyCloudWorkspaceLayout(_ layout: SurfaceProjectionLayout, projections: [SurfaceProjection]) {
+    func applyTuiWorkspaceLayout(_ layout: SurfaceProjectionLayout, projections: [SurfaceProjection]) {
         // Local Desktop/port views can belong to this Cloud workspace without a
         // daemon tab. Membership does not give the daemon geometry ownership:
         // flattening those extra views into its first leaf collapses local splits.
@@ -44,13 +44,13 @@ extension Workspace {
         guard expectedPlacements.isSubset(of: Set(layout.placements)) else { return }
         guard layout.placements.allSatisfy({ tabs[$0] != nil }) else { return }
         guard let sessionLayout = sessionLayout(for: layout, panelIDs: panelIDs) else { return }
-        if cloudLayoutMatches(layout, live: bonsplitController.treeSnapshot(), tabs: tabs) {
+        if tuiLayoutMatches(layout, live: bonsplitController.treeSnapshot(), tabs: tabs) {
             // External ratios suppress Bonsplit's geometry callback. Reconcile
             // AppKit and Ghostty even when the terminal membership is unchanged.
-            if applyCloudDividerRatios(layout, live: bonsplitController.treeSnapshot()) {
+            if applyTuiDividerRatios(layout, live: bonsplitController.treeSnapshot()) {
                 scheduleTerminalGeometryReconcile()
             }
-            recordCloudLayoutBaseline(projections)
+            recordTuiLayoutBaseline(projections)
             return
         }
         // Selecting a tab also focuses its pane. Without a focused panel, the focused
@@ -80,15 +80,15 @@ extension Workspace {
                 if let focused, bonsplitController.tab(focused) != nil { bonsplitController.selectTab(focused) }
             }
         }
-        recordCloudLayoutBaseline(projections)
+        recordTuiLayoutBaseline(projections)
         scheduleTerminalGeometryReconcile()
     }
 
     /// The machine's arrangement now shows natively; later native edits are measured from it.
-    private func recordCloudLayoutBaseline(_ projections: [SurfaceProjection]) {
+    private func recordTuiLayoutBaseline(_ projections: [SurfaceProjection]) {
         guard let machine = projections.first?.resource.machine else { return }
-        SurfaceCatalog.shared.cloudWorkspaceLayoutSyncCoordinator.machineLayoutApplied(
-            workspaceID: id, tree: cloudLayoutSyncTree(projections: projections, machine: machine)
+        SurfaceCatalog.shared.tuiWorkspaceLayoutSyncCoordinator.machineLayoutApplied(
+            workspaceID: id, tree: tuiLayoutSyncTree(projections: projections, machine: machine)
         )
     }
 
@@ -121,28 +121,28 @@ extension Workspace {
         }
     }
 
-    private func cloudLayoutMatches(_ layout: SurfaceProjectionLayout, live: ExternalTreeNode,
+    private func tuiLayoutMatches(_ layout: SurfaceProjectionLayout, live: ExternalTreeNode,
                                     tabs: [SurfaceResourcePlacement: TabID]) -> Bool {
         switch (layout, live) {
         case (.leaf(let placements), .pane(let pane)):
             return placements.compactMap { tabs[$0]?.uuid.uuidString } == pane.tabs.map(\.id)
         case (.split(let direction, _, let first, let second), .split(let split)):
             let orientation = direction == .right || direction == .left ? "horizontal" : "vertical"
-            return split.orientation == orientation && cloudLayoutMatches(first, live: split.first, tabs: tabs)
-                && cloudLayoutMatches(second, live: split.second, tabs: tabs)
+            return split.orientation == orientation && tuiLayoutMatches(first, live: split.first, tabs: tabs)
+                && tuiLayoutMatches(second, live: split.second, tabs: tabs)
         default: return false
         }
     }
 
     @discardableResult
-    private func applyCloudDividerRatios(_ layout: SurfaceProjectionLayout, live: ExternalTreeNode) -> Bool {
+    private func applyTuiDividerRatios(_ layout: SurfaceProjectionLayout, live: ExternalTreeNode) -> Bool {
         guard case .split(_, let ratio, let first, let second) = layout, case .split(let split) = live else { return false }
         var changed = false
         if let id = UUID(uuidString: split.id), abs(split.dividerPosition - ratio) > 0.0001 {
             changed = bonsplitController.setDividerPosition(CGFloat(ratio), forSplit: id, fromExternal: true)
         }
-        let firstChanged = applyCloudDividerRatios(first, live: split.first)
-        let secondChanged = applyCloudDividerRatios(second, live: split.second)
+        let firstChanged = applyTuiDividerRatios(first, live: split.first)
+        let secondChanged = applyTuiDividerRatios(second, live: split.second)
         return changed || firstChanged || secondChanged
     }
 }

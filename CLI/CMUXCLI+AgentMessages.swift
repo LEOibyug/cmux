@@ -33,7 +33,7 @@ extension CMUXCLI {
     }
 
     /// Handles `cmux agent message|inbox|messages`. Returns false for other `agent`
-    /// subcommands, which stay aliases of `cmux vm agent`.
+    /// subcommands, which are handled by the local agent dispatcher.
     func runAgentMessageCommandIfMatched(
         commandArgs: [String],
         client: SocketClient,

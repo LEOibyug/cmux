@@ -12,8 +12,7 @@ extension CMUXCLI {
     /// so the app surfaces it as a diagnostic instead of guessing a pane.
     ///
     /// Delivery failures are never silent: they land in the dead-letter file
-    /// and, when a session store and telemetry are provided, in the throttled
-    /// hook-failure report channel.
+    /// and, when a session store is provided, in the throttled local log.
     func emitAgentJournalEvent(
         client: SocketClient,
         kind: AgentJournalEventKind,
@@ -32,8 +31,7 @@ extension CMUXCLI {
         occurredAtMs: Int64? = nil,
         responseTimeout: TimeInterval? = nil,
         deadline: Date? = nil,
-        store: ClaudeHookSessionStore? = nil,
-        telemetry: CLISocketSentryTelemetry? = nil
+        store: ClaudeHookSessionStore? = nil
     ) {
         // A malformed or partial target (empty string, non-UUID, missing
         // half) is never trusted: the event is journaled as an explicit
@@ -71,7 +69,6 @@ extension CMUXCLI {
                 message: "invalid draft: \(problem)",
                 failureKind: "invalid-draft",
                 store: store,
-                telemetry: telemetry,
                 deadline: deadline
             )
             return
@@ -85,7 +82,6 @@ extension CMUXCLI {
                 message: "encode failed",
                 failureKind: "encode-failed",
                 store: store,
-                telemetry: telemetry,
                 deadline: deadline
             )
             return
@@ -108,7 +104,6 @@ extension CMUXCLI {
                     failureKind: Self.agentJournalReplyFailureKind(response),
                     error: CLIError(message: response),
                     store: store,
-                    telemetry: telemetry,
                     deadline: deadline
                 )
                 return
@@ -119,7 +114,6 @@ extension CMUXCLI {
                 message: String(describing: error),
                 error: error,
                 store: store,
-                telemetry: telemetry,
                 deadline: deadline
             )
         }
@@ -156,7 +150,7 @@ extension CMUXCLI {
     }
 
     /// Maps the app's fixed `agent_journal_append` rejection replies onto a
-    /// stable telemetry kind. The raw reply stays out of telemetry.
+    /// stable local diagnostic kind. Raw replies stay out of the local log.
     static func agentJournalReplyFailureKind(_ response: String) -> String {
         let reply = response.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if reply.hasPrefix("error: agent journal unavailable") { return "reply-journal-unavailable" }
@@ -171,21 +165,19 @@ extension CMUXCLI {
     /// file, warned on stderr, and (when possible) reported through the
     /// throttled hook-failure channel. Never silent.
     ///
-    /// `error` is the underlying failure, used to classify expected app
-    /// lifecycle and socket states; `failureKind` names a failure that has no
-    /// thrown error (a local draft problem or an app rejection reply).
+    /// `error` provides the local failure type; `failureKind` names a failure
+    /// with no thrown error (a local draft problem or app rejection reply).
     func recordAgentJournalDeliveryFailure(
         draft: AgentJournalEventDraft,
         message: String,
         failureKind: String? = nil,
         error: Error? = nil,
         store: ClaudeHookSessionStore?,
-        telemetry: CLISocketSentryTelemetry?,
         deadline: Date? = nil
     ) {
         appendAgentJournalDeadLetter(draft: draft, message: message)
         cliWriteStderr("Warning: agent journal append failed (\(draft.kind.rawValue)): \(message)\n")
-        if let store, let telemetry {
+        if let store {
             reportAgentHookFailure(
                 stage: .journalAppend,
                 agentName: draft.source,
@@ -194,7 +186,6 @@ extension CMUXCLI {
                 error: error,
                 failureKind: failureKind,
                 store: store,
-                telemetry: telemetry,
                 deadline: deadline
             )
         }

@@ -310,10 +310,10 @@ struct RemoteRelayAuthorizationPolicyTests {
         #expect(plan?.previousSessionID == "old-session")
         #expect(planner.routing(isRemoteOwned: false, configuration: nil) == .local)
 
-        let bakedSSH = WorkspaceRemoteConfiguration(
+        let attachOnlySSH = WorkspaceRemoteConfiguration(
             transport: .ssh,
             terminalTransport: .ssh,
-            destination: "vm+cmux@vm-ssh.freestyle.sh",
+            destination: "user@host.test",
             port: 22,
             identityFile: nil,
             sshOptions: [],
@@ -322,12 +322,11 @@ struct RemoteRelayAuthorizationPolicyTests {
             relayID: nil,
             relayToken: nil,
             localSocketPath: nil,
-            managedCloudVMID: "vm-base",
             terminalStartupCommand: nil,
             preserveAfterTerminalExit: true,
-            persistentDaemonSlot: "cmux-default-freestyle-sshd-v1",
+            persistentDaemonSlot: "user-slot",
             skipDaemonBootstrap: true
         )
-        #expect(planner.routing(isRemoteOwned: true, configuration: bakedSSH) == .unsupportedRemote)
+        #expect(planner.routing(isRemoteOwned: true, configuration: attachOnlySSH) == .unsupportedRemote)
     }
 }

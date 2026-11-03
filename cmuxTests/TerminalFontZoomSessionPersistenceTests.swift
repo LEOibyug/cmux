@@ -1065,7 +1065,7 @@ struct TerminalFontZoomSessionPersistenceTests {
             isExplicitOverride: false
         )
         sourcePanel.surface.recordCurrentFontSizeLineage(durableLineage)
-        sourcePanel.surface.mobileViewportFontFitState = MobileViewportFontFitState(
+        sourcePanel.surface.sharedViewportFontFitState = SharedViewportFontFitState(
             baseRuntimePointSize: 12,
             fittedRuntimePointSize: 6
         )
@@ -1164,7 +1164,7 @@ struct TerminalFontZoomSessionPersistenceTests {
             isExplicitOverride: false
         )
         surface.recordCurrentFontSizeLineage(configLineage)
-        surface.mobileViewportFontFitState = MobileViewportFontFitState(
+        surface.sharedViewportFontFitState = SharedViewportFontFitState(
             baseRuntimePointSize: 12,
             fittedRuntimePointSize: 6
         )
@@ -1185,7 +1185,7 @@ struct TerminalFontZoomSessionPersistenceTests {
         )
 
         #expect(resetLineage == TerminalFontSizeLineage(basePoints: 6, isExplicitOverride: false))
-        #expect(surface.mobileViewportFontFitState?.baseRuntimePointSize == 6)
+        #expect(surface.sharedViewportFontFitState?.baseRuntimePointSize == 6)
 
         let userLineage = surface.recordObservedFontSizeLineage(
             runtimePoints: 7,
@@ -1194,7 +1194,7 @@ struct TerminalFontZoomSessionPersistenceTests {
         )
 
         #expect(userLineage == TerminalFontSizeLineage(basePoints: 7, isExplicitOverride: true))
-        #expect(surface.mobileViewportFontFitState?.baseRuntimePointSize == 7)
+        #expect(surface.sharedViewportFontFitState?.baseRuntimePointSize == 7)
         #expect(surface.sessionFontSizeOverrideBasePoints() == 7)
     }
 

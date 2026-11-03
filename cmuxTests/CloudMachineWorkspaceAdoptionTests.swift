@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -11,103 +11,22 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct CloudMachineWorkspaceAdoptionTests {
-    @Test("The bind acknowledgement returns the explicit workspace's owning window")
-    func bindReceiptOwnsWindowResolution() async throws {
-        try await AppContextSerialGate.withExclusiveAppContext {
-            let app = try VaultPaneAppFixture()
-            let controller = TerminalController.shared
-            let previousManager = controller.activeTabManagerForCallerNotification()
-            let betaKey = RightSidebarBetaFeatureSettings.cloudMachinesEnabledKey
-            let previousBeta = UserDefaults.standard.object(forKey: betaKey)
-            let other = TabManager(autoWelcomeIfNeeded: false)
-            let otherWindow = app.appDelegate.registerMainWindowContextForTesting(tabManager: other)
-            defer {
-                app.appDelegate.unregisterMainWindowContextForTesting(windowId: otherWindow)
-                other.tabs.forEach { $0.teardownAllPanels() }
-                app.tearDown()
-                controller.setActiveTabManager(previousManager)
-                UserDefaults.standard.set(previousBeta, forKey: betaKey)
-            }
-            UserDefaults.standard.set(true, forKey: betaKey)
-            controller.setActiveTabManager(other)
-            let ref = try #require(controller.v2Ref(kind: .workspace, uuid: app.workspace.id) as? String)
-            for target in [ref, app.workspace.id.uuidString.lowercased()] {
-                let response = controller.v2WorkspaceCloudVMBind(params: ["workspace_id": target, "vm_id": "receipt-fixture"])
-                let bytes = Data(controller.v2Result(id: "receipt", response).utf8)
-                let object = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
-                #expect(object["ok"] as? Bool == true)
-                let result = try #require(object["result"] as? [String: Any])
-                #expect(result["workspace_id"] as? String == app.workspace.id.uuidString)
-                #expect(result["workspace_ref"] as? String == ref)
-                #expect(result["window_id"] as? String == app.windowID.uuidString)
-            }
-        }
-    }
-
-    @Test("Abandoning the last creating card leaves no orphan and keeps the window usable")
-    func cancellationOfLastWorkspace() async throws {
-        try await AppContextSerialGate.withExclusiveAppContext {
-            let app = try VaultPaneAppFixture()
-            defer { for workspace in app.manager.tabs { workspace.teardownAllPanels() }; app.tearDown() }
-            let pending = app.manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
-            app.manager.closeWorkspace(app.workspace, recordHistory: false)
-            #expect(app.manager.tabs.map(\.id) == [pending.id])
-            NewMachineSheetPresenter.closeReservedWorkspace(pending.id)
-            #expect(app.manager.tabs.count == 1)
-            #expect(app.manager.tabs.first?.id != pending.id)
-            #expect(app.manager.tabs.first?.panels.values.contains { $0 is CloudVMLoadingPanel } == false)
-            let remaining = app.manager.tabs.map(\.id)
-            NewMachineSheetPresenter.closeReservedWorkspace(pending.id)
-            #expect(app.manager.tabs.map(\.id) == remaining)
-        }
-    }
-
-    @Test("Cleanup preserves ordinary content and removes only its loading card")
-    func userPanesAreNotDisposable() async throws {
-        try await AppContextSerialGate.withExclusiveAppContext {
-            let app = try VaultPaneAppFixture()
-            defer { for workspace in app.manager.tabs { workspace.teardownAllPanels() }; app.tearDown() }
-            let pending = app.manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
-            let panel = try #require(app.workspace.focusedTerminalPanel)
-            pending.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "cancelled-machine", isBase: false)
-            NewMachineSheetPresenter.closeReservedWorkspace(app.workspace.id)
-            #expect(app.manager.tabs.contains { $0.id == app.workspace.id })
-            #expect(app.workspace.panels[panel.id] === panel)
-            let pane = try #require(pending.bonsplitController.allPaneIds.first)
-            let command = try #require(pending.newTerminalSurface(inPane: pane, focus: false,
-                initialCommand: "echo first-command", autoRefreshMetadata: false))
-            pending.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "newer-machine", isBase: false)
-            NewMachineSheetPresenter.closeReservedWorkspace(pending.id, machineID: "cancelled-machine")
-            #expect(app.manager.tabs.contains { $0.id == pending.id })
-            #expect(pending.panels.count == 2 && pending.panels[command.id] === command)
-            #expect(pending.cloudVMBinding?.vmID == "newer-machine")
-            pending.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "cancelled-machine", isBase: false)
-            NewMachineSheetPresenter.closeReservedWorkspace(pending.id, machineID: "cancelled-machine")
-            #expect(pending.panels.count == 1 && pending.panels[command.id] === command)
-            #expect(pending.cloudVMBinding == nil)
-            app.appDelegate.closeWorkspaces(forManagedCloudVMID: "cancelled-machine")
-            #expect(app.manager.tabs.contains { $0.id == pending.id })
-            #expect(pending.panels[command.id] === command)
-            #expect(command.surface.initialCommand?.contains("first-command") == true)
-        }
-    }
 
     @Test("Reserved creation targets its loading card after the user focuses another pane")
     func reservedCreationDoesNotCloseFocusedUserPane() async throws {
         try await AppContextSerialGate.withExclusiveAppContext {
             let app = try VaultPaneAppFixture()
             defer { for workspace in app.manager.tabs { workspace.teardownAllPanels() }; app.tearDown() }
-            let pending = app.manager.addWorkspace(initialSurface: .cloudVMLoading, select: false,
-                autoWelcomeIfNeeded: false)
-            let loadingPanels = pending.panels.values.compactMap { $0 as? CloudVMLoadingPanel }
+            let pending = app.manager.addWorkspace(initialSurface: .remoteLoading, select: false)
+            let loadingPanels = pending.panels.values.compactMap { $0 as? RemoteLoadingPanel }
             let loading = try #require(loadingPanels.count == 1 ? loadingPanels[0] : nil)
             let pane = try #require(pending.paneId(forPanelId: loading.id))
             let command = try #require(pending.newTerminalSurface(inPane: pane, focus: true,
                 initialCommand: "echo user-content", autoRefreshMetadata: false))
             #expect(pending.focusedPanelId == command.id)
 
-            let host = CloudWorkspaceCreationHost(manager: app.manager, reservedWorkspaceID: pending.id)
-            let reservation = try host.reserve(title: "Cloud VM", machine: .cloud("reserved-machine"), focus: false)
+            let host = TuiWorkspaceCreationHost(manager: app.manager, reservedWorkspaceID: pending.id)
+            let reservation = try host.reserve(title: "Cloud VM", machine: .ssh("e65b39c61d1c69b2184cd89464e454ac3309d01b30f591c283790934ea336d4b"), focus: false)
 
             #expect(reservation.panelID != command.id)
             #expect(pending.panels[command.id] === command)
@@ -127,53 +46,46 @@ struct CloudMachineWorkspaceAdoptionTests {
             catalog.register(provider)
             defer { catalog.unregister(machine: provider.machine) }
             let pending = manager.addWorkspace(title: "New Machine", titleSource: .auto,
-                initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
-            let loading = try #require(pending.panels.values.first as? CloudVMLoadingPanel)
+                initialSurface: .remoteLoading, select: false)
+            let loading = try #require(pending.panels.values.first as? RemoteLoadingPanel)
             let tab = pending.surfaceIdFromPanelId(loading.id)
             let pane = pending.paneId(forPanelId: loading.id)
             let stableID = pending.stableId
             let selection = manager.selectedTabId
-            #expect(pending.cloudVMBinding == nil)
+            #expect(pending.remoteWorkspaceBinding == nil)
             #expect(!pending.isRestorableInSessionSnapshot, "an uncommitted creating card cannot restore as a local shell")
 
             try provider.install(in: catalog)
-            catalog.bindCloudWorkspace(localWorkspaceID: pending.id, machine: provider.machine, remoteWorkspaceID: nil)
-            let loadingPresentation = CloudWorkspaceSidebarPresentation(
-                workspace: pending, orderedPanelIDs: [loading.id], usesLastSegmentPath: false, catalog: catalog
-            )
-            #expect(loadingPresentation?.machineLabel.contains("brave-sapphire-lobster") == true)
-            #expect(loadingPresentation?.directoryCandidates.isEmpty == true)
+            catalog.bindRemoteWorkspace(localWorkspaceID: pending.id, machine: provider.machine, remoteWorkspaceID: nil)
+            #expect(pending.remoteWorkspaceBinding?.machineID == provider.machine.rawValue)
+            #expect(pending.presentedCurrentDirectory == nil)
             let first = try await open(pending, provider: provider, catalog: catalog)
             #expect(first.panelID == loading.id)
-            #expect(CloudWorkspaceSidebarPresentation(
-                workspace: pending, orderedPanelIDs: [loading.id], usesLastSegmentPath: false, catalog: catalog
-            )?.directoryCandidates.first?.hasPrefix("brave-sapphire-lobster") == true)
+            #expect(pending.remoteBindingState.projectedResources[first.panelID]?.machine == provider.machine)
             #expect(pending.surfaceIdFromPanelId(first.panelID) == tab)
             #expect(pending.paneId(forPanelId: first.panelID) == pane)
             #expect(pending.panels.count == 1)
             #expect(pending.stableId == stableID)
             #expect(pending.panels[first.panelID]?.stableSurfaceId == loading.stableSurfaceId)
             #expect(pending.terminalPanel(for: first.panelID)?.surface.initialCommand == nil)
-            #expect(pending.cloudVMBinding?.remoteWorkspaceID == "ws-first")
+            #expect(pending.remoteWorkspaceBinding?.remoteWorkspaceID == "ws-first")
             #expect(pending.title == "workspace-1")
             #expect(manager.selectedTabId == selection)
-            NewMachineSheetPresenter.closeReservedWorkspace(pending.id)
-            #expect(manager.tabs.contains { $0.id == pending.id }, "an adopted projection is no longer disposable")
 
             let repeated = try await open(pending, provider: provider, catalog: catalog)
             #expect(repeated == first)
             #expect(provider.materializations == 1)
             try provider.install(in: catalog, generation: "reconnected")
-            await catalog.cloudWorkspaceProjectionCoordinator.waitForIdle()
+            await catalog.tuiWorkspaceProjectionCoordinator.waitForIdle()
             #expect(catalog.projections == [first])
             var saved = pending.sessionSnapshot(includeScrollback: false)
             saved.surfaceProjections = catalog.projectionRecords(forWorkspace: pending.id)
-            #expect(saved.cloudVM?.remoteWorkspaceID == "ws-first")
+            #expect(saved.remoteWorkspace?.remoteWorkspaceID == "ws-first")
             #expect(pending.isRestorableInSessionSnapshot)
-            let restored = Workspace(initialSurface: .cloudVMLoading)
+            let restored = Workspace(initialSurface: .remoteLoading)
             defer { restored.teardownAllPanels() }
             restored.restoreSessionSnapshot(saved)
-            #expect(restored.cloudVMBinding == pending.cloudVMBinding)
+            #expect(restored.remoteWorkspaceBinding == pending.remoteWorkspaceBinding)
             #expect(restored.title == "workspace-1")
         }
     }
@@ -189,21 +101,21 @@ struct CloudMachineWorkspaceAdoptionTests {
             catalog.register(provider)
             defer { catalog.unregister(machine: provider.machine) }
             try provider.install(in: catalog)
-            let first = manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
-            let second = manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
-            let loading = try #require(first.panels.values.first as? CloudVMLoadingPanel)
-            catalog.bindCloudWorkspace(localWorkspaceID: first.id, machine: provider.machine, remoteWorkspaceID: nil)
-            provider.beforeMaterialization = { throw CloudDiagnosticFailure.network }
-            await #expect(throws: CloudDiagnosticFailure.self) { try await open(first, provider: provider, catalog: catalog) }
+            let first = manager.addWorkspace(initialSurface: .remoteLoading, select: false)
+            let second = manager.addWorkspace(initialSurface: .remoteLoading, select: false)
+            let loading = try #require(first.panels.values.first as? RemoteLoadingPanel)
+            catalog.bindRemoteWorkspace(localWorkspaceID: first.id, machine: provider.machine, remoteWorkspaceID: nil)
+            provider.beforeMaterialization = { throw TuiTransportError.connectionClosed }
+            await #expect(throws: TuiTransportError.self) { try await open(first, provider: provider, catalog: catalog) }
             #expect(first.panels[loading.id] === loading)
             #expect(catalog.projections.isEmpty)
             provider.beforeMaterialization = nil
             let attached = try await open(first, provider: provider, catalog: catalog)
             #expect(attached.panelID == loading.id)
-            #expect(second.panels.values.first is CloudVMLoadingPanel)
+            #expect(second.panels.values.first is RemoteLoadingPanel)
 
             // An explicit later mirror has its own UUID, even for the same terminal.
-            catalog.bindCloudWorkspace(localWorkspaceID: second.id, machine: provider.machine, remoteWorkspaceID: nil)
+            catalog.bindRemoteWorkspace(localWorkspaceID: second.id, machine: provider.machine, remoteWorkspaceID: nil)
             let later = try await open(second, provider: provider, catalog: catalog)
             #expect(later.workspaceID != attached.workspaceID && later.panelID != attached.panelID)
             #expect(first.panels.count == 1 && second.panels.count == 1)
@@ -212,9 +124,9 @@ struct CloudMachineWorkspaceAdoptionTests {
             // An ordinary terminal can contain the user's first command; it is
             // never consumed as a loading card, regardless of a matching title.
             let ordinary = manager.addWorkspace(title: "Cloud VM", titleSource: .auto, initialTerminalCommand: "echo first-command",
-                select: false, eagerLoadTerminal: false, autoWelcomeIfNeeded: false)
+                select: false, eagerLoadTerminal: false)
             let command = try #require(ordinary.focusedTerminalPanel)
-            catalog.bindCloudWorkspace(localWorkspaceID: ordinary.id, machine: provider.machine, remoteWorkspaceID: nil)
+            catalog.bindRemoteWorkspace(localWorkspaceID: ordinary.id, machine: provider.machine, remoteWorkspaceID: nil)
             _ = try await open(ordinary, provider: provider, catalog: catalog)
             #expect(ordinary.panels[command.id] === command)
             #expect(command.surface.initialCommand?.contains("first-command") == true)
@@ -231,13 +143,13 @@ struct CloudMachineWorkspaceAdoptionTests {
             catalog.register(provider)
             defer { catalog.unregister(machine: provider.machine) }
             try provider.install(in: catalog)
-            let pending = app.manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
-            catalog.bindCloudWorkspace(localWorkspaceID: pending.id, machine: provider.machine, remoteWorkspaceID: nil)
-            let entered = CloudLinkFirstValue<Bool>(), release = CloudLinkFirstValue<Bool>()
+            let pending = app.manager.addWorkspace(initialSurface: .remoteLoading, select: false)
+            catalog.bindRemoteWorkspace(localWorkspaceID: pending.id, machine: provider.machine, remoteWorkspaceID: nil)
+            let entered = RemoteLinkFirstValue<Bool>(), release = RemoteLinkFirstValue<Bool>()
             provider.beforeMaterialization = { entered.resolve(true); _ = await release.result }
             let first = Task { try await open(pending, provider: provider, catalog: catalog) }
             _ = await entered.result
-            let started = CloudLinkFirstValue<Bool>()
+            let started = RemoteLinkFirstValue<Bool>()
             let second = Task { started.resolve(true); return try await open(pending, provider: provider, catalog: catalog) }
             _ = await started.result
             #expect(provider.materializations == 1)
@@ -259,12 +171,12 @@ struct CloudMachineWorkspaceAdoptionTests {
             catalog.register(provider)
             defer { catalog.unregister(machine: provider.machine) }
             try provider.install(in: catalog)
-            let pending = app.manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
-            catalog.bindCloudWorkspace(localWorkspaceID: pending.id, machine: provider.machine, remoteWorkspaceID: nil)
+            let pending = app.manager.addWorkspace(initialSurface: .remoteLoading, select: false)
+            catalog.bindRemoteWorkspace(localWorkspaceID: pending.id, machine: provider.machine, remoteWorkspaceID: nil)
             let originalID = try #require(pending.panels.values.first?.id)
             await #expect(throws: (any Error).self) { try await open(pending, provider: provider, catalog: catalog) }
             #expect(pending.panels.count == 1)
-            #expect((pending.panels[originalID] as? CloudVMLoadingPanel)?.hasFailed == true)
+            #expect((pending.panels[originalID] as? RemoteLoadingPanel)?.hasFailed == true)
             #expect(catalog.projections.isEmpty)
             provider.returnMismatchedPlacement = false
             let retry = try await open(pending, provider: provider, catalog: catalog)
@@ -274,7 +186,7 @@ struct CloudMachineWorkspaceAdoptionTests {
     }
 
     private func makeCatalog(_ manager: TabManager) -> SurfaceCatalog {
-        SurfaceCatalog(cloudWorkspaceRenameService: CloudWorkspaceRenameService(environment: .init(
+        SurfaceCatalog(tuiWorkspaceRenameService: TuiWorkspaceRenameService(environment: .init(
             workspace: { manager.workspacesById[$0] }, tabManager: { _ in manager }, workspaces: { manager.tabs }
         )))
     }
@@ -289,18 +201,18 @@ struct CloudMachineWorkspaceAdoptionTests {
             catalog.register(provider)
             defer { catalog.unregister(machine: provider.machine) }
             try provider.install(in: catalog)
-            let pending = app.manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
-            let other = app.manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
-            catalog.bindCloudWorkspace(localWorkspaceID: pending.id, machine: provider.machine, remoteWorkspaceID: nil)
-            let entered = CloudLinkFirstValue<Bool>(), release = CloudLinkFirstValue<Bool>()
+            let pending = app.manager.addWorkspace(initialSurface: .remoteLoading, select: false)
+            let other = app.manager.addWorkspace(initialSurface: .remoteLoading, select: false)
+            catalog.bindRemoteWorkspace(localWorkspaceID: pending.id, machine: provider.machine, remoteWorkspaceID: nil)
+            let entered = RemoteLinkFirstValue<Bool>(), release = RemoteLinkFirstValue<Bool>()
             provider.beforeMaterialization = { entered.resolve(true); _ = await release.result }
             let attachment = Task { try await open(pending, provider: provider, catalog: catalog) }
             _ = await entered.result
             app.manager.closeWorkspace(pending, recordHistory: false)
             release.resolve(true)
             await #expect(throws: (any Error).self) { try await attachment.value }
-            #expect(other.panels.count == 1 && other.panels.values.first is CloudVMLoadingPanel)
-            #expect(other.cloudVMBinding == nil)
+            #expect(other.panels.count == 1 && other.panels.values.first is RemoteLoadingPanel)
+            #expect(other.remoteWorkspaceBinding == nil)
             #expect(catalog.projections.isEmpty)
         }
     }
@@ -315,17 +227,20 @@ struct CloudMachineWorkspaceAdoptionTests {
             catalog.register(provider)
             defer { catalog.unregister(machine: provider.machine) }
             try provider.install(in: catalog)
-            let pending = app.manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
-            let other = app.manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
+            let pending = app.manager.addWorkspace(initialSurface: .remoteLoading, select: false)
+            let other = app.manager.addWorkspace(initialSurface: .remoteLoading, select: false)
+            let loadingID = try #require(pending.panels.values.first { $0 is RemoteLoadingPanel }?.id)
             let pane = try #require(pending.bonsplitController.allPaneIds.first)
             let command = try #require(pending.newTerminalSurface(inPane: pane, focus: false, initialCommand: "echo first-command", autoRefreshMetadata: false))
-            catalog.bindCloudWorkspace(localWorkspaceID: pending.id, machine: provider.machine, remoteWorkspaceID: nil)
-            let entered = CloudLinkFirstValue<Bool>(), release = CloudLinkFirstValue<Bool>()
+            catalog.bindRemoteWorkspace(localWorkspaceID: pending.id, machine: provider.machine, remoteWorkspaceID: nil)
+            let entered = RemoteLinkFirstValue<Bool>(), release = RemoteLinkFirstValue<Bool>()
             provider.beforeMaterialization = { entered.resolve(true); _ = await release.result }
             let attachment = Task { try await open(pending, provider: provider, catalog: catalog) }
             _ = await entered.result
-            NewMachineSheetPresenter.closeReservedWorkspace(pending.id, machineID: provider.machine.rawValue)
-            #expect(pending.cloudVMBinding == nil)
+            attachment.cancel()
+            #expect(pending.discardTuiMachineLoadingPanel(panelID: loadingID, machineID: provider.machine.rawValue))
+            pending.remoteWorkspaceBinding = nil
+            #expect(pending.remoteWorkspaceBinding == nil)
             // A later explicit open has a different admission claim and must not
             // join the cancelled adoption or be discarded with its late result.
             provider.beforeMaterialization = nil
@@ -335,7 +250,7 @@ struct CloudMachineWorkspaceAdoptionTests {
             #expect(pending.panels.count == (openAgain ? 2 : 1) && pending.panels[command.id] === command)
             if let reopened { #expect(pending.panels[reopened.panelID] is TerminalPanel) }
             #expect(command.surface.initialCommand?.contains("first-command") == true)
-            #expect(other.panels.count == 1 && other.panels.values.first is CloudVMLoadingPanel)
+            #expect(other.panels.count == 1 && other.panels.values.first is RemoteLoadingPanel)
             #expect(catalog.projections.count == (openAgain ? 1 : 0))
         }
     }

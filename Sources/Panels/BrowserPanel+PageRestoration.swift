@@ -117,7 +117,7 @@ extension BrowserPanel {
         let conditions = BrowserDiscardRestoreStrategy.Conditions(
             isExplicitReload: isExplicitReload,
             usesRemoteWorkspaceProxy: usesRemoteWorkspaceProxy,
-            usesCloudAccessRouting: retainsCloudResourceForDuplication || cloudBrowserMachineID != nil,
+            usesRemoteAccessRouting: retainsRemoteResourceForDuplication || remoteBrowserMachineID != nil,
             hasRecoverableWebContentTermination: hasRecoverableWebContentTermination,
             requiresInsecureHTTPConsent: browserShouldBlockInsecureHTTPURL(url)
         )
@@ -327,15 +327,15 @@ extension BrowserPanel {
     }
 
     /// Session state to write to the session file, or nil when this pane's
-    /// state must not persist: private profiles, remote and cloud routing,
+    /// state must not persist: private profiles or remote routing,
     /// error pages, form submissions, restored URL history and oversized state.
     /// Live state is also dropped while its current entry is not the URL the
     /// snapshot saves, because a relaunch restores it for that URL.
     func persistableInteractionStateForSessionSnapshot() -> Data? {
         guard shouldPersistSessionSnapshot(),
               !usesRemoteWorkspaceProxy,
-              !retainsCloudResourceForDuplication,
-              cloudBrowserMachineID == nil,
+              !retainsRemoteResourceForDuplication,
+              remoteBrowserMachineID == nil,
               navigationDelegate?.activeErrorPageDisplayURL == nil else {
             return nil
         }

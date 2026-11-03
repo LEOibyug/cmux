@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import Foundation
 import Testing
 
@@ -11,15 +11,15 @@ import Testing
 
 @MainActor
 @Suite("Cloud terminal mutation lifecycle", .timeLimit(.minutes(1)))
-struct CloudTerminalMutationLifecycleTests {
+struct TuiTerminalMutationLifecycleTests {
     @Test("Cancelling all turns keeps their predecessor chain until active work drains")
     func cancellationDoesNotReleaseSuccessorsEarly() async throws {
-        let queue = CloudTerminalMutationQueue()
-        let transport = CloudTerminalMutationTestTransport()
+        let queue = TuiTerminalMutationQueue()
+        let transport = TuiTerminalMutationTestTransport()
         var predecessorReturned = false
         var cancelledTurnRan = false
         let active = queue.enqueue {
-            let data = try await transport.runTuiCommand(arguments: CloudTuiRequest("workspace.run"), deadline: .seconds(30))
+            let data = try await transport.runTuiCommand(arguments: TuiRequest("workspace.run"), deadline: .seconds(30))
             predecessorReturned = true
             return data
         }
@@ -45,9 +45,9 @@ struct CloudTerminalMutationLifecycleTests {
 
     @Test("A committed turn returns its receipt after queue cancellation")
     func committedTurnSurvivesCancellation() async throws {
-        let queue = CloudTerminalMutationQueue()
-        let started = CloudLinkFirstValue<Bool>()
-        let release = CloudLinkFirstValue<String>()
+        let queue = TuiTerminalMutationQueue()
+        let started = RemoteLinkFirstValue<Bool>()
+        let release = RemoteLinkFirstValue<String>()
         let task = Task {
             try await queue.runCommitted {
                 started.resolve(true)
@@ -66,32 +66,32 @@ struct CloudTerminalMutationLifecycleTests {
     }
 
     @Test("Provider retirement rejects late command results and subsequent mutations",
-          arguments: ["suspend", "replace", "unregister"], ["session.snapshot", "workspace.run", "session.creation.resolve"])
+          arguments: ["retire", "replace", "unregister"], ["session.snapshot", "workspace.run", "session.creation.resolve"])
     func commandAwaitIsFenced(change: String, operation: String) async throws {
         let catalog = SurfaceCatalog()
         let provider = makeProvider(catalog: catalog)
-        let transport = CloudTerminalMutationTestTransport()
+        let transport = TuiTerminalMutationTestTransport()
         let lifecycle = provider.lifecycleGeneration
-        let commands = CloudTerminalMutationCommandRunner(base: transport) {
+        let commands = TuiTerminalMutationCommandRunner(base: transport) {
             try provider.validateTerminalMutationLifecycle(lifecycle)
         }
         var published = false
         let task = provider.terminalMutationQueue.enqueue {
-            _ = try await commands.runTuiCommand(arguments: CloudTuiRequest(operation), deadline: .seconds(30))
-            _ = try await commands.runTuiCommand(arguments: CloudTuiRequest("pane.split"), deadline: .seconds(30))
+            _ = try await commands.runTuiCommand(arguments: TuiRequest(operation), deadline: .seconds(30))
+            _ = try await commands.runTuiCommand(arguments: TuiRequest("pane.split"), deadline: .seconds(30))
             published = true
         }
         var replacement: CmuxTuiSurfaceProvider?
         defer {
-            provider.suspendForFeatureFlag()
-            replacement?.suspendForFeatureFlag()
+            provider.retireTransport()
+            replacement?.retireTransport()
             catalog.unregister(machine: provider.machine)
             transport.release()
         }
         try #require(await transport.started.result == true)
         switch change {
-        case "suspend": provider.suspendForFeatureFlag()
-        case "replace": replacement = makeProvider(catalog: catalog, machineID: provider.machineID)
+        case "retire": provider.retireTransport()
+        case "replace": replacement = makeProvider(catalog: catalog, connection: provider.summary.connection)
         case "unregister": catalog.unregister(machine: provider.machine)
         default: Issue.record("Unknown lifecycle transition")
         }
@@ -103,25 +103,24 @@ struct CloudTerminalMutationLifecycleTests {
         #expect(catalog.resources.isEmpty)
     }
 
-    @Test("Suspended and replaced providers reject both creation entrypoints before connecting",
-          arguments: ["suspend", "replace", "unregister"])
+    @Test("Retired and replaced providers reject creation before connecting",
+          arguments: ["retire", "replace", "unregister"])
     func staleProviderNeverConnects(change: String) async {
         let catalog = SurfaceCatalog()
         let provider = makeProvider(catalog: catalog)
         var replacement: CmuxTuiSurfaceProvider?
         switch change {
-        case "suspend": provider.suspendForFeatureFlag()
-        case "replace": replacement = makeProvider(catalog: catalog, machineID: provider.machineID)
+        case "retire": provider.retireTransport()
+        case "replace": replacement = makeProvider(catalog: catalog, connection: provider.summary.connection)
         case "unregister": catalog.unregister(machine: provider.machine)
         default: Issue.record("Unknown lifecycle transition")
         }
         defer {
-            provider.suspendForFeatureFlag()
-            replacement?.suspendForFeatureFlag()
+            provider.retireTransport()
+            replacement?.retireTransport()
             catalog.unregister(machine: provider.machine)
         }
-        // The fixture has no client or hub. Reaching connection would throw a
-        // transport error instead of this lifecycle cancellation.
+        // The real SSH test carrier cannot connect; cancellation must precede dialing it.
         await #expect(throws: CancellationError.self) {
             try await provider.createTerminal(command: nil, cwd: nil, name: nil, remoteWorkspaceID: "workspace")
         }
@@ -131,64 +130,64 @@ struct CloudTerminalMutationLifecycleTests {
     }
 
     @Test("A queued provider create cannot enter a replaced lifecycle",
-          arguments: [false, true], ["resume", "replace"])
+          arguments: [false, true], ["retire", "replace"])
     func queuedCreationKeepsItsAdmittedLifecycle(layout: Bool, change: String) async throws {
         let catalog = SurfaceCatalog()
         let provider = makeProvider(catalog: catalog)
-        let transport = CloudTerminalMutationTestTransport()
+        let transport = TuiTerminalMutationTestTransport()
         let blockingTurn = provider.terminalMutationQueue.enqueue {
-            try await transport.runTuiCommand(arguments: CloudTuiRequest("workspace.run"), deadline: .seconds(30))
+            try await transport.runTuiCommand(arguments: TuiRequest("workspace.run"), deadline: .seconds(30))
         }
         var replacement: CmuxTuiSurfaceProvider?
         defer {
-            provider.suspendForFeatureFlag()
-            replacement?.suspendForFeatureFlag()
+            provider.retireTransport()
+            replacement?.retireTransport()
             catalog.unregister(machine: provider.machine)
             transport.release()
         }
         try #require(await transport.started.result == true)
-        let admitted = CloudLinkFirstValue<Bool>()
+        let admitted = RemoteLinkFirstValue<Bool>()
         let request = Task {
             admitted.resolve(true)
             if layout { return try await provider.createTerminal(nearTabID: "tab", splitDirection: .right) }
             return try await provider.createTerminal(command: nil, cwd: nil, name: nil, remoteWorkspaceID: "workspace")
         }
         try #require(await admitted.result == true)
-        if change == "resume" {
-            provider.suspendForFeatureFlag()
-            provider.update(summary: try #require(provider.summary.cloudSummary))
+        if change == "retire" {
+            provider.retireTransport()
         } else {
-            replacement = makeProvider(catalog: catalog, machineID: provider.machineID)
+            replacement = makeProvider(catalog: catalog, connection: provider.summary.connection)
         }
         transport.release()
         _ = try? await blockingTurn.value
         await #expect(throws: CancellationError.self) { try await request.value }
     }
 
-    @Test("Resume creates a new generation without reviving old queued turns")
-    func suspensionInvalidatesQueuedWorkAcrossResume() async throws {
+    @Test("A replacement accepts new work without reviving the retired provider's queue")
+    func retirementInvalidatesQueuedWorkAcrossReplacement() async throws {
         let catalog = SurfaceCatalog()
         let provider = makeProvider(catalog: catalog)
-        let transport = CloudTerminalMutationTestTransport()
+        let transport = TuiTerminalMutationTestTransport()
         let oldGeneration = provider.lifecycleGeneration
         var queuedRan = false
         let active = provider.terminalMutationQueue.enqueue {
-            try await transport.runTuiCommand(arguments: CloudTuiRequest("workspace.run"), deadline: .seconds(30))
+            try await transport.runTuiCommand(arguments: TuiRequest("workspace.run"), deadline: .seconds(30))
         }
         let queued = provider.terminalMutationQueue.enqueue { queuedRan = true }
         defer {
-            provider.suspendForFeatureFlag()
+            provider.retireTransport()
             catalog.unregister(machine: provider.machine)
             transport.release()
         }
         try #require(await transport.started.result == true)
-        provider.suspendForFeatureFlag()
+        provider.retireTransport()
         #expect(active.isCancelled && queued.isCancelled)
-        provider.update(summary: try #require(provider.summary.cloudSummary))
+        let replacement = makeProvider(catalog: catalog, connection: provider.summary.connection)
+        defer { replacement.retireTransport() }
         #expect(throws: CancellationError.self) { try provider.validateTerminalMutationLifecycle(oldGeneration) }
-        let generation = provider.lifecycleGeneration
-        let next = provider.terminalMutationQueue.enqueue {
-            try provider.validateTerminalMutationLifecycle(generation)
+        let generation = replacement.lifecycleGeneration
+        let next = replacement.terminalMutationQueue.enqueue {
+            try replacement.validateTerminalMutationLifecycle(generation)
         }
         transport.release()
         await #expect(throws: CancellationError.self) { try await active.value }
@@ -198,90 +197,16 @@ struct CloudTerminalMutationLifecycleTests {
         await provider.stop()
     }
 
-    @Test("Account teardown quiesces every provider before awaiting the first active turn")
-    func registryQuiescesAllProvidersBeforeJoining() async throws {
-        let catalog = SurfaceCatalog()
-        let summaries = (0..<3).map { machine("lifecycle-\(UUID())-\($0)") }
-        let registry = CmuxTuiSurfaceProviderRegistry(
-            links: CloudMachineLinkManager(clientURL: nil, hub: nil, hostThemeColors: { nil }),
-            allowsBackgroundWork: { false },
-            listPage: { VMListPage(vms: summaries, limits: nil) },
-            refreshProvider: { _, _ in true },
-            closeTransports: {},
-            notificationCenter: NotificationCenter()
-        )
-        registry.start(catalog: catalog)
-        _ = await registry.refresh(force: true)
-        let providers = try summaries.map { try #require(registry.provider(machineID: $0.id)) }
-        let cancellation = CloudLinkFirstValue<Bool>()
-        let transports = providers.map { _ in CloudTerminalMutationTestTransport(cancelled: cancellation) }
-        let active = zip(providers, transports).map { provider, transport in
-            provider.terminalMutationQueue.enqueue {
-                try await transport.runTuiCommand(arguments: CloudTuiRequest("workspace.run"), deadline: .seconds(30))
-            }
-        }
-        defer { for transport in transports { transport.release() } }
-        for transport in transports { try #require(await transport.started.result == true) }
-        var finished = false
-        let stop = Task { await registry.accessDidEnd(); finished = true }
-        try #require(await cancellation.result == true)
-        #expect(providers.allSatisfy { $0.isFeatureSuspended })
-        #expect(active.allSatisfy { $0.isCancelled })
-        #expect(providers.allSatisfy { catalog.provider(for: $0.machine) == nil })
-        #expect(!finished, "Teardown must join the already-issued command")
-        let resuming = CloudLinkFirstValue<Bool>()
-        var resumed = false
-        let signIn = Task {
-            resuming.resolve(true)
-            await registry.resumeAfterSignIn()
-            resumed = true
-        }
-        try #require(await resuming.result == true)
-        #expect(!resumed)
-        #expect(await registry.providerRefreshingIfMissing(machineID: summaries[0].id) == nil)
-        for transport in transports { transport.release() }
-        for task in active { await #expect(throws: CancellationError.self) { try await task.value } }
-        await stop.value
-        #expect(finished)
-        await signIn.value
-        #expect(resumed)
-        await registry.accessDidEnd()
-    }
 
-    @Test("Machine deletion cancels terminal turns before scheduling asynchronous cleanup")
-    func deletionQuiescesProviderSynchronously() async throws {
-        let catalog = SurfaceCatalog()
-        let summary = machine("delete-\(UUID())")
-        let registry = CmuxTuiSurfaceProviderRegistry(
-            links: CloudMachineLinkManager(clientURL: nil, hub: nil, hostThemeColors: { nil }),
-            allowsBackgroundWork: { false },
-            listPage: { VMListPage(vms: [summary], limits: nil) },
-            refreshProvider: { _, _ in true }, closeTransports: {}, notificationCenter: NotificationCenter()
-        )
-        registry.start(catalog: catalog)
-        _ = await registry.refresh(force: true)
-        let provider = try #require(registry.provider(machineID: summary.id))
-        var ran = false
-        let queued = provider.terminalMutationQueue.enqueue { ran = true }
-        registry.machineWasDeleted(summary.id)
-        #expect(provider.isFeatureSuspended)
-        #expect(queued.isCancelled)
-        await #expect(throws: CancellationError.self) { try await queued.value }
-        #expect(!ran)
-        await registry.accessDidEnd()
-    }
-
-    private func makeProvider(catalog: SurfaceCatalog, machineID: String = "mutation-\(UUID())") -> CmuxTuiSurfaceProvider {
+    private func makeProvider(catalog: SurfaceCatalog, connection: SSHTuiConnection? = nil) -> CmuxTuiSurfaceProvider {
+        let host = connection.map(TuiTestHost.init(connection:)) ?? TuiTestHost(destination: "mutation-\(UUID()).example.test")
         let provider = CmuxTuiSurfaceProvider(
-            summary: machine(machineID),
-            links: CloudMachineLinkManager(clientURL: nil, hub: nil, hostThemeColors: { nil }),
+            summary: host.summary,
+            links: host.links(),
             catalog: catalog
         )
         catalog.register(provider)
         return provider
     }
 
-    private func machine(_ id: String) -> VMSummary {
-        VMSummary(id: id, provider: "freestyle", status: "running", image: "fixture", createdAt: 0, base: nil)
-    }
 }

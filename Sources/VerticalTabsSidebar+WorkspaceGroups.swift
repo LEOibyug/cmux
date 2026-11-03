@@ -578,9 +578,6 @@ extension VerticalTabsSidebar {
             },
             onEditConfig: {
                 SidebarWorkspaceGroupConfigOpener.openCmuxConfigInEditor()
-            },
-            onOpenDocs: {
-                SidebarWorkspaceGroupConfigOpener.openWorkspaceGroupsDocs()
             }
         )
         actions.notificationState = resolveNotificationState

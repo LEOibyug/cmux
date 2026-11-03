@@ -37,7 +37,7 @@ import Testing
             "policy": ["mode": "smallest", "priority": [], "fixed": NSNull()],
             "participants": [],
         ]))
-        let attached = TerminalSharingSnapshot(state: state, selfParticipantID: "m", isCloud: true)
+        let attached = TerminalSharingSnapshot(state: state, selfParticipantID: "m")
         let live = coder.sizeStatePayload(surfaceID: "S", snapshot: attached)
         #expect(live["detachment"] is NSNull)
         #expect(live["self_participant_id"] as? String == "m")

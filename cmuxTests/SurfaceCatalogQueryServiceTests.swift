@@ -11,10 +11,10 @@ import Testing
 @MainActor
 @Suite
 struct SurfaceCatalogQueryServiceTests {
-    @Test("A just-created machine is discovered before its seeded terminal is resolved")
-    func refreshedReadDiscoversMissingCloudProvider() async throws {
+    @Test("A configured SSH provider is resolved before its terminal is exported")
+    func refreshedReadResolvesMissingSSHProvider() async throws {
         let catalog = SurfaceCatalog()
-        let machine = SurfaceMachineID.cloud("vm-new")
+        let machine = SurfaceMachineID.ssh("2232947c91a3d4142d388effe31813557f2fee6d01683b3a4100a6f07f9b81ae")
         let provider = try CloudCatalogQueryTestProvider(machine: machine, catalog: catalog)
         var discoveries: [String] = []
         let query = SurfaceCatalogQueryService(catalog: catalog) { id in
@@ -22,29 +22,25 @@ struct SurfaceCatalogQueryServiceTests {
             catalog.register(provider)
         }
 
-        // vm.create has returned, but the periodic fleet read has not registered
-        // its provider. This is the surface.catalog request vm new uses next.
+        // A user SSH connection may exist before its catalog provider is registered.
         #expect(catalog.provider(for: machine) == nil)
         let result = await query.read(machine: machine, refresh: true)
 
-        #expect(discoveries == ["vm-new"])
+        #expect(discoveries == [machine.rawValue])
         #expect(provider.forcedRefreshes == [true])
         #expect(result.catalog.machines.map(\.id) == [machine])
         #expect(result.catalog.resources.map(\.id.key) == ["term-seeded"])
         #expect(result.catalog.projections.isEmpty)
-        // Both socket envelopes must support the same existing-terminal open;
-        // an undiscovered provider used to make this return .unavailable.
-        for cloudOnly in [false, true] {
-            let payload = TerminalController.surfaceCatalogPayload(result, machine: machine, cloudOnly: cloudOnly)
-            #expect(VMRemoteWorkspaceResolver().resolveVMMachineTerminal(machine: machine.rawValue, catalog: payload)
-                == .resolved(workspaceID: "ws-1", terminalID: "term-seeded", tabID: "tab-1"))
-        }
+        let payload = TerminalController.surfaceCatalogPayload(result, machine: machine)
+        let resource = try #require((payload["resources"] as? [[String: Any]])?.first)
+        #expect(resource["machine"] as? String == machine.rawValue)
+        #expect((resource["remote_views"] as? [[String: Any]])?.first?["tab_id"] as? String == "tab-1")
     }
 
-    @Test("New Machine open: a linked read discovers and connects a just-created machine without forcing a pass")
+    @Test("A linked SSH read resolves and joins the current provider pass without forcing it")
     func linkedReadDiscoversAndJoinsCurrentPass() async throws {
         let catalog = SurfaceCatalog()
-        let machine = SurfaceMachineID.cloud("vm-new")
+        let machine = SurfaceMachineID.ssh("2232947c91a3d4142d388effe31813557f2fee6d01683b3a4100a6f07f9b81ae")
         let provider = try CloudCatalogQueryTestProvider(machine: machine, catalog: catalog)
         var discoveries: [String] = []
         let query = SurfaceCatalogQueryService(catalog: catalog) { id in
@@ -52,21 +48,20 @@ struct SurfaceCatalogQueryServiceTests {
             catalog.register(provider)
         }
 
-        // The regression: `cmux vm open` for a fresh VM read the cached catalog,
-        // found no machine row, and failed with "sessions are unavailable".
+        // Link the explicitly requested SSH host before exporting its graph.
         let result = await query.read(machine: machine, mode: .linked)
 
-        #expect(discoveries == ["vm-new"])
+        #expect(discoveries == [machine.rawValue])
         #expect(provider.forcedRefreshes == [false])
-        let payload = TerminalController.surfaceCatalogPayload(result, machine: machine)
-        #expect(VMRemoteWorkspaceResolver().resolveVMMachineTerminal(machine: machine.rawValue, catalog: payload)
-            == .resolved(workspaceID: "ws-1", terminalID: "term-seeded", tabID: "tab-1"))
+        let resource = try #require(result.catalog.resources.first)
+        #expect(resource.remoteViews?.first?.workspace.id == "ws-1")
+        #expect(resource.remoteViews?.first?.tabID == "tab-1")
     }
 
     @Test("Reopen: a linked read of an already-connected machine does no provider work")
     func linkedReadOfConnectedMachineIsFree() async throws {
         let catalog = SurfaceCatalog()
-        let machine = SurfaceMachineID.cloud("vm-live")
+        let machine = SurfaceMachineID.ssh("2e85c01c13185ce76f321769ce3ede6398670934755c415d003ae64a6134d74b")
         let provider = try CloudCatalogQueryTestProvider(machine: machine, catalog: catalog)
         catalog.register(provider)
         await provider.refresh(force: false)
@@ -86,7 +81,7 @@ struct SurfaceCatalogQueryServiceTests {
         var discoveries: [String] = []
         let query = SurfaceCatalogQueryService(catalog: catalog) { discoveries.append($0) }
 
-        let result = await query.read(machine: .cloud("vm-new"), refresh: false)
+        let result = await query.read(machine: .ssh("2232947c91a3d4142d388effe31813557f2fee6d01683b3a4100a6f07f9b81ae"), refresh: false)
 
         #expect(discoveries.isEmpty)
         #expect(result.catalog == .empty)
@@ -95,8 +90,8 @@ struct SurfaceCatalogQueryServiceTests {
     @Test("Refreshing a known machine never waits on another machine's link")
     func knownProviderSkipsFleetDiscoveryAndOtherProviders() async throws {
         let catalog = SurfaceCatalog()
-        let requested = try CloudCatalogQueryTestProvider(machine: .cloud("vm-requested"), catalog: catalog)
-        let unrelated = try CloudCatalogQueryTestProvider(machine: .cloud("vm-unrelated"), catalog: catalog)
+        let requested = try CloudCatalogQueryTestProvider(machine: .ssh("5afcb72598986ba03abd8b148d154169070cebf43dfc6b22bdf229779e97aaa2"), catalog: catalog)
+        let unrelated = try CloudCatalogQueryTestProvider(machine: .ssh("37a9439d74d9153ee4157b4b004286c7aed5989e5cbbbca5095ada38d99780ba"), catalog: catalog)
         catalog.register(requested)
         catalog.register(unrelated)
         var discoveries: [String] = []
@@ -112,7 +107,7 @@ struct SurfaceCatalogQueryServiceTests {
     @Test("Failed discovery stays unavailable after one attempt and creates no resources")
     func failedDiscoveryDoesNotInventAnEmptyRemoteSession() async {
         let catalog = SurfaceCatalog()
-        let machine = SurfaceMachineID.cloud("vm-missing")
+        let machine = SurfaceMachineID.ssh("d3460c6e36ebaebc1e3dfb0363875cacb3b4b0e4256d5ec6f4917d452af697ff")
         var discoveries: [String] = []
         let query = SurfaceCatalogQueryService(catalog: catalog) { discoveries.append($0) }
 
@@ -121,10 +116,10 @@ struct SurfaceCatalogQueryServiceTests {
 
         #expect(discoveries == [machine.rawValue])
         #expect(result.catalog == .empty)
-        #expect(VMRemoteWorkspaceResolver().resolveVMMachineTerminal(machine: machine.rawValue, catalog: payload) == .unavailable)
+        #expect((payload["resources"] as? [[String: Any]])?.isEmpty != false)
     }
 
-    @Test("A missing local provider never triggers Cloud discovery")
+    @Test("A missing local provider never triggers SSH resolution")
     func localReadStaysLocal() async {
         let catalog = SurfaceCatalog()
         var discoveries: [String] = []
@@ -138,7 +133,7 @@ struct SurfaceCatalogQueryServiceTests {
     @Test("An unfiltered refresh still refreshes the registered catalog")
     func unfilteredReadRefreshesKnownProviders() async throws {
         let catalog = SurfaceCatalog()
-        let provider = try CloudCatalogQueryTestProvider(machine: .cloud("vm-known"), catalog: catalog)
+        let provider = try CloudCatalogQueryTestProvider(machine: .ssh("42e1a3fb6e634cee0e1dca35462bbd8eed574459a474e217e64fe0765d206867"), catalog: catalog)
         catalog.register(provider)
         var discoveries: [String] = []
         let query = SurfaceCatalogQueryService(catalog: catalog) { discoveries.append($0) }

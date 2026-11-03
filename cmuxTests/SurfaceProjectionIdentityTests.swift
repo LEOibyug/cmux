@@ -174,7 +174,7 @@ struct SurfaceProjectionIdentityTests {
             let workspace = workspaces[0]
             let panel = try terminal(in: workspace)
             let catalog = await localCatalog(workspaces)
-            let machine = SurfaceMachineID.cloud("identity-fixture")
+            let machine = SurfaceMachineID.ssh("67724f64a48454ec0763e5771e7ed7d8bbd26770141c6f98c9a88453057b0c2a")
             // The catalog ignores writes about a Cloud machine with no registered provider
             // (a22bde65ad), so register the fixture provider before publishing its resource.
             let provider = try CloudCatalogQueryTestProvider(machine: machine, catalog: catalog)
@@ -222,7 +222,7 @@ struct SurfaceProjectionIdentityTests {
     func batchCaptureUsesOwnersAfterRefresh() async throws {
         try await withWorkspaces(count: 2) { workspaces in
             let catalog = await localCatalog(workspaces)
-            let machine = SurfaceMachineID.cloud("identity-capture-order")
+            let machine = SurfaceMachineID.ssh("d44eac3d3be829173b83df7aea1480916f7127957d4537caee295c1fad093ee9")
             let provider = try CloudCatalogQueryTestProvider(machine: machine, catalog: catalog)
             var refreshedOwnerIndex: [UUID: Workspace] = [:]
             var captures = 0

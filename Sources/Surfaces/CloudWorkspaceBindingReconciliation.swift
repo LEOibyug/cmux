@@ -1,7 +1,7 @@
 import CmuxSurfaceCatalogModel
 import Foundation
 
-extension CloudWorkspaceRenameService {
+extension TuiWorkspaceRenameService {
     enum BindingReconciliation: Equatable {
         case keep
         case clear

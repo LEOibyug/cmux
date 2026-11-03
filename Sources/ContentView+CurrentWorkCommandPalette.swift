@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import AppKit
 import CmuxCommandPalette
 
@@ -9,8 +9,8 @@ extension ContentView {
         CommandPaletteCommandContribution(
             commandId: "palette.findWork",
             title: { _ in String(localized: "commandPalette.currentWork.title", defaultValue: "Find Work") },
-            subtitle: { _ in String(localized: "commandPalette.currentWork.subtitle", defaultValue: "Current local and Cloud work") },
-            keywords: ["current", "work", "find", "agent", "attention", "cloud", "pull request"],
+            subtitle: { _ in String(localized: "commandPalette.currentWork.subtitle", defaultValue: "Current local and SSH work") },
+            keywords: ["current", "work", "find", "agent", "attention", "pull request"],
             dismissOnRun: false
         )
     }
@@ -59,12 +59,10 @@ extension ContentView {
         switch kind {
         case "local":
             return String(localized: "commandPalette.currentWork.local", defaultValue: "Local")
-        case "cloud":
-            return String(localized: "commandPalette.currentWork.cloud", defaultValue: "Cloud")
         case "ssh":
             return String(localized: "menu.help.ssh", defaultValue: "SSH")
         default:
-            return String(localized: "featureFlags.source.remote", defaultValue: "Remote")
+            return kind
         }
     }
 

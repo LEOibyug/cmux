@@ -452,17 +452,6 @@ enum CommandPaletteSettingsToggleCommands {
                 defaultsKey: NotificationPaneFlashSettings.onTypingKey
             ),
             CommandPaletteSettingToggleDescriptor(
-                commandId: commandIdPrefix + "sendAnonymousTelemetry",
-                settingsKey: "app.sendAnonymousTelemetry",
-                title: {
-                    String(localized: "settings.app.telemetry", defaultValue: "Send anonymous telemetry")
-                },
-                sectionTitle: app,
-                keywords: ["app.sendAnonymousTelemetry", "telemetry", "analytics", "crash", "reports", "privacy"],
-                defaultValue: AppCatalogSection().sendAnonymousTelemetry.defaultValue,
-                defaultsKey: AppCatalogSection().sendAnonymousTelemetry.userDefaultsKey
-            ),
-            CommandPaletteSettingToggleDescriptor(
                 commandId: commandIdPrefix + "warnBeforeQuit",
                 settingsKey: "app.confirmQuit",
                 title: {
@@ -701,18 +690,6 @@ enum CommandPaletteSettingsToggleCommands {
                 keywords: ["sidebar.showBranchDirectory", "sidebar", "branch", "directory", "cwd", "path", "repo"],
                 defaultValue: SidebarWorkspaceDetailDefaults.showBranchDirectory,
                 defaultsKey: SidebarWorkspaceDetailDefaults.showBranchDirectoryKey,
-                isAvailable: sidebarDetailsAvailable
-            ),
-            CommandPaletteSettingToggleDescriptor(
-                commandId: commandIdPrefix + "showCloudDeviceIconsInSidebar",
-                settingsKey: "sidebar.showCloudDeviceIcons",
-                title: {
-                    String(localized: "settings.app.showCloudDeviceIcons", defaultValue: "Show Cloud and Device Icons in Sidebar")
-                },
-                sectionTitle: sidebar,
-                keywords: ["sidebar.showCloudDeviceIcons", "sidebar", "cloud", "device", "computer", "icon", "remote"],
-                defaultValue: SidebarWorkspaceDetailDefaults.showCloudDeviceIcons,
-                defaultsKey: SidebarWorkspaceDetailDefaults.showCloudDeviceIconsKey,
                 isAvailable: sidebarDetailsAvailable
             ),
             CommandPaletteSettingToggleDescriptor(

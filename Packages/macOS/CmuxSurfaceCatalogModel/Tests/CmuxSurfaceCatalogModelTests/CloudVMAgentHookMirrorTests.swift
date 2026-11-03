@@ -2,13 +2,13 @@ import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
 
-struct CloudVMAgentHookMirrorTests {
+struct TuiAgentHookMirrorTests {
     private func claude(
         _ terminalID: String = "term_1",
         state: String,
         session: String? = "claude-session-a"
-    ) -> CloudVMAgentState {
-        CloudVMAgentState(
+    ) -> TuiAgentState {
+        TuiAgentState(
             id: "agent_\(terminalID)",
             terminalID: terminalID,
             state: state,
@@ -18,13 +18,13 @@ struct CloudVMAgentHookMirrorTests {
         )
     }
 
-    private func kinds(_ events: [CloudVMAgentHookEvent]) -> [CloudVMAgentHookEvent.Kind] {
+    private func kinds(_ events: [TuiAgentHookEvent]) -> [TuiAgentHookEvent.Kind] {
         events.map(\.kind)
     }
 
     @Test("A new agent with a session id replays one session start")
     func newAgentReplaysSessionStart() {
-        var mirror = CloudVMAgentHookMirror()
+        var mirror = TuiAgentHookMirror()
         let events = mirror.reconcile(agents: [claude(state: "working")], routableTerminalIDs: ["term_1"])
         #expect(kinds(events) == [.sessionStart])
         #expect(events.first?.agent == "claude")
@@ -33,7 +33,7 @@ struct CloudVMAgentHookMirrorTests {
 
     @Test("State changes and repeated snapshots replay nothing")
     func stateChangesAreNotReplayed() {
-        var mirror = CloudVMAgentHookMirror()
+        var mirror = TuiAgentHookMirror()
         _ = mirror.reconcile(agents: [claude(state: "working")], routableTerminalIDs: ["term_1"])
         for state in ["blocked", "idle", "working", "idle", "unknown"] {
             #expect(mirror.reconcile(agents: [claude(state: state)], routableTerminalIDs: ["term_1"]).isEmpty)
@@ -42,7 +42,7 @@ struct CloudVMAgentHookMirrorTests {
 
     @Test("A changed session id starts the new session")
     func sessionChange() {
-        var mirror = CloudVMAgentHookMirror()
+        var mirror = TuiAgentHookMirror()
         _ = mirror.reconcile(agents: [claude(state: "idle")], routableTerminalIDs: ["term_1"])
         let events = mirror.reconcile(
             agents: [claude(state: "idle", session: "claude-session-b")],
@@ -54,7 +54,7 @@ struct CloudVMAgentHookMirrorTests {
 
     @Test("An agent without a session id replays nothing until the id arrives")
     func missingSessionID() {
-        var mirror = CloudVMAgentHookMirror()
+        var mirror = TuiAgentHookMirror()
         #expect(mirror.reconcile(agents: [claude(state: "working", session: nil)], routableTerminalIDs: ["term_1"]).isEmpty)
         // Leaving the roster without a known session has nothing to end.
         #expect(mirror.reconcile(agents: [], routableTerminalIDs: []).isEmpty)
@@ -67,7 +67,7 @@ struct CloudVMAgentHookMirrorTests {
 
     @Test("An agent leaving the roster ends its session once")
     func deletedAgentEndsSession() {
-        var mirror = CloudVMAgentHookMirror()
+        var mirror = TuiAgentHookMirror()
         _ = mirror.reconcile(agents: [claude(state: "idle")], routableTerminalIDs: ["term_1"])
         let events = mirror.reconcile(agents: [], routableTerminalIDs: [])
         #expect(kinds(events) == [.sessionEnd])
@@ -78,10 +78,10 @@ struct CloudVMAgentHookMirrorTests {
 
     @Test("Agents without a supported hook integration are skipped")
     func unknownAgentSkipped() {
-        var mirror = CloudVMAgentHookMirror()
+        var mirror = TuiAgentHookMirror()
         let agents = [
-            CloudVMAgentState(terminalID: "term_1", state: "working", source: "hook", agent: "opencode", agentSessionID: "s1"),
-            CloudVMAgentState(terminalID: "term_2", state: "working", source: "socket", agent: nil, agentSessionID: "s2"),
+            TuiAgentState(terminalID: "term_1", state: "working", source: "hook", agent: "opencode", agentSessionID: "s1"),
+            TuiAgentState(terminalID: "term_2", state: "working", source: "socket", agent: nil, agentSessionID: "s2"),
         ]
         #expect(mirror.reconcile(agents: agents, routableTerminalIDs: ["term_1", "term_2"]).isEmpty)
         #expect(mirror.reconcile(agents: [], routableTerminalIDs: []).isEmpty)
@@ -89,8 +89,8 @@ struct CloudVMAgentHookMirrorTests {
 
     @Test("Claude Code adapter ids map to the claude hook agent")
     func claudeCodeAdapterID() {
-        var mirror = CloudVMAgentHookMirror()
-        let agent = CloudVMAgentState(
+        var mirror = TuiAgentHookMirror()
+        let agent = TuiAgentState(
             terminalID: "term_1",
             state: "idle",
             source: "hook",
@@ -103,7 +103,7 @@ struct CloudVMAgentHookMirrorTests {
 
     @Test("An agent without a local pane waits and catches up when one opens")
     func unroutableAgentCatchesUp() {
-        var mirror = CloudVMAgentHookMirror()
+        var mirror = TuiAgentHookMirror()
         #expect(mirror.reconcile(agents: [claude(state: "working")], routableTerminalIDs: []).isEmpty)
         #expect(kinds(mirror.reconcile(agents: [claude(state: "working")], routableTerminalIDs: ["term_1"])) == [.sessionStart])
 
@@ -114,10 +114,10 @@ struct CloudVMAgentHookMirrorTests {
 
     @Test("Payloads carry only the session id and event name")
     func payloadShape() {
-        let start = CloudVMAgentHookEvent(terminalID: "term_1", agent: "claude", kind: .sessionStart, agentSessionID: "s1")
+        let start = TuiAgentHookEvent(terminalID: "term_1", agent: "claude", kind: .sessionStart, agentSessionID: "s1")
         #expect(start.subcommand == "session-start")
         #expect(start.payload == #"{"hook_event_name":"SessionStart","session_id":"s1"}"#)
-        let end = CloudVMAgentHookEvent(terminalID: "term_1", agent: "claude", kind: .sessionEnd, agentSessionID: "s1")
+        let end = TuiAgentHookEvent(terminalID: "term_1", agent: "claude", kind: .sessionEnd, agentSessionID: "s1")
         #expect(end.subcommand == "session-end")
         #expect(end.payload == #"{"hook_event_name":"SessionEnd","session_id":"s1"}"#)
     }
@@ -183,7 +183,7 @@ struct CloudVMAgentHookMirrorTests {
         ]
         let next = try #require(CmuxTuiSnapshotParser.applying(
             deltaPayload: try JSONSerialization.data(withJSONObject: delta),
-            cursor: CloudVMCursor(generation: "daemon-1", revision: 3),
+            cursor: TuiCursor(generation: "daemon-1", revision: 3),
             to: state
         ))
         #expect(next.lookupIndex.agent(terminalID: "term_2")?.agentSessionID == "claude-session-b")

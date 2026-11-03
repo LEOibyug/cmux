@@ -1,5 +1,4 @@
 import CMUXAgentLaunch
-@testable import CmuxMobileHost
 import Foundation
 import Testing
 
@@ -243,8 +242,6 @@ struct AgentChatFallbackTranscriptResolutionCoordinatorTests {
         let service = AgentChatTranscriptService(
             registry: AgentChatSessionRegistry(),
             resolver: AgentChatTranscriptResolver(homeDirectory: fixture.home, environment: [:]),
-            hasEventSubscribers: { false },
-            emitEventPayload: { _ in },
             fallbackTranscriptPathResolver: { record, deadline in
                 await probe.resolve(record: record, deadline: deadline)
             },

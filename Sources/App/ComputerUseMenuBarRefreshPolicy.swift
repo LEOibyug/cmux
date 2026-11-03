@@ -8,10 +8,9 @@ struct ComputerUseMenuBarRefreshPolicy: Sendable {
 
     func reloadDeadline(
         forEventAt eventDate: Date,
-        featureEnabled: Bool,
         showInMenuBar: Bool
     ) -> Date? {
-        guard featureEnabled && showInMenuBar else { return nil }
+        guard showInMenuBar else { return nil }
         return eventDate.addingTimeInterval(minimumEventReloadInterval)
     }
 

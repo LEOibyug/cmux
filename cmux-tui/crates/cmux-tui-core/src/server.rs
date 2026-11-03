@@ -79,7 +79,7 @@ use crate::workspace_registry::TerminalLifecycle;
 use crate::{
     AgentRecord, AgentSource, AgentState, AttachFrame, BrowserAttachState, BrowserFrameStream,
     DefaultColors, Direction, GraphicsStatus, JournalClass, JournalSensitivity, JournalSubject,
-    LayoutLeafSpec, LayoutRatioError, LayoutSpec, LayoutUndoResult, MachineUsage, Mux, MuxEvent,
+    LayoutLeafSpec, LayoutRatioError, LayoutSpec, LayoutUndoResult, Mux, MuxEvent,
     Node, NotificationLevel, PairingDecision, PaneId, RenderAttachFrame, RenderAttachStream, Rgb,
     ScreenId, SidebarPluginStatus, SplitDir, SplitId, SurfaceId, SurfaceKind, SurfaceNotification,
     SurfaceRenderFrame, TerminalColors, TreeDelta, TreeDeltaKind, ViewportWidthError, WorkspaceId,
@@ -137,8 +137,6 @@ pub const BROWSER_PROVIDER_CAPABILITY: &str = "browser-provider-v1";
 pub const SERVER_STATS_CAPABILITY: &str = "server-stats-v1";
 pub const CLIENT_FOCUS_CAPABILITY: &str = "client-focus-v1";
 pub const DAEMON_SHUTDOWN_EVENT: &str = "daemon-shutdown";
-/// The daemon answers `machine-usage` and emits `machine-usage-changed`.
-pub const MACHINE_USAGE_CAPABILITY: &str = "machine-usage-v1";
 /// The daemon reads the host's listening TCP sockets for an authenticated
 /// client. Cloud clients use this over the private cmux-tui link, so routine
 /// port inventory never needs a provider or web control-plane call.
@@ -167,19 +165,6 @@ fn validate_client_focus_id(client_id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `machine-usage` result and `machine-usage-changed` payload body: `usage`
-/// is the readout object or null when the daemon has none.
-fn machine_usage_json(usage: Option<&MachineUsage>) -> Value {
-    json!({
-        "usage": usage.map(|usage| json!({
-            "vm_id": usage.vm_id,
-            "period_days": usage.period_days,
-            "total_tokens": usage.total_tokens,
-            "api_equivalent_usd": usage.api_equivalent_usd,
-            "as_of": usage.as_of,
-        })),
-    })
-}
 
 fn machine_listening_tcp_json() -> anyhow::Result<Value> {
     #[cfg(not(unix))]
@@ -259,7 +244,6 @@ fn advertised_capabilities(bounded_clear_history_fallback_writes: bool) -> Vec<&
         PROVIDER_MANAGED_WORKSPACE_GUARD_CAPABILITY,
         BROWSER_PROVIDER_CAPABILITY,
         CLIENT_FOCUS_CAPABILITY,
-        MACHINE_USAGE_CAPABILITY,
         MACHINE_LISTENING_TCP_CAPABILITY,
         SERVER_STATS_CAPABILITY,
         TERMINAL_IDLE_CLOSE_CAPABILITY,
@@ -915,8 +899,6 @@ enum Command {
         device_id: Option<String>,
     },
     ListClients,
-    /// Read the machine-level model spend readout hosted by this daemon.
-    MachineUsage,
     /// Read listening TCP sockets on this host. The fixed command has no
     /// caller-controlled arguments and returns only the socket listing.
     MachineListeningTcp,
@@ -12161,7 +12143,6 @@ fn handle_command_with_cancellation(
             Ok(json!({}))
         }
         Command::ListClients => Ok(mux.control_clients_json(client)),
-        Command::MachineUsage => Ok(machine_usage_json(mux.machine_usage().as_ref())),
         Command::MachineListeningTcp => machine_listening_tcp_json(),
         Command::RegisterBrowserProvider {
             provider_id,
@@ -14432,11 +14413,6 @@ fn subscribed_event_json(event: &MuxEvent) -> Value {
             }),
         },
         MuxEvent::Status(message) => json!({"event": "status", "message": message}),
-        MuxEvent::MachineUsageChanged(usage) => {
-            let mut payload = machine_usage_json(usage.as_ref());
-            payload["event"] = json!("machine-usage-changed");
-            payload
-        }
         MuxEvent::ConfigReloadRequested => json!({"event": "config-reload-requested"}),
         MuxEvent::WindowTitleRequested(title) => {
             json!({"event": "window-title-requested", "title": title})

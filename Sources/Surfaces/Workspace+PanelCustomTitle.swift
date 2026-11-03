@@ -8,7 +8,7 @@ extension Workspace {
         title: String?,
         source: CustomTitleSource = .user,
         propagateToRemoteTmux: Bool = true,
-        propagateToCloud: Bool = true,
+        propagateToRemoteWorkspace: Bool = true,
         catalog: SurfaceCatalog? = nil
     ) -> Bool {
         let catalog = catalog ?? SurfaceCatalog.shared
@@ -22,10 +22,10 @@ extension Workspace {
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let previous = panelCustomTitles[panelId]
         let previousSource = panelCustomTitleSources[panelId]
-        let cloudResourceForPropagation = propagateToCloud && source != .remote
-            ? cloudProjectedResource(forPanel: panelId, catalog: catalog) : nil
-        if let resource = cloudResourceForPropagation, resource.kind == .terminal {
-            guard catalog.cloudWorkspaceRenameService.admitsTerminalRename(workspace: self,
+        let tuiResourceForPropagation = propagateToRemoteWorkspace && source != .remote
+            ? tuiProjectedResource(forPanel: panelId, catalog: catalog) : nil
+        if let resource = tuiResourceForPropagation, resource.kind == .terminal {
+            guard catalog.tuiWorkspaceRenameService.admitsTerminalRename(workspace: self,
                 panelID: panelId, resource: resource, source: source, catalog: catalog) else { return false }
         }
         if source == .auto {
@@ -34,7 +34,7 @@ extension Workspace {
         }
         var sameText = false
         if trimmed.isEmpty {
-            let canClearRemoteName = cloudResourceForPropagation?.kind == .terminal
+            let canClearRemoteName = tuiResourceForPropagation?.kind == .terminal
             guard previous != nil || canClearRemoteName else { return false }
             if previous != nil {
                 panelCustomTitles.removeValue(forKey: panelId)
@@ -77,8 +77,8 @@ extension Workspace {
         // to the machine's daemon tab name (`tab rename`): persisted there,
         // broadcast, and shown by every attached client (tree rows, other Macs,
         // TUI tab bars).
-        if let resource = cloudResourceForPropagation, resource.kind == .terminal {
-            catalog.propagateCloudTerminalRename(
+        if let resource = tuiResourceForPropagation, resource.kind == .terminal {
+            catalog.propagateTuiTerminalRename(
                 workspace: self,
                 panelID: panelId,
                 resource: resource,

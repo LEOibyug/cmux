@@ -167,43 +167,6 @@ impl SessionResetMessages {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct MachineAgentMessages {
-    pub help: &'static str,
-    pub usage: &'static str,
-    pub pairing_code: &'static str,
-    pub registered: &'static str,
-    pub retrying: &'static str,
-    pub migration_failed: &'static str,
-    pub pairing_code_unavailable: &'static str,
-    pub runtime_failed: &'static str,
-    pub invalid_session: &'static str,
-    pub identity_unavailable: &'static str,
-    pub registration_already_running: &'static str,
-    pub cloud_configuration_invalid: &'static str,
-    pub argument_needs_value: &'static str,
-    pub invalid_cloud_port: &'static str,
-    pub cloud_port_cannot_be_zero: &'static str,
-    pub unknown_argument: &'static str,
-}
-
-impl MachineAgentMessages {
-    pub(crate) fn retrying_message(&self, milliseconds: u128) -> String {
-        self.retrying.replace("{milliseconds}", &milliseconds.to_string())
-    }
-
-    pub(crate) fn argument_needs_value_message(&self, argument: &str) -> String {
-        self.argument_needs_value.replace("{argument}", argument)
-    }
-
-    pub(crate) fn invalid_cloud_port_message(&self, value: &str) -> String {
-        self.invalid_cloud_port.replace("{value}", value)
-    }
-
-    pub(crate) fn unknown_argument_message(&self, argument: &str) -> String {
-        self.unknown_argument.replace("{argument}", argument)
-    }
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct MenuMessages {
@@ -550,14 +513,12 @@ pub(crate) struct RemoteClientMessages {
     daemon_no_routes: &'static str,
     pub known_daemon_key_unavailable: &'static str,
     carrier_daemon_requires_carrier: &'static str,
-    pub upgrade_requires_ssh: &'static str,
     relay_route_not_candidate: &'static str,
     daemon_key_changed: &'static str,
     pub known_daemon_refresh_missing: &'static str,
     pub positional_invitation_rejected: &'static str,
     pub connect_one_route: &'static str,
     pub reconnect_policy_invalid: &'static str,
-    pub upgrade_no_install: &'static str,
     pub json_requires_headless: &'static str,
     pub help_invalid_options: &'static str,
     pub ssh_destination_required: &'static str,
@@ -1018,22 +979,9 @@ pub(crate) struct SidebarMessages {
     pub machine_replacement_not_pending: &'static str,
     pub machine_replacement_target_missing: &'static str,
     pub managed_ssh_requires_unix: &'static str,
-    /// Compact machine spend readout template: `{usd}` is the formatted
-    /// dollar amount and `{days}` the trailing window length.
-    pub machine_usage_readout: &'static str,
 }
 
 impl SidebarMessages {
-    /// Render the machine spend readout, e.g. `$1.23 / 30d`.
-    pub(crate) fn machine_usage_readout(
-        &self,
-        api_equivalent_usd: f64,
-        period_days: u32,
-    ) -> String {
-        self.machine_usage_readout
-            .replace("{usd}", &format_usd(api_equivalent_usd))
-            .replace("{days}", &period_days.to_string())
-    }
 
     pub(crate) fn connecting_to_message(&self, target: &str) -> String {
         self.connecting_to.replace("{target}", target)
@@ -1081,24 +1029,6 @@ impl SidebarMessages {
     }
 }
 
-/// Format a dollar amount with two decimals and thousands separators.
-/// Non-finite or negative inputs render as zero so a bad upstream number
-/// can never produce a misleading readout.
-pub(crate) fn format_usd(amount: f64) -> String {
-    let amount = if amount.is_finite() && amount > 0.0 { amount } else { 0.0 };
-    let cents = (amount * 100.0).round() as u64;
-    let whole = cents / 100;
-    let fraction = cents % 100;
-    let digits = whole.to_string();
-    let mut grouped = String::with_capacity(digits.len() + digits.len() / 3);
-    for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index).is_multiple_of(3) {
-            grouped.push(',');
-        }
-        grouped.push(digit);
-    }
-    format!("${grouped}.{fraction:02}")
-}
 
 impl ForeignViewportMessages {
     pub fn hint(&self, cols: u16, rows: u16) -> Option<ForeignViewportHint> {
@@ -1263,7 +1193,6 @@ pub(crate) struct Catalog {
     pub terminal: TerminalMessages,
     pub session: SessionMessages,
     pub session_reset: SessionResetMessages,
-    pub machine_agent: MachineAgentMessages,
     pub menu: MenuMessages,
     pub shortcuts: ShortcutMessages,
     pub browser: BrowserMessages,
@@ -1317,7 +1246,7 @@ static ENGLISH: Catalog = Catalog {
     local_server: LocalServerMessages {
         shorthand_help: "USAGE\n  cmux help shorthands\n\nShorthands use the same public resource operations and output modes.\n-t/--target accepts a cmux selector, not tmux session:window.pane syntax.\nNo target means current in the selected session. Lists stay within that session.\nsplitw defaults to down; -h is right and -v is down. Use --help for help.\nselectp accepts one of -L/-R/-U/-D. neww accepts -n NAME.\nrenamew accepts one new name. capturep always prints (-p is optional).\nsend-keys accepts key names (Enter, C-c, M-x); -l joins literal UTF-8 text.\nIt does not mix arbitrary text and key names. Use terminal write for text.\nResource paths may omit current: pane split, term read, ws rename --name NAME.\nExplicit selector paths win; name: forces names that match command words.\nNo new-session alias: use cmux --session NAME or server ensure --session NAME.\n",
         shorthand_invalid: "invalid or unsupported shorthand argument {value}; use cmux help shorthands",
-        startup_lifecycle_usage: "  cmux server <ACTION>     Start, inspect, stop, or reload one local session\n  cmux remote connect <ROUTE>  Attach through an authenticated remote route\n  cmux remote ssh <HOST>       Bootstrap and attach over direct SSH\n  cmux remote forward <ROUTE>  Forward a workspace TCP service locally\n  cmux remote rpc <ROUTE>     Run workspace coding-agent RPC requests\n  cmux remote enroll <ACTION> Enroll, approve, list, or revoke devices\n  cmux remote known-daemons   List client-pinned daemon identities and routes\n  cmux remote doctor <HOST>   Explain why SSH to a host fails\n  cmux remote trust <ACTION>  Decide what paired machines may do here\n  cmux remote stop            Stop a replaceable SSH sidecar explicitly",
+        startup_lifecycle_usage: "  cmux server <ACTION>     Start, inspect, stop, or reload one local session\n  cmux remote connect <ROUTE>  Attach through an authenticated remote route\n  cmux remote ssh <HOST>       Verify a preinstalled helper and attach over SSH\n  cmux remote forward <ROUTE>  Forward a workspace TCP service locally\n  cmux remote rpc <ROUTE>     Run workspace coding-agent RPC requests\n  cmux remote enroll <ACTION> Enroll, approve, list, or revoke devices\n  cmux remote known-daemons   List client-pinned daemon identities and routes\n  cmux remote doctor <HOST>   Explain why SSH to a host fails\n  cmux remote trust <ACTION>  Decide what paired machines may do here\n  cmux remote stop            Stop a replaceable SSH sidecar explicitly",
         root_remote_usage: "  cmux remote <connect|ssh|forward|rpc|enroll|known-daemons|doctor|trust|stop> [OPTIONS]",
         root_server_usage: "  cmux server <start|ensure|status|stats|stop|reload-config> [OPTIONS]",
         root_server_scope: "  server        Manage one named local durable session owner",
@@ -1445,42 +1374,6 @@ static ENGLISH: Catalog = Catalog {
         reason_filesystem: "the filesystem refused the scoped reset",
         recovery_filesystem: "check permissions and available disk, then retry the reset",
         retry_after_preview: "rerun without --force to inspect the scoped reset plan",
-    },
-    machine_agent: MachineAgentMessages {
-        help: "\
-cmux machine-agent - share one local cmux session through a remote service
-
-USAGE:
-  cmux machine-agent [OPTIONS]
-
-OPTIONS:
-  --session <name>         Local cmux session (default: main)
-  --socket <path>          Explicit local cmux control socket
-  --state <path>           Private machine identity file
-  --cloud-host <host>      SSH registration host (default: cmux.cloud)
-  --cloud-user <user>      SSH user
-  --cloud-port <port>      SSH port
-  --cloud-identity <path>  SSH identity file
-  -h, --help               Show this help
-
-The agent opens one outbound connection. It never opens a public listener or
-edits shell files. Authenticate with the configured host before retrying.
-",
-        usage: "cmux machine-agent       Share one local session through the configured host",
-        pairing_code: "Pairing code",
-        registered: "Sharing local cmux session",
-        retrying: "Cloud connection lost; retrying in {milliseconds} ms",
-        migration_failed: "Could not reconnect the machine; please try again",
-        pairing_code_unavailable: "Pairing code could not be displayed securely. Run this command from an interactive terminal and retry",
-        runtime_failed: "The machine agent could not start or continue; check its configuration",
-        invalid_session: "The session name is invalid; use a short name without spaces or control characters",
-        identity_unavailable: "The private machine identity is unavailable; check that --state points to a private writable file",
-        registration_already_running: "A machine agent is already sharing this session; stop it before starting another",
-        cloud_configuration_invalid: "The cloud connection settings are invalid; check the host, user, port, and identity file",
-        argument_needs_value: "Option {argument} needs a value",
-        invalid_cloud_port: "Invalid --cloud-port value: {value}",
-        cloud_port_cannot_be_zero: "--cloud-port cannot be zero",
-        unknown_argument: "Unknown machine-agent argument: {argument}",
     },
     menu: MenuMessages {
         move_tab_workspace_unsupported: "This session owner needs a newer cmux build to move tabs between workspaces",
@@ -1647,8 +1540,6 @@ TRANSPORT:
   --agent-hooks PROVIDER[,PROVIDER...] installs those coding-agent hooks for
     the remote user on each attach (for example claude,codex)
   --remote-state-dir PATH for a non-default daemon state directory
-  --upgrade explicitly replaces an SSH-managed remote sidecar after installing
-    the pinned binary; terminal panes survive, while remote RPC state resets
 
 RECONNECT:
   --reconnect-attempts N|unlimited  --reconnect-initial-ms MS
@@ -1659,8 +1550,9 @@ RECONNECT:
         ssh_help: r#"USAGE: cmux remote ssh [USER@]HOST[:PORT] [OPTIONS]
 
 Direct SSH uses one carrier by default. Pass --lanes auto or isolated to opt in
-to multiple carriers. The remote binary is probed and, unless --no-install is
-set, installed into the user account when missing or incompatible.
+to multiple carriers. Explicitly install a compatible local build at the remote
+--remote-binary path before connecting. Connections only probe that prerequisite;
+they never download, install, or upgrade the helper. --no-install asserts this policy.
 
 OPTIONS:
   --session NAME  --lanes single|auto|isolated  --headless [--json]
@@ -1668,9 +1560,6 @@ OPTIONS:
   --agent-hooks PROVIDER[,PROVIDER...] installs those coding-agent hooks for
     the remote user on each attach (for example claude,codex)
   --remote-state-dir PATH for a non-default daemon state directory
-  --upgrade explicitly replaces an SSH-managed remote sidecar; terminal panes
-    survive, remote clients and forwards disconnect, RPC processes stop, and
-    other RPC resources reset
   --state-dir PATH  --local-socket PATH  --connect-timeout-seconds N
   --reconnect-attempts N|unlimited  --reconnect-initial-ms MS
   --reconnect-max-ms MS  --reconnect-attempt-timeout-ms MS
@@ -1750,14 +1639,12 @@ OPTIONS:
         daemon_no_routes: "daemon {fingerprint} has no stored routes; pass a route or enroll again",
         known_daemon_key_unavailable: "known daemon key disappeared",
         carrier_daemon_requires_carrier: "daemon {fingerprint} is known only through a trusted SSH or Unix carrier; use that carrier route or enroll this device for network access",
-        upgrade_requires_ssh: "--upgrade requires SSH to be the initial route",
         relay_route_not_candidate: "relay credential route {route} is not one of this connection's route candidates",
         daemon_key_changed: "daemon key changed for {name}",
         known_daemon_refresh_missing: "known daemon disappeared while refreshing its route",
         positional_invitation_rejected: "positional invitations are not accepted; use --invite-file or stdin",
         connect_one_route: "connect accepts one route",
         reconnect_policy_invalid: "reconnect delays, attempt timeout, and enabled heartbeat timeout must be positive; max delay must be at least initial",
-        upgrade_no_install: "--upgrade cannot be combined with --no-install",
         json_requires_headless: "--json requires --headless for connect and ssh",
         help_invalid_options: "help cannot be combined with invalid connect options",
         ssh_destination_required: "ssh expects the destination before options",
@@ -2030,7 +1917,6 @@ socket.
         machine_replacement_not_pending: "Machine replacement is no longer pending",
         machine_replacement_target_missing: "Machine replacement target is missing",
         managed_ssh_requires_unix: "Managed SSH machine connections require Unix",
-        machine_usage_readout: "{usd} / {days}d",
     },
 };
 
@@ -2065,7 +1951,7 @@ static JAPANESE: Catalog = Catalog {
     local_server: LocalServerMessages {
         shorthand_help: "使用方法\n  cmux help shorthands\n\n短縮形は同じ公開リソース操作と出力形式を使います。\n-t/--target は cmux セレクターです。tmux の session:window.pane 形式ではありません。\n対象の省略は選択したセッションの current です。一覧もそのセッション内です。\nsplitw の既定は下、-h は右、-v は下です。ヘルプは --help を使います。\nselectp は -L/-R/-U/-D の一つ、neww は -n NAME を受け付けます。\nrenamew は新しい名前一つ、capturep は常に出力します（-p は省略可）。\nsend-keys は Enter、C-c、M-x などのキー名、-l は UTF-8 文字列を連結します。\n文字列とキー名の混在には対応しません。文字列には terminal write を使います。\nリソースの current は省略可能です: pane split、term read、ws rename --name NAME。\n明示的なセレクターパスを優先します。コマンドと同名なら name: を使います。\nnew-session はありません。cmux --session NAME または server ensure --session NAME を使います。\n",
         shorthand_invalid: "短縮形の引数 {value} は無効または未対応です。cmux help shorthands を参照してください",
-        startup_lifecycle_usage: "  cmux server <操作>       一つのローカルセッションを起動、確認、停止、再読み込み\n  cmux remote connect <ルート>  認証済みリモートルート経由で接続\n  cmux remote ssh <ホスト>       直接 SSH で導入して接続\n  cmux remote forward <ルート>  ワークスペースの TCP サービスをローカル転送\n  cmux remote rpc <ルート>       ワークスペースのコーディングエージェント RPC を実行\n  cmux remote enroll <操作>      デバイスを登録、承認、一覧、失効\n  cmux remote known-daemons      クライアントに固定したデーモン ID とルートを一覧表示\n  cmux remote doctor <ホスト>   ホストへの SSH が失敗する理由を説明\n  cmux remote trust <操作>      ペアリングしたマシンがここでできることを決める\n  cmux remote stop               置換可能な SSH サイドカーを明示的に停止",
+        startup_lifecycle_usage: "  cmux server <操作>       一つのローカルセッションを起動、確認、停止、再読み込み\n  cmux remote connect <ルート>  認証済みリモートルート経由で接続\n  cmux remote ssh <ホスト>       導入済みヘルパーを確認して SSH 接続\n  cmux remote forward <ルート>  ワークスペースの TCP サービスをローカル転送\n  cmux remote rpc <ルート>       ワークスペースのコーディングエージェント RPC を実行\n  cmux remote enroll <操作>      デバイスを登録、承認、一覧、失効\n  cmux remote known-daemons      クライアントに固定したデーモン ID とルートを一覧表示\n  cmux remote doctor <ホスト>   ホストへの SSH が失敗する理由を説明\n  cmux remote trust <操作>      ペアリングしたマシンがここでできることを決める\n  cmux remote stop               置換可能な SSH サイドカーを明示的に停止",
         root_remote_usage: "  cmux remote <connect|ssh|forward|rpc|enroll|known-daemons|doctor|trust|stop> [オプション]",
         root_server_usage: "  cmux server <start|ensure|status|stats|stop|reload-config> [オプション]",
         root_server_scope: "  server        一つの名前付きローカル永続セッション所有者を管理",
@@ -2193,42 +2079,6 @@ static JAPANESE: Catalog = Catalog {
         reason_filesystem: "ファイルシステムがスコープ付きリセットを拒否しました",
         recovery_filesystem: "権限と空きディスク容量を確認してからリセットを再試行してください",
         retry_after_preview: "--force なしで再実行してスコープ付きリセット計画を確認してください",
-    },
-    machine_agent: MachineAgentMessages {
-        help: "\
-cmux machine-agent - ローカルの cmux セッションをリモートサービス経由で共有
-
-使用方法:
-  cmux machine-agent [オプション]
-
-オプション:
-  --session <name>         ローカル cmux セッション（既定: main）
-  --socket <path>          ローカル cmux 制御ソケットを指定
-  --state <path>           非公開のマシン ID ファイル
-  --cloud-host <host>      SSH 登録ホスト（既定: cmux.cloud）
-  --cloud-user <user>      SSH ユーザー
-  --cloud-port <port>      SSH ポート
-  --cloud-identity <path>  SSH ID ファイル
-  -h, --help               このヘルプを表示
-
-エージェントは外向きの接続を 1 つ開きます。公開リスナーを開いたり、シェルファイル
-を編集したりしません。再試行する前に、設定したホストで認証してください。
-",
-        usage: "cmux machine-agent       設定したホスト経由でローカルセッションを共有",
-        pairing_code: "ペアリングコード",
-        registered: "ローカル cmux セッションを共有中",
-        retrying: "クラウド接続が切断されました。{milliseconds} ミリ秒後に再接続します",
-        migration_failed: "マシンを再接続できませんでした。もう一度お試しください",
-        pairing_code_unavailable: "ペアリングコードを安全に表示できませんでした。対話型端末でこのコマンドを実行して再試行してください",
-        runtime_failed: "machine-agent を開始または続行できませんでした。設定を確認してください",
-        invalid_session: "セッション名が無効です。空白や制御文字を含まない短い名前を使用してください",
-        identity_unavailable: "非公開のマシン ID を使用できません。--state が非公開で書き込み可能なファイルを指していることを確認してください",
-        registration_already_running: "このセッションは別の machine-agent が共有中です。停止してからもう一度開始してください",
-        cloud_configuration_invalid: "クラウド接続設定が無効です。ホスト、ユーザー、ポート、ID ファイルを確認してください",
-        argument_needs_value: "オプション {argument} には値が必要です",
-        invalid_cloud_port: "--cloud-port の値が無効です: {value}",
-        cloud_port_cannot_be_zero: "--cloud-port に 0 は指定できません",
-        unknown_argument: "不明な machine-agent 引数です: {argument}",
     },
     menu: MenuMessages {
         move_tab_workspace_unsupported: "ワークスペース間でタブを移動するにはセッション所有者を新しい cmux ビルドに更新してください",
@@ -2394,8 +2244,6 @@ ID とセッション:
   --agent-hooks プロバイダー[,プロバイダー...] 接続のたびにリモートユーザーへ
     コーディングエージェントのフックを導入 (例: claude,codex)
   --remote-state-dir パス  既定以外のデーモン状態ディレクトリ
-  --upgrade は固定済みバイナリのインストール後に SSH 管理のサイドカーを置換します。
-    ターミナルペインは維持され、リモート RPC 状態はリセットされます。
 
 再接続:
   --reconnect-attempts 回数|unlimited  --reconnect-initial-ms ミリ秒
@@ -2406,8 +2254,9 @@ ID とセッション:
         ssh_help: r#"使用方法: cmux remote ssh [ユーザー@]ホスト[:ポート] [オプション]
 
 直接 SSH は既定で 1 本の搬送接続を使用します。複数接続を使うには
---lanes auto または isolated を指定します。リモートバイナリを確認し、
---no-install がなければ未導入または非互換時にユーザー領域へインストールします。
+--lanes auto または isolated を指定します。接続前に互換性のあるローカルビルドを
+リモートの --remote-binary パスへ明示的に導入してください。接続時は必要条件の確認のみを
+行い、ダウンロード、インストール、自動更新は行いません。--no-install はこの方針を明示します。
 
 オプション:
   --session 名前  --lanes single|auto|isolated  --headless [--json]
@@ -2415,8 +2264,6 @@ ID とセッション:
   --agent-hooks プロバイダー[,プロバイダー...] 接続のたびにリモートユーザーへ
     コーディングエージェントのフックを導入 (例: claude,codex)
   --remote-state-dir パス  既定以外のデーモン状態ディレクトリ
-  --upgrade は SSH 管理のサイドカーを明示的に置換します。ターミナルペインは維持され、
-    リモートクライアントと転送は切断され、RPC プロセスなどの状態はリセットされます。
   --state-dir パス  --local-socket パス  --connect-timeout-seconds 秒数
   --reconnect-attempts 回数|unlimited  --reconnect-initial-ms ミリ秒
   --reconnect-max-ms ミリ秒  --reconnect-attempt-timeout-ms ミリ秒
@@ -2495,14 +2342,12 @@ ID とセッション:
         daemon_no_routes: "デーモン {fingerprint} に保存済みルートがありません。ルートを指定するか、再登録してください",
         known_daemon_key_unavailable: "登録済みデーモンの鍵が見つかりません",
         carrier_daemon_requires_carrier: "デーモン {fingerprint} は信頼済みの SSH または Unix 搬送路でのみ登録されています。その搬送路を使用するか、ネットワーク接続用にこのデバイスを登録してください",
-        upgrade_requires_ssh: "--upgrade を使用するには最初のルートを SSH にしてください",
         relay_route_not_candidate: "リレー認証情報のルート {route} はこの接続のルート候補に含まれていません",
         daemon_key_changed: "デーモン {name} の鍵が変更されています",
         known_daemon_refresh_missing: "ルートの更新中に登録済みデーモンが見つからなくなりました",
         positional_invitation_rejected: "招待を位置引数へ指定できません。--invite-file または標準入力を使用してください",
         connect_one_route: "connect に指定できるルートは 1 つです",
         reconnect_policy_invalid: "再接続遅延、試行タイムアウト、有効なハートビートタイムアウトには正の値が必要です。最大遅延は初期遅延以上にしてください",
-        upgrade_no_install: "--upgrade と --no-install は同時に指定できません",
         json_requires_headless: "connect と ssh で --json を使うには --headless が必要です",
         help_invalid_options: "ヘルプと無効な connect オプションは同時に指定できません",
         ssh_destination_required: "ssh の接続先をオプションより前に指定してください",
@@ -2774,7 +2619,6 @@ SIGTERM または SIGINT で終了し、ソケットを削除します。
         machine_replacement_not_pending: "保留中のマシン切り替えがありません",
         machine_replacement_target_missing: "マシン切り替え先が見つかりません",
         managed_ssh_requires_unix: "管理 SSH マシン接続には Unix が必要です",
-        machine_usage_readout: "{usd} / {days}日",
     },
 };
 
@@ -2798,344 +2642,6 @@ fn system_locale() -> String {
 mod tests {
     use super::*;
 
-    #[test]
-    fn locale_tags_select_complete_catalogs() {
-        assert_eq!(catalog_for_locale("en_US.UTF-8"), &ENGLISH);
-        assert_eq!(catalog_for_locale("ja_JP.UTF-8"), &JAPANESE);
-        assert_eq!(catalog_for_locale("C"), &ENGLISH);
-        assert_eq!(ENGLISH.menu.maximize_pane, "Maximize pane");
-        assert_eq!(JAPANESE.menu.maximize_pane, "ペインを最大化");
-        assert_eq!(ENGLISH.action_label(Action::NewPaneSmart), "New pane");
-        assert_eq!(JAPANESE.action_label(Action::NewPaneSmart), "新しいペイン");
-        assert_eq!(ENGLISH.shortcuts.title, "Keyboard shortcuts");
-        assert_eq!(JAPANESE.shortcuts.title, "キーボードショートカット");
-        assert_eq!(ENGLISH.shortcuts.close_button, "Esc close");
-        assert_eq!(JAPANESE.shortcuts.close_button, "Esc 閉じる");
-        assert_eq!(ENGLISH.remote_client.known_daemons_empty, "No known daemons.");
-        assert_eq!(JAPANESE.remote_client.known_daemons_empty, "登録済みのデーモンはありません。");
-        assert_eq!(ENGLISH.remote_client.known_daemon_auth_enrolled, "enrolled");
-        assert_eq!(JAPANESE.remote_client.known_daemon_auth_enrolled, "登録済み");
-        assert_eq!(ENGLISH.remote_client.known_daemon_auth_carrier, "carrier");
-        assert_eq!(JAPANESE.remote_client.known_daemon_auth_carrier, "信頼済み搬送路");
-        assert_eq!(
-            ENGLISH.remote_client.relay_credentials_require_explicit_route,
-            "relay credentials without --relay-route require one explicit relay connection route"
-        );
-        assert_eq!(
-            JAPANESE.remote_client.relay_credentials_require_explicit_route,
-            "--relay-route を指定しないリレー認証情報には、明示的なリレー接続ルートを 1 つ指定してください"
-        );
-        assert_eq!(
-            JAPANESE.remote_client.relay_shorthand_requires_relay_route("wss://example.test/"),
-            "リレー認証情報の短縮形式には明示的なリレールートが必要です。指定されたルート: wss://example.test/"
-        );
-        assert_eq!(
-            JAPANESE.remote_client.known_daemon_forgotten("fingerprint"),
-            "デーモン fingerprint を削除しました。"
-        );
-        assert_eq!(
-            JAPANESE.remote_client.known_daemon_not_known("fingerprint"),
-            "デーモン \"fingerprint\" は登録されていません"
-        );
-        assert_eq!(
-            ENGLISH.terminal.deferred_input_destination_changed,
-            "Deferred input was discarded because its destination changed"
-        );
-        assert_eq!(
-            JAPANESE.terminal.deferred_input_destination_changed,
-            "遅延入力は送信先が変更されたため破棄されました"
-        );
-        assert_eq!(
-            ENGLISH.terminal.deferred_input_queue_full,
-            "Input queue byte limit reached while a session change is pending"
-        );
-        assert_eq!(
-            JAPANESE.terminal.deferred_input_queue_full,
-            "セッション変更の保留中に入力キューのバイト上限に達しました"
-        );
-        assert_eq!(ENGLISH.terminal.pty_input_exited, "Terminal exited; input was not sent");
-        assert_eq!(
-            JAPANESE.terminal.pty_input_exited,
-            "ターミナルが終了したため、入力は送信されませんでした"
-        );
-        assert_eq!(ENGLISH.session.operation_failed, "Session operation failed");
-        assert_eq!(
-            JAPANESE.session.mux_subscription_recovered,
-            "Mux イベントの滞留が上限を超えました。購読を復旧しました"
-        );
-        assert_eq!(
-            JAPANESE.session.mux_subscription_recovery_failed("更新失敗"),
-            "Mux イベントの滞留から復旧できませんでした。再試行中のキュー入力を破棄しました: 更新失敗"
-        );
-        assert_eq!(JAPANESE.session.operation_failed, "セッション操作に失敗しました");
-        assert_eq!(
-            JAPANESE.attach.filtered_subscription_unavailable,
-            "単一ターミナルへの接続には新しい cmux-tui サーバーが必要です。セッションを再起動してください"
-        );
-        assert_eq!(ENGLISH.attach.remote_attach_queue_full, "remote surface attach queue is full");
-        assert_eq!(
-            JAPANESE.attach.remote_attach_queue_full,
-            "リモートサーフェス接続キューがいっぱいです"
-        );
-        assert_eq!(
-            ENGLISH.attach.remote_attach_workers_failed("os detail"),
-            "could not start surface attach workers: os detail"
-        );
-        assert_eq!(
-            JAPANESE.attach.remote_attach_workers_failed("os detail"),
-            "リモートサーフェス接続ワーカーを開始できませんでした: os detail"
-        );
-        assert_eq!(
-            ENGLISH.attach.unknown_terminal("missing"),
-            "unknown terminal \"missing\"; use `cmux terminal list` to list terminal IDs"
-        );
-        assert_eq!(
-            JAPANESE.attach.ambiguous_terminal("000010"),
-            "ターミナル参照 \"000010\" は曖昧です。`cmux terminal list` に表示される一意の ID を使用してください"
-        );
-        assert_eq!(
-            JAPANESE.attach.browser_not_terminal("browser"),
-            "サーフェス \"browser\" はブラウザであり、ターミナルではありません"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").terminal.keyboard_text_too_large,
-            "キーボード入力が 4 MiB の PTY バッファ上限を超えています"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").terminal.clear_history_help,
-            "アクティブなプロンプトを保持したまま PTY 履歴を消去します。"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").terminal.clear_history_unsupported,
-            "このサーバーでは clear-history を使用できません。cmux-tui サーバーを再起動してください"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.machine_provider_disconnected,
-            "マシンプロバイダーから切断されました。再接続しています"
-        );
-        assert_eq!(catalog_for_locale("en_US.UTF-8").machine_agent.pairing_code, "Pairing code");
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").machine_agent.retrying_message(250),
-            "Cloud connection lost; retrying in 250 ms"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").machine_agent.pairing_code,
-            "ペアリングコード"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").machine_agent.retrying_message(250),
-            "クラウド接続が切断されました。250 ミリ秒後に再接続します"
-        );
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").machine_agent.migration_failed,
-            "Could not reconnect the machine; please try again"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").machine_agent.migration_failed,
-            "マシンを再接続できませんでした。もう一度お試しください"
-        );
-        assert!(
-            catalog_for_locale("en_US.UTF-8")
-                .machine_agent
-                .help
-                .contains("share one local cmux session through a remote service")
-        );
-        assert!(
-            catalog_for_locale("ja_JP.UTF-8")
-                .machine_agent
-                .help
-                .contains("ローカルの cmux セッションをリモートサービス経由で共有")
-        );
-        assert!(!catalog_for_locale("en_US.UTF-8").machine_agent.help.contains("BatchMode"));
-        assert!(!catalog_for_locale("ja_JP.UTF-8").machine_agent.help.contains("BatchMode"));
-        assert!(
-            catalog_for_locale("en_US.UTF-8")
-                .machine_agent
-                .pairing_code_unavailable
-                .contains("interactive terminal")
-        );
-        assert!(
-            catalog_for_locale("ja_JP.UTF-8")
-                .machine_agent
-                .pairing_code_unavailable
-                .contains("対話型端末")
-        );
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").machine_agent.invalid_cloud_port_message("invalid"),
-            "Invalid --cloud-port value: invalid"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").machine_agent.invalid_cloud_port_message("invalid"),
-            "--cloud-port の値が無効です: invalid"
-        );
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").sidebar.machine_action_failed,
-            "Machine action failed"
-        );
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").sidebar.provider_notice_identity_unavailable,
-            "Could not prepare the connection. Try again; if the problem persists, restart cmux."
-        );
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").sidebar.provider_connection_already_running,
-            "Another connection is already running. Close it and try again."
-        );
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").sidebar.connect_prompt,
-            "Host address or pairing code"
-        );
-        assert_eq!(catalog_for_locale("en_US.UTF-8").sidebar.new_machine, "new vm");
-        assert_eq!(catalog_for_locale("ja_JP.UTF-8").sidebar.new_machine, "新規VM");
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.connect_prompt,
-            "ホストアドレスまたはペアリングコード"
-        );
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").sidebar.connect_host_prompt,
-            "SSH host or user@host"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.connect_host_prompt,
-            "SSH ホストまたは user@host"
-        );
-        assert_eq!(catalog_for_locale("en_US.UTF-8").sidebar.ssh_hosts, "SSH hosts");
-        assert_eq!(catalog_for_locale("ja_JP.UTF-8").sidebar.ssh_hosts, "SSH ホスト");
-        assert_eq!(catalog_for_locale("en_US.UTF-8").sidebar.type_to_filter, "type to filter");
-        assert_eq!(catalog_for_locale("ja_JP.UTF-8").sidebar.type_to_filter, "入力して絞り込み");
-        assert_eq!(catalog_for_locale("en_US.UTF-8").sidebar.other_host, "Add SSH host…");
-        assert_eq!(catalog_for_locale("ja_JP.UTF-8").sidebar.other_host, "SSH ホストを追加…");
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").sidebar.machine_name_required,
-            "Enter a machine name"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.machine_name_required,
-            "マシン名を入力してください"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.machine_action_failed,
-            "マシン操作に失敗しました"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.provider_notice_identity_unavailable,
-            "接続を準備できませんでした。もう一度お試しください。問題が解決しない場合は、cmux を再起動してください。"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.provider_connection_already_running,
-            "別の接続がすでに実行中です。終了してから、もう一度お試しください。"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.machine_provider_external_connect_ambiguous,
-            "前回の接続処理が完了している可能性があります。プロバイダーを再接続し、同じペアリングコードで再試行してください"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.machine_replacement_stale,
-            "マシン切り替えの状態が古くなっています"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.machine_catalog_updates_failed,
-            "マシンカタログの更新を開始できませんでした"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.machine_replacement_worker_stopped,
-            "確定前にマシン切り替え処理が停止しました"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.machine_not_ready_to_connect,
-            "選択したマシンは接続準備ができていません"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.machine_managed_authority_unsupported,
-            "このプロバイダーは管理ワークスペースのミラーを認可できません。マシンプロバイダーをアップグレードしてください"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.machine_managed_authority_invalid,
-            "マシンプロバイダーから無効な管理ワークスペース権限バインディングが返されました"
-        );
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").sidebar.confirm_layout_undo,
-            "Type CONFIRM to close pane(s) {items}"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.confirm_layout_undo,
-            "ペイン {items} を閉じるには CONFIRM と入力"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.layout_nothing_to_undo,
-            "元に戻せるレイアウト操作はありません"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.layout_undo_stale,
-            "レイアウトが変更されたため、元に戻す操作は適用されませんでした"
-        );
-        let japanese_layout = &catalog_for_locale("ja_JP.UTF-8").layout;
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").layout.surface_size_release_failed(7, "disconnected"),
-            "surface 7 size release failed; retrying on the next layout: disconnected"
-        );
-        assert_eq!(
-            japanese_layout.surface_size_release_failed(7, "切断"),
-            "サーフェス 7 のサイズ設定の解放に失敗しました。次回のレイアウト更新時に再試行します: 切断"
-        );
-        assert_eq!(
-            japanese_layout.viewport_width_out_of_range,
-            "ビューポートペインの幅は 0.1 から 1.0 の範囲で指定してください"
-        );
-        assert_eq!(
-            japanese_layout.viewport_width_must_be_finite,
-            "--width には有限の数値を指定してください"
-        );
-        assert_eq!(
-            japanese_layout.viewport_width_must_be_number,
-            "--width には数値を指定してください"
-        );
-        assert_eq!(japanese_layout.ratio_must_be_number, "--ratio には数値を指定してください");
-        assert_eq!(
-            japanese_layout.ratio_must_be_finite,
-            "--ratio には有限の数値を指定してください"
-        );
-        assert_eq!(
-            japanese_layout.pane_without_resizable_column(42),
-            "ペイン 42 にはサイズ変更可能なビューポート列がありません"
-        );
-        assert_eq!(
-            japanese_layout.unsupported_server_command("undo-layout"),
-            "undo-layout はこのサーバーではサポートされていません"
-        );
-        assert_eq!(japanese_layout.layout_undo_applied(3, 9), "元に戻しました screen=3 revision=9");
-        assert_eq!(
-            japanese_layout.layout_undo_confirmation_required(8, "15,16"),
-            "確認が必要です: --revision 8 --confirm-close を付けて再実行してください（閉じるペイン: 15,16）"
-        );
-        assert_eq!(
-            japanese_layout.layout_undo_confirmation_flags_together,
-            "--revision と --confirm-close は同時に指定してください"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").runtime.renderer_panicked("描画セルが無効"),
-            "ターミナル描画処理でパニックが発生しました: 描画セルが無効"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").runtime.host_input_failed("切断"),
-            "ホストターミナルの入力に失敗しました: 切断"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").runtime.signal_handlers_failed("権限がありません"),
-            "シグナルハンドラーの設定に失敗しました: 権限がありません"
-        );
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8")
-                .runtime
-                .terminal_restore_also_failed("event loop failed", "restore failed"),
-            "event loop failed; host terminal restoration also failed: restore failed"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8")
-                .runtime
-                .terminal_restore_also_failed("イベントループ失敗", "復元失敗"),
-            "イベントループ失敗; ホストターミナルの復元にも失敗しました: 復元失敗"
-        );
-    }
 
     #[test]
     fn remote_recovery_messages_are_localized() {
@@ -3294,27 +2800,5 @@ mod tests {
         assert_eq!(JAPANESE.foreign_viewport.hint_width(12, 5), 19);
     }
 
-    #[test]
-    fn usd_formatting_is_two_decimal_and_grouped() {
-        assert_eq!(format_usd(0.0), "$0.00");
-        assert_eq!(format_usd(1.234), "$1.23");
-        assert_eq!(format_usd(1.235), "$1.24");
-        assert_eq!(format_usd(999.999), "$1,000.00");
-        assert_eq!(format_usd(1234567.5), "$1,234,567.50");
-        assert_eq!(format_usd(-3.0), "$0.00");
-        assert_eq!(format_usd(f64::NAN), "$0.00");
-        assert_eq!(format_usd(f64::INFINITY), "$0.00");
-    }
 
-    #[test]
-    fn machine_usage_readout_is_localized() {
-        assert_eq!(
-            catalog_for_locale("en_US.UTF-8").sidebar.machine_usage_readout(1.23, 30),
-            "$1.23 / 30d"
-        );
-        assert_eq!(
-            catalog_for_locale("ja_JP.UTF-8").sidebar.machine_usage_readout(1.23, 30),
-            "$1.23 / 30日"
-        );
-    }
 }

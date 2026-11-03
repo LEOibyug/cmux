@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -11,28 +11,30 @@ import Testing
 /// Uses the production parser, provider acceptance fence, catalog and workspace projection.
 @MainActor
 final class CloudDirectoryTestFixture {
-    let machine = SurfaceMachineID.cloud("cwd-machine")
+    let host = TuiTestHost(destination: "cwd.example.test")
+    var machine: SurfaceMachineID { host.machine }
     let workspace: Workspace
     let panels: [UUID]
     let catalog: SurfaceCatalog
     let provider: CmuxTuiSurfaceProvider
 
     init() throws {
+        let machine = host.machine
         let workspace = Workspace(workingDirectory: "/Users/alice/local-checkout")
         self.workspace = workspace
         let pane = try #require(workspace.bonsplitController.allPaneIds.first)
         panels = [try #require(workspace.focusedPanelId), try #require(workspace.newTerminalSurface(inPane: pane, focus: false)).id]
-        workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "ws_main")
+        workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "ws_main")
         workspace.setCustomTitle("My explicit task title")
-        catalog = SurfaceCatalog(cloudWorkspaceRenameService: CloudWorkspaceRenameService(
-            environment: CloudWorkspaceRenameEnvironment(
+        catalog = SurfaceCatalog(tuiWorkspaceRenameService: TuiWorkspaceRenameService(
+            environment: TuiWorkspaceRenameEnvironment(
                 workspace: { $0 == workspace.id ? workspace : nil },
                 workspaces: { [workspace] }
             )
         ))
         provider = CmuxTuiSurfaceProvider(
-            summary: VMSummary(id: machine.rawValue, provider: "freestyle", status: "running", image: "cmux-devbox", createdAt: 0, base: nil),
-            links: CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil }), catalog: catalog
+            summary: host.summary,
+            links: host.links(), catalog: catalog
         )
         catalog.register(provider)
         try install(paths: ["/home/cmux/first", "/home/cmux/second"], revision: 1)
@@ -42,7 +44,7 @@ final class CloudDirectoryTestFixture {
                 remoteWorkspaceID: "ws_main", remoteTabID: "tab_\(index)"
             ))
         }
-        provider.publish(try #require(provider.cloudState), ports: [])
+        provider.publish(try #require(provider.tuiState), ports: [])
     }
 
     func close() {
@@ -54,7 +56,7 @@ final class CloudDirectoryTestFixture {
         SurfaceResourceID(machine: machine, kind: .terminal, key: "term_\(index)")
     }
 
-    func state(paths: [String?], revision: UInt64, generation: String = "daemon", lifecycles: [String] = []) throws -> CloudVMState {
+    func state(paths: [String?], revision: UInt64, generation: String = "daemon", lifecycles: [String] = []) throws -> TuiState {
         let terminals = paths.enumerated().map { index, path -> [String: Any] in
             ["id": "term_\(index)", "title": "bash", "cwd": path as Any? ?? NSNull(), "lifecycle": index < lifecycles.count ? lifecycles[index] : "running"]
         }
@@ -71,7 +73,7 @@ final class CloudDirectoryTestFixture {
     }
 
     @discardableResult
-    func install(paths: [String?], revision: UInt64, generation: String = "daemon", lifecycles: [String] = []) throws -> CloudVMState {
+    func install(paths: [String?], revision: UInt64, generation: String = "daemon", lifecycles: [String] = []) throws -> TuiState {
         let state = try state(paths: paths, revision: revision, generation: generation, lifecycles: lifecycles)
         #expect(provider.installSnapshotIfNewer(state))
         provider.publish(state, ports: [])
@@ -79,9 +81,9 @@ final class CloudDirectoryTestFixture {
     }
 
     func changeDirectory(_ path: String?, terminal: Int) throws {
-        let current = try #require(provider.cloudState)
+        let current = try #require(provider.tuiState)
         let cursor = try #require(current.cursor)
-        let nextCursor = CloudVMCursor(generation: cursor.generation, revision: cursor.revision + 1)
+        let nextCursor = TuiCursor(generation: cursor.generation, revision: cursor.revision + 1)
         let delta = try JSONSerialization.data(withJSONObject: ["changes": [[
             "kind": "upsert", "resource": "terminal", "id": "term_\(terminal)",
             "value": ["id": "term_\(terminal)", "title": "bash", "cwd": path as Any? ?? NSNull(), "lifecycle": "running"]

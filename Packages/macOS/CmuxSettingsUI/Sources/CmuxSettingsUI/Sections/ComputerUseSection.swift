@@ -69,7 +69,7 @@ public struct ComputerUseSection: View {
                 }
                 SettingsCardDivider()
                 SettingsCardNote(
-                    String(localized: "settings.computerUse.enabled.note", defaultValue: "cmux Computer Use runs locally in the bundled cmux Computer Use app. Its permissions and restart lifecycle are independent from cmux. Telemetry and update checks are disabled.")
+                    String(localized: "settings.computerUse.enabled.note", defaultValue: "cmux Computer Use runs locally in the bundled cmux Computer Use app. Its permissions and restart lifecycle are independent from cmux.")
                 )
             }
             .task {

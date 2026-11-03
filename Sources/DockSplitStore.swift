@@ -51,8 +51,6 @@ final class DockSplitStore: BonsplitDelegate, FilePreviewTabMetadataHost {
     /// and new host, so visibility is the union rather than a single flag.
     private var visibleUIHostIds: Set<UUID> = []
     @ObservationIgnored let dockPortalReconcileState = DockPortalReconcileState()
-    @ObservationIgnored let appLinkHandoffCoordinator = BrowserAppLinkHandoffCoordinator()
-    @ObservationIgnored let appLinkPlacementPolicy = BrowserAppLinkPlacementPolicy()
 
     private let baseDirectoryProvider: () -> String?
     private let remoteBrowserSettingsProvider: () -> DockRemoteBrowserSettings
@@ -659,7 +657,7 @@ final class DockSplitStore: BonsplitDelegate, FilePreviewTabMetadataHost {
         websiteDataStore: WKWebsiteDataStore? = nil,
         conversationID: ConversationID? = nil
     ) -> UUID? {
-        guard !isRetired, kind != .browser || acceptsUnownedBrowserURL(initialRequest?.url ?? url) else { return nil }
+        guard !isRetired else { return nil }
         ensureLoaded()
         let source = resolveSourcePanelId(sourcePanelId, preferredPaneId: paneId)
         let resolvedBrowserProfileID = kind == .browser
@@ -744,7 +742,7 @@ final class DockSplitStore: BonsplitDelegate, FilePreviewTabMetadataHost {
         focus: Bool = true,
         conversationID: ConversationID? = nil
     ) -> UUID? {
-        guard !isRetired, kind != .browser || acceptsUnownedBrowserURL(initialRequest?.url ?? url) else { return nil }
+        guard !isRetired else { return nil }
         ensureLoaded()
         let source = resolveSourcePanelId(sourcePanelId)
         let resolvedBrowserProfileID = kind == .browser

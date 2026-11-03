@@ -538,11 +538,10 @@ func shouldToggleMainWindowFullScreenForCommandControlFShortcut(
 func shouldRouteCommandPaletteSelectionNavigation(
     delta: Int?,
     isInteractive: Bool,
-    usesInlineTextHandling: Bool,
-    isAgentInboxReplyFieldFocused: Bool = false
+    usesInlineTextHandling: Bool
 ) -> Bool {
     guard delta != nil, isInteractive else { return false }
-    return !usesInlineTextHandling && !isAgentInboxReplyFieldFocused
+    return !usesInlineTextHandling
 }
 
 func shouldConsumeShortcutWhileCommandPaletteVisible(

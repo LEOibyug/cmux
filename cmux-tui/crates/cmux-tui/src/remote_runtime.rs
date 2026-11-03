@@ -49,7 +49,7 @@ use cmux_remote::secure_directory::{DirectoryAccess, ensure_secure_directory};
 use cmux_remote::service::{EndpointRole, ServiceMultiplexer};
 use cmux_remote::services::DaemonServices;
 use cmux_remote::session::SessionLimits;
-use cmux_remote::ssh_bootstrap::{BootstrapError, SshBootstrapConfig, SshBootstrapper};
+use cmux_remote::ssh_prerequisite::{PrerequisiteError, SshPrerequisiteConfig, SshPrerequisite};
 use cmux_remote::workspace::WorkspaceService;
 use cmux_remote_protocol::{LanePolicy, SessionId};
 use serde::{Deserialize, Serialize};
@@ -516,7 +516,7 @@ impl ResolvedRouteCandidate {
         providers: &cmux_remote::provider::ProviderRegistry,
     ) -> Result<Self, ProviderError> {
         if endpoint.scheme() == "ssh" {
-            ssh_bootstrap_destination(&endpoint).map_err(|_| {
+            ssh_prerequisite_destination(&endpoint).map_err(|_| {
                 ProviderError::Configuration("SSH route is not a safe OpenSSH destination".into())
             })?;
         }
@@ -544,9 +544,7 @@ impl ResolvedRouteCandidate {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct SshBootstrapOptions {
-    pub auto_install: bool,
-    pub upgrade: bool,
+pub struct SshPrerequisiteOptions {
     pub attempt_timeout: Duration,
 }
 
@@ -565,7 +563,7 @@ pub struct ClientRuntimeOptions {
     pub state_dir: PathBuf,
     pub local_socket: Option<PathBuf>,
     pub ssh: SshProviderConfig,
-    pub ssh_bootstrap: SshBootstrapOptions,
+    pub ssh_prerequisite: SshPrerequisiteOptions,
 }
 
 #[derive(Clone)]
@@ -871,7 +869,6 @@ async fn connect_first_available(
             options.session,
             options.lane_policy,
             client_auth_kind(&options.auth),
-            options.ssh_bootstrap.upgrade,
             &mut attempt,
         )
         .await
@@ -922,10 +919,9 @@ impl fmt::Display for InitialRouteSelectionError {
 
 #[async_trait]
 trait InitialRouteAttempt<T: Send> {
-    async fn bootstrap_ssh(
+    async fn verify_ssh(
         &mut self,
         endpoint: &Url,
-        upgrade: bool,
     ) -> Result<(), InitialRouteAttemptError>;
     async fn connect(
         &mut self,
@@ -939,17 +935,11 @@ async fn select_initial_route<T: Send>(
     session: SessionId,
     lane_policy: LanePolicy,
     auth: AuthKind,
-    upgrade: bool,
     attempt: &mut impl InitialRouteAttempt<T>,
 ) -> Result<T, InitialRouteSelectionError> {
     if routes.is_empty() {
         return Err(InitialRouteSelectionError::terminal(anyhow!(
             "remote connection has no route candidates"
-        )));
-    }
-    if upgrade && routes[0].endpoint.scheme() != "ssh" {
-        return Err(InitialRouteSelectionError::terminal(anyhow!(
-            "--upgrade requires SSH to be the initial route"
         )));
     }
     let mut failures = Vec::new();
@@ -969,18 +959,12 @@ async fn select_initial_route<T: Send>(
         let request = connect_request(candidate, session, lane_policy)
             .map_err(InitialRouteSelectionError::terminal)?;
         let endpoint = request.endpoint.clone();
-        let upgrade_candidate = upgrade && index == 0;
         if endpoint.scheme() == "ssh" {
-            match attempt.bootstrap_ssh(&endpoint, upgrade_candidate).await {
+            match attempt.verify_ssh(&endpoint).await {
                 Ok(()) => {}
                 Err(InitialRouteAttemptError::Route { error, retryable: route_retryable }) => {
-                    if upgrade_candidate {
-                        return Err(InitialRouteSelectionError::terminal(anyhow!(
-                            "SSH bootstrap failed for {display_endpoint}: {error:#}"
-                        )));
-                    }
                     retryable |= route_retryable;
-                    failures.push(format!("{display_endpoint}: SSH bootstrap failed: {error:#}"));
+                    failures.push(format!("{display_endpoint}: SSH prerequisite failed: {error:#}"));
                     continue;
                 }
                 Err(InitialRouteAttemptError::Fatal(error)) => {
@@ -991,11 +975,6 @@ async fn select_initial_route<T: Send>(
         match attempt.connect(index, request).await {
             Ok(result) => return Ok(result),
             Err(InitialRouteAttemptError::Route { error, retryable: route_retryable }) => {
-                if upgrade_candidate {
-                    return Err(InitialRouteSelectionError::terminal(anyhow!(
-                        "upgraded SSH route failed for {display_endpoint}: {error:#}"
-                    )));
-                }
                 retryable |= route_retryable;
                 failures.push(format!("{display_endpoint}: {error:#}"));
             }
@@ -1017,21 +996,19 @@ struct RuntimeInitialRouteAttempt<'a> {
 
 #[async_trait]
 impl InitialRouteAttempt<(Arc<ClientConnection>, String)> for RuntimeInitialRouteAttempt<'_> {
-    async fn bootstrap_ssh(
+    async fn verify_ssh(
         &mut self,
         endpoint: &Url,
-        upgrade: bool,
     ) -> Result<(), InitialRouteAttemptError> {
-        bootstrap_initial_ssh_route(
+        verify_initial_ssh_route(
             endpoint,
             &self.options.ssh,
-            self.options.ssh_bootstrap,
-            upgrade,
+            self.options.ssh_prerequisite,
             Some(self.shutdown.clone()),
         )
         .await
         .map_err(|error| InitialRouteAttemptError::Route {
-            retryable: !upgrade && ssh_bootstrap_failure_is_retryable(&error),
+            retryable: ssh_prerequisite_failure_is_retryable(&error),
             error,
         })
     }
@@ -1140,43 +1117,34 @@ async fn close_failed_initial_group(group: &Arc<dyn LinkGroup>) {
     let _ = tokio::time::timeout(INITIAL_GROUP_CLOSE_TIMEOUT, group.close()).await;
 }
 
-async fn bootstrap_initial_ssh_route(
+async fn verify_initial_ssh_route(
     endpoint: &Url,
     ssh: &SshProviderConfig,
-    options: SshBootstrapOptions,
-    upgrade: bool,
+    options: SshPrerequisiteOptions,
     shutdown: Option<watch::Receiver<bool>>,
 ) -> anyhow::Result<()> {
-    let (destination, port) = ssh_bootstrap_destination(endpoint)?;
-    let mut config = SshBootstrapConfig::defaults(destination);
+    let (destination, port) = ssh_prerequisite_destination(endpoint)?;
+    let mut config = SshPrerequisiteConfig::defaults(destination);
     config.ssh_binary = ssh.ssh_binary.clone();
     config.port = port;
     config.remote_binary = ssh.remote_binary.clone();
     config.extra_args = ssh.extra_args.clone();
-    config.auto_install = options.auto_install;
     config.timeout = options.attempt_timeout;
-    let bootstrap = SshBootstrapper::new(config)?;
+    let bootstrap = SshPrerequisite::new(config)?;
     tokio::select! {
         result = tokio::time::timeout(options.attempt_timeout, async {
-            if upgrade {
-                bootstrap.install_verified().await?;
-                bootstrap
-                    .stop_daemon(&ssh.remote_session, ssh.remote_state_dir.as_deref())
-                    .await?;
-            } else {
-                bootstrap.ensure_installed().await?;
-            }
-            Ok::<(), BootstrapError>(())
+            bootstrap.require_available().await?;
+            Ok::<(), PrerequisiteError>(())
         }) => {
-            result.map_err(|_| BootstrapError::Timeout)??;
+            result.map_err(|_| PrerequisiteError::Timeout)??;
             Ok(())
         }
-        () = wait_for_shutdown_request(shutdown) => Err(anyhow!("SSH bootstrap interrupted")),
+        () = wait_for_shutdown_request(shutdown) => Err(anyhow!("SSH prerequisite interrupted")),
     }
 }
 
-fn ssh_bootstrap_failure_is_retryable(error: &anyhow::Error) -> bool {
-    error.downcast_ref::<BootstrapError>().is_some_and(BootstrapError::is_retryable_carrier_failure)
+fn ssh_prerequisite_failure_is_retryable(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<PrerequisiteError>().is_some_and(PrerequisiteError::is_retryable_carrier_failure)
 }
 
 /// Returns when the owner asks the runtime to stop or a termination signal
@@ -1219,7 +1187,7 @@ async fn wait_for_shutdown_request(mut shutdown: Option<watch::Receiver<bool>>) 
     }
 }
 
-fn ssh_bootstrap_destination(endpoint: &Url) -> anyhow::Result<(String, Option<u16>)> {
+fn ssh_prerequisite_destination(endpoint: &Url) -> anyhow::Result<(String, Option<u16>)> {
     if endpoint.password().is_some() {
         return Err(anyhow!("passwords are not allowed in SSH URLs; use SSH authentication"));
     }
@@ -1380,9 +1348,9 @@ impl ReconnectGroupSource for RuntimeReconnectGroups {
                 .max(1),
         )
         .unwrap_or(u32::MAX);
-        let ssh_bootstraps = u32::try_from(self.unprepared_ssh_probe_count()).unwrap_or(u32::MAX);
+        let ssh_prerequisites = u32::try_from(self.unprepared_ssh_probe_count()).unwrap_or(u32::MAX);
         reconnect_attempt_timeout.saturating_mul(provider_attempts).saturating_add(
-            self.options.ssh_bootstrap.attempt_timeout.saturating_mul(ssh_bootstraps),
+            self.options.ssh_prerequisite.attempt_timeout.saturating_mul(ssh_prerequisites),
         )
     }
 
@@ -1428,17 +1396,16 @@ impl ReconnectRouteAttempt<Arc<dyn LinkGroup>> for RuntimeReconnectRouteAttempt<
         let endpoint = request.endpoint.clone();
         let display_endpoint = sanitized_route(&endpoint);
         if endpoint.scheme() == "ssh" && !self.prepared_ssh[index].load(Ordering::Acquire) {
-            bootstrap_initial_ssh_route(
+            verify_initial_ssh_route(
                 &endpoint,
                 &self.options.ssh,
-                self.options.ssh_bootstrap,
-                false,
+                self.options.ssh_prerequisite,
                 self.shutdown.clone(),
             )
             .await
             .map_err(|error| {
                 ProviderError::Transport(format!(
-                    "SSH bootstrap failed for reconnect route {display_endpoint}: {error:#}"
+                    "SSH prerequisite failed for reconnect route {display_endpoint}: {error:#}"
                 ))
             })?;
             self.prepared_ssh[index].store(true, Ordering::Release);
@@ -3257,26 +3224,25 @@ mod tests {
 
     #[derive(Debug, PartialEq, Eq)]
     enum FakeInitialRouteEvent {
-        Bootstrap { endpoint: String, upgrade: bool },
+        Bootstrap { endpoint: String },
         Provider(ConnectRequest),
     }
 
     struct FakeInitialRouteAttempt {
-        fail_ssh_bootstrap: bool,
+        fail_ssh_prerequisite: bool,
         fail_provider_index: Option<usize>,
         events: Vec<FakeInitialRouteEvent>,
     }
 
     #[async_trait]
     impl InitialRouteAttempt<String> for FakeInitialRouteAttempt {
-        async fn bootstrap_ssh(
+        async fn verify_ssh(
             &mut self,
             endpoint: &Url,
-            upgrade: bool,
         ) -> Result<(), InitialRouteAttemptError> {
             self.events
-                .push(FakeInitialRouteEvent::Bootstrap { endpoint: endpoint.to_string(), upgrade });
-            if self.fail_ssh_bootstrap {
+                .push(FakeInitialRouteEvent::Bootstrap { endpoint: endpoint.to_string() });
+            if self.fail_ssh_prerequisite {
                 Err(InitialRouteAttemptError::Route {
                     error: anyhow!("fake SSH is unreachable"),
                     retryable: true,
@@ -4661,9 +4627,7 @@ mod tests {
                 state_dir: client_state,
                 local_socket: Some(local_socket),
                 ssh,
-                ssh_bootstrap: SshBootstrapOptions {
-                    auto_install: false,
-                    upgrade: false,
+                ssh_prerequisite: SshPrerequisiteOptions {
                     attempt_timeout: Duration::from_secs(1),
                 },
             });
@@ -5160,7 +5124,7 @@ mod tests {
             resolved_test_route("ssh://carrier.example", SupportedClientAuthModes::DeviceOrCarrier),
         ];
         let mut attempt = FakeInitialRouteAttempt {
-            fail_ssh_bootstrap: false,
+            fail_ssh_prerequisite: false,
             fail_provider_index: None,
             events: Vec::new(),
         };
@@ -5170,7 +5134,6 @@ mod tests {
             SessionId([13; 16]),
             LanePolicy::Single,
             AuthKind::Carrier,
-            false,
             &mut attempt,
         )
         .await
@@ -5182,7 +5145,6 @@ mod tests {
             [
                 FakeInitialRouteEvent::Bootstrap {
                     endpoint: "ssh://carrier.example".into(),
-                    upgrade: false,
                 },
                 FakeInitialRouteEvent::Provider(ConnectRequest {
                     endpoint: Url::parse("ssh://carrier.example").unwrap(),
@@ -5238,7 +5200,7 @@ mod tests {
             SupportedClientAuthModes::DeviceOnly,
         )];
         let mut attempt = FakeInitialRouteAttempt {
-            fail_ssh_bootstrap: false,
+            fail_ssh_prerequisite: false,
             fail_provider_index: None,
             events: Vec::new(),
         };
@@ -5248,7 +5210,6 @@ mod tests {
             SessionId([15; 16]),
             LanePolicy::Single,
             AuthKind::Carrier,
-            false,
             &mut attempt,
         )
         .await
@@ -5279,9 +5240,7 @@ mod tests {
             state_dir: PathBuf::from("/tmp/cmux-reconnect-budget-test"),
             local_socket: None,
             ssh,
-            ssh_bootstrap: SshBootstrapOptions {
-                auto_install: true,
-                upgrade: false,
+            ssh_prerequisite: SshPrerequisiteOptions {
                 attempt_timeout: Duration::from_millis(500),
             },
         }
@@ -5302,7 +5261,7 @@ mod tests {
         assert_eq!(
             source.resolution_timeout(Duration::from_millis(20)),
             Duration::from_millis(1_080),
-            "four provider attempts and two first-use SSH bootstraps need one aggregate deadline"
+            "four provider attempts and two first-use SSH prerequisites need one aggregate deadline"
         );
         source.prepared_ssh[1].store(true, Ordering::Release);
         assert_eq!(
@@ -5322,12 +5281,11 @@ mod tests {
             "an ordinary single-route reconnect must retain its configured deadline"
         );
 
-        let mut no_install_options = reconnect_test_options(vec![
+        let no_install_options = reconnect_test_options(vec![
             test_route("wss://selected.example/v1/link"),
             test_route("ssh://no-install.example"),
         ]);
-        no_install_options.ssh_bootstrap.auto_install = false;
-        let probe_timeout = no_install_options.ssh_bootstrap.attempt_timeout;
+        let probe_timeout = no_install_options.ssh_prerequisite.attempt_timeout;
         let no_install = RuntimeReconnectGroups::new(no_install_options, 0);
         assert_eq!(
             no_install.resolution_timeout(Duration::from_millis(20)),
@@ -5338,7 +5296,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn client_shutdown_cancels_reconnect_ssh_bootstrap_and_kills_child() {
+    fn client_shutdown_cancels_reconnect_ssh_prerequisite_and_kills_child() {
         use std::os::unix::fs::PermissionsExt;
 
         let directory = tempfile::tempdir().unwrap();
@@ -5425,7 +5383,7 @@ mod tests {
                 initial_delay: Duration::from_millis(10),
                 maximum_delay: Duration::from_millis(10),
                 // This fixture injects carrier EOF directly and asserts prompt
-                // shutdown during SSH bootstrap. Give setup handshakes their
+                // shutdown during SSH prerequisite. Give setup handshakes their
                 // own budget and keep heartbeat timing out of that invariant.
                 attempt_timeout: instrumented_test_timeout(Duration::from_secs(1)),
                 full_jitter: false,
@@ -5438,9 +5396,7 @@ mod tests {
             state_dir: directory.path().join("client"),
             local_socket: Some(directory.path().join("client.sock")),
             ssh,
-            ssh_bootstrap: SshBootstrapOptions {
-                auto_install: true,
-                upgrade: false,
+            ssh_prerequisite: SshPrerequisiteOptions {
                 attempt_timeout: Duration::from_secs(10),
             },
         })
@@ -5458,7 +5414,7 @@ mod tests {
             }
             assert!(
                 std::time::Instant::now() < deadline,
-                "client did not enter reconnect SSH bootstrap"
+                "client did not enter reconnect SSH prerequisite"
             );
             thread::sleep(Duration::from_millis(10));
         };
@@ -5486,7 +5442,7 @@ mod tests {
             };
         assert!(
             completed_promptly,
-            "client shutdown waited for the reconnect SSH bootstrap timeout"
+            "client shutdown waited for the reconnect SSH prerequisite timeout"
         );
 
         let deadline =
@@ -5500,7 +5456,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn failed_ssh_bootstrap_falls_back_to_next_initial_provider() {
+    async fn failed_ssh_prerequisite_falls_back_to_next_initial_provider() {
         let routes = vec![
             test_route("ssh://unreachable.example"),
             resolved_test_route_with_routing(
@@ -5513,7 +5469,7 @@ mod tests {
             ),
         ];
         let mut attempt = FakeInitialRouteAttempt {
-            fail_ssh_bootstrap: true,
+            fail_ssh_prerequisite: true,
             fail_provider_index: None,
             events: Vec::new(),
         };
@@ -5523,7 +5479,6 @@ mod tests {
             SessionId([5; 16]),
             LanePolicy::Single,
             AuthKind::Enrolled,
-            false,
             &mut attempt,
         )
         .await
@@ -5535,7 +5490,6 @@ mod tests {
             [
                 FakeInitialRouteEvent::Bootstrap {
                     endpoint: "ssh://unreachable.example".into(),
-                    upgrade: false,
                 },
                 FakeInitialRouteEvent::Provider(ConnectRequest {
                     endpoint: Url::parse("iroh://next").unwrap(),
@@ -5602,9 +5556,7 @@ mod tests {
             state_dir: directory.path().join("client"),
             local_socket: None,
             ssh,
-            ssh_bootstrap: SshBootstrapOptions {
-                auto_install: false,
-                upgrade: false,
+            ssh_prerequisite: SshPrerequisiteOptions {
                 attempt_timeout: Duration::from_secs(1),
             },
         };
@@ -5678,9 +5630,7 @@ mod tests {
             state_dir: directory.path().join("client"),
             local_socket: None,
             ssh,
-            ssh_bootstrap: SshBootstrapOptions {
-                auto_install: false,
-                upgrade: false,
+            ssh_prerequisite: SshPrerequisiteOptions {
                 attempt_timeout: Duration::from_secs(1),
             },
         };
@@ -5835,7 +5785,7 @@ mod tests {
             ),
         ];
         let mut attempt = FakeInitialRouteAttempt {
-            fail_ssh_bootstrap: true,
+            fail_ssh_prerequisite: true,
             fail_provider_index: Some(1),
             events: Vec::new(),
         };
@@ -5845,7 +5795,6 @@ mod tests {
             SessionId([11; 16]),
             LanePolicy::Single,
             AuthKind::Enrolled,
-            false,
             &mut attempt,
         )
         .await
@@ -5867,83 +5816,7 @@ mod tests {
         assert!(error.contains("relay+wss://relay.example"), "{error}");
     }
 
-    #[tokio::test]
-    async fn upgrade_bootstrap_failure_is_fatal_without_provider_fallback() {
-        let routes = vec![
-            test_route("ssh://upgrade-user@upgrade.example"),
-            test_route("wss://fallback.example/v1/link"),
-        ];
-        let mut attempt = FakeInitialRouteAttempt {
-            fail_ssh_bootstrap: true,
-            fail_provider_index: None,
-            events: Vec::new(),
-        };
 
-        let error = select_initial_route(
-            &routes,
-            SessionId([6; 16]),
-            LanePolicy::Single,
-            AuthKind::Enrolled,
-            true,
-            &mut attempt,
-        )
-        .await
-        .unwrap_err();
-
-        assert!(error.to_string().contains("fake SSH is unreachable"));
-        assert!(!error.to_string().contains("upgrade-user"));
-        assert!(error.to_string().contains("ssh://upgrade.example"));
-        assert_eq!(
-            attempt.events,
-            [FakeInitialRouteEvent::Bootstrap {
-                endpoint: "ssh://upgrade-user@upgrade.example".into(),
-                upgrade: true,
-            }]
-        );
-    }
-
-    #[tokio::test]
-    async fn upgrade_provider_failure_is_fatal_without_route_fallback() {
-        let routes = vec![
-            test_route("ssh://upgrade-user@upgrade.example"),
-            test_route("wss://fallback.example/v1/link"),
-        ];
-        let mut attempt = FakeInitialRouteAttempt {
-            fail_ssh_bootstrap: false,
-            fail_provider_index: Some(0),
-            events: Vec::new(),
-        };
-
-        let error = select_initial_route(
-            &routes,
-            SessionId([8; 16]),
-            LanePolicy::Single,
-            AuthKind::Enrolled,
-            true,
-            &mut attempt,
-        )
-        .await
-        .unwrap_err();
-
-        assert!(error.to_string().contains("fake provider is unreachable"));
-        assert!(!error.to_string().contains("upgrade-user"));
-        assert!(error.to_string().contains("ssh://upgrade.example"));
-        assert_eq!(
-            attempt.events,
-            [
-                FakeInitialRouteEvent::Bootstrap {
-                    endpoint: "ssh://upgrade-user@upgrade.example".into(),
-                    upgrade: true,
-                },
-                FakeInitialRouteEvent::Provider(ConnectRequest {
-                    endpoint: Url::parse("ssh://upgrade-user@upgrade.example").unwrap(),
-                    session: SessionId([8; 16]),
-                    lane_policy: LanePolicy::Single,
-                    routing: BTreeMap::new(),
-                }),
-            ]
-        );
-    }
 
     #[cfg(unix)]
     #[tokio::test]
@@ -5953,13 +5826,11 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let script = directory.path().join("ssh");
         let log = directory.path().join("ssh.log");
-        let probe = cmux_remote::ssh_bootstrap::RemoteProbe {
+        let probe = cmux_remote::ssh_prerequisite::RemoteProbe {
             app: "cmux-tui".into(),
-            version: cmux_remote::ssh_bootstrap::DISTRIBUTION_VERSION.into(),
-            distribution_version: Some(cmux_remote::ssh_bootstrap::DISTRIBUTION_VERSION.into()),
-            npm_bootstrap_version: cmux_remote::ssh_bootstrap::NPM_BOOTSTRAP_VERSION
-                .map(str::to_owned),
-            build_identity: Some(cmux_remote::ssh_bootstrap::BUILD_IDENTITY.into()),
+            version: cmux_remote::ssh_prerequisite::DISTRIBUTION_VERSION.into(),
+            distribution_version: Some(cmux_remote::ssh_prerequisite::DISTRIBUTION_VERSION.into()),
+            build_identity: Some(cmux_remote::ssh_prerequisite::BUILD_IDENTITY.into()),
             remote_protocol: cmux_remote_protocol::REMOTE_PROTOCOL_VERSION,
             os: "test".into(),
             arch: "test".into(),
@@ -5999,9 +5870,7 @@ mod tests {
             state_dir: directory.path().join("state"),
             local_socket: None,
             ssh,
-            ssh_bootstrap: SshBootstrapOptions {
-                auto_install: true,
-                upgrade: false,
+            ssh_prerequisite: SshPrerequisiteOptions {
                 // This launches a real subprocess while hundreds of TUI tests
                 // run concurrently. Keep the watchdog independent of host
                 // scheduler latency; the reconnect budget remains 20 ms.
@@ -6167,7 +6036,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reconnect_ssh_bootstrap_failure_redacts_dial_userinfo() {
+    async fn reconnect_ssh_prerequisite_failure_redacts_dial_userinfo() {
         let routes = vec![test_route("ssh://ssh-user:ssh-password-marker@ssh.example:2222")];
         let options = reconnect_test_options(routes.clone());
         let prepared_ssh = [AtomicBool::new(false)];
@@ -6189,23 +6058,23 @@ mod tests {
     }
 
     #[test]
-    fn ssh_bootstrap_normalizes_ipv6_and_preserves_port() {
+    fn ssh_prerequisite_normalizes_ipv6_and_preserves_port() {
         let endpoint = Url::parse("ssh://alice@[2001:db8::1]:2222").unwrap();
         assert_eq!(
-            ssh_bootstrap_destination(&endpoint).unwrap(),
+            ssh_prerequisite_destination(&endpoint).unwrap(),
             ("alice@2001:db8::1".into(), Some(2222))
         );
     }
 
     #[test]
-    fn ssh_bootstrap_rejects_option_like_destination() {
+    fn ssh_prerequisite_rejects_option_like_destination() {
         let endpoint = Url::parse("ssh://-Fvalidation@localhost").unwrap();
-        assert!(ssh_bootstrap_destination(&endpoint).is_err());
+        assert!(ssh_prerequisite_destination(&endpoint).is_err());
     }
 
     #[cfg(unix)]
     #[tokio::test]
-    async fn connection_timeout_bounds_initial_ssh_bootstrap() {
+    async fn connection_timeout_bounds_initial_ssh_prerequisite() {
         use std::os::unix::fs::PermissionsExt;
 
         let directory = tempfile::tempdir().unwrap();
@@ -6216,17 +6085,14 @@ mod tests {
             ssh_binary: script.to_string_lossy().into_owned(),
             ..SshProviderConfig::default()
         };
-        let options = SshBootstrapOptions {
-            auto_install: true,
-            upgrade: false,
+        let options = SshPrerequisiteOptions {
             attempt_timeout: Duration::from_millis(100),
         };
 
-        let error = bootstrap_initial_ssh_route(
+        let error = verify_initial_ssh_route(
             &Url::parse("ssh://example.com").unwrap(),
             &ssh,
             options,
-            false,
             None,
         )
         .await
@@ -6260,9 +6126,7 @@ mod tests {
             state_dir: PathBuf::from("/tmp/cmux-remote-route-test"),
             local_socket: None,
             ssh,
-            ssh_bootstrap: SshBootstrapOptions {
-                auto_install: true,
-                upgrade: false,
+            ssh_prerequisite: SshPrerequisiteOptions {
                 attempt_timeout: Duration::from_secs(1),
             },
         };

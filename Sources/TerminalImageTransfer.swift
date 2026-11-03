@@ -1,5 +1,5 @@
 import Foundation
-import CmuxCloudImagePaste
+import CmuxTui
 import CmuxTerminal
 import AppKit
 import CmuxRemoteSession
@@ -247,8 +247,8 @@ enum TerminalImageTransferPlanner {
         guard !fileURLs.isEmpty else { return .reject }
 
         switch target {
-        case .cloud:
-            return .pasteCloudImages(fileURLs)
+        case .tui:
+            return .pasteTuiImages(fileURLs)
         case .local:
             if mode == .drop,
                fileURLs.count > 1,
@@ -303,11 +303,11 @@ enum TerminalImageTransferPlanner {
         onFailure: @escaping (Error) -> Void
     ) -> TerminalImageTransferOperation? {
         switch plan {
-        case .pasteCloudImages:
-            // The native Cloud session owns both upload and remote paste. A
+        case .pasteTuiImages:
+            // The native SSH session owns both upload and remote paste. A
             // caller without that transport must fail instead of inserting a path.
             if let operation, !operation.finish() { return operation }
-            onFailure(CloudImagePasteError.unavailable)
+            onFailure(TuiImagePasteError.unavailable)
             return operation
         case .insertText(let text):
             if let operation, !operation.finish() {

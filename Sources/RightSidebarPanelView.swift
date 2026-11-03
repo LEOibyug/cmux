@@ -1,4 +1,3 @@
-import CmuxCloud
 import AppKit
 import Bonsplit
 import CMUXAgentLaunch
@@ -30,7 +29,7 @@ enum FileExplorerRootSyncPolicy {
         switch mode {
         case .files, .find:
             return true
-        case .sessions, .feed, .dock, .machines, .customSidebar:
+        case .sessions, .feed, .dock, .customSidebar:
             return false
         }
     }
@@ -61,7 +60,6 @@ extension RightSidebarMode {
 
 /// Right sidebar root view. Hosts a segmented mode picker plus the active panel.
 struct RightSidebarPanelView: View {
-    var devicesModel: DevicesPanelViewModel? = nil
     @ObservedObject var tabManager: TabManager
     @ObservedObject var fileExplorerStore: FileExplorerStore
     @ObservedObject var fileExplorerState: FileExplorerState
@@ -74,8 +72,6 @@ struct RightSidebarPanelView: View {
     let onOpenFilePreview: (String) -> Void
     let onOpenAsPane: (RightSidebarMode) -> Void
     let onClose: () -> Void
-    let cloudActivationCoordinator: CloudActivationCoordinator = AppDelegate.shared?.cloudActivationCoordinator
-        ?? CloudActivationCoordinator.unconfigured()
     /// Live data context for the Custom mode's JS/Swift sidebar (built by the
     /// window's ContentView, which owns the unread model this view never sees).
     let customSidebarDataContext: (Date) -> [String: SwiftValue]
@@ -105,7 +101,6 @@ struct RightSidebarPanelView: View {
     /// the remote host swaps files in place on one client, so a shared client
     /// would make the two rails fight over one worker process.
     @State private var customSidebarWorkerClient: RenderWorkerClient?
-    @State private var managedPolicyRevision = 0
 
     // track the pending count so the badge updates live when hooks push
     // new items.
@@ -114,11 +109,7 @@ struct RightSidebarPanelView: View {
     }
 
     private var featureAvailableModes: [RightSidebarMode] {
-        _ = managedPolicyRevision
-        return RightSidebarMode.availableModes(
-            feedEnabled: feedEnabled,
-            machinesEnabled: CloudMachinesFeature.isAvailable
-        )
+        RightSidebarMode.availableModes(feedEnabled: feedEnabled)
     }
 
     /// Feature-available tabs in the user's order, for the customization
@@ -205,15 +196,9 @@ struct RightSidebarPanelView: View {
         }
         .onChange(of: fileExplorerState.isVisible) { _, visible in
             if visible { hasMountedRightSidebarContent = true }
-            else { fileExplorerState.cloudTeamPickerPresentation.isPresented = false }
         }
         .onChange(of: feedEnabled) { _, _ in refreshModeAvailabilityAndFocusIfNeeded() }
         .onReceive(NotificationCenter.default.publisher(for: RightSidebarTabPreferences.didChangeNotification)) { _ in
-            refreshModeAvailabilityAndFocusIfNeeded()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: ManagedDevicePolicy.didChangeNotification)
-            .merge(with: NotificationCenter.default.publisher(for: .cmuxFeatureFlagsDidChange))) { _ in
-            managedPolicyRevision &+= 1
             refreshModeAvailabilityAndFocusIfNeeded()
         }
     }
@@ -478,16 +463,6 @@ struct RightSidebarPanelView: View {
                 )
             case .dock:
                 dockPanel(windowAppearance: windowAppearance)
-            case .machines:
-                MachinesPanelView(
-                    chromeBackgroundColor: windowAppearance.resolvedChromeBackgroundColor,
-                    machinePinStore: AppDelegate.shared?.cloudMachinePinStore,
-                    devicesModel: devicesModel,
-                    tabManager: tabManager,
-                    teamPickerPresentation: fileExplorerState.cloudTeamPickerPresentation,
-                    activationCoordinator: cloudActivationCoordinator,
-                    coderouterStore: tabManager.coderouterAccountStore
-                )
             case .customSidebar:
                 customSidebarPanel
             }

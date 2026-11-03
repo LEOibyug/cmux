@@ -5,7 +5,6 @@ internal import Foundation
 extension RemoteDaemonRPCClient {
     func startTransportKeepalive() {
         stateQueue.sync {
-            guard configuration.transport != .websocket else { return }
             startTransportKeepaliveLocked()
         }
     }
@@ -31,7 +30,7 @@ extension RemoteDaemonRPCClient {
     }
 
     func sendTransportKeepaliveLocked() {
-        guard !isClosed, webSocketConnection == nil else {
+        guard !isClosed else {
             stopTransportKeepaliveLocked()
             return
         }
@@ -112,7 +111,6 @@ extension RemoteDaemonRPCClient {
         streamSubscriptions.removeAll(keepingCapacity: false)
         failPTYSubscriptionsLocked(detail)
         signalPendingFailureLocked(detail)
-        stopWebSocketKeepaliveLocked()
         stopTransportKeepaliveLocked()
 
         capturedStdout?.readabilityHandler = nil

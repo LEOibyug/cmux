@@ -1,9 +1,8 @@
-import CmuxCloud
+import CmuxSettings
 import CmuxControlSocket
 import CmuxCore
 import CmuxFoundation
 import CmuxPanes
-import CmuxProductAnalytics
 import CmuxRemoteWorkspace
 import CmuxRemoteSession
 import CmuxWorkspaces
@@ -538,8 +537,7 @@ extension TerminalController: ControlWorkspaceContext {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let configuredRemoteCommand = v2RawString(params, "configured_remote_command")?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let managedCloudVMID = v2RawString(params, "managed_cloud_vm_id")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
         var persistentDaemonSlot = v2RawString(params, "persistent_daemon_slot")?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if v2HasNonNullParam(params, "persistent_daemon_slot") {
@@ -555,37 +553,14 @@ extension TerminalController: ControlWorkspaceContext {
                 )
             }
         }
-        let daemonWebSocketURL = v2RawString(params, "daemon_websocket_url")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let daemonWebSocketToken = v2RawString(params, "daemon_websocket_token")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let daemonWebSocketSessionID = v2RawString(params, "daemon_websocket_session_id")?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let daemonWebSocketExpiresAtUnix = (params["daemon_websocket_expires_at_unix"] as? Int64)
-            ?? Int64((params["daemon_websocket_expires_at_unix"] as? Double) ?? 0)
-        let rawDaemonHeaders = params["daemon_websocket_headers"] as? [String: Any] ?? [:]
-        let daemonWebSocketHeaders = rawDaemonHeaders.reduce(into: [String: String]()) { result, pair in
-            if let value = pair.value as? String {
-                result[pair.key] = value
-            }
-        }
-        let daemonWebSocketEndpoint: WorkspaceRemoteWebSocketDaemonEndpoint?
-        if let daemonWebSocketURL,
-           !daemonWebSocketURL.isEmpty,
-           let daemonWebSocketToken,
-           !daemonWebSocketToken.isEmpty,
-           let daemonWebSocketSessionID,
-           !daemonWebSocketSessionID.isEmpty {
-            daemonWebSocketEndpoint = WorkspaceRemoteWebSocketDaemonEndpoint(
-                url: daemonWebSocketURL,
-                headers: daemonWebSocketHeaders,
-                token: daemonWebSocketToken,
-                sessionId: daemonWebSocketSessionID,
-                expiresAtUnix: daemonWebSocketExpiresAtUnix
-            )
-        } else {
-            daemonWebSocketEndpoint = nil
-        }
+        
+        
+        
+        
+        
+        
+        
+        
         let preserveAfterTerminalExit = v2Bool(params, "preserve_after_terminal_exit") ?? false
         if v2HasNonNullParam(params, "preserve_after_terminal_exit"),
            v2Bool(params, "preserve_after_terminal_exit") == nil {
@@ -608,7 +583,6 @@ extension TerminalController: ControlWorkspaceContext {
         if preserveAfterTerminalExit,
            transport == .ssh,
            !skipDaemonBootstrap,
-           daemonWebSocketEndpoint == nil,
            persistentDaemonSlot == nil {
             persistentDaemonSlot = "ssh-\(workspaceId.uuidString.lowercased())"
         }
@@ -637,20 +611,17 @@ extension TerminalController: ControlWorkspaceContext {
         // `DisableRemoteConnections` (MDM). `configureRemoteConnection` refuses
         // too; this pre-check exists so the CLI reports the policy instead of
         // the generic control-master failure the Bool refusal maps to.
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
             return .err(
                 code: "remote_connections_disabled",
-                message: ManagedRemoteConnectionsPolicy.disabledMessage,
+                message: ManagedRemoteConnectionsPolicy().disabledMessage,
                 data: nil
             )
         }
         // `DisableCloud` (MDM): a workspace bound to a Cloud machine is a Cloud
         // attach whichever verb carried it, so pre-minted daemon credentials
         // cannot route around the `vm.*` gate.
-        if let managedCloudVMID, !managedCloudVMID.isEmpty,
-           (ManagedCloudPolicy.isDisabled || !CloudMachinesFeature.offMainIsEnabled()) {
-            return .err(code: ManagedCloudPolicy.socketErrorCode, message: CloudMachinesFeature.disabledMessage, data: nil)
-        }
+        
         guard let owner = AppDelegate.shared?.tabManagerFor(tabId: workspaceId),
               let workspace = owner.tabs.first(where: { $0.id == workspaceId }) else {
             return .err(code: "not_found", message: "Workspace not found", data: .object([
@@ -671,7 +642,7 @@ extension TerminalController: ControlWorkspaceContext {
             relayID: relayID?.isEmpty == true ? nil : relayID,
             relayToken: relayToken?.isEmpty == true ? nil : relayToken,
             localSocketPath: localSocketPath,
-            managedCloudVMID: managedCloudVMID?.isEmpty == true ? nil : managedCloudVMID,
+            
             terminalStartupCommand: terminalStartupCommand?.isEmpty == true ? nil : terminalStartupCommand,
             configuredRemoteCommand: configuredRemoteCommand?.isEmpty == true ? nil : configuredRemoteCommand,
             foregroundAuthToken: foregroundAuthToken?.isEmpty == true ? nil : foregroundAuthToken,
@@ -681,7 +652,7 @@ extension TerminalController: ControlWorkspaceContext {
                 explicitAgentSocketPathIsSet: hasExplicitAgentSocketPath
             ),
             agentSocketPathOverrideIsSet: hasExplicitAgentSocketPath,
-            daemonWebSocketEndpoint: daemonWebSocketEndpoint,
+            
             preserveAfterTerminalExit: preserveAfterTerminalExit,
             persistentDaemonSlot: persistentDaemonSlot?.isEmpty == true ? nil : persistentDaemonSlot,
             skipDaemonBootstrap: skipDaemonBootstrap
@@ -700,9 +671,7 @@ extension TerminalController: ControlWorkspaceContext {
         }
         // `cmux ssh` configures a plain remote workspace; Cloud attaches carry
         // a managed VM id and are counted by the Cloud events instead.
-        if config.managedCloudVMID == nil {
-            ProductAnalytics.app.featureUsed(.cmuxSSH)
-        }
+        
         notifyRemotePTYControllerAvailabilityChanged()
 
         let windowId = AppDelegate.shared?.windowId(for: owner)

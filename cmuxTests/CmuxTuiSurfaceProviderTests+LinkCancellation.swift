@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import Darwin
 import Foundation
 import Testing
@@ -24,8 +24,8 @@ extension CmuxTuiSurfaceProviderTests {
         exit 2
         """.write(to: client, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: client.path)
-        let link = CloudMachineLink(
-            machineID: "ssh-test", clientURL: client, paths: CloudTuiClientPaths(home: root)
+        let link = RemoteMachineLink(
+            machineID: "ssh-test", clientURL: client, paths: TuiClientPaths(home: root)
         )
         do {
             _ = try await link.connect(
@@ -33,7 +33,7 @@ extension CmuxTuiSurfaceProviderTests {
                 sshArguments: ["-p", "2222", "-i", "/keys/with spaces", "-o", "ProxyJump=fixture-jump"]
             )
             Issue.record("the fixture exits before connecting")
-        } catch CloudMachineLink.LinkError.exitedBeforeSocket(let status, _) {
+        } catch RemoteMachineLink.LinkError.exitedBeforeSocket(let status, _) {
             #expect(status == 2)
         }
         let arguments = try String(contentsOf: argumentsFile, encoding: .utf8)
@@ -60,10 +60,10 @@ extension CmuxTuiSurfaceProviderTests {
         exec /bin/sleep 30
         """.write(to: client, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: client.path)
-        let link = CloudMachineLink(
+        let link = RemoteMachineLink(
             machineID: "test-machine",
             clientURL: client,
-            paths: CloudTuiClientPaths(home: root)
+            paths: TuiClientPaths(home: root)
         )
         try #require(Darwin.mkfifo(pidFile.path, 0o600) == 0)
         let readyFD = Darwin.open(pidFile.path, O_RDWR | O_NONBLOCK)

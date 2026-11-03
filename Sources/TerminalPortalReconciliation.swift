@@ -52,11 +52,6 @@ extension GhosttyTerminalView {
             let previousTransition = hostedView.terminalWorkTransition
             hostedView.terminalWorkTransition = request.transition
             defer { hostedView.terminalWorkTransition = previousTransition }
-            let work = TerminalGeometryDiagnostics().begin(
-                .geometryPublication, workspaceID: terminalSurface.tabId,
-                transition: request.transition
-            )
-            defer { work.end() }
 
             let portalBindingLive = terminalSurface.canAcceptPortalBinding(
                 expectedSurfaceId: snapshot.expectedSurfaceId,
@@ -175,11 +170,11 @@ extension GhosttyTerminalView {
                 break
             }
             if portalBindingLive {
-                hostedView.cloudTerminalOverlay.updateAnchor(
+                hostedView.tuiTerminalOverlay.updateAnchor(
                     host, visible: coordinator.desiredIsVisibleInUI,
                     ownershipGeneration: snapshot.ownershipGeneration
                 )
-                hostedView.synchronizeCloudTerminalReconnectOverlay()
+                hostedView.synchronizeTuiTerminalReconnectOverlay()
             }
             if hostOwnsPortal, reasons.contains(.flushPendingManualSizeReport) {
                 terminalSurface.flushPendingManualSizeReportIfAttached()

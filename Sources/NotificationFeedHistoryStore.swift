@@ -13,7 +13,6 @@ final class NotificationFeedHistoryStore {
     private let totalRetentionLimit: Int
     private let persistence: NotificationFeedHistoryPersistence
     private let persistsToDisk: Bool
-    private let onChange: (Int) -> Void
     private var didFinishLoading = false
     private var persistenceAllowsWrites = true
     private var pendingMutations: [NotificationFeedHistoryMutation] = []
@@ -27,8 +26,7 @@ final class NotificationFeedHistoryStore {
         fileURL: URL?,
         fileManager: FileManager = .default,
         readRetentionLimit: Int = NotificationFeedHistoryStore.readRetentionLimit,
-        totalRetentionLimit: Int = NotificationFeedHistoryStore.totalRetentionLimit,
-        onChange: @escaping (Int) -> Void = { _ in }
+        totalRetentionLimit: Int = NotificationFeedHistoryStore.totalRetentionLimit
     ) {
         let resolvedReadRetentionLimit = max(0, readRetentionLimit)
         let resolvedTotalRetentionLimit = max(0, totalRetentionLimit)
@@ -42,7 +40,6 @@ final class NotificationFeedHistoryStore {
         self.totalRetentionLimit = resolvedTotalRetentionLimit
         self.persistence = persistence
         persistsToDisk = fileURL != nil
-        self.onChange = onChange
 
         loadingTask = Task { [weak self, persistence] in
             let outcome = await persistence.load()
@@ -180,13 +177,11 @@ final class NotificationFeedHistoryStore {
         if didFinishLoading {
             schedulePersistence()
         }
-        onChange(revision)
         return result
     }
 
     private func finishLoading(_ outcome: NotificationFeedHistoryLoadOutcome) {
         guard !didFinishLoading else { return }
-        let previousSnapshot = snapshot
 
         var loadedRevision: Int
         var loadedNotifications: [NotificationFeedHistoryRecord]
@@ -230,9 +225,6 @@ final class NotificationFeedHistoryStore {
            revision > persistedRevision,
            (replayedChanges > 0 || revision != loadedRevision) {
             schedulePersistence()
-        }
-        if snapshot != previousSnapshot {
-            onChange(revision)
         }
     }
 

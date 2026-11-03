@@ -50,7 +50,7 @@ extension Workspace {
 #if DEBUG
         cmuxDebugLog("surfaces.drop workspace=\(self.id.uuidString.prefix(5)) group=\(group.title) count=\(group.resources.count) target=\(target)")
 #endif
-        if let url = catalog.cloudBrowserCopyURL(for: group, intoWorkspace: id) {
+        if let url = catalog.tuiBrowserCopyURL(for: group, intoWorkspace: id) {
             // The normal browser creation path creates the daemon browser for this
             // mirrored workspace, so the copy gets its own tab and sidebar row.
             do {

@@ -1,6 +1,5 @@
-import CmuxCloud
-import CmuxCloudBannerCore
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxCore
 import CmuxSurfaceCatalogModel
 import Foundation
@@ -12,37 +11,19 @@ import Testing
 #endif
 
 @MainActor
-@Suite("Cloud port recovery", .timeLimit(.minutes(1)))
+@Suite("SSH port recovery", .timeLimit(.minutes(1)))
 struct CloudPortRecoveryTests {
-    @Test("Retry reads one machine's metadata and installs its current private route")
-    func refreshMissingAddress() async throws {
-        let catalog = SurfaceCatalog()
-        let links = CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil })
-        var requested: [String] = []
-        let provider = CmuxTuiSurfaceProvider(summary: summary(), links: links, catalog: catalog,
-            loadPortSummary: { id in
-                requested.append(id)
-                return summary(address: "10.0.0.7")
-            })
-        catalog.register(provider)
-        #expect(provider.info.portDiscoveryState == .unavailable(.privateAddress))
-        try await provider.refreshPortMetadata()
-        #expect(requested == ["port-owner"])
-        #expect(provider.info.privateAddress == "10.0.0.7")
-        #expect(await links.privateAddresses(for: "port-owner") == ["10.0.0.7"])
-        await provider.stop()
-    }
 
     @Test("An explicit catalog refresh opts into demand-driven port discovery")
     func explicitRefreshRequestsDiscovery() async {
         let catalog = SurfaceCatalog()
-        let links = CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil })
+        let host = TuiTestHost(destination: "port-owner.example.test")
         let provider = CmuxTuiSurfaceProvider(
-            summary: summary(address: "10.0.0.7"), links: links, catalog: catalog
+            summary: host.summary, links: host.links(), catalog: catalog
         )
         catalog.register(provider)
         #expect(!provider.portDiscovery.mayScan)
-        await catalog.refresh(machine: .cloud("port-owner"), force: true)
+        await catalog.refresh(machine: provider.machine, force: true)
         #expect(provider.portDiscovery.mayScan)
         await provider.stop()
     }
@@ -50,8 +31,8 @@ struct CloudPortRecoveryTests {
     @Test("An SSH machine's loopback route admits demand-driven discovery")
     func sshLoopbackRouteAdmitsDiscovery() async {
         let catalog = SurfaceCatalog()
-        let links = CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil })
-        let provider = CmuxTuiSurfaceProvider(summary: .ssh(sshConnection()), links: links, catalog: catalog)
+        let connection = sshConnection()
+        let provider = CmuxTuiSurfaceProvider(summary: .ssh(connection), links: TuiTestHost(connection: connection).links(), catalog: catalog)
         catalog.register(provider)
         #expect(provider.info.privateAddress == "127.0.0.1")
         #expect(provider.info.portDiscoveryState == .notRequested)
@@ -73,74 +54,6 @@ struct CloudPortRecoveryTests {
         await provider.stop()
     }
 
-    /// The machines panel cancels its refreshes when it goes away, which can land during the metadata read.
-    @Test("A refresh cancelled before its scan starts does not leave Ports discovering")
-    func cancelledRefreshSettlesDiscovery() async {
-        let catalog = SurfaceCatalog()
-        let links = CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil })
-        let started = CloudLinkFirstValue<Bool>()
-        let resume = CloudLinkFirstValue<Bool>()
-        let provider = CmuxTuiSurfaceProvider(summary: summary(address: "10.0.0.7"), links: links, catalog: catalog,
-            loadPortSummary: { _ in
-                started.resolve(true)
-                _ = await resume.result
-                return summary(address: "10.0.0.7")
-            })
-        catalog.register(provider)
-        let refresh = Task { await catalog.refreshPortDiscovery(machine: provider.machine) }
-        _ = await started.result
-        #expect(provider.info.portDiscoveryState == .loading)
-        refresh.cancel()
-        resume.resolve(true)
-        await refresh.value
-        #expect(provider.info.portDiscoveryState == .notRequested)
-        #expect(provider.portDiscovery.mayScan)
-        await provider.stop()
-    }
-
-    /// The cancel can also land while a forced refresh is still reading the guest's displays.
-    @Test("A refresh cancelled during display discovery does not leave Ports discovering")
-    func cancelledDisplayRefreshSettlesDiscovery() async {
-        let catalog = SurfaceCatalog()
-        let started = CloudLinkFirstValue<Bool>()
-        let resume = CloudLinkFirstValue<Bool>()
-        let displays = CloudDisplayCoordinator { _, _ in
-            started.resolve(true)
-            _ = await resume.result
-            return VMExecResult(exitCode: 1, stdout: "", stderr: "")
-        }
-        var desktop = summary(address: "10.0.0.7")
-        desktop.kind = .desktop
-        let provider = CmuxTuiSurfaceProvider(summary: desktop,
-            links: CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil }), catalog: catalog,
-            displayCoordinator: displays, loadPortSummary: { _ in desktop })
-        catalog.register(provider)
-        let refresh = Task { await catalog.refreshPortDiscovery(machine: provider.machine) }
-        _ = await started.result
-        #expect(provider.info.portDiscoveryState == .loading)
-        refresh.cancel()
-        resume.resolve(true)
-        await refresh.value
-        #expect(provider.info.portDiscoveryState == .notRequested)
-        #expect(provider.portDiscovery.mayScan)
-        await provider.stop()
-    }
-
-    @Test("Refreshing an SSH machine's Ports never sends its id to the Cloud API")
-    func sshRefreshSkipsCloudMetadata() async {
-        let catalog = SurfaceCatalog()
-        var requested: [String] = []
-        let provider = CmuxTuiSurfaceProvider(summary: .ssh(sshConnection()), links: UnreachableLinks(), catalog: catalog,
-            loadPortSummary: { id in
-                requested.append(id)
-                throw URLError(.badServerResponse)
-            })
-        catalog.register(provider)
-        await catalog.refreshPortDiscovery(machine: provider.machine)
-        #expect(requested.isEmpty)
-        #expect(provider.info.portDiscoveryState == .unavailable(.link))
-        await provider.stop()
-    }
 
     /// The cached pass retires the rescan's refresh, but the rescan still owns the Ports request.
     @Test("A rescan's inventory publishes its rows after a cached refresh retires its pass")
@@ -181,53 +94,13 @@ struct CloudPortRecoveryTests {
         }
     }
 
-    @Test("A metadata result from before retirement cannot revive a provider")
-    func lateMetadataIsRejected() async throws {
-        let catalog = SurfaceCatalog()
-        let links = CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil })
-        let started = CloudLinkFirstValue<Bool>()
-        let resume = CloudLinkFirstValue<Bool>()
-        let provider = CmuxTuiSurfaceProvider(summary: summary(), links: links, catalog: catalog,
-            loadPortSummary: { _ in
-                started.resolve(true)
-                _ = await resume.result
-                return summary(address: "10.0.0.7")
-            })
-        catalog.register(provider)
-        let refresh = Task { try await provider.refreshPortMetadata() }
-        _ = await started.result
-        await provider.stop()
-        resume.resolve(true)
-        do {
-            try await refresh.value
-            Issue.record("A retired provider accepted a late machine summary")
-        } catch is CancellationError {} catch { Issue.record("Unexpected error: \(error)") }
-        #expect(provider.info.privateAddress == nil)
-        #expect(await links.privateAddresses(for: "port-owner").isEmpty)
-    }
-
-    @Test("A foreign summary never changes the machine's address")
-    func foreignMetadataIsRejected() async {
-        let catalog = SurfaceCatalog()
-        let links = CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil })
-        let provider = CmuxTuiSurfaceProvider(summary: summary(), links: links, catalog: catalog,
-            loadPortSummary: { _ in summary(id: "foreign", address: "10.0.0.8") })
-        catalog.register(provider)
-        do {
-            try await provider.refreshPortMetadata()
-            Issue.record("A foreign summary was accepted")
-        } catch {}
-        #expect(provider.info.privateAddress == nil)
-        #expect(await links.privateAddresses(for: "port-owner").isEmpty)
-        await provider.stop()
-    }
 
     @Test("Leaving a failed route cancels and fences its pending retry")
     func retryCannotOverrideNewNavigation() async {
-        let state = CloudBrowserAccessState()
-        let started = CloudLinkFirstValue<Bool>()
-        let resume = CloudLinkFirstValue<Bool>()
-        let finished = CloudLinkFirstValue<Bool>()
+        let state = RemoteBrowserAccessState()
+        let started = RemoteLinkFirstValue<Bool>()
+        let resume = RemoteLinkFirstValue<Bool>()
+        let finished = RemoteLinkFirstValue<Bool>()
         var published = false
         state.showUnavailable("Missing address") { [weak state] request in
             started.resolve(true)
@@ -243,25 +116,21 @@ struct CloudPortRecoveryTests {
         #expect(!published && state.unavailable == nil && state.unavailableRetryAction == nil)
     }
 
-    @Test("In-app proxy access ignores every system VPN phase", arguments: [
-        CloudTunnelState.off, .starting, .awaitingApproval, .up, .stopping, .failed("VPN denied")
-    ])
-    func vpnDoesNotGatePort(_ vpn: CloudTunnelState) async {
+    @Test("An SSH browser proxy can retry after its carrier becomes available")
+    func browserProxyRecoversAfterFailure() async {
         var attempts = 0
-        let model = CloudPortAccessModel(target: CloudPortForwardTarget(host: "10.0.0.7", port: 3000),
-            coordinator: nil, wake: {}, startForward: { _ in Issue.record("Unexpected system forward"); return 1 },
+        let model = RemotePortAccessModel(target: RemotePortForwardTarget(host: "10.0.0.7", port: 3000),
+            wake: {}, startForward: { _ in Issue.record("Unexpected raw forward"); return 1 },
             stopForward: {}, startBrowserProxy: {
                 attempts += 1
                 if attempts == 1 { throw URLError(.cannotConnectToHost) }
-                return CloudBrowserProxyEndpoint(host: "127.0.0.1", port: 42001, username: "fixture", password: "fixture")
+                return RemoteBrowserProxyEndpoint(host: "127.0.0.1", port: 42001, username: "fixture", password: "fixture")
             })
-        model.acceptTunnelState(vpn)
         model.connectBrowser()
         #expect(await wait { model.failureMessage != nil })
         model.retry()
         #expect(await wait { model.isReady })
         #expect(attempts == 2 && model.usesBrowserProxy)
-        model.acceptTunnelState(.off)
         #expect(model.isReady)
         await model.retire()
     }
@@ -275,10 +144,6 @@ struct CloudPortRecoveryTests {
         ))
     }
 
-    private func summary(id: String = "port-owner", address: String? = nil) -> VMSummary {
-        VMSummary(id: id, provider: "freestyle", status: "running", image: "fixture", createdAt: 0,
-            base: nil, addressIPv4: address)
-    }
 
     private func wait(_ condition: () -> Bool) async -> Bool {
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
@@ -305,7 +170,7 @@ struct CloudPortRecoveryTests {
         ))
         let links = SSHTuiLinkManager(
             connection: connection, clientURL: client,
-            paths: CloudTuiClientPaths(home: root), isEnabled: { true }
+            paths: TuiClientPaths(home: root), isEnabled: { true }
         )
         let catalog = SurfaceCatalog()
         let provider = CmuxTuiSurfaceProvider(summary: .ssh(connection), links: links, catalog: catalog)
@@ -427,11 +292,11 @@ struct CloudPortRecoveryTests {
 
 /// A carrier that never connects, so every refresh takes the link-failure path.
 private actor UnreachableLinks: RemoteTuiLinkManaging {
-    nonisolated let operations: CloudOperationRecorder? = nil
-    func connected(machineID: String) async throws -> CloudMachineLink.Connected { throw URLError(.cannotConnectToHost) }
-    func link(machineID: String) async -> CloudMachineLink? { nil }
-    func status(machineID: String) async -> CloudMachineLinkManager.LinkStatus? { nil }
+    func connected(machineID: String) async throws -> RemoteMachineLink.Connected { throw URLError(.cannotConnectToHost) }
+    func link(machineID: String) async -> RemoteMachineLink? { nil }
+    func status(machineID: String) async -> RemoteMachineLink.Status? { nil }
     func privateAddresses(for machineID: String) async -> [String] { [] }
-    func setPrivateAddresses(_ addresses: [String], for machineID: String) async {}
-    func browserProxy(machineID: String, remoteNetwork: Bool) async throws -> CloudBrowserProxyEndpoint { throw URLError(.cannotConnectToHost) }
+    func loopbackForward(machineID: String, port: Int, onExit: @escaping @Sendable () -> Void) async throws -> UInt16 { throw URLError(.cannotConnectToHost) }
+    func closeLoopbackForward(machineID: String, port: Int) async {}
+    func browserProxy(machineID: String, remoteNetwork: Bool) async throws -> RemoteBrowserProxyEndpoint { throw URLError(.cannotConnectToHost) }
 }

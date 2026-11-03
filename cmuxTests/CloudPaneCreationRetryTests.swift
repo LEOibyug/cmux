@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -11,10 +11,10 @@ import Testing
 
 @Suite("Cloud pane creation retry")
 @MainActor
-struct CloudPaneCreationRetryTests {
+struct TuiPaneCreationRetryTests {
     @Test
     func staleFailureActionCannotRetryTheNewestRequest() async throws {
-        let store = CloudPaneCreationFailureStore()
+        let store = TuiPaneCreationFailureStore()
         let completions = AsyncStream<Void>.makeStream()
         var completion = completions.stream.makeAsyncIterator()
         let resource = Self.resource()
@@ -23,7 +23,7 @@ struct CloudPaneCreationRetryTests {
             store.run(
                 machine: resource.machine, requestID: store.beginRequest(),
                 create: { resource },
-                project: { _ in projects += 1; throw CloudDiagnosticFailure.network },
+                project: { _ in projects += 1; throw TuiTransportError.connectionClosed },
                 onStart: {}, onFinish: { completions.continuation.yield(()) },
                 discardProjection: { _ in }
             )
@@ -44,11 +44,11 @@ struct CloudPaneCreationRetryTests {
 
     @Test
     func aNewIntentDoesNotOrphanAnActiveRetry() async throws {
-        let store = CloudPaneCreationFailureStore()
-        let failed = CloudLinkFirstValue<Bool>()
-        let retryStarted = CloudLinkFirstValue<Bool>()
-        let release = CloudLinkFirstValue<Bool>()
-        let returned = CloudLinkFirstValue<Bool>()
+        let store = TuiPaneCreationFailureStore()
+        let failed = RemoteLinkFirstValue<Bool>()
+        let retryStarted = RemoteLinkFirstValue<Bool>()
+        let release = RemoteLinkFirstValue<Bool>()
+        let returned = RemoteLinkFirstValue<Bool>()
         let resource = Self.resource()
         var projects = 0
         var discarded = false
@@ -58,7 +58,7 @@ struct CloudPaneCreationRetryTests {
             create: { resource },
             project: { resource in
                 projects += 1
-                if projects == 1 { throw CloudDiagnosticFailure.network }
+                if projects == 1 { throw TuiTransportError.connectionClosed }
                 retryStarted.resolve(true)
                 _ = await release.result
                 returned.resolve(true)
@@ -85,7 +85,7 @@ struct CloudPaneCreationRetryTests {
 
     @Test
     func inlineRetryProjectsTheExistingTerminal() async throws {
-        let store = CloudPaneCreationFailureStore()
+        let store = TuiPaneCreationFailureStore()
         let requestID = store.beginRequest()
         let completions = AsyncStream<Void>.makeStream()
         var completion = completions.stream.makeAsyncIterator()
@@ -98,7 +98,7 @@ struct CloudPaneCreationRetryTests {
             create: { creates += 1; return resource },
             project: { resource in
                 projections += 1
-                if projections == 1 { throw CloudDiagnosticFailure.network }
+                if projections == 1 { throw TuiTransportError.connectionClosed }
                 return (SurfaceProjection(resource: resource.id, workspaceID: UUID(), panelID: UUID()), false)
             },
             onStart: {},
@@ -118,10 +118,10 @@ struct CloudPaneCreationRetryTests {
 
     @Test
     func workspaceTeardownCancelsPendingProjectionAndReleasesItsScope() async {
-        let store = CloudPaneCreationFailureStore()
-        let started = CloudLinkFirstValue<Bool>()
-        let release = CloudLinkFirstValue<Bool>()
-        let createReturned = CloudLinkFirstValue<Bool>()
+        let store = TuiPaneCreationFailureStore()
+        let started = RemoteLinkFirstValue<Bool>()
+        let release = RemoteLinkFirstValue<Bool>()
+        let createReturned = RemoteLinkFirstValue<Bool>()
         let resource = Self.resource()
         var projections = 0
         var finished = 0
@@ -165,7 +165,7 @@ struct CloudPaneCreationRetryTests {
 
     private static func resource() -> SurfaceResource {
         SurfaceResource(
-            id: SurfaceResourceID(machine: .cloud("retry-fixture"), kind: .terminal, key: "term_created"),
+            id: SurfaceResourceID(machine: .ssh("b7b771a82088e3e6e52f65ecd1adfb905d3c5bed1ee6878aa01cf03b9fcbf8f2"), kind: .terminal, key: "term_created"),
             title: "", detail: nil, lifecycle: .launching, agent: nil,
             remoteWorkspace: nil, remoteViews: [], port: nil, url: nil
         )

@@ -45,70 +45,27 @@ enum WorkspaceRemoteReconnectPolicy {
     }
 }
 
-enum CloudTerminalReconnectOverlayPolicy {
+enum RemoteTerminalReconnectOverlayPolicy {
     struct Presentation: Equatable, Sendable {
         let title: String
         let detail: String
         let showsProgress: Bool
         let showsReconnectButton: Bool
-        var diagnosticReference: String? = nil
 
         var copyableError: String {
-            ([title, detail] + (diagnosticReference.map { [$0] } ?? [])).joined(separator: "\n")
+            [title, detail].joined(separator: "\n")
         }
     }
 
-    static func presentation(
-        isManagedCloudWorkspace: Bool,
-        isRemoteTerminalSurface: Bool,
-        connectionState: WorkspaceRemoteConnectionState,
-        detail: String?
-    ) -> Presentation? {
-        guard isManagedCloudWorkspace, isRemoteTerminalSurface else { return nil }
-
-        let trimmedDetail = detail?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let displayDetail = trimmedDetail?.isEmpty == false ? trimmedDetail : nil
+    static func presentation(connectionState: WorkspaceRemoteConnectionState, detail: String?) -> Presentation? {
         switch connectionState {
-        case .connected:
-            return nil
-        case .connecting, .reconnecting:
-            // Connection recovery is intentionally silent. The terminal pane
-            // remains in place and fills when the stream is ready; showing a
-            // modal card here caused the recurring reconnect flash reported
-            // for Cloud terminals.
-            return nil
-        case .disconnected:
+        case .connected, .connecting, .reconnecting: return nil
+        case .disconnected, .suspended, .error:
+            let detail = detail?.trimmingCharacters(in: .whitespacesAndNewlines)
             return Presentation(
-                title: String(localized: "cloud.overlay.disconnected.title", defaultValue: "Cloud session disconnected"),
-                detail: displayDetail
-                    ?? String(
-                        localized: "cloud.overlay.disconnected.detail",
-                        defaultValue: "The terminal session is offline. Reconnect when you are ready."
-                    ),
-                showsProgress: false,
-                showsReconnectButton: true
-            )
-        case .suspended:
-            return Presentation(
-                title: String(localized: "cloud.overlay.suspended.title", defaultValue: "Cloud session unavailable"),
-                detail: displayDetail
-                    ?? String(
-                        localized: "cloud.overlay.suspended.detail",
-                        defaultValue: "Automatic reconnect paused. Reconnect to try again."
-                    ),
-                showsProgress: false,
-                showsReconnectButton: true
-            )
-        case .error:
-            return Presentation(
-                title: String(localized: "cloud.overlay.error.title", defaultValue: "Cloud session unavailable"),
-                detail: displayDetail
-                    ?? String(
-                        localized: "cloud.overlay.error.detail",
-                        defaultValue: "The secure terminal endpoint is unavailable."
-                    ),
-                showsProgress: false,
-                showsReconnectButton: true
+                title: String(localized: "remote.terminal.unavailable.title", defaultValue: "SSH session unavailable"),
+                detail: detail?.isEmpty == false ? detail! : String(localized: "remote.terminal.unavailable.detail", defaultValue: "The terminal connection is offline. Reconnect when you are ready."),
+                showsProgress: false, showsReconnectButton: true
             )
         }
     }

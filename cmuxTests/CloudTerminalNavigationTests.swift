@@ -12,16 +12,16 @@ import Testing
 struct CloudTerminalNavigationTests {
     @Test("Invalid owner coordinates never submit a navigation operation", arguments: 0..<4)
     func rejectsInvalidOwner(variant: Int) async {
-        let machine = SurfaceMachineID.cloud("navigation")
+        let machine = SurfaceMachineID.ssh("d70d5a7909ed5910fbc67667c7464f0b53fd935653afb327e53067bb7ca578ca")
         let resource = SurfaceResourceID(machine: machine, kind: .terminal, key: "term-1")
         let workspace = SurfaceRemoteWorkspace(id: "ws-1", name: "Workspace", index: 0, focused: false)
         let view = SurfaceRemoteView(tabID: "tab-1", workspace: workspace)
         let controller = CloudWorkspaceOperationController(isAvailable: { true }, notificationCenter: NotificationCenter())
         var submissions = 0
-        let navigation = CloudTreeTerminalNavigationCoordinator(
+        let navigation = TuiTreeTerminalNavigationCoordinator(
             machineName: { _ in "Machine" },
             run: { _, _ in submissions += 1; return Task {} },
-            host: AppDelegate.makeCloudTerminalNavigationHost(),
+            host: AppDelegate.makeRemoteTerminalNavigationHost(),
             operationController: controller
         )
         let group = SurfaceResourceGroup(
@@ -29,7 +29,7 @@ struct CloudTerminalNavigationTests {
             remoteWorkspaceID: variant == 1 ? "ws-other" : variant == 2 ? "" : nil
         )
         navigation.open(
-            machine: variant == 0 ? .cloud("other") : machine,
+            machine: variant == 0 ? .ssh("d9298a10d1b0735837dc4bd85dac641b0f3cef27a47e5d53a54f2f3f5b2fcffa") : machine,
             group: group, resource: resource, view: variant < 2 ? view : nil, openIn: nil
         )
         await controller.waitForPendingOperations()
@@ -38,17 +38,17 @@ struct CloudTerminalNavigationTests {
 
     @Test("Duplicate valid activations submit one operation with the machine's display name")
     func deduplicatesActivations() async {
-        let machine = SurfaceMachineID.cloud("navigation")
+        let machine = SurfaceMachineID.ssh("d70d5a7909ed5910fbc67667c7464f0b53fd935653afb327e53067bb7ca578ca")
         let resource = SurfaceResourceID(machine: machine, kind: .terminal, key: "term-1")
         let workspace = SurfaceRemoteWorkspace(id: "ws-1", name: "Workspace", index: 0, focused: false)
         let view = SurfaceRemoteView(tabID: "tab-1", workspace: workspace)
         let group = SurfaceResourceGroup(title: "Workspace", resources: [resource], remoteWorkspaceID: workspace.id)
         let controller = CloudWorkspaceOperationController(isAvailable: { true }, notificationCenter: NotificationCenter())
         var labels: [String] = []
-        let navigation = CloudTreeTerminalNavigationCoordinator(
+        let navigation = TuiTreeTerminalNavigationCoordinator(
             machineName: { _ in "Friendly machine" },
             run: { label, _ in labels.append(label); return Task {} },
-            host: AppDelegate.makeCloudTerminalNavigationHost(),
+            host: AppDelegate.makeRemoteTerminalNavigationHost(),
             operationController: controller
         )
         for _ in 0..<2 {
@@ -62,7 +62,7 @@ struct CloudTerminalNavigationTests {
     @Test("Navigation reuses the exact daemon-tab projection through the real catalog")
     func reusesProjection() async throws {
         try await AppContextSerialGate.withExclusiveAppContext {
-            let fixture = try CloudWorkspaceCreationSidebarFixture()
+            let fixture = try TuiWorkspaceCreationSidebarFixture()
             defer { fixture.close() }
             let workspace = try await fixture.provider.createRemoteWorkspace(name: "Navigation")
             let resource = try #require(fixture.catalog.snapshot.resources.first { $0.id.machine == fixture.provider.machine })
@@ -77,7 +77,7 @@ struct CloudTerminalNavigationTests {
             )
             let controller = CloudWorkspaceOperationController(isAvailable: { true }, notificationCenter: NotificationCenter())
             var failures: [any Error] = []
-            let navigation = CloudTreeTerminalNavigationCoordinator(
+            let navigation = TuiTreeTerminalNavigationCoordinator(
                 machineName: { _ in "Machine" },
                 run: { _, operation in
                     Task { @MainActor in
@@ -85,7 +85,7 @@ struct CloudTerminalNavigationTests {
                         catch { failures.append(error) }
                     }
                 },
-                host: AppDelegate.makeCloudTerminalNavigationHost(),
+                host: AppDelegate.makeRemoteTerminalNavigationHost(),
                 operationController: controller
             )
             navigation.open(machine: fixture.provider.machine, group: group, resource: resource.id, view: view, openIn: nil)

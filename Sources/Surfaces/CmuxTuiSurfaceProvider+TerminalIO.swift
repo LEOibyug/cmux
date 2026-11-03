@@ -1,4 +1,4 @@
-import CmuxCloudTui
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -27,7 +27,7 @@ extension CmuxTuiSurfaceProvider {
             let connected = try await links.connected(machineID: machineID)
             guard let link = await links.link(machineID: machineID) else { return nil }
             let data = try await link.run(
-                arguments: CloudTuiRequests.processInfoArguments(
+                arguments: TuiRequests.processInfoArguments(
                     socketPath: connected.socketPath,
                     terminalID: resource.id.key
                 )
@@ -35,7 +35,7 @@ extension CmuxTuiSurfaceProvider {
             guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 return nil
             }
-            return CloudTuiCommandLine.foregroundWorkingDirectory(fromProcessInfo: result)
+            return TuiCommandLine.foregroundWorkingDirectory(fromProcessInfo: result)
         } catch {
             // Directory inheritance is best effort. A daemon without the process
             // query capability must retain the existing workspace fallback.
@@ -50,11 +50,11 @@ extension CmuxTuiSurfaceProvider {
     /// `{state: "pending", terminal_id, lifecycle, …}`.
     func waitForExit(terminalID: String, timeoutMs: Int?) async throws -> [String: Any] {
         let connected = try await links.connected(machineID: machineID)
-        guard let link = await links.link(machineID: machineID) else { throw ProviderError.machineAsleep(machineID) }
+        guard let link = await links.link(machineID: machineID) else { throw ProviderError.connectionUnavailable(machineID) }
         let effectiveMs = Self.clampedWaitTimeoutMs(timeoutMs)
         let linkTimeout = Duration.milliseconds(effectiveMs + 5_000)
         let data = try await link.run(
-            arguments: CloudTuiRequests.processWaitArguments(socketPath: connected.socketPath, terminalID: terminalID, timeoutMs: effectiveMs),
+            arguments: TuiRequests.processWaitArguments(socketPath: connected.socketPath, terminalID: terminalID, timeoutMs: effectiveMs),
             timeout: linkTimeout
         )
         return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
@@ -66,9 +66,9 @@ extension CmuxTuiSurfaceProvider {
     /// next_offset, complete}`. `complete == false` means "call again with next_offset".
     func readOutput(terminalID: String, after: Int?, maxBytes: Int?) async throws -> [String: Any] {
         let connected = try await links.connected(machineID: machineID)
-        guard let link = await links.link(machineID: machineID) else { throw ProviderError.machineAsleep(machineID) }
+        guard let link = await links.link(machineID: machineID) else { throw ProviderError.connectionUnavailable(machineID) }
         let data = try await link.run(
-            arguments: CloudTuiRequests.outputReadArguments(socketPath: connected.socketPath, terminalID: terminalID, after: after, maxBytes: maxBytes)
+            arguments: TuiRequests.outputReadArguments(socketPath: connected.socketPath, terminalID: terminalID, after: after, maxBytes: maxBytes)
         )
         return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }

@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Observation
@@ -14,7 +14,7 @@ import Observation
 @Observable
 final class SurfaceCatalog {
     private typealias MaterializationKey = SurfaceProjectionMaterialization.Key
-    static let shared = SurfaceCatalog(sidebarOrganization: CloudSidebarOrganizationStore(defaults: .standard))
+    static let shared = SurfaceCatalog()
     /// A provider call with no remaining caller must not occupy a resource forever when the
     /// provider ignores task cancellation. The deadline starts only after the last caller
     /// detaches, so a slow but observed materialization is still allowed to finish normally.
@@ -29,45 +29,40 @@ final class SurfaceCatalog {
     private(set) var machines: [SurfaceMachineID: SurfaceMachineInfo] = [:]
     private(set) var resources: [SurfaceResourceID: SurfaceResource] = [:]
     /// Native documents are presentation state, separate from the daemon's browser snapshot.
-    var cloudBrowserDocuments: [SurfaceResourceID: [UUID: CloudBrowserDocument]] = [:]
-    var cloudBrowserDocumentRevision: UInt64 = 0
-    private struct CloudProjectionKey: Hashable { let panelID: UUID; let workspaceID: UUID }
+    var tuiBrowserDocuments: [SurfaceResourceID: [UUID: TuiBrowserDocument]] = [:]
+    var tuiBrowserDocumentRevision: UInt64 = 0
+    private struct TuiProjectionKey: Hashable { let panelID: UUID; let workspaceID: UUID }
     /// Derived storage must not publish when a SwiftUI read rebuilds it.
-    @ObservationIgnored private var cloudProjectionIndex: Set<CloudProjectionKey>?
-    private(set) var projections: Set<SurfaceProjection> = [] { didSet { cloudProjectionIndex = nil; noteProjectionChanges(from: oldValue) } }
+    @ObservationIgnored private var tuiProjectionIndex: Set<TuiProjectionKey>?
+    private(set) var projections: Set<SurfaceProjection> = [] { didSet { tuiProjectionIndex = nil; noteProjectionChanges(from: oldValue) } }
     var projectionVersions: [SurfaceMachineID: UInt64] = [:]; var projectionMachinesByWorkspace: [UUID: Set<SurfaceMachineID>] = [:]
     /// Resource IDs grouped by machine so providers can answer presence checks
     /// without sorting the full catalog snapshot on every refresh.
     private(set) var resourceIDsByMachine: [SurfaceMachineID: Set<SurfaceResourceID>] = [:]
     /// Accepted revisioned graphs shared by providers, socket, and agent callers.
     /// Whether each retained graph was observed on a live link. This is separate
-    /// from `CloudVMState` because freshness is local observation metadata, not
+    /// from `TuiState` because freshness is local observation metadata, not
     /// part of the daemon document or its cursor.
-    private(set) var cloudStates: [SurfaceMachineID: CloudVMState] = [:]
-    private(set) var cloudStateObservations: [SurfaceMachineID: CloudVMStateObservation] = [:]
+    private(set) var tuiStates: [SurfaceMachineID: TuiState] = [:]
+    private(set) var tuiStateObservations: [SurfaceMachineID: TuiStateObservation] = [:]
     private var providers: [SurfaceMachineID: any SurfaceProvider] = [:]
-    /// Admits one display creation per machine so repeated clicks cannot project the same guest twice.
-    var activeDisplayCreations: Set<SurfaceMachineID> = []
     /// Remote rename intents shared by all local windows.
-    let cloudRenameCoordinator = CloudRenameCoordinator()
-    let sidebarOrganization: CloudSidebarOrganizationStore
+    let tuiRenameCoordinator = TuiRenameCoordinator()
     @ObservationIgnored
-    lazy var sidebarNotifications = CloudSidebarNotificationCoordinator { [weak self] machine, resources in
-        self?.flushSidebarNotifications(on: machine, resources: resources)
-    }
-    @ObservationIgnored
-    lazy var cloudWorkspaceCreationCoordinator = CloudWorkspaceCreationCoordinator(catalog: self)
-    let cloudWorkspaceProjectionCoordinator: CloudWorkspaceProjectionCoordinator
+    lazy var tuiWorkspaceCreationCoordinator = TuiWorkspaceCreationCoordinator(catalog: self)
+    let tuiWorkspaceProjectionCoordinator: TuiWorkspaceProjectionCoordinator
     /// Writes native Cloud arrangements back to the machine's layout document.
-    let cloudWorkspaceLayoutSyncCoordinator = CloudWorkspaceLayoutSyncCoordinator()
+    let tuiWorkspaceLayoutSyncCoordinator = TuiWorkspaceLayoutSyncCoordinator()
     /// Optimistic Cloud workspace deletes are catalog state so every sidebar and
     /// socket reader sees the same pending/tombstoned tree.
-    let cloudWorkspaceDeletionLedger = CloudWorkspaceDeletionLedger()
+    let tuiWorkspaceDeletionLedger = TuiWorkspaceDeletionLedger()
     /// Resolves local workspace owners for cloud rename write-through. The app installs
     /// its live environment at the composition root; tests keep the no-op environment.
     /// Keeps a mirrored local workspace's panes and its machine workspace's tabs in step.
-    private(set) var cloudWorkspaceRenameService: CloudWorkspaceRenameService
-    private(set) var cloudPlacementCoordinator: CloudPlacementCoordinator
+    private(set) var tuiWorkspaceRenameService: TuiWorkspaceRenameService
+    private(set) var tuiPlacementCoordinator: TuiPlacementCoordinator
+    /// Durable daemon notification state shared across replacement SSH providers.
+    @ObservationIgnored let tuiNotificationSyncHub = TuiNotificationSyncHub()
     /// Materializations are asynchronous, so actor reentrancy can otherwise let two callers
     /// pass the reuse check before either provider has returned a projection.
     private var inFlightProjects: [MaterializationKey: SurfaceProjectionMaterialization] = [:]
@@ -85,7 +80,7 @@ final class SurfaceCatalog {
     private let maximumTrackedMaterializations: Int
     private let materializationClock: any Clock<Duration>
     private var projectionEndReasons: [UUID: SurfaceProjectionEndReason] = [:]
-    var pendingRestoredProjections = SurfaceProjectionRestoreStore() { didSet { cloudProjectionIndex = nil } }
+    var pendingRestoredProjections = SurfaceProjectionRestoreStore() { didSet { tuiProjectionIndex = nil } }
     /// Focus/select behavior the app uses to bring an existing projection forward.
     var focusProjection: ((SurfaceProjection) -> Void)?
     init(
@@ -94,10 +89,9 @@ final class SurfaceCatalog {
         completedMaterializationRetention: Duration = SurfaceCatalog.defaultCompletedMaterializationRetention,
         maximumTrackedMaterializations: Int = SurfaceCatalog.defaultMaximumTrackedMaterializations,
         materializationClock: any Clock<Duration> = ContinuousClock(),
-        cloudWorkspaceRenameService: CloudWorkspaceRenameService = CloudWorkspaceRenameService(),
-        cloudPlacementCoordinator: CloudPlacementCoordinator? = nil,
-        sidebarOrganization: CloudSidebarOrganizationStore? = nil,
-        cloudWorkspaceProjectionCoordinator: CloudWorkspaceProjectionCoordinator? = nil
+        tuiWorkspaceRenameService: TuiWorkspaceRenameService = TuiWorkspaceRenameService(),
+        tuiPlacementCoordinator: TuiPlacementCoordinator? = nil,
+        tuiWorkspaceProjectionCoordinator: TuiWorkspaceProjectionCoordinator? = nil
     ) {
         precondition(abandonedMaterializationTimeout > .zero)
         precondition(retiredMaterializationRetention > .zero)
@@ -108,93 +102,91 @@ final class SurfaceCatalog {
         self.completedMaterializationRetention = completedMaterializationRetention
         self.maximumTrackedMaterializations = maximumTrackedMaterializations
         self.materializationClock = materializationClock
-        self.sidebarOrganization = sidebarOrganization ?? CloudSidebarOrganizationStore()
-        self.cloudWorkspaceRenameService = cloudWorkspaceRenameService
-        self.cloudPlacementCoordinator = cloudPlacementCoordinator ?? CloudPlacementCoordinator()
-        self.cloudWorkspaceProjectionCoordinator = cloudWorkspaceProjectionCoordinator ?? CloudWorkspaceProjectionCoordinator(
-            environment: .init(workspaces: cloudWorkspaceRenameService.environment)
+        self.tuiWorkspaceRenameService = tuiWorkspaceRenameService
+        self.tuiPlacementCoordinator = tuiPlacementCoordinator ?? TuiPlacementCoordinator()
+        self.tuiWorkspaceProjectionCoordinator = tuiWorkspaceProjectionCoordinator ?? TuiWorkspaceProjectionCoordinator(
+            environment: .init(workspaces: tuiWorkspaceRenameService.environment)
         )
         // A pending rename is visible in the snapshot the moment it is admitted
         // and gone the moment it fails; local pane and workspace titles keep
         // their own provenance rules and follow the accepted graph.
-        cloudRenameCoordinator.onPendingNamesChanged = { [weak self] machine in
-            self?.reconcileDeviceNames(on: machine)
+        tuiRenameCoordinator.onPendingNamesChanged = { [weak self] machine in
             self?.notifyChange(for: machine)
         }
     }
 
     /// Installs the app-owned cloud rename service once the composition root can provide
     /// workspace and tab-manager lookups. The catalog retains ownership after install.
-    func installCloudWorkspaceRenameService(_ service: CloudWorkspaceRenameService) {
-        cloudWorkspaceRenameService = service
-        cloudWorkspaceProjectionCoordinator.environment = .init(workspaces: service.environment)
-        cloudPlacementCoordinator = CloudPlacementCoordinator(
-            binding: { service.environment.workspace($0)?.cloudVMBinding },
+    func installTuiWorkspaceRenameService(_ service: TuiWorkspaceRenameService) {
+        tuiWorkspaceRenameService = service
+        tuiWorkspaceProjectionCoordinator.environment = .init(workspaces: service.environment)
+        tuiPlacementCoordinator = TuiPlacementCoordinator(
+            binding: { service.environment.workspace($0)?.remoteWorkspaceBinding },
             workspaceExists: { [weak self] machine, remoteWorkspaceID in
-                guard let self, let state = self.cloudStates[machine],
-                      (self.cloudStateObservations[machine] ?? .current).freshness == .current,
+                guard let self, let state = self.tuiStates[machine],
+                      (self.tuiStateObservations[machine] ?? .current).freshness == .current,
                       state.cursor != nil, state.document.containsCollection("workspaces") else { return nil }
                 return state.workspaceIDs.contains(remoteWorkspaceID)
             },
             reportFailure: { projection, error in
-                service.environment.workspace(projection.workspaceID)?.presentCloudPlacementFailure(error, machine: projection.resource.machine)
+                service.environment.workspace(projection.workspaceID)?.presentTuiPlacementFailure(error, machine: projection.resource.machine)
             }
         )
     }
 
     /// Reconciles a local workspace binding from its exact cloud projections.
-    func reconcileCloudWorkspaceBinding(localWorkspaceID: UUID) {
-        cloudWorkspaceRenameService.reconcileBinding(
+    func reconcileTuiWorkspaceBinding(localWorkspaceID: UUID) {
+        tuiWorkspaceRenameService.reconcileBinding(
             localWorkspaceID: localWorkspaceID,
             catalog: self
         )
-        requestCloudWorkspaceProjection(localWorkspaceID)
-        updateCloudDirectoryMetadata(localWorkspaceID: localWorkspaceID)
+        requestTuiWorkspaceProjection(localWorkspaceID)
+        updateTuiDirectoryMetadata(localWorkspaceID: localWorkspaceID)
     }
 
     // MARK: Providers
     func register(_ provider: any SurfaceProvider) {
         if let previous = providers[provider.machine], previous !== provider {
-            cloudBrowserDocuments = cloudBrowserDocuments.filter { $0.key.machine != provider.machine }
-            cloudWorkspaceCreationCoordinator.cancel(machine: provider.machine)
-            cloudWorkspaceProjectionCoordinator.cancel(machine: provider.machine)
+            tuiBrowserDocuments = tuiBrowserDocuments.filter { $0.key.machine != provider.machine }
+            tuiWorkspaceCreationCoordinator.cancel(machine: provider.machine)
+            tuiWorkspaceProjectionCoordinator.cancel(machine: provider.machine)
             let inFlightKeys = inFlightProjects.keys.filter { $0.machine == provider.machine }
             for key in inFlightKeys {
                 cancelInFlightProject(key, error: SurfaceCatalogError.unknownResource(key.resource))
             }
         }
         providers[provider.machine] = provider
-        machines[provider.machine] = machineInfoPreservingCanonicalCloudState(provider.info)
-        if cloudStates[provider.machine] != nil {
-            cloudWorkspaceProjectionCoordinator.request(machine: provider.machine, catalog: self)
+        machines[provider.machine] = machineInfoPreservingCanonicalTuiState(provider.info)
+        if tuiStates[provider.machine] != nil {
+            tuiWorkspaceProjectionCoordinator.request(machine: provider.machine, catalog: self)
         }
         notifyChange(for: provider.machine)
     }
 
     func unregister(machine: SurfaceMachineID) {
-        cloudWorkspaceCreationCoordinator.cancel(machine: machine)
+        tuiWorkspaceCreationCoordinator.cancel(machine: machine)
         let inFlightKeys = inFlightProjects.keys.filter { $0.machine == machine }
         for key in inFlightKeys {
             cancelInFlightProject(key, error: SurfaceCatalogError.unknownResource(key.resource))
         }
         closeURLBackedPanes(on: machine)
-        cloudWorkspaceDeletionLedger.remove(machine: machine)
+        tuiWorkspaceDeletionLedger.remove(machine: machine)
         providers[machine] = nil
-        cloudBrowserDocuments = cloudBrowserDocuments.filter { $0.key.machine != machine }
+        tuiBrowserDocuments = tuiBrowserDocuments.filter { $0.key.machine != machine }
         machines[machine] = nil
         for id in resourceIDsByMachine[machine] ?? [] { resources[id] = nil }
         resourceIDsByMachine[machine] = nil
-        syncCloudTerminalTabIcons(on: machine)
+        syncTuiTerminalTabIcons(on: machine)
         pendingRestoredProjections.remove(machine: machine)
-        cloudWorkspaceProjectionCoordinator.cancel(machine: machine)
-        cloudStates[machine] = nil
-        cloudStateObservations[machine] = nil
+        tuiWorkspaceProjectionCoordinator.cancel(machine: machine)
+        tuiStates[machine] = nil
+        tuiStateObservations[machine] = nil
         projections = projections.filter { $0.resource.machine != machine }
         // Drop the workspace's device provenance only after removing the
         // projections that establish ownership. A transport disconnect keeps
         // the provider registered and therefore retains the desktop badge;
         // unregister means access ended and clears it.
-        updateCloudDirectoryMetadata(on: machine)
+        updateTuiDirectoryMetadata(on: machine)
         projectionVersions[machine] = nil
         notifyChange(for: machine)
     }
@@ -263,8 +255,8 @@ final class SurfaceCatalog {
         guard let provider = providers[machine] else {
             throw SurfaceCatalogError.noProvider(machine)
         }
-        let key = CloudRenameCoordinator.Key.terminal(machine: machine, id: id.key)
-        let task = cloudRenameCoordinator.enqueue(key: key, pendingName: name) {
+        let key = TuiRenameCoordinator.Key.terminal(machine: machine, id: id.key)
+        let task = tuiRenameCoordinator.enqueue(key: key, pendingName: name) {
             try await provider.renameTerminal(id, name: name)
         }
         try await task.value
@@ -286,17 +278,16 @@ final class SurfaceCatalog {
             resources[resource.id] = resource
             resourceIDsByMachine[machine, default: []].insert(resource.id)
         }
-        if let info { machines[machine] = machineInfoPreservingCanonicalCloudState(info) }
+        if let info { machines[machine] = machineInfoPreservingCanonicalTuiState(info) }
         let restoredProjectionIDs = resolvePendingRestoredProjections(on: machine)
-        syncCloudTerminalTabIcons(on: machine)
-        updateCloudDirectoryMetadata(on: machine)
-        reconcileDeviceNames(on: machine)
-        if let state = cloudStates[machine] {
-            cloudWorkspaceRenameService.reconcileRemoteState(
+        syncTuiTerminalTabIcons(on: machine)
+        updateTuiDirectoryMetadata(on: machine)
+        if let state = tuiStates[machine] {
+            tuiWorkspaceRenameService.reconcileRemoteState(
                 machine: machine,
                 state: state,
                 catalog: self,
-                observation: cloudStateObservations[machine] ?? .current
+                observation: tuiStateObservations[machine] ?? .current
             )
         }
         notifyChange(for: machine)
@@ -311,12 +302,12 @@ final class SurfaceCatalog {
         resources[resource.id] = resource
         resourceIDsByMachine[resource.machine, default: []].insert(resource.id)
         let restoredProjectionIDs = resolvePendingRestoredProjections(on: resource.machine)
-        syncCloudTerminalTabIcons(on: resource.machine, affected: [resource.id])
+        syncTuiTerminalTabIcons(on: resource.machine, affected: [resource.id])
         // Incremental cloud graph updates can be the first place a projected
         // terminal (and its cwd) becomes visible. Keep the local workspace's
         // machine label and directory projection in sync with the same
         // authoritative resource update used by full snapshots.
-        updateCloudDirectoryMetadata(on: resource.machine, affectedResourceIDs: [resource.id])
+        updateTuiDirectoryMetadata(on: resource.machine, affectedResourceIDs: [resource.id])
         notifyChange(for: resource.machine)
         if !restoredProjectionIDs.isEmpty { providers[resource.machine]?.projectionsRestored(resources: restoredProjectionIDs) }
     }
@@ -329,8 +320,8 @@ final class SurfaceCatalog {
         if resourceIDsByMachine[id.machine]?.isEmpty == true {
             resourceIDsByMachine[id.machine] = nil
         }
-        syncCloudTerminalTabIcons(on: id.machine, affected: [id])
-        updateCloudDirectoryMetadata(on: id.machine, affectedResourceIDs: [id])
+        syncTuiTerminalTabIcons(on: id.machine, affected: [id])
+        updateTuiDirectoryMetadata(on: id.machine, affectedResourceIDs: [id])
         notifyChange(for: id.machine)
     }
 
@@ -339,55 +330,55 @@ final class SurfaceCatalog {
     func admitMachineCreationReceipt(_ info: SurfaceMachineInfo) {
         guard !info.id.isLocal, machines[info.id] == nil else { return }
         machines[info.id] = info
-        updateCloudDirectoryMetadata(on: info.id)
+        updateTuiDirectoryMetadata(on: info.id)
         notifyChange(for: info.id)
     }
 
     /// Update machine metadata, optionally validating the provider registration that supplied it.
     func updateMachine(_ info: SurfaceMachineInfo, from source: (any SurfaceProvider)? = nil) {
         guard accepts(writeFor: info.id, from: source) else { return }
-        machines[info.id] = machineInfoPreservingCanonicalCloudState(info)
-        updateCloudDirectoryMetadata(on: info.id)
+        machines[info.id] = machineInfoPreservingCanonicalTuiState(info)
+        updateTuiDirectoryMetadata(on: info.id)
         notifyChange(for: info.id)
     }
 
     /// Retains the last accepted graph while recording that the transport no
     /// longer proves it current. This is used when the fleet summary reports a
     /// sleeping machine before the provider's next full refresh.
-    func markCloudStateStale(
+    func markTuiStateStale(
         on machine: SurfaceMachineID,
         reason: String? = nil,
         info: SurfaceMachineInfo? = nil
     ) {
-        guard cloudStates[machine] != nil else {
-            if let info { machines[machine] = machineInfoPreservingCanonicalCloudState(info) }
+        guard tuiStates[machine] != nil else {
+            if let info { machines[machine] = machineInfoPreservingCanonicalTuiState(info) }
             notifyChange(for: machine)
             return
         }
-        var observation = cloudStateObservations[machine] ?? .stale(reason: reason)
+        var observation = tuiStateObservations[machine] ?? .stale(reason: reason)
         observation.freshness = .stale
         observation.reason = reason
-        cloudStateObservations[machine] = observation
+        tuiStateObservations[machine] = observation
         if let info {
             precondition(info.id == machine, "machine info and stale machine disagree")
-            machines[machine] = machineInfoPreservingCanonicalCloudState(info)
+            machines[machine] = machineInfoPreservingCanonicalTuiState(info)
         }
-        updateCloudDirectoryMetadata(on: machine)
+        updateTuiDirectoryMetadata(on: machine)
         notifyChange(for: machine)
     }
 
     /// Publishes pending receipts separately from the accepted daemon document and derived rows.
-    func updateCloudPendingWrites(
+    func updateTuiPendingWrites(
         on machine: SurfaceMachineID,
-        writes: [CloudVMPendingMutation],
+        writes: [TuiPendingMutation],
         from source: (any SurfaceProvider)? = nil
     ) {
-        guard accepts(writeFor: machine, from: source), cloudStates[machine] != nil else { return }
-        var observation = cloudStateObservations[machine] ?? .current
+        guard accepts(writeFor: machine, from: source), tuiStates[machine] != nil else { return }
+        var observation = tuiStateObservations[machine] ?? .current
         let pending = writes.isEmpty ? nil : writes
         guard observation.pendingWrites != pending else { return }
         observation.pendingWrites = pending
-        cloudStateObservations[machine] = observation
+        tuiStateObservations[machine] = observation
         notifyChange(for: machine)
     }
 
@@ -395,15 +386,15 @@ final class SurfaceCatalog {
     /// one catalog transaction. Equal rows are retained, so observers can never
     /// see a new cursor paired with resource rows from the previous revision and
     /// a title-only snapshot does not rebuild every row.
-    func replaceCloudState(
-        _ state: CloudVMState,
+    func replaceTuiState(
+        _ state: TuiState,
         resources list: [SurfaceResource],
         info: SurfaceMachineInfo,
-        observation: CloudVMStateObservation = .current
+        observation: TuiStateObservation = .current
     ) {
         guard state.machine.tuiMachineID != nil else { return }
         precondition(info.id == state.machine, "cloud state and machine info disagree")
-        _ = installCloudStateRows(
+        _ = installTuiStateRows(
             state,
             resources: list,
             info: info,
@@ -415,15 +406,15 @@ final class SurfaceCatalog {
     /// committed atomically with its derived rows, but a title-only event updates one resource
     /// instead of rebuilding every sidebar row and projection input.
     @discardableResult
-    func applyCloudStateDelta(
-        _ state: CloudVMState,
+    func applyTuiStateDelta(
+        _ state: TuiState,
         resources list: [SurfaceResource],
         info: SurfaceMachineInfo,
-        observation: CloudVMStateObservation = .current
+        observation: TuiStateObservation = .current
     ) -> Set<SurfaceResourceID> {
         guard state.machine.tuiMachineID != nil else { return [] }
         precondition(info.id == state.machine, "cloud state and machine info disagree")
-        return installCloudStateRows(
+        return installTuiStateRows(
             state,
             resources: list,
             info: info,
@@ -436,12 +427,12 @@ final class SurfaceCatalog {
     /// capabilities, remain untouched. The graph, cursor, machine info, and affected rows are
     /// still one catalog transaction, so an agent never observes a new cursor with mixed rows.
     @discardableResult
-    func applyCloudStateResourcePatch(
-        _ state: CloudVMState,
+    func applyTuiStateResourcePatch(
+        _ state: TuiState,
         resources list: [SurfaceResource],
         affectedResourceIDs: Set<SurfaceResourceID>,
         info: SurfaceMachineInfo,
-        observation: CloudVMStateObservation = .current
+        observation: TuiStateObservation = .current
     ) -> Set<SurfaceResourceID> {
         guard state.machine.tuiMachineID != nil else { return [] }
         precondition(info.id == state.machine, "cloud state and machine info disagree")
@@ -474,28 +465,28 @@ final class SurfaceCatalog {
         // canonical resource map.
         rebuildResourceIndex(for: state.machine)
 
-        let freshnessChanged = cloudStateObservations[state.machine]?.freshness != observation.freshness
-        cloudStates[state.machine] = state
-        cloudStateObservations[state.machine] = observation
+        let freshnessChanged = tuiStateObservations[state.machine]?.freshness != observation.freshness
+        tuiStates[state.machine] = state
+        tuiStateObservations[state.machine] = observation
         if observation.freshness == .current {
-            cloudWorkspaceDeletionLedger.reconcile(state)
+            tuiWorkspaceDeletionLedger.reconcile(state)
         }
-        machines[state.machine] = machineInfoPreservingCanonicalCloudState(info, state: state)
-        cloudWorkspaceCreationCoordinator.reconcile(state)
+        machines[state.machine] = machineInfoPreservingCanonicalTuiState(info, state: state)
+        tuiWorkspaceCreationCoordinator.reconcile(state)
         let restoredProjectionIDs = resolvePendingRestoredProjections(on: state.machine)
-        syncCloudTerminalTabIcons(on: state.machine, affected: changed)
-        updateCloudDirectoryMetadata(on: state.machine, affectedResourceIDs: freshnessChanged ? nil : affectedResourceIDs)
+        syncTuiTerminalTabIcons(on: state.machine, affected: changed)
+        updateTuiDirectoryMetadata(on: state.machine, affectedResourceIDs: freshnessChanged ? nil : affectedResourceIDs)
         notifyChange(for: state.machine)
         if !restoredProjectionIDs.isEmpty { providers[state.machine]?.projectionsRestored(resources: restoredProjectionIDs) }
         return changed
     }
 
     @discardableResult
-    private func installCloudStateRows(
-        _ state: CloudVMState,
+    private func installTuiStateRows(
+        _ state: TuiState,
         resources list: [SurfaceResource],
         info: SurfaceMachineInfo,
-        observation: CloudVMStateObservation
+        observation: TuiStateObservation
     ) -> Set<SurfaceResourceID> {
         guard state.machine.tuiMachineID != nil else { return [] }
         precondition(info.id == state.machine, "cloud state and machine info disagree")
@@ -519,51 +510,51 @@ final class SurfaceCatalog {
             }
         }
         rebuildResourceIndex(for: state.machine)
-        cloudStates[state.machine] = state
-        cloudStateObservations[state.machine] = observation
+        tuiStates[state.machine] = state
+        tuiStateObservations[state.machine] = observation
         if observation.freshness == .current {
-            cloudWorkspaceDeletionLedger.reconcile(state)
+            tuiWorkspaceDeletionLedger.reconcile(state)
         }
-        machines[state.machine] = machineInfoPreservingCanonicalCloudState(info, state: state)
-        cloudWorkspaceCreationCoordinator.reconcile(state)
+        machines[state.machine] = machineInfoPreservingCanonicalTuiState(info, state: state)
+        tuiWorkspaceCreationCoordinator.reconcile(state)
         let restoredProjectionIDs = resolvePendingRestoredProjections(on: state.machine)
-        syncCloudTerminalTabIcons(on: state.machine, affected: changed)
-        updateCloudDirectoryMetadata(on: state.machine)
+        syncTuiTerminalTabIcons(on: state.machine, affected: changed)
+        updateTuiDirectoryMetadata(on: state.machine)
         notifyChange(for: state.machine)
         if !restoredProjectionIDs.isEmpty { providers[state.machine]?.projectionsRestored(resources: restoredProjectionIDs) }
         return changed
     }
 
-    func clearCloudState(on machine: SurfaceMachineID) {
-        let removedState = cloudStates.removeValue(forKey: machine) != nil
-        let removedObservation = cloudStateObservations.removeValue(forKey: machine) != nil
+    func clearTuiState(on machine: SurfaceMachineID) {
+        let removedState = tuiStates.removeValue(forKey: machine) != nil
+        let removedObservation = tuiStateObservations.removeValue(forKey: machine) != nil
         guard removedState || removedObservation else { return }
-        updateCloudDirectoryMetadata(on: machine)
+        updateTuiDirectoryMetadata(on: machine)
         notifyChange(for: machine)
     }
 
     /// Atomically publishes the machine's reachable capability rows while its
     /// daemon graph is unavailable. The last accepted graph is retained and
-    /// marked stale. A separate `clearCloudState` followed by `replaceResources`
+    /// marked stale. A separate `clearTuiState` followed by `replaceResources`
     /// would destroy useful diagnosis state and expose two transitions, which
     /// lets an agent read a half-updated VM.
-    func replaceUnavailableCloudState(
+    func replaceUnavailableTuiState(
         on machine: SurfaceMachineID,
         resources list: [SurfaceResource],
         info: SurfaceMachineInfo,
-        pendingWrites: [CloudVMPendingMutation] = []
+        pendingWrites: [TuiPendingMutation] = []
     ) {
         precondition(info.id == machine, "machine info and unavailable machine disagree")
-        if cloudStates[machine] != nil {
-            var observation = cloudStateObservations[machine] ?? .stale(reason: info.linkError ?? info.linkState.rawValue)
+        if tuiStates[machine] != nil {
+            var observation = tuiStateObservations[machine] ?? .stale(reason: info.linkError ?? info.linkState.rawValue)
             observation.freshness = .stale
             observation.reason = info.linkError ?? info.linkState.rawValue
             observation.pendingWrites = pendingWrites.isEmpty ? nil : pendingWrites
-            cloudStateObservations[machine] = observation
+            tuiStateObservations[machine] = observation
         } else {
-            cloudStateObservations[machine] = pendingWrites.isEmpty
+            tuiStateObservations[machine] = pendingWrites.isEmpty
                 ? nil
-                : CloudVMStateObservation(freshness: .stale, reason: info.linkError ?? info.linkState.rawValue, pendingWrites: pendingWrites)
+                : TuiStateObservation(freshness: .stale, reason: info.linkError ?? info.linkState.rawValue, pendingWrites: pendingWrites)
         }
         for id in Array(resources.keys.filter { $0.machine == machine }) {
             resources[id] = nil
@@ -573,10 +564,10 @@ final class SurfaceCatalog {
             resources[resource.id] = resource
         }
         rebuildResourceIndex(for: machine)
-        machines[machine] = machineInfoPreservingCanonicalCloudState(info)
+        machines[machine] = machineInfoPreservingCanonicalTuiState(info)
         let restoredProjectionIDs = resolvePendingRestoredProjections(on: machine)
-        syncCloudTerminalTabIcons(on: machine)
-        updateCloudDirectoryMetadata(on: machine)
+        syncTuiTerminalTabIcons(on: machine)
+        updateTuiDirectoryMetadata(on: machine)
         notifyChange(for: machine)
         if !restoredProjectionIDs.isEmpty { providers[machine]?.projectionsRestored(resources: restoredProjectionIDs) }
     }
@@ -593,12 +584,12 @@ final class SurfaceCatalog {
     /// workspace list authoritative so a stale status response cannot regress a
     /// renamed workspace or resurrect a removed one in the tree. Pending creation
     /// rows remain represented by their resource overlays until the next graph.
-    private func machineInfoPreservingCanonicalCloudState(
+    private func machineInfoPreservingCanonicalTuiState(
         _ info: SurfaceMachineInfo,
-        state: CloudVMState? = nil
+        state: TuiState? = nil
     ) -> SurfaceMachineInfo {
         guard info.id.tuiMachineID != nil,
-              let state = state ?? cloudStates[info.id] else { return info }
+              let state = state ?? tuiStates[info.id] else { return info }
         var adjusted = info
         let canonical = state.workspaces.map {
             SurfaceRemoteWorkspace(id: $0.id, name: $0.name, index: $0.index, focused: $0.focused)
@@ -626,8 +617,8 @@ final class SurfaceCatalog {
     /// Desktop row uses this so "open this workspace's screen" never teleports to a
     /// different workspace's VNC pane. Nil keeps the global open-or-focus jump.
     @discardableResult
-    func project(_ id: SurfaceResourceID, into destination: SurfaceDestination, focus: Bool = true, reuseExisting: Bool = true, reuseInWorkspace: UUID? = nil, remoteView: SurfaceRemoteView? = nil, adopting reservation: CloudTerminalPaneReservation? = nil) async throws -> (projection: SurfaceProjection, reused: Bool) {
-        if isDeletingCloudResource(id, remoteWorkspaceID: remoteView?.workspace.id) { throw CancellationError() }
+    func project(_ id: SurfaceResourceID, into destination: SurfaceDestination, focus: Bool = true, reuseExisting: Bool = true, reuseInWorkspace: UUID? = nil, remoteView: SurfaceRemoteView? = nil, adopting reservation: TuiTerminalPaneReservation? = nil) async throws -> (projection: SurfaceProjection, reused: Bool) {
+        if isDeletingTuiResource(id, remoteWorkspaceID: remoteView?.workspace.id) { throw CancellationError() }
         try validateOwnership(of: [id], at: destination)
         let scope = beginProjectionMutation(for: [id])
         defer { endProjectionMutation(scope) }
@@ -638,20 +629,6 @@ final class SurfaceCatalog {
         // different placement after a concurrent daemon update.
         let resolvedRemoteView: SurfaceRemoteView?
         if let remoteView {
-            if let membershipViewID = remoteView.cloudDisplayMembershipViewID {
-                guard resource.kind == .display,
-                      let current = cloudDisplayMembershipView(
-                          for: id,
-                          workspaceID: remoteView.workspace.id,
-                          viewID: membershipViewID
-                      ) else {
-                    throw SurfaceCatalogError.unavailable(
-                        id,
-                        reason: "Cloud display membership is no longer present"
-                    )
-                }
-                resolvedRemoteView = current
-            } else {
                 guard let current = resource.remoteViews?.first(where: { $0.tabID == remoteView.tabID }) else {
                     throw SurfaceCatalogError.unavailable(
                         id,
@@ -665,11 +642,10 @@ final class SurfaceCatalog {
                     )
                 }
                 resolvedRemoteView = current
-            }
         } else {
             resolvedRemoteView = nil
         }
-        let loadingReservation = CloudMachineLoadingReservation(id, at: destination, remoteView: resolvedRemoteView)
+        let loadingReservation = TuiMachineLoadingReservation(id, at: destination, remoteView: resolvedRemoteView)
         let materializationKey = MaterializationKey(resource: id, remoteTabID: resolvedRemoteView?.tabID, workspaceID: reuseInWorkspace, loadingPanelID: loadingReservation?.panelID)
         if reuseExisting, let existing = projections.first(where: {
             guard $0.resource == id, reuseInWorkspace == nil || $0.workspaceID == reuseInWorkspace else { return false }
@@ -679,20 +655,17 @@ final class SurfaceCatalog {
             // An explicit placement must match an explicit projection. A legacy
             // projection with no tab id is not safe to reuse because it may be
             // showing another tab of the same terminal.
-            if let resolvedRemoteView, resolvedRemoteView.isCloudDisplayMembershipView {
-                return $0.remoteTabID == nil && $0.remoteWorkspaceID == resolvedRemoteView.workspace.id
-            }
             return resolvedRemoteView == nil || $0.remoteTabID == resolvedRemoteView?.tabID
         }) {
             try claimCompletedMaterializationIfNeeded(materializationKey, projection: existing)
             if let loadingReservation, existing.panelID != loadingReservation.panelID {
-                guard Workspace.liveWorkspace(id: loadingReservation.workspaceID)?.discardCloudMachineLoadingPanel(panelID: loadingReservation.panelID, machineID: loadingReservation.machineID) == true else { throw CancellationError() }
+                guard Workspace.liveWorkspace(id: loadingReservation.workspaceID)?.discardTuiMachineLoadingPanel(panelID: loadingReservation.panelID, machineID: loadingReservation.machineID) == true else { throw CancellationError() }
             }
             let resolved = attachRemoteView(resolvedRemoteView, to: existing)
             if resource.kind != .terminal,
                let provider = providers[id.machine] as? CmuxTuiSurfaceProvider,
                let browser = SurfacePaneFactory.browserPanel(panelID: resolved.panelID, in: resolved.workspaceID),
-               (browser.cloudAccess.model == nil || browser.cloudAccess.model?.phase == .closed),
+               (browser.remoteAccess.model == nil || browser.remoteAccess.model?.phase == .closed),
                let raw = resource.url, let url = URL(string: raw) {
                 provider.configureBrowser(browser, url: url)
             }
@@ -735,7 +708,7 @@ final class SurfaceCatalog {
         let projection = try await provider.materializeValidated(resource, remoteView: resolvedRemoteView, at: destination, focus: focus, adopting: reservation, loadingReservation: loadingReservation)
         try validateMaterializationOwnership(projection, provider: provider)
         guard !Task.isCancelled, providers[id.machine] === provider,
-              !isDeletingCloudResource(id, remoteWorkspaceID: resolvedRemoteView?.workspace.id) else {
+              !isDeletingTuiResource(id, remoteWorkspaceID: resolvedRemoteView?.workspace.id) else {
             provider.discardMaterialization(projection)
             throw CancellationError()
         }
@@ -758,7 +731,7 @@ final class SurfaceCatalog {
         adopted.remoteWorkspaceID = projection.remoteWorkspaceID ?? registered.remoteWorkspaceID
         adopted.remoteTabID = projection.remoteTabID ?? registered.remoteTabID
         if adopted != registered { reconcileRemotePlacements([registered: adopted]) }
-        replayMaterializedCloudPlacement(adopted)
+        replayMaterializedTuiPlacement(adopted)
         return adopted
     }
 
@@ -771,8 +744,8 @@ final class SurfaceCatalog {
         destination: SurfaceDestination,
         focus: Bool,
         waiterID: UUID,
-        adopting reservation: CloudTerminalPaneReservation? = nil,
-        loadingReservation: CloudMachineLoadingReservation?
+        adopting reservation: TuiTerminalPaneReservation? = nil,
+        loadingReservation: TuiMachineLoadingReservation?
     ) async throws -> SurfaceProjectionMaterialization.Result {
         try await withCheckedThrowingContinuation { continuation in
             guard !Task.isCancelled else {
@@ -857,7 +830,7 @@ final class SurfaceCatalog {
                 cleanupMaterialization(projection, from: inFlight.provider)
                 return
             }
-            if isDeletingCloudResource(id, remoteWorkspaceID: projection.remoteWorkspaceID) {
+            if isDeletingTuiResource(id, remoteWorkspaceID: projection.remoteWorkspaceID) {
                 inFlightProjects[key] = nil
                 cleanupMaterialization(projection, from: inFlight.provider)
                 resume(inFlight.waiters, throwing: CancellationError())
@@ -944,6 +917,7 @@ final class SurfaceCatalog {
         inFlight.completionCleanupTask?.cancel()
         inFlightProjects[key] = nil
     }
+
 
     private func claimCompletedMaterializationIfNeeded(
         _ key: MaterializationKey,
@@ -1159,10 +1133,10 @@ final class SurfaceCatalog {
     /// Records a materialized pane and reconciles it with the installed graph.
     func record(_ projection: SurfaceProjection) {
         consumePendingProjectionIfMaterialized(projection)
-        recordCloudProjection(projection)
-        reconcileCloudWorkspaceBinding(localWorkspaceID: projection.workspaceID)
-        reconcileCloudProjection(projection)
-        syncCloudTerminalTabIcon(projection)
+        recordTuiProjection(projection)
+        reconcileTuiWorkspaceBinding(localWorkspaceID: projection.workspaceID)
+        reconcileTuiProjection(projection)
+        syncTuiTerminalTabIcon(projection)
         notifyChange(for: projection.resource.machine)
     }
 
@@ -1182,7 +1156,7 @@ final class SurfaceCatalog {
         let savedWorkspace = views == nil ? previous.remoteWorkspaceID : nil
         let savedTab = views == nil ? previous.remoteTabID : nil
         if let remotePlacement {
-            cloudPlacementCoordinator.confirmPlacement(remotePlacement, on: previous.resource.machine)
+            tuiPlacementCoordinator.confirmPlacement(remotePlacement, on: previous.resource.machine)
         }
         endProjections(panelID: previous.panelID, reason: .replaced)
         record(SurfaceProjection(
@@ -1228,16 +1202,16 @@ final class SurfaceCatalog {
     }
 
     /// A pane went away. Remote resources live on; a pane closed on purpose inside a
-    /// mirrored workspace also closes its machine tab (`CloudPlacementCoordinator`).
+    /// mirrored workspace also closes its machine tab (`TuiPlacementCoordinator`).
     func endProjections(panelID: UUID, reason: SurfaceProjectionEndReason = .paneClosed) {
-        cloudWorkspaceCreationCoordinator.projectionDidEnd(panelID: panelID)
+        tuiWorkspaceCreationCoordinator.projectionDidEnd(panelID: panelID)
         let pending = pendingRestoredProjections.projection(forPanel: panelID)
         let pendingMachine = pending?.resource.machine
         let removedPending = pendingRestoredProjections.remove(panelID: panelID)
         if let pending {
-            cloudBrowserDocuments[pending.resource]?[panelID] = nil
-            if cloudBrowserDocuments[pending.resource]?.isEmpty == true {
-                cloudBrowserDocuments[pending.resource] = nil
+            tuiBrowserDocuments[pending.resource]?[panelID] = nil
+            if tuiBrowserDocuments[pending.resource]?.isEmpty == true {
+                tuiBrowserDocuments[pending.resource] = nil
             }
         }
         let ended = projections.filter { $0.panelID == panelID }
@@ -1245,7 +1219,7 @@ final class SurfaceCatalog {
         projections.subtract(ended)
         for projection in ended {
             let endReason = projectionEndReasons[panelID] ?? reason
-            cloudPlacementCoordinator.projectionDidEnd(projection, reason: endReason, catalog: self)
+            tuiPlacementCoordinator.projectionDidEnd(projection, reason: endReason, catalog: self)
             providers[projection.resource.machine]?.projectionDidEnd(projection, reason: endReason)
         }
         for projection in ended { notifyChange(for: projection.resource.machine) }
@@ -1253,18 +1227,18 @@ final class SurfaceCatalog {
     }
 
     func moveProjections(panelID: UUID, to workspaceID: UUID) {
-        let pendingBefore = pendingRestoredProjections.projection(forPanel: panelID); let movedPending = pendingRestoredProjections.move(panelID: panelID, to: workspaceID); if movedPending, let oldWorkspace = pendingBefore?.workspaceID, oldWorkspace != workspaceID { reconcileCloudWorkspaceBinding(localWorkspaceID: oldWorkspace) }
+        let pendingBefore = pendingRestoredProjections.projection(forPanel: panelID); let movedPending = pendingRestoredProjections.move(panelID: panelID, to: workspaceID); if movedPending, let oldWorkspace = pendingBefore?.workspaceID, oldWorkspace != workspaceID { reconcileTuiWorkspaceBinding(localWorkspaceID: oldWorkspace) }
         let moved = projections.filter { $0.panelID == panelID && $0.workspaceID != workspaceID }
         guard !moved.isEmpty || movedPending else { return }
         projections.subtract(moved)
         for var projection in moved {
             projection.workspaceID = workspaceID
-            projection = cloudPlacementCoordinator.projectionInCurrentWorkspace(projection)
+            projection = tuiPlacementCoordinator.projectionInCurrentWorkspace(projection)
             projections.insert(projection)
         }
-        reconcileCloudWorkspaceBinding(localWorkspaceID: workspaceID)
+        reconcileTuiWorkspaceBinding(localWorkspaceID: workspaceID)
         for projection in projections where projection.panelID == panelID {
-            cloudPlacementCoordinator.projectionDidMove(projection, catalog: self)
+            tuiPlacementCoordinator.projectionDidMove(projection, catalog: self)
         }
         for projection in moved { notifyChange(for: projection.resource.machine) }; if movedPending, let machine = pendingBefore?.resource.machine { notifyChange(for: machine) }
     }
@@ -1316,8 +1290,7 @@ final class SurfaceCatalog {
     @discardableResult
     private func attachRemoteView(_ view: SurfaceRemoteView?, to projection: SurfaceProjection) -> SurfaceProjection {
         guard let view else { return projection }
-        // A display membership view attaches only to a tabless preview.
-        let tabID = view.isCloudDisplayMembershipView ? nil : view.tabID
+        let tabID = view.tabID
         guard projection.remoteTabID == nil || projection.remoteTabID == tabID else { return projection }
         var updated = projection
         updated.remoteWorkspaceID = view.workspace.id
@@ -1330,25 +1303,25 @@ final class SurfaceCatalog {
         next.remove(projection)
         next.insert(updated)
         projections = next
-        reconcileCloudWorkspaceBinding(localWorkspaceID: updated.workspaceID)
+        reconcileTuiWorkspaceBinding(localWorkspaceID: updated.workspaceID)
         notifyChange(for: updated.resource.machine)
         return updated
     }
 
     /// Returns whether the panel is backed by a non-local resource projection.
-    func hasCloudProjection(panelID: UUID, workspaceID: UUID) -> Bool {
+    func hasTuiProjection(panelID: UUID, workspaceID: UUID) -> Bool {
         // Cache hits must observe the same authoritative inputs as cache misses.
         access(keyPath: \.projections)
         access(keyPath: \.pendingRestoredProjections)
-        let key = CloudProjectionKey(panelID: panelID, workspaceID: workspaceID)
-        if let cloudProjectionIndex { return cloudProjectionIndex.contains(key) }
+        let key = TuiProjectionKey(panelID: panelID, workspaceID: workspaceID)
+        if let tuiProjectionIndex { return tuiProjectionIndex.contains(key) }
         var index = Set(projections.filter { !$0.resource.machine.isLocal }.map {
-            CloudProjectionKey(panelID: $0.panelID, workspaceID: $0.workspaceID)
+            TuiProjectionKey(panelID: $0.panelID, workspaceID: $0.workspaceID)
         })
         index.formUnion(pendingRestoredProjections.projections.compactMap {
-            $0.resource.machine.isLocal ? nil : CloudProjectionKey(panelID: $0.panelID, workspaceID: $0.workspaceID)
+            $0.resource.machine.isLocal ? nil : TuiProjectionKey(panelID: $0.panelID, workspaceID: $0.workspaceID)
         })
-        cloudProjectionIndex = index
+        tuiProjectionIndex = index
         return index.contains(key)
     }
 
@@ -1384,12 +1357,12 @@ final class SurfaceCatalog {
             if resources[record.resource] != nil {
                 wokenMachines.insert(record.resource.machine)
                 pendingRestoredProjections.remove(panelID: record.panelID)
-                recordCloudProjection(cloudPlacementCoordinator.restoredProjection(record, workspaceID: workspaceID))
+                recordTuiProjection(tuiPlacementCoordinator.restoredProjection(record, workspaceID: workspaceID))
             } else {
                 pendingRestoredProjections.stage(record, workspaceID: workspaceID)
             }
         }
-        reconcileCloudWorkspaceBinding(localWorkspaceID: workspaceID)
+        reconcileTuiWorkspaceBinding(localWorkspaceID: workspaceID)
         for record in records {
             notifyChange(for: record.resource.machine)
         }
@@ -1416,7 +1389,7 @@ final class SurfaceCatalog {
     /// stale-machine reconciliation so a deleted ID cannot attach old panes
     /// when a different machine later receives the same ID.
     var pendingRestoredMachineIDs: Set<String> {
-        Set(pendingRestoredProjections.machineIDs.compactMap { $0.cloudMachineID })
+        Set(pendingRestoredProjections.machineIDs.compactMap { $0.tuiMachineID })
     }
 
     /// Returns whether at least one resource is currently published for a machine.
@@ -1449,12 +1422,12 @@ final class SurfaceCatalog {
             isAllowed: canRestoreProjection
         )
         for projection in resolved {
-            recordCloudProjection(cloudPlacementCoordinator.resolvingLocalPreviewMembership(projection))
+            recordTuiProjection(tuiPlacementCoordinator.resolvingLocalPreviewMembership(projection))
             resolvedWorkspaceIDs.insert(projection.workspaceID)
             resolvedResourceIDs.insert(projection.resource)
         }
         for workspaceID in resolvedWorkspaceIDs {
-            reconcileCloudWorkspaceBinding(localWorkspaceID: workspaceID)
+            reconcileTuiWorkspaceBinding(localWorkspaceID: workspaceID)
         }
         return resolvedResourceIDs
     }

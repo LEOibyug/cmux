@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import AppKit
 import Bonsplit
 import CmuxBrowser
@@ -135,11 +135,6 @@ final class BrowserPopupWindowController: NSObject, NSWindowDelegate {
         let uiDel = PopupUIDelegate(externalNavigationHandler: externalNavigationHandler)
         let navDel = PopupNavigationDelegate(externalNavigationHandler: externalNavigationHandler)
         let dlDel = BrowserDownloadDelegate()
-        let appLinkHandler: (URL) -> Bool = { [weak openerPanel] url in
-            openerPanel?.openAppLinkInBrowserSplit?(url) ?? false
-        }
-        uiDel.openAppLinkInBrowserSplit = appLinkHandler
-        navDel.openAppLinkInBrowserSplit = appLinkHandler
         self.popupUIDelegate = uiDel
         self.popupNavigationDelegate = navDel
         self.downloadDelegate = dlDel
@@ -474,7 +469,6 @@ final class BrowserPopupWindowController: NSObject, NSWindowDelegate {
 private final class PopupUIDelegate: BrowserPDFPreviewActionUIDelegate {
     private let externalNavigationHandler: BrowserExternalNavigationHandler
     weak var controller: BrowserPopupWindowController?
-    var openAppLinkInBrowserSplit: ((URL) -> Bool)?
 
     init(externalNavigationHandler: BrowserExternalNavigationHandler) {
         self.externalNavigationHandler = externalNavigationHandler
@@ -497,15 +491,6 @@ private final class PopupUIDelegate: BrowserPDFPreviewActionUIDelegate {
         windowFeatures: WKWindowFeatures
     ) -> WKWebView? {
         if let url = navigationAction.request.url {
-            if navigationAction.navigationType == .linkActivated,
-               navigationAction.targetFrame?.isMainFrame != false,
-               let appLink = BrowserAppLinkOpenRequest(
-                   url: url,
-                   webOrigin: AuthEnvironment.appSessionHandoffOrigin
-               ),
-               openAppLinkInBrowserSplit?(appLink.destinationURL) == true {
-                return nil
-            }
             switch externalNavigationHandler.openConfiguredExternallyResult(
                 url,
                 navigationType: navigationAction.navigationType,
@@ -526,20 +511,10 @@ private final class PopupUIDelegate: BrowserPDFPreviewActionUIDelegate {
 
         if let url = navigationAction.request.url,
            navigationAction.targetFrame?.isMainFrame != false,
-           url.scheme?.lowercased() != AuthEnvironment.callbackScheme.lowercased(),
            !BrowserURLAllowlistPolicy(defaults: .standard).allows(url) {
             return nil
         }
 
-        if let url = navigationAction.request.url,
-           BrowserAuthCallbackNavigationPolicy.shouldBlockExternalNavigation(url) {
-#if DEBUG
-            cmuxDebugLog(
-                "popup.createWebView kind=blockUntrustedAuthCallback scheme=\(url.scheme ?? "nil")"
-            )
-#endif
-            return nil
-        }
 
         if let url = navigationAction.request.url,
            browserShouldRouteExternalNavigation(url) {
@@ -688,12 +663,7 @@ private final class PopupUIDelegate: BrowserPDFPreviewActionUIDelegate {
 @MainActor private class PopupNavigationDelegate: NSObject, WKNavigationDelegate {
     weak var controller: BrowserPopupWindowController?
     private let externalNavigationHandler: BrowserExternalNavigationHandler
-    var openAppLinkInBrowserSplit: ((URL) -> Bool)?
     var downloadDelegate: WKDownloadDelegate?
-    private let authCallbackNavigationPolicy = BrowserAuthCallbackNavigationPolicy(
-        trustedSourcePageOrigin: AuthEnvironment.appSessionHandoffOrigin,
-        callbackScheme: AuthEnvironment.callbackScheme
-    )
     private let subframeDownloadIntents = BrowserSubframeDownloadIntentTracker()
     private let basicAuthPromptCoordinator = BrowserHTTPBasicAuthPromptCoordinator()
     private let clientCertificateAuthenticationController = BrowserClientCertificateAuthenticationController()
@@ -791,16 +761,6 @@ private final class PopupUIDelegate: BrowserPDFPreviewActionUIDelegate {
             return
         }
 
-        if navigationAction.navigationType == .linkActivated,
-           navigationAction.targetFrame?.isMainFrame != false,
-           let appLink = BrowserAppLinkOpenRequest(
-               url: url,
-               webOrigin: AuthEnvironment.appSessionHandoffOrigin
-           ),
-           openAppLinkInBrowserSplit?(appLink.destinationURL) == true {
-            decisionHandler(.cancel)
-            return
-        }
 
         switch externalNavigationHandler.openConfiguredExternallyResult(
             url,
@@ -826,8 +786,7 @@ private final class PopupUIDelegate: BrowserPDFPreviewActionUIDelegate {
         }
 
         let isMainFrame = navigationAction.targetFrame?.isMainFrame != false
-        if url.scheme?.lowercased() != AuthEnvironment.callbackScheme.lowercased(),
-           !BrowserURLAllowlistPolicy(defaults: .standard).allows(url) {
+        if !BrowserURLAllowlistPolicy(defaults: .standard).allows(url) {
             decisionHandler(.cancel)
             if isMainFrame {
                 blockURLAllowlistNavigation(url, in: webView)
@@ -835,40 +794,6 @@ private final class PopupUIDelegate: BrowserPDFPreviewActionUIDelegate {
             return
         }
 
-        let authCallbackDisposition = authCallbackNavigationPolicy.disposition(
-            for: navigationAction,
-            url: url
-        )
-        if authCallbackNavigationPolicy.consume(
-            disposition: authCallbackDisposition,
-            callbackURL: url,
-            sourcePageURL: webView.url,
-            cancelNavigation: { [self] in
-                clearAttemptedRequest(discardPendingBypasses: true)
-                decisionHandler(.cancel)
-            },
-            reportTerminalCancellation: {},
-            deliver: authCallbackNavigationPolicy.deliverAuthCallbackInApp,
-            completion: { [weak self, weak webView] delivered, returnURL in
-                guard let self, let webView else { return }
-#if DEBUG
-                cmuxDebugLog(
-                    "popup.nav kind=deliverNativeAuthCallbackInApp " +
-                    "delivered=\(delivered ? 1 : 0) scheme=\(url.scheme ?? "nil")"
-                )
-#endif
-                BrowserAuthCallbackNavigationPolicy.finishDelivery(
-                    delivered: delivered,
-                    returnURL: returnURL,
-                    in: webView,
-                    prepareReturnRequest: { [weak self] request in
-                        self?.recordAttemptedRequest(request)
-                    }
-                )
-            }
-        ) {
-            return
-        }
 
         // External URL schemes → hand off to macOS
         if browserShouldRouteExternalNavigation(url) {

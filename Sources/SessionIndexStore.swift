@@ -1205,6 +1205,7 @@ final class SessionIndexStore: ObservableObject {
     /// bytes of a transcript, for a session named between the head and tail
     /// windows. Searches the mapped file backwards for the record marker, so
     /// a name near the end costs one short scan; nil when there is none.
+
     /// Every lookup stays inside the window, so a line that starts before it
     /// cannot pull the rest of the file in.
     nonisolated static func lastClaudeCustomTitle(url: URL) -> String? {
@@ -2325,6 +2326,7 @@ final class SessionIndexStore: ObservableObject {
                 }
                 messageCount = Int(sqlite3_column_int64(stmt, 6))
             }
+
             results.append(SessionEntry(
                 id: "opencode:" + sid,
                 agent: .opencode,

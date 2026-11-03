@@ -1,7 +1,6 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxFoundation
 import CmuxSettings
-import CmuxRemoteSession
 import Foundation
 import Darwin
 
@@ -136,7 +135,7 @@ struct DetectedSSHSession: Equatable, Sendable {
         // mediating an upload, so it fails closed. A user's own `scp` typed
         // into the same terminal is deliberately out of scope.
         guard !managedDevicePolicy.isEnforced(.disableFileTransfer) else {
-            throw ManagedFileTransferPolicy.refusalError()
+            throw ManagedFileTransferPolicy().refusalError()
         }
         guard !fileURLs.isEmpty else { return [] }
 

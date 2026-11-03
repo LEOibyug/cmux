@@ -37,21 +37,26 @@ Only needed for the native app. Docs, translations, Python tooling, `cmux-tui` a
 ## Getting Started
 
 ```bash
-git clone --recursive https://github.com/manaflow-ai/cmux.git
+git clone --recursive https://github.com/LEOibyug/cmux.git
 cd cmux
 ./scripts/setup.sh
-CMUX_DEV_BACKEND_MODE=local ./scripts/reload.sh --tag my-feature
+(cd cmux-tui && cargo build --release --locked -p cmux-tui --bin cmux-tui)
+./scripts/reload.sh --release --tag my-feature --no-global-cli-links
 ```
 
 - `setup.sh` initializes the submodules, installs the pinned Rust toolchain, and
   fetches a checksum-pinned prebuilt `GhosttyKit.xcframework` (it builds from source
   with Zig if that fails; force that with `CMUX_GHOSTTYKIT_NO_PREBUILT=1`).
-- `reload.sh --tag <tag>` builds a tagged Debug app and prints its path. Add
-  `--launch` to open it, or `--build-only` to only compile.
-  `CMUX_DEV_BACKEND_MODE=local` points it at the local dev origin; without it a
-  tagged build expects the maintainers' shared backend and stops. See
-  [tagged builds](skills/cmux-dev-workflow/references/tagged-builds.md) for cache
-  reuse and Release variants.
+- Build `cmux-tui` with its pinned Rust toolchain and Zig 0.16.0 first. The native
+  build uses `cmux-tui/target/release/cmux-tui`, or an explicit executable in
+  `CMUX_TUI_CLIENT_LOCAL`; it never downloads or upgrades the helper.
+- `reload.sh --tag <tag>` builds a tagged Debug app; `--release` selects Release.
+  Add `--launch` to open that isolated app, or `--build-only` for compile-only
+  staging. No backend, account credentials or service login is needed.
+- Reuse the same tag and DerivedData cache. The local workflow builds only the
+  host architecture and omits IDE indexing and debug symbols. SwiftPM uses the
+  pinned package resolution unless explicitly overridden. See
+  [tagged builds](skills/cmux-dev-workflow/references/tagged-builds.md).
 - `reload.sh` skips emitting the app's Swift module to make rebuilds a little
   faster, except on Xcode 26.2 and 26.3, where that build stops at the module merge
   with `error: type mismatch of function ... but used in a swift module as ...`.
@@ -61,8 +66,15 @@ CMUX_DEV_BACKEND_MODE=local ./scripts/reload.sh --tag my-feature
   `./scripts/install-git-hooks.sh`. With a custom `core.hooksPath` it prints the
   `pre-commit` and `post-merge` lines to add yourself; wire both.
 
-Team members with a Stack account can also sign DEBUG builds in and attach an iOS
-build: see [team dev setup](docs/team-dev-setup.md).
+For this personal fork, verification follows the requested behavior: compile the
+affected product, then exercise the changed path in an isolated tagged app. Run
+only focused tests needed for a changed boundary or an uncertain edge; do not
+start full app-host/UI suites, broad CI, repeated audits or release/fleet builds
+by default. Record observed results and skipped checks. Upstream integration is
+manual and selective, only after an explicit user request; see [README](README.md#updates-explicit-requests-only).
+Do not add older-version migration layers, compatibility aliases or migration-only
+regression suites by default. Current-format behavior is the verification target.
+
 
 <a id="fast-checks-before-building-or-pushing"></a>
 

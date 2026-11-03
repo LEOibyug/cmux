@@ -76,18 +76,6 @@ import Testing
         #expect(mapped[d.id] == "::ffff:192.168.2.10")
     }
 
-    @Test func cloudVMsAreToldApartByTheirVMId() {
-        // Managed Cloud VMs share one gateway destination, so its host would name them all the same.
-        let gateway = "vm-a+cmux@vm-ssh.example.com"
-        #expect(helper.origin(destination: gateway, cloudVMID: "vm-a") == "vm-a")
-        #expect(helper.origin(destination: "user@box.example.com", cloudVMID: nil) == "user@box.example.com")
-        #expect(helper.origin(destination: nil, cloudVMID: nil) == nil)
-        let a = entry("main", helper.origin(destination: "vm-a+cmux@vm-ssh.example.com", cloudVMID: "vm-a"))
-        let b = entry("main", helper.origin(destination: "vm-b+cmux@vm-ssh.example.com", cloudVMID: "vm-b"))
-        let suffixes = helper.suffixes(for: [a, b])
-        #expect(suffixes[a.id] == "vm-a")
-        #expect(suffixes[b.id] == "vm-b")
-    }
 
     @Test func hostsThatDifferInTheLastLabelKeepEveryLabel() {
         let a = entry("main", "10.0.0.1")

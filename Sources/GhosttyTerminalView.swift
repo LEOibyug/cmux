@@ -1,6 +1,5 @@
 import CmuxSSHClipboardTrust
-import CmuxCloudBannerCore
-import CmuxCloud
+import CmuxRemoteSession
 import Foundation
 import CmuxAppKitSupportUI
 import CmuxTerminal
@@ -343,9 +342,6 @@ class GhosttyApp {
             SessionScrollbackReplayStore.environmentKey,
         globalFontMagnificationPercent: {
             GhosttyApp.shared.appliedGlobalFontMagnificationPercent
-        },
-        terminalWork: TerminalSurfaceWorkDiagnostics(log: MobileHostDiagnostics.log) { workspaceID in
-            TerminalGeometryDiagnostics().context(workspaceID: workspaceID, transition: .unknown)
         }
     )
 
@@ -663,16 +659,8 @@ class GhosttyApp {
             self.logBackground(message)
         })
 
-    // Scroll lag tracking
+    // Scroll activity tracking
     private(set) var isScrolling = false
-    private var scrollLagSampleCount = 0
-    private var scrollLagTotalMs: Double = 0
-    private var scrollLagMaxMs: Double = 0
-    private let scrollLagThresholdMs: Double = 40
-    private let scrollLagMinimumSamples = 8
-    private let scrollLagMinimumAverageMs: Double = 12
-    private let scrollLagReportCooldownSeconds: TimeInterval = 300
-    private var lastScrollLagReportUptime: TimeInterval?
     @MainActor private lazy var scrollEndTimer = MainActorCoalescingDeadlineTimer(owner: self) { owner in
         owner.endScrollSession()
     }
@@ -699,41 +687,6 @@ class GhosttyApp {
         guard isScrolling else { return }
         isScrolling = false
 
-        // Report accumulated lag stats if any exceeded threshold
-        if scrollLagSampleCount > 0 {
-            let avgLag = scrollLagTotalMs / Double(scrollLagSampleCount)
-            let maxLag = scrollLagMaxMs
-            let samples = scrollLagSampleCount
-            let threshold = scrollLagThresholdMs
-            let nowUptime = ProcessInfo.processInfo.systemUptime
-            if Self.shouldCaptureScrollLagEvent(
-                samples: samples,
-                averageMs: avgLag,
-                maxMs: maxLag,
-                thresholdMs: threshold,
-                minimumSamples: scrollLagMinimumSamples,
-                minimumAverageMs: scrollLagMinimumAverageMs,
-                nowUptime: nowUptime,
-                lastReportedUptime: lastScrollLagReportUptime,
-                cooldown: scrollLagReportCooldownSeconds
-            ) {
-                sentryCaptureWarning(
-                    "Scroll lag detected",
-                    category: "scroll_lag",
-                    data: [
-                        "samples": samples,
-                        "avg_ms": String(format: "%.2f", avgLag),
-                        "max_ms": String(format: "%.2f", maxLag),
-                        "threshold_ms": threshold
-                    ]
-                )
-                lastScrollLagReportUptime = nowUptime
-            }
-            // Reset stats
-            scrollLagSampleCount = 0
-            scrollLagTotalMs = 0
-            scrollLagMaxMs = 0
-        }
     }
 
     private init() {
@@ -775,12 +728,6 @@ class GhosttyApp {
         } else {
             initializationLogger.error("\(message, privacy: .public) \(String(describing: data), privacy: .public)")
         }
-        sentryCaptureError(
-            message,
-            category: "terminal",
-            data: data,
-            contextKey: "ghostty.initialization"
-        )
     }
 
     private func initializeGhostty() {
@@ -884,7 +831,7 @@ class GhosttyApp {
             }
         }
         runtimeConfig.write_clipboard_cb = { userdata, location, content, len, _ in
-            // Manual-I/O surfaces are remote terminal projections (SSH/tmux/Cloud).
+            // Manual-I/O surfaces are remote terminal projections (SSH/tmux).
             // OSC 52 from them is remote-origin input and must never overwrite this
             // Mac's clipboard without a user gesture or confirmation.
             guard let callbackContext = GhosttyApp.callbackContext(from: userdata),
@@ -1746,28 +1693,6 @@ class GhosttyApp {
         return effectiveTerminalColorScheme
     }
 
-    static func shouldCaptureScrollLagEvent(
-        samples: Int,
-        averageMs: Double,
-        maxMs: Double,
-        thresholdMs: Double,
-        minimumSamples: Int = 8,
-        minimumAverageMs: Double = 12,
-        nowUptime: TimeInterval,
-        lastReportedUptime: TimeInterval?,
-        cooldown: TimeInterval = 300
-    ) -> Bool {
-        guard samples >= minimumSamples else { return false }
-        guard averageMs.isFinite, maxMs.isFinite, thresholdMs.isFinite, nowUptime.isFinite, cooldown.isFinite else {
-            return false
-        }
-        guard averageMs >= minimumAverageMs else { return false }
-        guard maxMs > thresholdMs else { return false }
-        if let lastReportedUptime, nowUptime - lastReportedUptime < cooldown {
-            return false
-        }
-        return true
-    }
 
     private func loadCmuxAppSupportGhosttyConfigIfNeeded(_ config: ghostty_config_t) {
         #if os(macOS)
@@ -1872,19 +1797,11 @@ class GhosttyApp {
 
         guard let app = app else { return }
 
-        let start = CACurrentMediaTime()
         ghostty_app_tick(app)
-        let elapsedMs = (CACurrentMediaTime() - start) * 1000
         if Self.tickNotificationDemand.isActive {
             NotificationCenter.default.post(name: .ghosttyDidTick, object: self)
         }
 
-        // Track lag during scrolling
-        if isScrolling {
-            scrollLagSampleCount += 1
-            scrollLagTotalMs += elapsedMs
-            scrollLagMaxMs = max(scrollLagMaxMs, elapsedMs)
-        }
     }
 
     @MainActor
@@ -9713,7 +9630,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
 
     /// Middle-click follows a separate AppKit path from left/right clicks.
     /// Converge the workspace pane before the portal callback can lag, so a
-    /// Cloud manual mirror beside a local pane cannot accept the click while
+    /// remote manual mirror beside a local pane cannot accept the click while
     /// the local pane keeps the focus ring.
     func convergeFocusForMiddleMouseDown() {
         guard let terminalSurface else { return }
@@ -10325,7 +10242,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
             return .insertText(segments.joined())
         case .uploadFiles(let fileURLs, _):
             return .uploadFiles(fileURLs)
-        case .reject, .pasteCloudImages:
+        case .reject, .pasteTuiImages:
             return .reject
         }
     }
@@ -10392,14 +10309,14 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         onTextCompletion: @escaping () -> Void = {}
     ) -> Bool {
         guard plan != .reject else { return false }
-        if case .pasteCloudImages(let urls) = plan {
+        if case .pasteTuiImages(let urls) = plan {
             MainActor.assumeIsolated {
                 guard let terminalSurface else {
                     GhosttyApp.terminalPasteboard.cleanupTransferredTemporaryImageFiles(urls)
                     return
                 }
                 let operation = operation ?? TerminalImageTransferOperation()
-                let lease = CloudImagePasteInputLease(view: self, operation: operation)
+                let lease = TuiImagePasteInputLease(view: self, operation: operation)
                 terminalSurface.hostedView.beginImageTransferIndicator(
                     for: operation,
                     onCancel: {
@@ -10414,7 +10331,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
                         onTextCompletion()
                     }
                     do {
-                        try await terminalSurface.pasteCloudImages(
+                        try await terminalSurface.pasteTuiImages(
                             urls,
                             operation: operation
                         )
@@ -10511,8 +10428,8 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
                         .endImageTransferIndicator(for: operation)
                 }
                 DispatchQueue.main.async {
-                    if ManagedFileTransferPolicy.isRefusal(error) {
-                        ManagedFileTransferPolicy.presentRefusal()
+                    if ManagedFileTransferPolicy().isRefusal(error) {
+                        ManagedFileTransferPolicy().presentRefusal()
                     } else {
                         let outcome = TerminalUploadFailureNotification.post(
                             error: error,
@@ -10750,9 +10667,8 @@ final class GhosttySurfaceScrollView: NSView {
     private let scrollView: GhosttyScrollView
     private let documentView: NSView
     let surfaceView: GhosttyNSView
-    private let mobileViewportBorderOverlayView = TerminalViewportBorderOverlayView(frame: .zero)
-    /// Shared-terminal bounds (docs/shared-terminal-sizing.md); supersedes the
-    /// legacy phone border while a snapshot is shown.
+    private let sharedViewportBorderOverlayView = TerminalViewportBorderOverlayView(frame: .zero)
+    /// Shared-terminal bounds supersede the simple cap border while presented.
     let terminalSizeBoundsOverlayView = TerminalSizeBoundsOverlayView()
     private let inactiveOverlayView: GhosttyFlashOverlayView
     private var inactiveOverlayColor: NSColor = .clear
@@ -10764,8 +10680,8 @@ final class GhosttySurfaceScrollView: NSView {
     private let notificationRingLayer: CAShapeLayer
     private let flashOverlayView: GhosttyFlashOverlayView
     private let flashLayer: CAShapeLayer
-    let cloudTerminalOverlay = CloudTerminalOverlayCoordinator()
-    private var cloudTerminalReconnectOverlayView: CloudTerminalReconnectOverlayView? { cloudTerminalOverlay.overlay }
+    let tuiTerminalOverlay = TuiTerminalOverlayCoordinator()
+    private var tuiTerminalReconnectOverlayView: RemoteTerminalReconnectOverlayView? { tuiTerminalOverlay.overlay }
     var hasVisibilityRevealRefreshScheduled = false
     var pendingVisibilityRefreshTransition: TerminalWorkContext.Transition = .unknown
     /// Active reconciliation origin; asynchronous refreshes capture it before return.
@@ -11085,9 +11001,9 @@ final class GhosttySurfaceScrollView: NSView {
         backgroundView.terminalScrollView = scrollView
         addSubview(backgroundView)
         addSubview(scrollView)
-        mobileViewportBorderOverlayView.isHidden = true
-        addSubview(mobileViewportBorderOverlayView, positioned: .above, relativeTo: scrollView)
-        addSubview(terminalSizeBoundsOverlayView, positioned: .above, relativeTo: mobileViewportBorderOverlayView)
+        sharedViewportBorderOverlayView.isHidden = true
+        addSubview(sharedViewportBorderOverlayView, positioned: .above, relativeTo: scrollView)
+        addSubview(terminalSizeBoundsOverlayView, positioned: .above, relativeTo: sharedViewportBorderOverlayView)
         paneDropTargetView.hostedView = self
         addSubview(paneDropTargetView, positioned: .above, relativeTo: nil)
         synchronizeScrollbarAppearance()
@@ -11448,7 +11364,7 @@ final class GhosttySurfaceScrollView: NSView {
     override var safeAreaInsets: NSEdgeInsets { NSEdgeInsetsZero }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        if let overlay = cloudTerminalReconnectOverlayView,
+        if let overlay = tuiTerminalReconnectOverlayView,
            overlay.superview === self,
            let hit = overlay.hitTest(convert(point, to: overlay)) {
             return hit
@@ -11532,8 +11448,6 @@ final class GhosttySurfaceScrollView: NSView {
         forceViewportSync: Bool? = nil,
         preservedReviewOriginY: CGFloat? = nil
     ) -> Bool {
-        let work = TerminalGeometryDiagnostics().begin(.layout, workspaceID: surfaceView.terminalSurface?.tabId, transition: TerminalGeometryDiagnostics().resizeTransition(in: window))
-        defer { work.end() }
         let preservedReviewOriginY = preservedReviewOriginY ?? {
             guard scrollbackViewportIntent.preservesViewportDuringPendingSync else { return nil }
             return max(scrollView.contentView.bounds.origin.y, 0)
@@ -11568,7 +11482,7 @@ final class GhosttySurfaceScrollView: NSView {
             size: CGSize(width: targetSize.width, height: documentView.frame.height)
         )
         _ = setFrameIfNeeded(documentView, to: targetDocumentFrame)
-        _ = setFrameIfNeeded(mobileViewportBorderOverlayView, to: contentFrame)
+        _ = setFrameIfNeeded(sharedViewportBorderOverlayView, to: contentFrame)
         if setFrameIfNeeded(terminalSizeBoundsOverlayView, to: contentFrame) {
             terminalSizeBoundsOverlayView.refreshGeometry()
         }
@@ -11594,8 +11508,8 @@ final class GhosttySurfaceScrollView: NSView {
         _ = setFrameIfNeeded(flashOverlayView, to: bounds)
         _ = setFrameIfNeeded(linkHoverIndicatorView, to: contentFrame)
         _ = setFrameIfNeeded(passwordInputIndicatorView, to: contentFrame)
-        if let cloudTerminalReconnectOverlayView { _ = setFrameIfNeeded(cloudTerminalReconnectOverlayView, to: contentFrame) }
-        synchronizeCloudTerminalReconnectOverlay()
+        if let tuiTerminalReconnectOverlayView { _ = setFrameIfNeeded(tuiTerminalReconnectOverlayView, to: contentFrame) }
+        synchronizeTuiTerminalReconnectOverlay()
         if let overlay = searchOverlayHostingView {
             _ = setFrameIfNeeded(overlay, to: contentFrame)
         }
@@ -11625,13 +11539,13 @@ final class GhosttySurfaceScrollView: NSView {
         sessionContentWidthPresentation.contentFrame(in: bounds)
     }
 
-    func setMobileViewportBorder(size: CGSize?, drawRight: Bool, drawBottom: Bool) {
+    func setSharedViewportBorder(size: CGSize?, drawRight: Bool, drawBottom: Bool) {
         let isVisible = drawRight || drawBottom
-        mobileViewportBorderOverlayView.effectiveSize = size
-        mobileViewportBorderOverlayView.drawsVisibleAreaBorder = isVisible
-        mobileViewportBorderOverlayView.drawsVisibleAreaRightBorder = drawRight
-        mobileViewportBorderOverlayView.drawsVisibleAreaBottomBorder = drawBottom
-        mobileViewportBorderOverlayView.isHidden = !isVisible || terminalSizeBoundsOverlayView.isPresentingSharing
+        sharedViewportBorderOverlayView.effectiveSize = size
+        sharedViewportBorderOverlayView.drawsVisibleAreaBorder = isVisible
+        sharedViewportBorderOverlayView.drawsVisibleAreaRightBorder = drawRight
+        sharedViewportBorderOverlayView.drawsVisibleAreaBottomBorder = drawBottom
+        sharedViewportBorderOverlayView.isHidden = !isVisible || terminalSizeBoundsOverlayView.isPresentingSharing
         terminalSizeBoundsOverlayView.refreshGeometry()
     }
 
@@ -11648,9 +11562,9 @@ final class GhosttySurfaceScrollView: NSView {
         overlay.onReattach = onReattach
         overlay.update(snapshot: snapshot)
         if overlay.isPresentingSharing {
-            mobileViewportBorderOverlayView.isHidden = true
-        } else if mobileViewportBorderOverlayView.drawsVisibleAreaBorder {
-            mobileViewportBorderOverlayView.isHidden = false
+            sharedViewportBorderOverlayView.isHidden = true
+        } else if sharedViewportBorderOverlayView.drawsVisibleAreaBorder {
+            sharedViewportBorderOverlayView.isHidden = false
         }
     }
 
@@ -11663,39 +11577,39 @@ final class GhosttySurfaceScrollView: NSView {
 
     private func handleWorkspaceRemoteConnectionPresentationDidChange(_ notification: Notification) {
         guard let terminalSurface = surfaceView.terminalSurface else {
-            synchronizeCloudTerminalReconnectOverlay()
+            synchronizeTuiTerminalReconnectOverlay()
             return
         }
         if let workspace = notification.object as? Workspace,
            workspace.id != terminalSurface.tabId {
             return
         }
-        synchronizeCloudTerminalReconnectOverlay()
+        synchronizeTuiTerminalReconnectOverlay()
     }
 
-    private func currentCloudTerminalReconnectPresentation() -> CloudTerminalReconnectOverlayPolicy.Presentation? {
+    private func currentTuiTerminalReconnectPresentation() -> RemoteTerminalReconnectOverlayPolicy.Presentation? {
         guard let terminalSurface = surfaceView.terminalSurface,
               let workspace = terminalSurface.owningWorkspace() else {
             return nil
         }
-        return workspace.cloudTerminalReconnectOverlayPresentation(forSurfaceId: terminalSurface.id)
+        return workspace.remoteTerminalReconnectOverlayPresentation(forSurfaceId: terminalSurface.id)
     }
 
-    func synchronizeCloudTerminalReconnectOverlay() {
-        let legacyPresentation = cloudTerminalOverlay.session == nil ? currentCloudTerminalReconnectPresentation() : nil
-        guard cloudTerminalOverlay.session != nil || cloudTerminalOverlay.endedPresentation != nil
-            || legacyPresentation != nil || cloudTerminalOverlay.overlay != nil else { return }
-        cloudTerminalOverlay.synchronize(
+    func synchronizeTuiTerminalReconnectOverlay() {
+        let legacyPresentation = tuiTerminalOverlay.session == nil ? currentTuiTerminalReconnectPresentation() : nil
+        guard tuiTerminalOverlay.session != nil || tuiTerminalOverlay.endedPresentation != nil
+            || legacyPresentation != nil || tuiTerminalOverlay.overlay != nil else { return }
+        tuiTerminalOverlay.synchronize(
             hostedView: self,
             contentFrame: sessionContentFrame,
             legacyPresentation: legacyPresentation,
             onReconnect: { [weak self] in
                 guard let terminalSurface = self?.surfaceView.terminalSurface,
                       let workspace = terminalSurface.owningWorkspace() else { return }
-                _ = workspace.reconnectCloudTerminalSurface(surfaceId: terminalSurface.id)
+                _ = workspace.reconnectTuiTerminalSurface(surfaceId: terminalSurface.id)
             }
         )
-        if let overlay = cloudTerminalReconnectOverlayView, overlay.superview === self {
+        if let overlay = tuiTerminalReconnectOverlayView, overlay.superview === self {
             updateKeyboardCopyModeBadgeZOrder(relativeTo: overlay)
             updateImageTransferIndicatorZOrder(relativeTo: overlay)
         }
@@ -11882,7 +11796,7 @@ final class GhosttySurfaceScrollView: NSView {
         // has produced a real host size instead of a transient 1x1 placeholder.
         guard bounds.width > 1, bounds.height > 1 else { return }
         _ = synchronizeGeometryAndContent()
-        synchronizeCloudTerminalReconnectOverlay()
+        synchronizeTuiTerminalReconnectOverlay()
     }
 
     func setFocusHandler(_ handler: (() -> Void)?) {
@@ -11919,9 +11833,9 @@ final class GhosttySurfaceScrollView: NSView {
         CATransaction.commit()
         // The viewport border strokes the window-chrome separator color, which tracks the
         // terminal background/theme. Repaint it when the background changes (e.g. theme
-        // switch) so a connected iOS device's visible-area border stays in sync.
-        if !mobileViewportBorderOverlayView.isHidden {
-            mobileViewportBorderOverlayView.needsDisplay = true
+        // switch) so the shared viewport's visible-area border stays in sync.
+        if !sharedViewportBorderOverlayView.isHidden {
+            sharedViewportBorderOverlayView.needsDisplay = true
         }
     }
 
@@ -12600,7 +12514,7 @@ final class GhosttySurfaceScrollView: NSView {
         surfaceView.setVisibleInUI(visible)
         isHidden = !visible
         surfaceView.terminalSurface?.setRendererPortalVisible(visible)
-        synchronizeCloudTerminalReconnectOverlay()
+        synchronizeTuiTerminalReconnectOverlay()
         if wasVisible != visible, lastRequestedPortalOcclusionVisible != visible {
             lastRequestedPortalOcclusionVisible = visible
             // A portal reveal inside a hidden window (agent/socket-driven

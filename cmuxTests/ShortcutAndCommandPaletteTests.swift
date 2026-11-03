@@ -11,8 +11,6 @@ import WebKit
 import ObjectiveC.runtime
 import Bonsplit
 import UserNotifications
-import Sparkle
-import CmuxUpdater
 import Testing
 // Selective imports: the app target also defines AppIconMode/StoredShortcut/etc.,
 // so a blanket `import CmuxSettings` here makes those names ambiguous. Import only
@@ -600,14 +598,6 @@ final class FullScreenShortcutTests: XCTestCase {
                 usesInlineTextHandling: false
             )
         )
-        XCTAssertFalse(
-            shouldRouteCommandPaletteSelectionNavigation(
-                delta: -1,
-                isInteractive: true,
-                usesInlineTextHandling: false,
-                isAgentInboxReplyFieldFocused: true
-            )
-        )
     }
 }
 
@@ -899,167 +889,6 @@ final class CommandPaletteRenameSelectionSettingsTests: XCTestCase {
     }
 }
 
-@Suite("Cloud command palette", .serialized)
-struct CommandPaletteCloudAvailabilityTests {
-    /// Cloud availability guidance is visible only for Cloud workspaces.
-    @Test("availability guidance is visible only for Cloud workspaces")
-    func availabilityInfoAppearsOnlyForCloudWorkspace() {
-        let contribution = ContentView.commandPaletteCloudAvailabilityInfoContribution(
-            locale: Locale(identifier: "en")
-        )
-        let localContext = CommandPaletteContextSnapshot()
-        var cloudContext = CommandPaletteContextSnapshot()
-        cloudContext.setBool(CommandPaletteContextKeys.workspaceIsCloud, true)
-
-        #expect(!contribution.when(localContext))
-        #expect(contribution.when(cloudContext))
-        #expect(contribution.title(cloudContext) == "Show Cloud command availability")
-        #expect(contribution.subtitle(cloudContext) == "Cloud workspace")
-        #expect(
-            contribution.keywords == [
-                "cloud", "workspace", "availability", "local", "unavailable", "actions",
-            ]
-        )
-    }
-
-    /// Server-advertised VM capabilities hide only the operations the selected machine cannot honor.
-    @MainActor
-    @Test("server capabilities gate Cloud VM operations")
-    func cloudVMCapabilitiesGateOperations() {
-        let key = BetaFeaturesCatalogSection().cloudMachines.userDefaultsKey
-        let defaults = UserDefaults.standard
-        let original = defaults.object(forKey: key)
-        defaults.set(true, forKey: key)
-        defer {
-            if let original { defaults.set(original, forKey: key) }
-            else { defaults.removeObject(forKey: key) }
-        }
-        let contributions = ContentView.commandPaletteCloudCommandContributions(isAuthenticated: true)
-        var context = CommandPaletteContextSnapshot()
-        context.setBool(CommandPaletteContextKeys.workspaceIsCloud, true)
-        context.setBool(CommandPaletteContextKeys.cloudVMCapabilitiesKnown, true)
-        context.setBool(CommandPaletteContextKeys.cloudVMSupportsFork, false)
-        context.setBool(CommandPaletteContextKeys.cloudVMSupportsSnapshot, false)
-        context.setBool(CommandPaletteContextKeys.cloudVMSupportsRestore, false)
-        context.setBool(CommandPaletteContextKeys.cloudVMSupportsPorts, false)
-        context.setBool(CommandPaletteContextKeys.cloudVMSupportsExec, false)
-
-        let hidden = Set(
-            contributions.filter { !$0.when(context) }.map(\.commandId)
-        )
-        #expect(hidden.contains(ContentView.commandPaletteCloudForkCommandId))
-        #expect(hidden.contains(ContentView.commandPaletteCloudSnapshotCommandId))
-        #expect(hidden.contains(ContentView.commandPaletteCloudRestoreCommandId))
-        #expect(hidden.contains(ContentView.commandPaletteCloudPromoteTemplateCommandId))
-        #expect(hidden.contains(ContentView.commandPaletteCloudPortsCommandId))
-        #expect(hidden.contains(ContentView.commandPaletteCloudToolsCommandId))
-        #expect(!hidden.contains(ContentView.commandPaletteCloudHandoffCommandId))
-        #expect(
-            contributions.first { $0.commandId == ContentView.commandPaletteCloudStatusCommandId }?.when(context) == true
-        )
-
-        context.setBool(CommandPaletteContextKeys.cloudVMSupportsExec, true)
-        context.setBool(CommandPaletteContextKeys.cloudVMSupportsPorts, true)
-        let executionSupportedHidden = Set(
-            contributions.filter { !$0.when(context) }.map(\.commandId)
-        )
-        #expect(!executionSupportedHidden.contains(ContentView.commandPaletteCloudPortsCommandId))
-        #expect(!executionSupportedHidden.contains(ContentView.commandPaletteCloudToolsCommandId))
-    }
-
-    /// The Cloud contribution catalog remains complete when capabilities are
-    /// unknown, and feature and authentication gates still remove it.
-    @MainActor
-    @Test("Cloud contribution catalog honors feature and account gates")
-    func cloudContributionCatalogHonorsFeatureAndAccountGates() {
-        let key = BetaFeaturesCatalogSection().cloudMachines.userDefaultsKey
-        let defaults = UserDefaults.standard
-        let original = defaults.object(forKey: key)
-        defaults.set(true, forKey: key)
-        defer {
-            if let original { defaults.set(original, forKey: key) }
-            else { defaults.removeObject(forKey: key) }
-        }
-
-        let commandIds = Set(ContentView.commandPaletteCloudCommandContributions(isAuthenticated: true).map(\.commandId))
-        #expect(commandIds.contains(ContentView.commandPaletteCloudForkCommandId))
-        #expect(commandIds.contains(ContentView.commandPaletteCloudRestoreCommandId))
-        #expect(commandIds.contains(ContentView.commandPaletteCloudPortsCommandId))
-        #expect(commandIds.contains(ContentView.commandPaletteCloudToolsCommandId))
-        #expect(ContentView.commandPaletteCloudCommandContributions(isAuthenticated: false).isEmpty)
-
-        defaults.set(false, forKey: key)
-        #expect(ContentView.commandPaletteCloudCommandContributions(isAuthenticated: true).isEmpty)
-    }
-
-    /// Cloud commands keep the tab manager that owns the invoking palette.
-    @MainActor
-    @Test("Cloud command routing prefers the invoking window context")
-    func cloudCommandRoutingPrefersInvokingTabManager() {
-        let previousAppDelegate = AppDelegate.shared
-        let appDelegate = AppDelegate()
-        AppDelegate.shared = appDelegate
-        defer { AppDelegate.shared = previousAppDelegate }
-
-        let mainManager = TabManager()
-        let paletteManager = TabManager()
-        let mainWindowID = appDelegate.registerMainWindowContextForTesting(
-            windowId: UUID(),
-            tabManager: mainManager
-        )
-        let paletteWindowID = appDelegate.registerMainWindowContextForTesting(
-            windowId: UUID(),
-            tabManager: paletteManager
-        )
-        defer {
-            appDelegate.unregisterMainWindowContextForTesting(windowId: paletteWindowID)
-            appDelegate.unregisterMainWindowContextForTesting(windowId: mainWindowID)
-        }
-
-        let context = appDelegate.contextForCloudVMCommand(
-            preferredTabManager: paletteManager,
-            preferredWindow: nil,
-            debugSource: "test.palette.cloud.routing"
-        )
-        #expect(context?.tabManager === paletteManager)
-        #expect(context?.tabManager !== mainManager)
-    }
-}
-
-final class CommandPaletteCloudCommandTests: XCTestCase {
-
-    /// Managed Cloud identity is distinct from a generic SSH configuration.
-    func testCloudVMIdentityIsExplicitMetadata() {
-        let cloudConfig = WorkspaceRemoteConfiguration(
-            destination: "nncop8f8h6w9blhns6sy+cmux@vm-ssh.freestyle.sh",
-            port: 22,
-            identityFile: nil,
-            sshOptions: [],
-            localProxyPort: nil,
-            relayPort: nil,
-            relayID: nil,
-            relayToken: nil,
-            localSocketPath: nil,
-            managedCloudVMID: " nncop8f8h6w9blhns6sy ",
-            terminalStartupCommand: nil
-        )
-        XCTAssertEqual(cloudConfig.managedCloudVMID, "nncop8f8h6w9blhns6sy")
-
-        let plainSSHConfig = WorkspaceRemoteConfiguration(
-            destination: "nncop8f8h6w9blhns6sy+cmux@vm-ssh.freestyle.sh",
-            port: 22,
-            identityFile: nil,
-            sshOptions: [],
-            localProxyPort: nil,
-            relayPort: nil,
-            relayID: nil,
-            relayToken: nil,
-            localSocketPath: nil,
-            terminalStartupCommand: nil
-        )
-        XCTAssertNil(plainSSHConfig.managedCloudVMID)
-    }
-}
 
 
 final class CommandPaletteSelectionScrollBehaviorTests: XCTestCase {
@@ -1328,7 +1157,6 @@ final class RightSidebarModeShortcutHintTests: XCTestCase {
         .switchRightSidebarToSessions,
         .switchRightSidebarToFeed,
         .switchRightSidebarToDock,
-        .switchRightSidebarToMachines,
     ]
     /// The digit defaults are positional over the visible tabs, so the
     /// expectations below pin every remaining mode gate on and clear any tab
@@ -1336,7 +1164,6 @@ final class RightSidebarModeShortcutHintTests: XCTestCase {
     /// digits.
     private let touchedTabEnvironmentKeys: [String] = [
         RightSidebarBetaFeatureSettings.feedEnabledKey,
-        RightSidebarBetaFeatureSettings.cloudMachinesEnabledKey,
         RightSidebarTabPreferences.orderKey,
         RightSidebarTabPreferences.hiddenKey,
     ]
@@ -1359,7 +1186,6 @@ final class RightSidebarModeShortcutHintTests: XCTestCase {
             }
         )
         UserDefaults.standard.set(true, forKey: RightSidebarBetaFeatureSettings.feedEnabledKey)
-        UserDefaults.standard.set(true, forKey: RightSidebarBetaFeatureSettings.cloudMachinesEnabledKey)
         UserDefaults.standard.removeObject(forKey: RightSidebarTabPreferences.orderKey)
         UserDefaults.standard.removeObject(forKey: RightSidebarTabPreferences.hiddenKey)
 
@@ -1407,7 +1233,6 @@ final class RightSidebarModeShortcutHintTests: XCTestCase {
         XCTAssertEqual(RightSidebarMode.sessions.shortcutAction, .switchRightSidebarToSessions)
         XCTAssertEqual(RightSidebarMode.feed.shortcutAction, .switchRightSidebarToFeed)
         XCTAssertEqual(RightSidebarMode.dock.shortcutAction, .switchRightSidebarToDock)
-        XCTAssertEqual(RightSidebarMode.machines.shortcutAction, .switchRightSidebarToMachines)
     }
 
     func testModeShortcutsUsePrivateControlDigitDefaults() {
@@ -1431,21 +1256,15 @@ final class RightSidebarModeShortcutHintTests: XCTestCase {
             RightSidebarMode.modeShortcut(for: makeKeyDownEvent(key: "5", modifiers: [.control], keyCode: 23)),
             .dock
         )
-        XCTAssertEqual(
-            RightSidebarMode.modeShortcut(for: makeKeyDownEvent(key: "6", modifiers: [.control], keyCode: 22)),
-            .machines
-        )
     }
 
-    /// Hiding Feed and the standard Dock tab leaves Cloud as the 4th visible
-    /// tab, so ctrl+4 must select it.
+    /// Hiding Feed moves the standard Dock tab into the fourth visible slot.
     func testModeShortcutDigitsFollowVisibleTabPositions() {
         UserDefaults.standard.set(false, forKey: RightSidebarBetaFeatureSettings.feedEnabledKey)
-        XCTAssertTrue(RightSidebarTabPreferences.setHidden(true, mode: .dock))
 
         XCTAssertEqual(
             RightSidebarMode.modeShortcut(for: makeKeyDownEvent(key: "4", modifiers: [.control], keyCode: 21)),
-            .machines
+            .dock
         )
         XCTAssertNil(
             RightSidebarMode.modeShortcut(for: makeKeyDownEvent(key: "5", modifiers: [.control], keyCode: 23))
@@ -2142,194 +1961,3 @@ final class BuildFlavorTests: XCTestCase {
 }
 
 
-final class UpdateChannelSettingsTests: XCTestCase {
-    func testResolvedFeedFallsBackWhenInfoFeedMissing() {
-        let resolver = UpdateFeedResolver()
-        let resolved = resolver.resolve(infoFeedURL: nil)
-        XCTAssertEqual(
-            resolved.url,
-            "https://github.com/manaflow-ai/cmux/releases/latest/download/appcast-\(resolver.hostArchitecture.rawValue).xml"
-        )
-        XCTAssertFalse(resolved.isNightly)
-        XCTAssertTrue(resolved.usedFallback)
-    }
-
-    func testResolvedFeedFallsBackWhenInfoFeedEmpty() {
-        let resolver = UpdateFeedResolver()
-        let resolved = resolver.resolve(infoFeedURL: "")
-        XCTAssertEqual(
-            resolved.url,
-            "https://github.com/manaflow-ai/cmux/releases/latest/download/appcast-\(resolver.hostArchitecture.rawValue).xml"
-        )
-        XCTAssertFalse(resolved.isNightly)
-        XCTAssertTrue(resolved.usedFallback)
-    }
-
-    func testResolvedFeedUsesInfoFeedForStableChannel() {
-        let infoFeed = "https://example.com/custom/appcast.xml"
-        let resolved = UpdateFeedResolver().resolve(infoFeedURL: infoFeed)
-        XCTAssertEqual(resolved.url, infoFeed)
-        XCTAssertFalse(resolved.isNightly)
-        XCTAssertFalse(resolved.usedFallback)
-    }
-
-    func testResolvedFeedDetectsNightlyFromInfoFeedURL() {
-        let resolved = UpdateFeedResolver(hostArchitecture: .arm64).resolve(
-            infoFeedURL: "https://example.com/nightly/appcast.xml"
-        )
-        XCTAssertEqual(resolved.url, "https://example.com/nightly/appcast-arm64.xml")
-        XCTAssertTrue(resolved.isNightly)
-        XCTAssertFalse(resolved.usedFallback)
-    }
-}
-
-
-final class UpdateSettingsTests: XCTestCase {
-    func testApplyEnablesAutomaticChecksAndDailySchedule() {
-        let defaults = makeDefaults()
-        UpdateSettings().apply(to: defaults)
-
-        XCTAssertTrue(defaults.bool(forKey: UpdateSettings.automaticChecksKey))
-        XCTAssertEqual(defaults.double(forKey: UpdateSettings.scheduledCheckIntervalKey), UpdateSettings().scheduledCheckInterval)
-        XCTAssertFalse(defaults.bool(forKey: UpdateSettings.automaticallyUpdateKey))
-        XCTAssertFalse(defaults.bool(forKey: UpdateSettings.sendProfileInfoKey))
-        XCTAssertTrue(defaults.bool(forKey: UpdateSettings.migrationKey))
-    }
-
-    func testApplyRepairsLegacyDisabledAutomaticChecksOnce() {
-        let defaults = makeDefaults()
-        defaults.set(false, forKey: UpdateSettings.automaticChecksKey)
-        defaults.set(0, forKey: UpdateSettings.scheduledCheckIntervalKey)
-        defaults.set(true, forKey: UpdateSettings.automaticallyUpdateKey)
-
-        UpdateSettings().apply(to: defaults)
-
-        XCTAssertTrue(defaults.bool(forKey: UpdateSettings.automaticChecksKey))
-        XCTAssertEqual(defaults.double(forKey: UpdateSettings.scheduledCheckIntervalKey), UpdateSettings().scheduledCheckInterval)
-        XCTAssertTrue(defaults.bool(forKey: UpdateSettings.automaticallyUpdateKey))
-
-        defaults.set(false, forKey: UpdateSettings.automaticChecksKey)
-        UpdateSettings().apply(to: defaults)
-
-        XCTAssertFalse(defaults.bool(forKey: UpdateSettings.automaticChecksKey))
-    }
-
-    private func makeDefaults() -> UserDefaults {
-        let suiteName = "UpdateSettingsTests.\(UUID().uuidString)"
-        guard let defaults = UserDefaults(suiteName: suiteName) else {
-            fatalError("Failed to create isolated UserDefaults suite")
-        }
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
-    }
-}
-
-@MainActor
-final class UpdateViewModelPresentationTests: XCTestCase {
-    func testDetectedBackgroundUpdateShowsPillWhileIdle() {
-        let viewModel = UpdateStateModel()
-
-        viewModel.debugSetDetectedVersion("9.9.9")
-
-        XCTAssertTrue(viewModel.showsPill)
-        XCTAssertTrue(viewModel.showsDetectedBackgroundUpdate)
-        XCTAssertEqual(viewModel.text, "Update Available: 9.9.9")
-        XCTAssertEqual(viewModel.iconName, "shippingbox.fill")
-    }
-
-    func testActiveUpdateStateTakesPrecedenceOverDetectedBackgroundVersion() {
-        let viewModel = UpdateStateModel()
-
-        viewModel.debugSetDetectedVersion("9.9.9")
-        viewModel.setState(.checking(.init(cancel: {})))
-
-        XCTAssertTrue(viewModel.showsPill)
-        XCTAssertFalse(viewModel.showsDetectedBackgroundUpdate)
-        XCTAssertEqual(viewModel.text, "Checking for Updates…")
-    }
-
-    func testDismissDetectedAvailableUpdateRepliesAndClearsState() throws {
-        let viewModel = UpdateStateModel()
-        let item = try XCTUnwrap(makeAppcastItem(displayVersion: "9.9.9"))
-        let recorder = UpdateChoiceRecorder()
-
-        viewModel.recordDetectedUpdate(item)
-        viewModel.setState(.updateAvailable(.init(
-            appcastItem: item,
-            reply: { recorder.record($0) }
-        )))
-
-        viewModel.dismissDetectedAvailableUpdate()
-
-        XCTAssertEqual(recorder.snapshot(), [.dismiss])
-        XCTAssertEqual(viewModel.state, .idle)
-        XCTAssertNil(viewModel.detectedUpdateVersion)
-        XCTAssertNil(viewModel.detectedUpdateItem)
-        XCTAssertFalse(viewModel.showsPill)
-    }
-
-    func testCancelActiveStateForNewCheckDismissesAndClearsTransientState() throws {
-        let viewModel = UpdateStateModel()
-        let item = try XCTUnwrap(makeAppcastItem(displayVersion: "9.9.9"))
-        let recorder = UpdateChoiceRecorder()
-
-        viewModel.setState(.updateAvailable(.init(
-            appcastItem: item,
-            reply: { recorder.record($0) }
-        )))
-        viewModel.setOverrideState(.checking(.init(cancel: {})))
-
-        viewModel.cancelActiveStateForNewCheck()
-
-        XCTAssertEqual(recorder.snapshot(), [.dismiss])
-        XCTAssertEqual(viewModel.state, .idle)
-        XCTAssertNil(viewModel.overrideState)
-    }
-
-    func testApplyDriverStateRecordsDetectedUpdateMetadata() throws {
-        let viewModel = UpdateStateModel()
-        let item = try XCTUnwrap(makeAppcastItem(displayVersion: "9.9.9"))
-
-        viewModel.applyDriverState(.updateAvailable(.init(
-            appcastItem: item,
-            reply: { _ in }
-        )))
-        viewModel.setState(.idle)
-
-        XCTAssertEqual(viewModel.detectedUpdateVersion, "9.9.9")
-        XCTAssertTrue(viewModel.hasCachedDetectedUpdateDetails)
-        XCTAssertTrue(viewModel.showsDetectedBackgroundUpdate)
-    }
-
-    private func makeAppcastItem(displayVersion: String) -> SUAppcastItem? {
-        let enclosure: [String: Any] = [
-            "url": "https://example.com/cmux.zip",
-            "length": "1024",
-            "sparkle:version": displayVersion,
-            "sparkle:shortVersionString": displayVersion,
-        ]
-        let dict: [String: Any] = [
-            "title": "cmux \(displayVersion)",
-            "pubDate": "Wed, 25 Mar 2026 12:00:00 +0000",
-            "enclosure": enclosure,
-        ]
-        return SUAppcastItem(dictionary: dict)
-    }
-}
-
-private final class UpdateChoiceRecorder: @unchecked Sendable {
-    private let lock = NSLock()
-    private var choices: [SPUUserUpdateChoice] = []
-
-    func record(_ choice: SPUUserUpdateChoice) {
-        lock.lock()
-        choices.append(choice)
-        lock.unlock()
-    }
-
-    func snapshot() -> [SPUUserUpdateChoice] {
-        lock.lock()
-        defer { lock.unlock() }
-        return choices
-    }
-}

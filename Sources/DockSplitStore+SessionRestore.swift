@@ -192,8 +192,7 @@ extension DockSplitStore {
             }
             return restoredPanelId
         }
-        if sourceWorkspaceId != nil,
-           snapshot.terminal?.isRemoteTerminal == true {
+        if snapshot.terminal?.isRemoteTerminal == true {
             return nil
         }
         switch snapshot.type {

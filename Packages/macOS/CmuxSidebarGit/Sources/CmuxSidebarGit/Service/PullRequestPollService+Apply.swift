@@ -20,15 +20,6 @@ extension PullRequestPollService {
             stopWorkspacePullRequestPolling(activity: activity)
             return
         }
-        guard !host.mobileHostHasRecentActivity(within: mobileHostDeferral.quietInterval) else {
-            workspacePullRequestRefreshTask = nil
-            for key in requestedKeys {
-                workspacePullRequestProbeStateByKey[key] = .idle
-                workspacePullRequestNextPollAtByKey[key] = now.addingTimeInterval(mobileHostDeferral.quietInterval)
-            }
-            deferWorkspacePullRequestRefreshForMobileHost()
-            return
-        }
 
         for (repoSlug, repoResult) in repoResults {
             guard case .success(let cacheEntry, let usedCache, _) = repoResult,
