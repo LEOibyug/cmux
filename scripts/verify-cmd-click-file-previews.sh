@@ -162,9 +162,9 @@ copy_fixture() {
   fi
 }
 
-copy_fixture "$repo_root/web/public/blog/cmd-shift-u.mp4" "CMUX Sample Video.mp4"
+copy_fixture "$repo_root/artifacts/tabclose-demo.mp4" "CMUX Sample Video.mp4"
 copy_fixture "$repo_root/vendor/bonsplit/www/public/demo-compressed.mov" "Bonsplit Sample Video.mov"
-copy_fixture "$repo_root/web/public/avatars/schrockn.jpg" "Sample JPEG Fixture.jpg"
+sips -s format jpeg "$fixture_dir/Generated PNG Fixture.png" --out "$fixture_dir/Sample JPEG Fixture.jpg" >/dev/null
 
 printf 'cmux cmd-click file preview fixtures\n'
 printf 'Directory: %s\n\n' "$fixture_dir"

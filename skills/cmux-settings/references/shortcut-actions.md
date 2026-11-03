@@ -1,6 +1,6 @@
 # Keyboard shortcut action ids
 
-Every action id in `web/data/cmux.schema.json`
+Every action id in `schemas/cmux.schema.json`
 (`shortcuts.bindings.propertyNames.enum`). `tests/test_cmux_settings_supported_paths.py`
 fails if this list and the schema disagree, so an id missing here is a bug in this file.
 

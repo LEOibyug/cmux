@@ -2,7 +2,7 @@
 
 Global app preferences live in `~/.config/cmux/cmux.json`.
 
-The canonical schema is local `web/data/cmux.schema.json` and is embedded in the
+The canonical schema is local `schemas/cmux.schema.json` and is embedded in the
 app for offline validation. Newly created configs omit `$schema`; no remote
 schema URL is required. Existing files retain their editor-selected schema URLs
 when copied from the legacy settings path.

@@ -2430,7 +2430,7 @@ struct ComputerUseUXTests {
         let repositoryRoot = SwiftTestingAssertions.sourceURL()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let schemaURL = repositoryRoot.appendingPathComponent("web/data/cmux.schema.json")
+        let schemaURL = repositoryRoot.appendingPathComponent("schemas/cmux.schema.json")
         let object = try #require(
             try JSONSerialization.jsonObject(with: Data(contentsOf: schemaURL)) as? [String: Any]
         )

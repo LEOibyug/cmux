@@ -74,7 +74,7 @@ DEFAULT_ROOTS: tuple[str, ...] = (
     "webviews/test",
 )
 
-DEFAULT_ALLOWLIST = ".github/test-determinism-allowlist.txt"
+DEFAULT_ALLOWLIST = "scripts/test-determinism-allowlist.txt"
 
 # Only files that look like test code are scanned. Packages/ is broad, so we
 # additionally require a Tests path segment for files under it.

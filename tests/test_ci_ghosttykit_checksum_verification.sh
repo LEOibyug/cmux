@@ -7,12 +7,6 @@ SCRIPT="$ROOT_DIR/scripts/download-prebuilt-ghosttykit.sh"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-WORKFLOWS=(
-  "$ROOT_DIR/.github/workflows/ci.yml"
-  "$ROOT_DIR/.github/workflows/nightly.yml"
-  "$ROOT_DIR/.github/workflows/release.yml"
-)
-
 FIXTURE_SHA="7dd589824d4c9bda8265355718800cccaf7189a0"
 FIXTURE_DIR="$TMP_DIR/fixture"
 SUCCESS_DIR="$TMP_DIR/success"
@@ -53,13 +47,6 @@ if ! grep -Fq "embedded macOS GhosttyKit contains native Sentry marker" "$NATIVE
   echo "FAIL: archive validator did not report embedded native Sentry"
   exit 1
 fi
-
-for workflow in "${WORKFLOWS[@]}"; do
-  if ! grep -Fq './scripts/download-prebuilt-ghosttykit.sh' "$workflow"; then
-    echo "FAIL: $workflow must call download-prebuilt-ghosttykit.sh"
-    exit 1
-  fi
-done
 
 cat > "$BIN_DIR/curl" <<'EOF'
 #!/usr/bin/env bash

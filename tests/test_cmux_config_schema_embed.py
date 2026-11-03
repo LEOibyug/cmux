@@ -3,7 +3,7 @@
 
 scripts/generate-cmux-config-schema.py writes the schema into
 CmuxConfigSchema.generated.swift as a raw multi-line string literal, line for
-line with web/data/cmux.schema.json, so git merges independent schema edits
+line with schemas/cmux.schema.json, so git merges independent schema edits
 in the generated file as cleanly as in the source. These tests read the literal
 back with Swift's rules (closing delimiter, dropped final line break, no
 escapes) and check the result, the delimiter choice, and the merge property.

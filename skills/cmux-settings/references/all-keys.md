@@ -1,6 +1,6 @@
 # All settings keys
 
-Hand-maintained from `web/data/cmux.schema.json` and known to lag it. The schema is
+Hand-maintained from `schemas/cmux.schema.json` and known to lag it. The schema is
 authoritative; `cmux-settings list-supported` enumerates what the helper accepts.
 The app embeds this schema for offline validation; new configs need no remote `$schema` URL.
 

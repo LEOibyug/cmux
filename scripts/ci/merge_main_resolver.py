@@ -21,7 +21,7 @@ from pathlib import Path
 DEFAULT_TOOLS_ROOT = Path(__file__).resolve().parents[2]
 
 PBXPROJ = "cmux.xcodeproj/project.pbxproj"
-SCHEMA_JSON = "web/data/cmux.schema.json"
+SCHEMA_JSON = "schemas/cmux.schema.json"
 SCHEMA_SWIFT = (
     "Packages/macOS/CmuxFoundation/Sources/CmuxFoundation/ConfigValidation/"
     "CmuxConfigSchema.generated.swift"

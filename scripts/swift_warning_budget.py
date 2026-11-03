@@ -199,7 +199,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--log", required=True, type=pathlib.Path, help="xcodebuild output log")
     parser.add_argument(
         "--budget",
-        default=pathlib.Path(".github/swift-warning-budget.tsv"),
+        default=pathlib.Path("scripts/swift-warning-budget.tsv"),
         type=pathlib.Path,
         help="checked-in warning budget file",
     )

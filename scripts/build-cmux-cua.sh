@@ -164,7 +164,6 @@ command -v git >/dev/null 2>&1 || { echo "error: git is required" >&2; exit 1; }
 command -v cargo >/dev/null 2>&1 || {
   echo "error: cargo is required to build the bundled cmux-cua" >&2
   echo "  local dev: install Rust via rustup (https://rustup.rs or \`brew install rustup && rustup-init\`)" >&2
-  echo "  CI: run scripts/install-rust-ci.sh" >&2
   exit 1
 }
 

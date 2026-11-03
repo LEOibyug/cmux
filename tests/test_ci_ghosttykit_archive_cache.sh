@@ -8,7 +8,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT="$ROOT_DIR/scripts/download-prebuilt-ghosttykit.sh"
-WORKFLOW="$ROOT_DIR/.github/workflows/ci-macos.yml"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -103,15 +102,5 @@ rm -rf "$WORK/cache"
 printf 'not a directory' > "$WORK/cache"
 run_download "$WORK/out6/GhosttyKit.xcframework"
 [ -f "$WORK/out6/GhosttyKit.xcframework/marker.txt" ] || { echo "FAIL: an unusable cache dir must not block extraction"; exit 1; }
-
-# 7. Compile admission on an owned Mac passes the shared cache directory.
-step="$(awk '/^  macos-compile-admission:/{job=1} job && /^  [a-z0-9-]+:$/ && !/macos-compile-admission/{job=0}
-  job && /- name: Download pre-built GhosttyKit.xcframework/{grab=1; next}
-  grab && /- name:/{grab=0} grab' "$WORKFLOW")"
-printf '%s\n' "$step" | grep -Fq "GHOSTTYKIT_ARCHIVE_CACHE_DIR: \${{ startsWith(env.CMUX_PRODUCT_RUNNER, 'glaeda-') && '/Users/Shared/cmux-build-fleet/ci/ghosttykit-archives' || '' }}" || {
-  echo "FAIL: compile admission must pass the owned Mac's GhosttyKit archive cache"
-  printf '%s\n' "$step"
-  exit 1
-}
 
 echo "PASS: GhosttyKit archive cache reuses verified archives and stays behind the pinned checksum"

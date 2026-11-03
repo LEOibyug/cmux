@@ -1,47 +1,37 @@
 # cmux personal
 
-Personal macOS fork of [cmux](https://github.com/manaflow-ai/cmux), maintained at [LEOibyug/cmux](https://github.com/LEOibyug/cmux).
+这是 [LEOibyug/cmux](https://github.com/LEOibyug/cmux) 的个人 macOS 版本，基于 [cmux](https://github.com/manaflow-ai/cmux)。
 
-## Local-only macOS app
+## 保留的功能
 
-- Native Ghostty terminal, workspaces, splits, embedded browser and local automation socket.
-- Vault history, including OMP, with live global `vault.enabledAgents` source selection; see [Vault](docs/vault.md).
-- Prominent colored agent activity badges shared by the sidebar and each terminal tab; processing animates without renaming conversations. See [agent hooks](docs/agent-hooks.md#visible-conversation-state).
-- User-configured SSH, mosh, tmux and explicitly installed remote helpers.
-- Local Computer Use and Simulator support.
-- No cmux Cloud, account sign-in, teams, subscriptions, phone pairing, managed VPN, product telemetry, remote feature flags or automatic updater.
+- Ghostty 终端、工作区、分屏、内置浏览器和本地控制接口。
+- 保险库对话历史，以及可动态调整的 `vault.enabledAgents` 来源选择。
+- OMP 对话的彩色状态徽标；侧栏与标签同步，支持 hooks 和原生 OSC 7501 状态。
+- 用户自行配置的 SSH、mosh、tmux，本地 Computer Use 和 Simulator。
 
-Browser sign-in to sites you choose and local socket authentication remain available. Local-only does not prohibit user-requested network operations such as browser navigation, Git or SSH. Server and iOS sources retained from upstream are not part of this macOS app.
+不包含 Cloud、官方账号登录、团队、计费、手机配对、遥测或自动更新。仓库只维护本机 macOS 产品；GitHub Actions、官方发布流程和机器人协作配置均已移除。浏览器访问、Git 和用户发起的 SSH 网络操作不受限制。
 
-This fork targets its current configuration and session formats. Do not add older-version adapters or migration-only regression suites unless the user explicitly asks for them.
+## 本地开发
 
-## Development and installation
+构建前提与命令见 [CONTRIBUTING.md](CONTRIBUTING.md)。已有可用产物时直接复用，不重复编译。
 
-See [CONTRIBUTING.md](CONTRIBUTING.md#getting-started) for the local build prerequisites and tagged command. A compatible local `cmux-tui` executable is required; the build does not download or upgrade it automatically.
+改动只做对应功能的本机编译和隔离 smoke；不默认运行全量回归或远端 CI。不维护旧版本配置适配层。替换安装前，先由用户退出正在运行的 cmux；配置和原始对话独立保留。
 
-Use a tagged app and `CMUX_TAG=<tag> scripts/cmux-debug-cli.sh` for smoke checks. Do not quit or replace a running stable app. Installing a new stable build requires the user to exit it first.
+## 更新方式
 
-## Updates: explicit requests only
+仅在用户主动要求时，检查上游并选择性合并需要的提交；不自动同步整个上游。合入时保留个人功能和纯本地边界，不重新引入账号服务、遥测或更新器。
 
-There is no update check, background download, scheduled upstream sync or automatic merge in this app. A change of version starts with an explicit user request:
+## 使用参考
 
-1. Fetch upstream and inspect the requested fixes; do not merge all of `upstream/main` by default.
-2. Apply only agreed commits to a personal branch, reviewing dependencies and conflicts.
-3. Keep the local-only boundary, Vault source controls and local security policy. Do not reintroduce service SDKs or an updater.
-4. Build only the affected products and run one targeted runtime scenario. Add focused regression coverage only where a consumer-visible edge requires it; do not run the full app/CI matrix by default.
-5. Commit and push to the personal fork. Replace the installed app only after the user exits it.
+- [保险库与代理来源](docs/vault.md)
+- [OMP 和其他代理 hooks](docs/agent-hooks.md)
+- [原生终端状态协议](docs/program-status.md)
+- [外观设置](docs/customizing-appearance.md)
+- [配置 schema](schemas/cmux.schema.json)
+- [Shell 集成](docs/shell-integration.md)
+- [本地 tmux](docs/local-tmux.md)
 
-## Local references
+## 许可证
 
-- [Appearance](docs/customizing-appearance.md)
-- [Configuration schema](web/data/cmux.schema.json)
-- [Vault and agent sources](docs/vault.md)
-- [Shell integration](docs/shell-integration.md)
-- [Local tmux](docs/local-tmux.md)
-- [Ghostty keybindings](docs/ghostty-keybindings.md)
-
-Other upstream documentation and translated READMEs are historical references, not a promise that their Cloud, account, installer or update instructions apply to this fork.
-
-## License and attribution
-
-Original cmux authorship and notices remain intact. See [LICENSE](LICENSE): the macOS app is GPL-3.0-or-later; the listed server directories retain their separate Business Source License 1.1 terms. Removing service integration does not change those licenses or third-party rights.
+保留原作者和第三方的版权与归属声明。许可证见 [LICENSE](LICENSE) 与 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)；带有独立许可声明的材料仍按各自声明授权。个人定制和移除服务不改变原有授权。
+本机对话界面仍使用的多语言文案保存在 `agent-chat/messages/`，其原有 [独立许可证](agent-chat/messages/LICENSE) 随文件保留；不是把原网站整体纳入本机产品。
