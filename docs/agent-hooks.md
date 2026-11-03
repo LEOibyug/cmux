@@ -15,16 +15,18 @@ Supported agent names are `codex`, `grok`, `opencode`, `pi`, `omp`, `campfire`, 
 
 ## Visible conversation state
 
-Hook-reported agent state appears as a larger colored badge below the workspace
-title and as a compact badge beside that terminal's surface-tab title. Running
+Hook-reported agent state and [native terminal status](program-status.md) appear as
+a larger colored badge below the workspace title and as a compact badge beside
+that terminal's surface-tab title. Running
 work uses a blue rotating indicator; completed/idle turns are green, waiting or
 needs-input states amber, and reported failures red. Text and symbols remain
 visible when Reduce Motion disables animation.
 Tab captions use short localized state labels without repeating the provider name,
 leaving room for the conversation title.
 
-OMP uses its existing session extension: prompt submission starts activity and
-the final turn-end settles it. No additional plugin or model request is needed.
+OMP can report through its existing session extension or native OSC 7501 output.
+Both use the same badges; native reports do not require a hook or agent PID.
+No additional plugin, model request, or session migration is needed.
 Each terminal keeps its own report, so two OMP conversations in one workspace
 can show different states. Moving or clearing one does not overwrite the other.
 Badges do not rename conversations or persist stale activity across app restarts.

@@ -1,8 +1,9 @@
 # Program status (OSC 7501)
 
 cmux supports the [Program Status Protocol](https://www.superlogical.com/rex/docs/build/program-status)
-(OSC 7501, rev 0.3). A program writes its state to the terminal and cmux shows it in the sidebar. It
-works over SSH and inside containers because it travels through the pty.
+(OSC 7501, rev 0.3). A program writes its state to the terminal and cmux shows it in the sidebar
+and that terminal's surface tab. It works over SSH and inside containers because it travels
+through the pty.
 
 ```bash
 status() {
@@ -22,6 +23,11 @@ row on the workspace: `blocked` (bell), then `error`, `working` (with its percen
 program sends `progress`), and `done`. `idle` records are kept but not shown. The row text is the
 record's `app` (inherited from the nearest parent record) and its `msg`, or `title`, or a state
 label such as "Needs permission".
+
+The row uses the same prominent colored badges as hook-integrated agents: blue
+with a rotating indicator for working, amber for blocked, red for error, and green
+for done. Reduce Motion keeps the text and symbol static. Native OMP reports use
+this path without a hook PID; conversation age does not affect the presentation.
 
 - `working` and `blocked` records are removed when a new shell prompt starts (OSC 133 A or cmux
   shell integration) and when the pane's process exits.

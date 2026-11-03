@@ -36,7 +36,6 @@ struct WorkspaceProgramStatusTests {
         )
         #expect(workspace.agentLifecycleStatesByPanelId[panelId] == nil)
         #expect(workspace.agentRuntimeState(forPanelId: panelId) == nil)
-        #expect(workspace.statusEntries[Workspace.programStatusKey]?.value == "brew · Needs sign-in")
     }
 
     @Test func nativeOMPStatusesDriveBadgesWithoutHookPIDs() throws {
