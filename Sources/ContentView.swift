@@ -11093,6 +11093,7 @@ struct VerticalTabsSidebar: View, Equatable {
     @Environment(\.sidebarReadabilityBackdrop) private var sidebarReadabilityBackdrop
     @Environment(\.cmuxGlobalFontMagnificationPercent) private var sidebarGlobalFontMagnificationPercent
     @State private var sidebarDisplayAccessibility = DisplayAccessibilityOptions.current
+    @Environment(CodexpressCoordinator.self) private var codexpressCoordinator: CodexpressCoordinator?
 
     // The provider to actually render. Built-in views are always honored; only
     // the hosted-extension selection falls back to the default workspaces
@@ -11557,13 +11558,29 @@ struct VerticalTabsSidebar: View, Equatable {
             visibleWorkspaceRowIds: visibleWorkspaceRowIds
         )
         let _ = SidebarProfilingSignposts.end(signpost)
-        ZStack(alignment: .bottomLeading) {
-            if CmuxExtensionSidebarSelection.resolvesToDefaultSidebar(effectiveProviderId: effectiveExtensionSidebarProviderId) {
-                workspaceScrollArea(renderContext: renderContext)
-            } else {
-                extensionSidebarScrollArea(renderContext: renderContext)
+        VStack(spacing: 0) {
+            Group {
+                if CmuxExtensionSidebarSelection.resolvesToDefaultSidebar(effectiveProviderId: effectiveExtensionSidebarProviderId) {
+                    workspaceScrollArea(renderContext: renderContext)
+                } else {
+                    extensionSidebarScrollArea(renderContext: renderContext)
+                }
             }
+            .frame(maxHeight: .infinity)
             if isPresented {
+                if let codexpressCoordinator {
+                    CodexpressSidebarCard(coordinator: codexpressCoordinator) {
+                        guard let applicationURL = NSWorkspace.shared.urlForApplication(
+                            withBundleIdentifier: "local.codexpress.mac"
+                        ) else { return }
+                        NSWorkspace.shared.openApplication(
+                            at: applicationURL,
+                            configuration: NSWorkspace.OpenConfiguration()
+                        )
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                }
                 SidebarFooter(
                     fileExplorerState: fileExplorerState,
                     modifierKeyMonitor: modifierKeyMonitor

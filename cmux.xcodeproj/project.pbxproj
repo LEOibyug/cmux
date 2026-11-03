@@ -1379,6 +1379,18 @@
 		918100000000000000000041 /* CodexHookFailureSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 918100000000000000000040 /* CodexHookFailureSummary.swift */; };
 		918100000000000000000061 /* CodexHookUserInputCandidate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 918100000000000000000060 /* CodexHookUserInputCandidate.swift */; };
 		918100000000000000000091 /* CodexMonitorOwnerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 918100000000000000000090 /* CodexMonitorOwnerState.swift */; };
+		2954F89A6525B4BEF4E5DF4F /* CodexpressCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48BC125503D535C1592C527C /* CodexpressCoordinator.swift */; };
+		7C2A402330D5D4C2A92EFB93 /* CodexpressManagementAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07941784389D081C7CD85E40 /* CodexpressManagementAction.swift */; };
+		F17A0EB45C3AD7E19B03B4F9 /* CodexpressManagementClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FC63C3F6A7E016D267CAED1 /* CodexpressManagementClient.swift */; };
+		C901CE4E492E9FEE49474E52 /* CodexpressManagementError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16DFABF3869C3677B135A208 /* CodexpressManagementError.swift */; };
+		4AA78C224C80396B59EA1FEC /* CodexpressManagementServing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B15617D32640516273BA137 /* CodexpressManagementServing.swift */; };
+		FCFF1966E7B439F8E6BDAE7A /* CodexpressOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D77222EF0F9F5AA8009DBD8 /* CodexpressOperation.swift */; };
+		1D4701D61254EA10922F9A2B /* CodexpressPanelStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B66FC16D6699A27A36F76D6D /* CodexpressPanelStrings.swift */; };
+		02FEB421FBE0E06B713332F1 /* CodexpressResetRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2943AE8F23DB2FC9B2F5B16 /* CodexpressResetRequest.swift */; };
+		37D004923D497178B54CD6A8 /* CodexpressSessionDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF41163B4A33EFC72D61625 /* CodexpressSessionDelegate.swift */; };
+		5EEB5CF3574C2D3FD544AD9C /* CodexpressSidebarCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E672FA7BA83D6BDAD8B064B /* CodexpressSidebarCard.swift */; };
+		1624BC0D8BDE985B97117150 /* CodexpressSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B340F480F4460ECDB081788 /* CodexpressSnapshot.swift */; };
+		BBF058CBFF1725596AE3819D /* CodexpressSourceRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0FA0A30E75B08112FC17C9 /* CodexpressSourceRow.swift */; };
 		9D04DE21C5281E376C0FE450 /* CodexRestoreHookEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 657ECAA4E052C87DFE264F70 /* CodexRestoreHookEvidence.swift */; };
 		256E3FBC057F233E8849DF79 /* CodexRestoreHookEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D2A327B1DBFC724A70928 /* CodexRestoreHookEvidenceTests.swift */; };
 		7FF4F2EA73F8883D21912965 /* CodexRestoreOwnerGenerationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49E1CED2CD67AA6493348BF7 /* CodexRestoreOwnerGenerationTests.swift */; };
@@ -5387,6 +5399,18 @@
 		918100000000000000000040 /* CodexHookFailureSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHookFailureSummary.swift; sourceTree = "<group>"; };
 		918100000000000000000060 /* CodexHookUserInputCandidate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHookUserInputCandidate.swift; sourceTree = "<group>"; };
 		918100000000000000000090 /* CodexMonitorOwnerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexMonitorOwnerState.swift; sourceTree = "<group>"; };
+		48BC125503D535C1592C527C /* CodexpressCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressCoordinator.swift; sourceTree = "<group>"; };
+		07941784389D081C7CD85E40 /* CodexpressManagementAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressManagementAction.swift; sourceTree = "<group>"; };
+		3FC63C3F6A7E016D267CAED1 /* CodexpressManagementClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressManagementClient.swift; sourceTree = "<group>"; };
+		16DFABF3869C3677B135A208 /* CodexpressManagementError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressManagementError.swift; sourceTree = "<group>"; };
+		8B15617D32640516273BA137 /* CodexpressManagementServing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressManagementServing.swift; sourceTree = "<group>"; };
+		8D77222EF0F9F5AA8009DBD8 /* CodexpressOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressOperation.swift; sourceTree = "<group>"; };
+		B66FC16D6699A27A36F76D6D /* CodexpressPanelStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressPanelStrings.swift; sourceTree = "<group>"; };
+		B2943AE8F23DB2FC9B2F5B16 /* CodexpressResetRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressResetRequest.swift; sourceTree = "<group>"; };
+		0FF41163B4A33EFC72D61625 /* CodexpressSessionDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressSessionDelegate.swift; sourceTree = "<group>"; };
+		1E672FA7BA83D6BDAD8B064B /* CodexpressSidebarCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressSidebarCard.swift; sourceTree = "<group>"; };
+		5B340F480F4460ECDB081788 /* CodexpressSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressSnapshot.swift; sourceTree = "<group>"; };
+		7B0FA0A30E75B08112FC17C9 /* CodexpressSourceRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressSourceRow.swift; sourceTree = "<group>"; };
 		657ECAA4E052C87DFE264F70 /* CodexRestoreHookEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexRestoreHookEvidence.swift; sourceTree = "<group>"; };
 		7A1D2A327B1DBFC724A70928 /* CodexRestoreHookEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodexRestoreHookEvidenceTests.swift"; sourceTree = "<group>"; };
 		49E1CED2CD67AA6493348BF7 /* CodexRestoreOwnerGenerationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodexRestoreOwnerGenerationTests.swift"; sourceTree = "<group>"; };
@@ -10784,6 +10808,18 @@
 				0FB36E306BB4921F173777BB /* AgentStatusPresentation.swift */,
 				FC6F4F9BF05378FBD0B5BD6D /* AgentStatusBadgeView.swift */,
 				B8F28346FFF8271CD7930F0B /* AgentStatusBadge.swift */,
+				48BC125503D535C1592C527C /* CodexpressCoordinator.swift */,
+				5B340F480F4460ECDB081788 /* CodexpressSnapshot.swift */,
+				07941784389D081C7CD85E40 /* CodexpressManagementAction.swift */,
+				8B15617D32640516273BA137 /* CodexpressManagementServing.swift */,
+				3FC63C3F6A7E016D267CAED1 /* CodexpressManagementClient.swift */,
+				16DFABF3869C3677B135A208 /* CodexpressManagementError.swift */,
+				8D77222EF0F9F5AA8009DBD8 /* CodexpressOperation.swift */,
+				B2943AE8F23DB2FC9B2F5B16 /* CodexpressResetRequest.swift */,
+				0FF41163B4A33EFC72D61625 /* CodexpressSessionDelegate.swift */,
+				1E672FA7BA83D6BDAD8B064B /* CodexpressSidebarCard.swift */,
+				7B0FA0A30E75B08112FC17C9 /* CodexpressSourceRow.swift */,
+				B66FC16D6699A27A36F76D6D /* CodexpressPanelStrings.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -13459,6 +13495,18 @@
 				C0A1E5CE01C0A1E5CE01A001 /* CoalesceLatestPublisher.swift in Sources */,
 				A9F200000000000000000016 /* CodexAppServerQueuedInput.swift in Sources */,
 				A9E02000000000000000000E /* CodexAppServerSession.swift in Sources */,
+				2954F89A6525B4BEF4E5DF4F /* CodexpressCoordinator.swift in Sources */,
+				7C2A402330D5D4C2A92EFB93 /* CodexpressManagementAction.swift in Sources */,
+				F17A0EB45C3AD7E19B03B4F9 /* CodexpressManagementClient.swift in Sources */,
+				C901CE4E492E9FEE49474E52 /* CodexpressManagementError.swift in Sources */,
+				4AA78C224C80396B59EA1FEC /* CodexpressManagementServing.swift in Sources */,
+				FCFF1966E7B439F8E6BDAE7A /* CodexpressOperation.swift in Sources */,
+				1D4701D61254EA10922F9A2B /* CodexpressPanelStrings.swift in Sources */,
+				02FEB421FBE0E06B713332F1 /* CodexpressResetRequest.swift in Sources */,
+				37D004923D497178B54CD6A8 /* CodexpressSessionDelegate.swift in Sources */,
+				5EEB5CF3574C2D3FD544AD9C /* CodexpressSidebarCard.swift in Sources */,
+				1624BC0D8BDE985B97117150 /* CodexpressSnapshot.swift in Sources */,
+				BBF058CBFF1725596AE3819D /* CodexpressSourceRow.swift in Sources */,
 				9D04DE21C5281E376C0FE450 /* CodexRestoreHookEvidence.swift in Sources */,
 				ED298B66FFCCF75A5AA46E29 /* CodexRolloutIdentity.swift in Sources */,
 				F01AB73E1C591D0276A370A6 /* CodexRolloutIdentityResolver.swift in Sources */,

@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 
 #if canImport(cmux_DEV)
 @testable import cmux_DEV
@@ -6,20 +6,18 @@ import XCTest
 @testable import cmux
 #endif
 
-final class SidebarIdentifierFormattingTests: XCTestCase {
-    func testSidebarPortLabelFormatsCatalogPlaceholder() {
-        let label = SidebarPortDisplayText.label(for: 2014)
-
-        XCTAssertEqual(label, ":2014")
-        XCTAssertFalse(label.contains("%lld"))
-        XCTAssertFalse(label.contains(":2,014"))
+@Suite
+struct SidebarIdentifierFormattingTests {
+    @Test(arguments: [(1, ":1"), (2014, ":2014"), (17867, ":17867"), (65535, ":65535")])
+    func portIdentifiersAreLocaleIndependent(port: Int, expected: String) {
+        #expect(SidebarPortDisplayText.label(for: port) == expected)
     }
 
-    func testSidebarPortTooltipFormatsCatalogPlaceholder() {
+    @Test
+    func portTooltipKeepsTheUnformattedPortNumber() {
         let tooltip = SidebarPortDisplayText.openTooltip(for: 2014)
-
-        XCTAssertTrue(tooltip.contains("2014"))
-        XCTAssertFalse(tooltip.contains("%lld"))
-        XCTAssertFalse(tooltip.contains("2,014"))
+        #expect(tooltip.contains("2014"))
+        #expect(!tooltip.contains("%lld"))
+        #expect(!tooltip.contains("2,014"))
     }
 }

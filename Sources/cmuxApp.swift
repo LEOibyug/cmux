@@ -22,6 +22,7 @@ struct cmuxApp: App {
     /// Composition-root owner for the config-backed automation bridge.
     private let automationEngine: AutomationEngine
     private let browserDataImportCoordinator: BrowserDataImportCoordinator
+    private let codexpressCoordinator: CodexpressCoordinator
     @StateObject private var tabManager: TabManager
     @StateObject private var notificationStore: TerminalNotificationStore
     @StateObject var closedItemHistoryStore: ClosedItemHistoryStore
@@ -94,6 +95,19 @@ struct cmuxApp: App {
             saveSecret: { try socketPasswordStore.savePassword($0) },
             backupTimestamp: secretMigrationTimestamp
         )
+        let codexpressStateDirectory = ProcessInfo.processInfo.environment["CODEXPRESS_STATE_DIR"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Codexpress", isDirectory: true)
+        let codexpressClient = CodexpressManagementClient(
+            configurationURL: codexpressStateDirectory.appendingPathComponent("control-access.json")
+        )
+        let codexpressRefreshClock = ContinuousClock()
+        let codexpressCoordinator = CodexpressCoordinator(service: codexpressClient) {
+            // This API exposes snapshots, not events; only visible sidebars sample local state.
+            try await codexpressRefreshClock.sleep(for: .seconds(2))
+        }
+        self.codexpressCoordinator = codexpressCoordinator
         let browserDataImportCoordinator = BrowserDataImportCoordinator()
         let notificationStore = TerminalNotificationStore.shared
         let closedItemHistoryStore = ClosedItemHistoryStore.shared
@@ -303,6 +317,7 @@ struct cmuxApp: App {
             settingsRuntime: settingsRuntime,
             automationEngine: automationEngine,
             browserDataImportCoordinator: browserDataImportCoordinator,
+            codexpressCoordinator: codexpressCoordinator,
             computerUseRuntimeService: computerUseRuntimeService
         )
         historyMenuCoordinator.refreshIfNeeded()
