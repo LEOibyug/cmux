@@ -193,7 +193,10 @@ struct cmuxApp: App {
         StartupBreadcrumbLog.append("app.init.keyboardShortcuts.loaded")
 
         // Reconcile saved language preference before any UI loads
-        LanguageSettingsStore(defaults: .standard, domainName: ProcessDefaultsDomain.name).reconcileLanguageOverrideAtLaunch()
+        LanguageSettingsStore(
+            defaults: .standard,
+            systemLanguages: UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String] ?? []
+        ).reconcileLanguageOverrideAtLaunch()
         StartupBreadcrumbLog.append("app.init.language.applied")
         let defaultsStore = UserDefaultsSettingsStore(defaults: .standard, migrating: settingsCatalog.all)
         let hostSettingsActions = HostSettingsActions(

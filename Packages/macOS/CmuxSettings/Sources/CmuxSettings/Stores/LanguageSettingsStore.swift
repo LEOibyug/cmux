@@ -1,101 +1,50 @@
 import Foundation
 
-/// Repository for the app UI language, persisted in `UserDefaults` under the
-/// catalog's `app.language` key, plus cmux-owned writes to the system
-/// `AppleLanguages` per-app override.
+/// Persists the selected language and resolves this personal build to English or Chinese.
 ///
-/// `AppleLanguages` is the OS-defined per-app language override list that
-/// Foundation's localization machinery reads at process start. cmux writes a
-/// single-element list when the user chooses an explicit app language, and
-/// records that write in a companion key so returning to
-/// ``AppLanguage/system`` removes only an override cmux still owns. Launch
-/// reconciliation repairs missing or stale cmux overrides for explicit
-/// selections but never deletes externally-managed `AppleLanguages` values.
-///
-/// Isolation: a stateless `Sendable` struct, not an actor — its operations run
-/// synchronously at startup, from Settings, or from the settings importer, the
-/// struct holds no mutable state, and `UserDefaults` is documented thread-safe.
+/// Other language choices retain their settings value but render in English.
+/// System follows the first system language only when it is Chinese.
 public struct LanguageSettingsStore: Sendable {
-    // UserDefaults is documented thread-safe and the reference is immutable.
+    // UserDefaults is thread-safe; the immutable reference is constructor-injected.
     private nonisolated(unsafe) let defaults: UserDefaults
+    private let systemLanguages: [String]
     private let keys = AppCatalogSection()
-    private let domainName: String?
-    private let appleLanguagesKey = "AppleLanguages"
-    private let appliedOverrideKey = "appLanguageAppliedOverride"
 
-    /// Creates a store reading and writing the given defaults suite.
+    /// Creates a store with an isolated defaults source and system-language snapshot.
     ///
-    /// Pass `domainName` for any non-`.standard` suite so ownership checks
-    /// read only that suite's persistent domain; it defaults to the main
-    /// bundle identifier, which matches the `.standard` suite's app domain.
-    public init(defaults: UserDefaults, domainName: String? = Bundle.main.bundleIdentifier) {
+    /// - Parameters:
+    ///   - defaults: The app's defaults or an isolated test suite.
+    ///   - systemLanguages: OS preferences, independent of cmux's per-app override.
+    public init(defaults: UserDefaults, systemLanguages: [String] = []) {
         self.defaults = defaults
-        self.domainName = domainName
+        self.systemLanguages = systemLanguages
     }
 
-    /// The persisted language choice; unrecognized stored values read as
-    /// ``AppLanguage/system``.
-    public var storedLanguage: AppLanguage {
-        keys.language.value(in: defaults)
-    }
+    /// The saved menu choice; unrecognized values resolve to System.
+    public var storedLanguage: AppLanguage { keys.language.value(in: defaults) }
 
-    /// Writes an explicit cmux-owned `AppleLanguages` override, or removes it
-    /// for ``AppLanguage/system`` only when the current value still matches
-    /// cmux's last recorded write.
+    /// Applies English, Simplified Chinese or Traditional Chinese for the selection.
     ///
-    /// A no-companion `AppleLanguages` value is never removed, even though a
-    /// pre-companion cmux build could have left one behind when its last
-    /// session switched to System: those bytes are indistinguishable from a
-    /// user's manual `defaults write` or the macOS per-app Language & Region
-    /// setting, and deleting them is the exact data loss of
-    /// https://github.com/manaflow-ai/cmux/issues/7686. The legacy leftover
-    /// self-heals when the user picks any explicit language (or toggles
-    /// through one back to System), which stamps the companion.
+    /// - Parameter language: The selected menu option; non-Chinese options use English.
     public func applyLanguageOverride(_ language: AppLanguage) {
-        if language == .system {
-            if let appliedOverride = defaults.string(forKey: appliedOverrideKey), currentAppleLanguages == [appliedOverride] {
-                defaults.removeObject(forKey: appleLanguagesKey)
-            }
-            defaults.removeObject(forKey: appliedOverrideKey)
-        } else {
-            defaults.set([language.rawValue], forKey: appleLanguagesKey)
-            defaults.set(language.rawValue, forKey: appliedOverrideKey)
-        }
+        defaults.set([localization(for: language)], forKey: "AppleLanguages")
     }
 
-    /// Repairs, adopts, or refreshes cmux-owned explicit overrides at launch,
-    /// and clears stale cmux-owned overrides for ``AppLanguage/system`` without
-    /// removing externally-managed `AppleLanguages` values.
+    /// Resolves the saved selection before Foundation loads localized UI resources.
     public func reconcileLanguageOverrideAtLaunch() {
-        let language = storedLanguage
-        guard language != .system else {
-            applyLanguageOverride(.system)
-            return
-        }
-
-        let expectedOverride = [language.rawValue]
-        if let currentAppleLanguages {
-            if currentAppleLanguages == expectedOverride {
-                if defaults.string(forKey: appliedOverrideKey) == nil {
-                    defaults.set(language.rawValue, forKey: appliedOverrideKey)
-                }
-            } else if let appliedOverride = defaults.string(forKey: appliedOverrideKey), currentAppleLanguages == [appliedOverride] {
-                applyLanguageOverride(language)
-            } else {
-                return
-            }
-        } else {
-            applyLanguageOverride(language)
-        }
+        applyLanguageOverride(storedLanguage)
     }
 
-    // Optional (not `[]`) on purpose: `nil` distinguishes "no AppleLanguages
-    // key present" from "present but different value" for the repair branch
-    // in reconcileLanguageOverrideAtLaunch(). Do not collapse to [].
-    private var currentAppleLanguages: [String]? {
-        if let domainName {
-            return defaults.persistentDomain(forName: domainName)?[appleLanguagesKey] as? [String]
+    private func localization(for language: AppLanguage) -> String {
+        switch language {
+        case .zhHans: return "zh-Hans"
+        case .zhHant: return "zh-Hant"
+        case .system:
+            guard let identifier = systemLanguages.first else { return "en" }
+            let locale = Locale(identifier: identifier)
+            guard locale.language.languageCode?.identifier == "zh" else { return "en" }
+            return locale.language.script?.identifier == "Hant" ? "zh-Hant" : "zh-Hans"
+        default: return "en"
         }
-        return defaults.array(forKey: appleLanguagesKey) as? [String]
     }
 }

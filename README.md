@@ -12,6 +12,8 @@
 
 不包含 Cloud、官方账号登录、团队、计费、手机配对、遥测或自动更新。仓库只维护本机 macOS 产品；GitHub Actions、官方发布流程和机器人协作配置均已移除。浏览器访问、Git 和用户发起的 SSH 网络操作不受限制。
 
+界面仅维护英文、简体中文与繁体中文；其他语言选项统一使用英文。「跟随系统」在系统首选语言为中文时采用相应中文，否则使用英文。终端、浏览器网页和用户文件的语言不受影响。
+
 ## Codexpress 来源面板
 
 需要支持管理 API 的 Codexpress。在 Codexpress「接入 → 管理 API」启用本机服务；cmux 从 `~/Library/Application Support/Codexpress/control-access.json` 读取独立端口与管理 Key，不复制密钥、不修改 Codex、供应商凭据或系统代理。自定义数据目录可通过启动 cmux 时的 `CODEXPRESS_STATE_DIR` 指定，配置文件和所属目录必须为当前用户私有，不能使用符号链接。

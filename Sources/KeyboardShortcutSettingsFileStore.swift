@@ -101,9 +101,7 @@ final class CmuxSettingsFileStore {
         self.fileManager = fileManager
         self.notificationCenter = notificationCenter
         self.userDefaults = userDefaults
-        // Language override ownership is supplied by the composition root. A custom
-        // UserDefaults suite must provide a LanguageSettingsStore with its domain name;
-        // there is no safe way to infer a suite name from a UserDefaults instance.
+        // The composition root supplies the shared Chinese/English language policy.
         self.languageSettingsStore = languageSettingsStore
         self.passwordStore = passwordStore
         self.onWatchedFileReload = onWatchedFileReload
