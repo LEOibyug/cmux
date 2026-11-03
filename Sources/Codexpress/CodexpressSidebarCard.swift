@@ -7,14 +7,16 @@ struct CodexpressSidebarCard: View {
     let openCodexpress: () -> Void
 
     @AppStorage("codexpressSidebarExpanded") private var isExpanded = true
+    @Environment(\.cmuxGlobalFontMagnificationPercent) private var magnification
     private let strings = CodexpressPanelStrings()
 
     var body: some View {
+        let sources = coordinator.snapshot.map { orderedSources($0.sources) } ?? []
         VStack(alignment: .leading, spacing: 7) {
             header
             if isExpanded {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
                         if let error = coordinator.connectionError {
                             Text(strings.message(for: error))
                                 .foregroundStyle(.secondary)
@@ -39,12 +41,11 @@ struct CodexpressSidebarCard: View {
                             }
                         }
                         if let snapshot = coordinator.snapshot {
-                            Text(modeLabel(snapshot))
-                                .foregroundStyle(.secondary)
-                            if snapshot.sources.isEmpty {
+                            if sources.isEmpty {
                                 Text(strings.noSources).foregroundStyle(.secondary)
                             }
-                            ForEach(orderedSources(snapshot.sources), id: \.id) { source in
+                            ForEach(sources, id: \.id) { source in
+                                if source.id != sources.first?.id { Divider() }
                                 CodexpressSourceRow(
                                     source: source,
                                     isTakingOver: snapshot.manualRoute?.sourceID == source.id,
@@ -65,22 +66,13 @@ struct CodexpressSidebarCard: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(height: contentHeight)
-                Button(action: openCodexpress) {
-                    HStack(spacing: 5) {
-                        Text(strings.open)
-                        Image(systemName: "arrow.up.forward.app")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .frame(height: contentHeight(for: sources))
             }
         }
-        .cmuxFont(size: 12)
-        .padding(9)
+        .cmuxFont(size: 10)
+        .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(maxHeight: 300)
+        .frame(maxHeight: 280)
         .fixedSize(horizontal: false, vertical: true)
         .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
         .overlay {
@@ -125,15 +117,23 @@ struct CodexpressSidebarCard: View {
             .disabled(coordinator.isUpdating)
             .help(strings.refresh)
             .accessibilityLabel(Text(strings.refresh))
+            Button(action: openCodexpress) {
+                Image(systemName: "arrow.up.forward.app")
+                    .frame(width: 18, height: 18)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help(strings.open)
+            .accessibilityLabel(Text(strings.open))
         }
-        .help(statusLabel)
+        .help(coordinator.snapshot.map { statusLabel + " · " + modeLabel($0) } ?? statusLabel)
     }
 
-    private var contentHeight: CGFloat {
-        guard let sources = coordinator.snapshot?.sources, !sources.isEmpty else {
-            return coordinator.connectionError == nil ? 55 : 100
-        }
-        return sources.count == 1 && sources[0].kind != "official" ? 190 : 220
+    private func contentHeight(for sources: [CodexpressSnapshot.Source]) -> CGFloat {
+        let rowHeight = sources.reduce(CGFloat.zero) { $0 + ($1.kind == "official" ? 56 : 40) }
+        let separators = CGFloat(max(0, sources.count - 1)) * 7
+        let errorHeight: CGFloat = coordinator.connectionError != nil || coordinator.actionError != nil ? 50 : 0
+        return min(230, max(36, (rowHeight + separators) * CGFloat(magnification) / 100 + errorHeight))
     }
 
     private var statusLabel: String {
@@ -159,8 +159,7 @@ struct CodexpressSidebarCard: View {
     }
 
     private func orderedSources(_ sources: [CodexpressSnapshot.Source]) -> [CodexpressSnapshot.Source] {
-        sources.sorted {
-            if $0.enabled != $1.enabled { return $0.enabled }
+        sources.filter(\.enabled).sorted {
             if $0.priority != $1.priority { return $0.priority < $1.priority }
             return $0.id < $1.id
         }

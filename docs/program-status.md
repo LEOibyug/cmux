@@ -18,16 +18,21 @@ Programs can detect support with `printf '\e]7501;?\e\\'`; cmux answers with the
 
 ## What cmux shows
 
-cmux keeps the records of each terminal pane separately and shows the most urgent one as a status
-row on the workspace: `blocked` (bell), then `error`, `working` (with its percentage when the
-program sends `progress`), and `done`. `idle` records are kept but not shown. The row text is the
-record's `app` (inherited from the nearest parent record) and its `msg`, or `title`, or a state
-label such as "Needs permission".
+cmux keeps each terminal pane's records separately and selects the most urgent status:
+`blocked`, then `error`, `working`, and `done`. Native `idle` records are kept but not shown.
+The sidebar and terminal tab use the same short state label. In Chinese, working is
+“工作中” and blocked is “等待输入”; hook-reported idle, completed, error and external
+waiting states also share their labels across both locations. The original app name,
+message, title and progress remain in the sidebar badge's hover help.
 
 The row uses the same prominent colored badges as hook-integrated agents: blue
 with a rotating indicator for working, amber for blocked, red for error, and green
 for done. Reduce Motion keeps the text and symbol static. Native OMP reports use
 this path without a hook PID; conversation age does not affect the presentation.
+
+OMP 18.16 reports an `ask` prompt as `blocked:kind=question` and an approval prompt as
+`blocked:kind=permission`. cmux already handles both as needs-input; no text matching
+or extra OMP extension is needed. Finishing a turn is distinct from a blocking question.
 
 - `working` and `blocked` records are removed when a new shell prompt starts (OSC 133 A or cmux
   shell integration) and when the pane's process exits.

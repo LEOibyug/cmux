@@ -12,8 +12,6 @@ struct CodexpressPanelStrings {
     var syncing: String { String(localized: "codexpress.status.syncing", defaultValue: "Syncing…") }
     var unknown: String { String(localized: "codexpress.value.unknown", defaultValue: "Unknown") }
     var stale: String { String(localized: "codexpress.value.stale", defaultValue: "Stale") }
-    var fresh: String { String(localized: "codexpress.value.fresh", defaultValue: "Fresh") }
-    var freshnessUnknown: String { String(localized: "codexpress.value.freshnessUnknown", defaultValue: "Freshness unknown") }
     var estimated: String { String(localized: "codexpress.balance.estimated", defaultValue: "Estimated") }
     var spendPending: String { String(localized: "codexpress.balance.spendPending", defaultValue: "Spend pending") }
     var currencyUnknown: String { String(localized: "codexpress.balance.currencyUnknown", defaultValue: "Currency unknown") }
@@ -27,9 +25,8 @@ struct CodexpressPanelStrings {
     var exhausted: String { String(localized: "codexpress.source.exhausted", defaultValue: "Exhausted") }
     var authRequired: String { String(localized: "codexpress.source.authRequired", defaultValue: "Sign-in required in Codexpress") }
     var proxyError: String { String(localized: "codexpress.source.proxyError", defaultValue: "Connection error") }
-    var active: String { String(localized: "codexpress.source.active", defaultValue: "Active") }
-    var shortWindow: String { String(localized: "codexpress.quota.short", defaultValue: "Short window") }
-    var weekWindow: String { String(localized: "codexpress.quota.week", defaultValue: "Weekly") }
+    var active: String { String(localized: "codexpress.source.active", defaultValue: "Active requests") }
+    var weekWindow: String { String(localized: "codexpress.quota.week", defaultValue: "week") }
     var cards: String { String(localized: "codexpress.quota.cards", defaultValue: "Reset cards") }
     var resetTime: String { String(localized: "codexpress.quota.resets", defaultValue: "Resets") }
     var remaining: String { String(localized: "codexpress.quota.remaining", defaultValue: "Remaining") }
@@ -45,7 +42,7 @@ struct CodexpressPanelStrings {
     var resetFailed: String { String(localized: "codexpress.reset.failed", defaultValue: "Reset failed") }
     var resetCancelled: String { String(localized: "codexpress.reset.cancelled", defaultValue: "Reset cancelled") }
     var resetUnknown: String { String(localized: "codexpress.reset.unknown", defaultValue: "Reset outcome unknown — check Codexpress") }
-    var noSources: String { String(localized: "codexpress.panel.noSources", defaultValue: "No providers configured") }
+    var noSources: String { String(localized: "codexpress.panel.noSources", defaultValue: "No enabled providers") }
     var cached: String { String(localized: "codexpress.panel.cached", defaultValue: "Showing last local status") }
     var automaticMode: String { String(localized: "codexpress.mode.automatic", defaultValue: "Automatic routing") }
     var fixedMode: String { String(localized: "codexpress.mode.fixed", defaultValue: "Fixed routing") }

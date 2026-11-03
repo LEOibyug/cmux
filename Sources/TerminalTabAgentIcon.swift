@@ -46,7 +46,7 @@ extension Workspace {
         guard let entry = terminalAgentStatusEntryVisibleForDisplay(panelId: panelId),
               let presentation = AgentStatusPresentation(entry: entry) else { return nil }
         return TabStatusBadge(
-            text: presentation.tabText,
+            text: presentation.text,
             symbolName: presentation.symbolName,
             foregroundHex: presentation.foregroundHex,
             backgroundHex: presentation.backgroundHex,

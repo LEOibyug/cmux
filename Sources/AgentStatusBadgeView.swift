@@ -42,6 +42,8 @@ final class AgentStatusBadgeView: NSView {
         let foreground = Self.color(presentation.foregroundHex)
         layer?.backgroundColor = Self.color(presentation.backgroundHex).cgColor
         let font = NSFont.systemFont(ofSize: pointSize, weight: .semibold)
+        let detailsHelp = entry.url.map { $0.absoluteString + "\n" + entry.sidebarHelpText }
+            ?? entry.sidebarHelpText
         iconView.image = RenderableSystemSymbol.configuredAppKitImage(systemName: presentation.symbolName, pointSize: pointSize, weight: .semibold)
         iconView.contentTintColor = foreground
         iconView.imageScaling = .scaleProportionallyDown
@@ -55,14 +57,14 @@ final class AgentStatusBadgeView: NSView {
             markdown.configure(markdown: presentation.text, font: font, color: foreground, explicitURL: entry.url, onOpenURL: onOpenURL)
         } else if let url = entry.url {
             link.isHidden = false
-            link.configure(title: presentation.text, font: font, color: foreground, underlined: true, toolTip: entry.sidebarToolTip(linkURL: url), onClick: { onOpenURL(url) })
+            link.configure(title: presentation.text, font: font, color: foreground, underlined: true, toolTip: detailsHelp, onClick: { onOpenURL(url) })
         } else {
             label.isHidden = false
             label.stringValue = presentation.text
             label.font = font
             label.textColor = foreground
         }
-        toolTip = entry.sidebarToolTip(linkURL: entry.url)
+        toolTip = detailsHelp
         arc.strokeColor = foreground.cgColor
         setAccessibilityLabel(presentation.text)
         invalidateIntrinsicContentSize()

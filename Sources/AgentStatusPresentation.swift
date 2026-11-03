@@ -7,12 +7,12 @@ struct AgentStatusPresentation: Equatable, Sendable {
         case running
         case waiting
         case needsInput
+        case idle
         case completed
         case error
     }
 
     let state: State
-    let text: String
     let symbolName: String
 
     init?(entry: SidebarStatusEntry) {
@@ -34,17 +34,19 @@ struct AgentStatusPresentation: Equatable, Sendable {
                 state = .running
             case "hourglass":
                 state = .waiting
-            case "pause.circle.fill", "checkmark.circle.fill", "checkmark.circle":
+            case "pause.circle.fill":
+                state = .idle
+            case "checkmark.circle.fill", "checkmark.circle":
                 state = .completed
             default:
                 return nil
             }
         }
-        text = entry.sidebarDisplayText
         switch state {
         case .running: symbolName = icon ?? "bolt.fill"
         case .waiting: symbolName = "hourglass"
         case .needsInput: symbolName = "bell.fill"
+        case .idle: symbolName = "pause.circle.fill"
         case .completed: symbolName = "checkmark.circle.fill"
         case .error: symbolName = "exclamationmark.triangle.fill"
         }
@@ -52,12 +54,13 @@ struct AgentStatusPresentation: Equatable, Sendable {
 
     var isAnimating: Bool { state == .running }
 
-    /// The tab already carries the provider icon; omit its repeated name.
-    var tabText: String {
+    /// One short state label for both sidebar and tab chrome; details stay in help.
+    var text: String {
         switch state {
         case .running: String(localized: "agent.generic.status.running", defaultValue: "Running")
         case .waiting: String(localized: "agent.generic.status.waiting", defaultValue: "Waiting")
         case .needsInput: String(localized: "feed.status.needsInput", defaultValue: "Needs input")
+        case .idle: String(localized: "agent.generic.notification.status.idle", defaultValue: "Idle")
         case .completed: String(localized: "sidebar.status.done", defaultValue: "Done")
         case .error: String(localized: "agent.generic.notification.subtitle.error", defaultValue: "Error")
         }
@@ -69,7 +72,7 @@ struct AgentStatusPresentation: Equatable, Sendable {
         switch state {
         case .running: "#8BCBFF"
         case .waiting, .needsInput: "#FFD36B"
-        case .completed: "#7EE2A8"
+        case .idle, .completed: "#7EE2A8"
         case .error: "#FFADB3"
         }
     }
@@ -78,7 +81,7 @@ struct AgentStatusPresentation: Equatable, Sendable {
         switch state {
         case .running: "#142F4D"
         case .waiting, .needsInput: "#422F0B"
-        case .completed: "#163A2C"
+        case .idle, .completed: "#163A2C"
         case .error: "#481C23"
         }
     }

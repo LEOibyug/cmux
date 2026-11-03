@@ -1,4 +1,8 @@
 {
+  "codexpress.quota.week": {
+    "class": "format",
+    "source": "week"
+  },
   "codexpress.panel.title": {
     "class": "brand",
     "source": "Codexpress"

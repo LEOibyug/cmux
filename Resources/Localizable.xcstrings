@@ -24362,13 +24362,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "运行中"
+            "value": "工作中"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "執行中"
+            "value": "工作中"
           }
         }
       }
@@ -193801,13 +193801,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "需要输入"
+            "value": "等待输入"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "需要輸入"
+            "value": "等待輸入"
           }
         }
       }
@@ -343046,7 +343046,7 @@
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "完畢"
+            "value": "已完成"
           }
         },
         "zh-Hans": {
@@ -509297,8 +509297,18 @@
         "fr": { "stringUnit": { "state": "translated", "value": "En cours" } },
         "ar": { "stringUnit": { "state": "translated", "value": "جارٍ التنفيذ" } },
         "es": { "stringUnit": { "state": "translated", "value": "En curso" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "處理中" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "处理中" } },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作中"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作中"
+          }
+        },
         "ko": { "stringUnit": { "state": "translated", "value": "작업 중" } },
         "ja": { "stringUnit": { "state": "translated", "value": "処理中" } }
       }
@@ -542134,55 +542144,55 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No providers configured"
+            "value": "No enabled providers"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "لم يتم إعداد أي مزوّد خدمة"
+            "value": "لا يوجد مزوّدون مفعّلون"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keine Anbieter konfiguriert"
+            "value": "Keine Anbieter aktiviert"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "No hay proveedores configurados"
+            "value": "No hay proveedores habilitados"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun fournisseur configuré"
+            "value": "Aucun fournisseur activé"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "プロバイダーが設定されていません"
+            "value": "有効なプロバイダーがありません"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "설정된 제공업체 없음"
+            "value": "활성화된 공급자 없음"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "尚未配置提供商"
+            "value": "未启用来源"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "尚未設定供應商"
+            "value": "未啟用來源"
           }
         }
       }
@@ -542530,13 +542540,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "短期额度"
+            "value": "短期"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "短期額度"
+            "value": "短期"
           }
         }
       }
@@ -542547,55 +542557,55 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Weekly"
+            "value": "week"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "أسبوعي"
+            "value": "week"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wöchentlich"
+            "value": "week"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Semanal"
+            "value": "week"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hebdomadaire"
+            "value": "week"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "週間利用枠"
+            "value": "week"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "주간 할당량"
+            "value": "week"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "每周额度"
+            "value": "week"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "每週額度"
+            "value": "week"
           }
         }
       }
@@ -542960,55 +542970,55 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Active"
+            "value": "Active requests"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "نشط"
+            "value": "الطلبات النشطة"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aktiv"
+            "value": "Aktive Anfragen"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activo"
+            "value": "Solicitudes activas"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Actif"
+            "value": "Requêtes actives"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用中"
+            "value": "処理中のリクエスト"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "사용 중"
+            "value": "진행 중인 요청"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "当前使用"
+            "value": "活跃请求"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "目前使用"
+            "value": "活躍請求"
           }
         }
       }

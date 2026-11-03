@@ -19,122 +19,110 @@ struct CodexpressSourceRow: View {
     private let strings = CodexpressPanelStrings()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+        let windows = quotaWindows
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(healthColor)
+                    .frame(width: 6, height: 6)
+                    .symbolEffect(.pulse, options: .repeating, isActive: source.activeRequests > 0 && !reduceMotion)
+                    .accessibilityHidden(true)
                 Text(displayName)
-                    .cmuxFont(size: 13, weight: .semibold)
+                    .cmuxFont(size: 12, weight: .semibold)
                     .lineLimit(2)
                     .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-                Image(systemName: source.activeRequests > 0 ? "waveform.path" : "circle.fill")
-                    .cmuxFont(size: source.activeRequests > 0 ? 13 : 7, weight: .semibold)
-                    .foregroundStyle(healthColor)
-                    .symbolEffect(.pulse, options: .repeating, isActive: source.activeRequests > 0 && !reduceMotion)
-                    .accessibilityHidden(true)
-            }
-            HStack(alignment: .top, spacing: 6) {
-                Text(healthLabel)
-                    .foregroundStyle(healthColor)
-                    .lineLimit(2)
-                Spacer(minLength: 0)
-                Text(strings.active)
-                Text(source.activeRequests, format: .number)
-                    .monospacedDigit()
-            }
-            .foregroundStyle(.secondary)
-            .cmuxFont(size: 10.5)
-
-            if isOfficial {
-                quotaLine(strings.shortWindow, window: shortWindow)
-                quotaLine(strings.weekWindow, window: weeklyWindow)
-                freshness(stale: source.quota?.stale, fetchedAt: source.quota?.fetchedAt, failed: source.quota?.error != nil)
-                HStack(spacing: 6) {
-                    Text(strings.cards)
-                    Spacer(minLength: 0)
-                    if let count = source.credits?.availableCount {
-                        Text(count, format: .number).monospacedDigit()
-                    } else {
-                        Text(strings.unknown).foregroundStyle(.secondary)
-                    }
+                Spacer(minLength: 2)
+                HStack(spacing: 2) {
+                    Image(systemName: "arrow.left.arrow.right")
+                    Text(source.activeRequests, format: .number).monospacedDigit()
                 }
-                freshness(stale: source.credits?.stale, fetchedAt: source.credits?.fetchedAt, failed: source.credits?.error != nil)
-            } else {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(strings.balance)
-                    Spacer(minLength: 0)
-                    Text(balanceLabel)
-                        .cmuxFont(size: 14, weight: .semibold)
-                        .monospacedDigit()
-                        .lineLimit(2)
-                        .multilineTextAlignment(.trailing)
+                .cmuxFont(size: 9)
+                .foregroundStyle(.secondary)
+                .help(strings.active)
+                if isStale {
+                    Image(systemName: "clock.badge.exclamationmark")
+                        .cmuxFont(size: 9)
+                        .foregroundStyle(.orange)
                 }
-                freshness(
-                    stale: source.balance?.status == "unavailable" ? true : source.balance?.stale,
-                    fetchedAt: source.balance?.updatedAt,
-                    failed: source.balance?.status == "unavailable"
-                )
-                if source.balance?.estimated == true {
-                    Text(strings.estimated).foregroundStyle(.secondary)
+                Button(action: isTakingOver ? onCancelTakeover : onTakeOver) {
+                    Image(systemName: isTakingOver ? "bolt.circle.fill" : "bolt.fill")
+                        .foregroundStyle(isTakingOver ? Color.accentColor : Color.secondary)
+                        .frame(width: 14, height: 16)
                 }
-                if let pending = source.balance?.unknownSpendRequests, pending > 0 {
-                    Text(strings.spendPending).foregroundStyle(.orange)
-                }
-            }
-
-            if let resetRequest {
-                Text(resetLabel(resetRequest.status))
-                    .foregroundStyle(resetBlocked ? Color.orange : Color.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HStack(spacing: 6) {
-                if isTakingOver {
-                    Button(strings.cancel, action: onCancelTakeover)
-                        .disabled(!actionsEnabled)
-                } else {
-                    Button(strings.preempt, action: onTakeOver)
-                        .disabled(!actionsEnabled || !source.enabled || source.health == "auth_required" || source.health == "exhausted")
-                }
-                Spacer(minLength: 0)
+                .help(isTakingOver ? strings.cancel : strings.preempt)
+                .accessibilityLabel(Text(isTakingOver ? strings.cancel : strings.preempt))
+                .disabled(!actionsEnabled || (!isTakingOver && (source.health == "auth_required" || source.health == "exhausted")))
                 Button(action: onRefresh) {
-                    Image(systemName: "arrow.clockwise")
-                        .frame(width: 18, height: 18)
+                    Image(systemName: isBusy ? "ellipsis" : "arrow.clockwise")
+                        .frame(width: 14, height: 16)
                 }
                 .help(strings.refresh)
                 .accessibilityLabel(Text(strings.refresh))
                 .disabled(!actionsEnabled)
-                if needsRecovery {
-                    Button(action: onRecover) {
-                        Image(systemName: "arrow.uturn.backward")
-                            .frame(width: 18, height: 18)
+                if isOfficial {
+                    Button(action: onRequestReset) {
+                        HStack(spacing: 2) {
+                            Text(strings.reset)
+                            if let count = source.credits?.availableCount {
+                                Text(count, format: .number).monospacedDigit()
+                            }
+                        }
+                        .cmuxFont(size: 9.5)
                     }
-                    .help(strings.recover)
-                    .accessibilityLabel(Text(strings.recover))
-                    .disabled(!actionsEnabled || !source.enabled)
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .help(strings.resetHelp)
+                    .disabled(!actionsEnabled || resetBlocked || (source.credits?.availableCount ?? 0) <= 0)
                 }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+            .buttonStyle(.plain)
+            .cmuxFont(size: 10)
             if isOfficial {
-                Button(action: onRequestReset) {
-                    Text(strings.reset).frame(maxWidth: .infinity)
+                HStack(alignment: .top, spacing: 10) {
+                    if windows.isEmpty {
+                        Text(strings.unknown).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(windows, id: \.name) { window in
+                            quotaCell(window)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help(strings.resetHelp)
-                .disabled(!actionsEnabled || !source.enabled || resetBlocked || (source.credits?.availableCount ?? 0) <= 0)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(strings.balance).cmuxFont(size: 9.5).foregroundStyle(.secondary)
+                    Text(balanceLabel)
+                        .cmuxFont(size: 14, weight: .semibold)
+                        .foregroundStyle(isStale ? Color.orange : ((source.balance?.amount ?? 0) > 0 ? Color.green : Color.secondary))
+                        .monospacedDigit()
+                        .lineLimit(2)
+                    Spacer(minLength: 0)
+                }
+            }
+            if resetBlocked, let resetRequest {
+                Text(resetLabel(resetRequest.status))
+                    .cmuxFont(size: 9.5)
+                    .foregroundStyle(.orange)
+                    .lineLimit(2)
             }
         }
-        .cmuxFont(size: 12)
-        .padding(9)
+        .cmuxFont(size: 10)
+        .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isTakingOver ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.08), lineWidth: 1)
+        .help(detailsHelp)
+        .contextMenu {
+            Button(strings.refresh, action: onRefresh).disabled(!actionsEnabled)
+            if needsRecovery {
+                Button(strings.recover, action: onRecover).disabled(!actionsEnabled)
+            }
         }
         .accessibilityElement(children: .contain)
+    }
+
+
+    private var isStale: Bool {
+        isSnapshotStale || source.balance?.stale == true || source.quota?.stale == true
     }
 
     private var isOfficial: Bool { source.kind == "official" }
@@ -186,67 +174,66 @@ struct CodexpressSourceRow: View {
         guard let currency = balance.currency, !currency.isEmpty else {
             return amount.formatted(.number.precision(.fractionLength(0...4))) + " · " + strings.currencyUnknown
         }
-        return amount.formatted(.currency(code: currency))
+        var formatted = amount.formatted(.currency(code: currency))
+        if let digit = formatted.firstIndex(where: \.isNumber), digit > formatted.startIndex {
+            let preceding = formatted[formatted.index(before: digit)]
+            if preceding.isLetter || preceding.unicodeScalars.contains(where: { $0.properties.generalCategory == .currencySymbol }) {
+                formatted.insert("\u{2009}", at: digit)
+            }
+        }
+        return formatted
     }
 
-    private var shortWindow: CodexpressSnapshot.QuotaWindow? {
-        source.quota?.windows
-            .lazy
-            .filter { ($0.name == "primary" || $0.name == "secondary") && ($0.windowSeconds ?? 0) > 0 && $0.windowSeconds != 604_800 }
-            .min { ($0.windowSeconds ?? .infinity) < ($1.windowSeconds ?? .infinity) }
+    private var quotaWindows: [CodexpressSnapshot.QuotaWindow] {
+        var windows = (source.quota?.windows ?? []).filter { $0.name == "primary" || $0.name == "secondary" }
+        windows.sort { ($0.windowSeconds ?? .greatestFiniteMagnitude) < ($1.windowSeconds ?? .greatestFiniteMagnitude) }
+        if windows.count > 2 { windows.removeSubrange(2...) }
+        return windows
     }
 
-    private var weeklyWindow: CodexpressSnapshot.QuotaWindow? {
-        source.quota?.windows.first { ($0.name == "primary" || $0.name == "secondary") && $0.windowSeconds == 604_800 }
-    }
-
-    @ViewBuilder
-    private func quotaLine(_ label: String, window: CodexpressSnapshot.QuotaWindow?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Text(label)
-                Spacer(minLength: 0)
-                if let used = window?.usedPercent, used.isFinite {
-                    Text(strings.remaining).foregroundStyle(.secondary)
-                    Text((max(0, min(100, 100 - used)) / 100).formatted(.percent.precision(.fractionLength(0...1))))
+    private func quotaCell(_ window: CodexpressSnapshot.QuotaWindow) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(quotaLabel(window)).cmuxFont(size: 9.5).foregroundStyle(.secondary)
+                if let used = window.usedPercent, used.isFinite {
+                    let remaining = max(0, min(100, 100 - used))
+                    Text((remaining / 100).formatted(.percent.precision(.fractionLength(0...1))))
                         .cmuxFont(size: 14, weight: .semibold)
+                        .foregroundStyle(isStale ? Color.secondary : (remaining > 30 ? .green : (remaining > 10 ? .orange : .red)))
                         .monospacedDigit()
+                        .help(strings.remaining)
                 } else {
                     Text(strings.unknown).foregroundStyle(.secondary)
                 }
             }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(strings.resetTime)
-                Spacer(minLength: 0)
-                if let timestamp = window?.resetAt, timestamp.isFinite {
-                    Text(Date(timeIntervalSince1970: timestamp), format: .dateTime.month(.abbreviated).day().hour().minute())
-                        .monospacedDigit()
-                        .multilineTextAlignment(.trailing)
-                } else {
-                    Text(strings.unknown)
-                }
+            if let timestamp = window.resetAt, timestamp.isFinite {
+                Text(Date(timeIntervalSince1970: timestamp), format: .dateTime.month(.twoDigits).day().hour().minute())
+                    .cmuxFont(size: 9)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .help(strings.resetTime)
             }
-            .foregroundStyle(.secondary)
-            .cmuxFont(size: 9.5)
         }
     }
 
-    private func freshness(stale: Bool?, fetchedAt: Double?, failed: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(isSnapshotStale || stale == true ? strings.stale : (stale == false ? strings.fresh : strings.freshnessUnknown))
-                .foregroundStyle(isSnapshotStale || stale == true ? Color.orange : Color.secondary)
-            if failed {
-                Text(strings.unavailable).foregroundStyle(.orange)
-            }
-            Spacer(minLength: 0)
-            if let fetchedAt, fetchedAt.isFinite {
-                Text(Date(timeIntervalSince1970: fetchedAt), format: .dateTime.hour().minute())
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
+    private func quotaLabel(_ window: CodexpressSnapshot.QuotaWindow) -> String {
+        if window.windowSeconds == 604_800 { return strings.weekWindow }
+        if let seconds = window.windowSeconds, seconds.isFinite, seconds > 0 {
+            return String(format: "%gh", seconds / 3600)
         }
-        .lineLimit(2)
-        .cmuxFont(size: 9.5)
+        return strings.remaining
+    }
+
+    private var detailsHelp: String {
+        var lines = [healthLabel]
+        if isStale { lines.append(strings.stale) }
+        if source.balance?.estimated == true { lines.append(strings.estimated) }
+        if (source.balance?.unknownSpendRequests ?? 0) > 0 { lines.append(strings.spendPending) }
+        if source.credits?.stale == true { lines.append(strings.cards + " · " + strings.stale) }
+        if let resetRequest { lines.append(resetLabel(resetRequest.status)) }
+        return lines.joined(separator: "\n")
     }
 
     private var resetBlocked: Bool {
