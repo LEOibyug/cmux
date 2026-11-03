@@ -271,7 +271,7 @@ public struct SidebarSection: View {
             SettingsCardRow(
                 configurationReview: .json("sidebar.wrapWorkspaceTitles"),
                 String(localized: "settings.app.wrapWorkspaceTitles", defaultValue: "Wrap Workspace Titles in Sidebar"),
-                subtitle: String(localized: "settings.app.wrapWorkspaceTitles.subtitle", defaultValue: "Shows long workspace titles in full on multiple lines.")
+                subtitle: String(localized: "settings.app.wrapWorkspaceTitles.subtitle", defaultValue: "Wraps long workspace titles to two lines, then truncates at the end.")
             ) {
                 Toggle("", isOn: Binding(get: { wrapTitles.current }, set: { wrapTitles.set($0) }))
                     .labelsHidden()

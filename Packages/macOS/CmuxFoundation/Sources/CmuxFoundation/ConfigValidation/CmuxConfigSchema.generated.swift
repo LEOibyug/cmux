@@ -1501,8 +1501,8 @@ enum CmuxEmbeddedConfigSchema {
         },
         "wrapWorkspaceTitles": {
           "type": "boolean",
-          "default": false,
-          "description": "Allow workspace titles in the sidebar to wrap to multiple lines instead of truncating after one line."
+          "default": true,
+          "description": "Wrap sidebar workspace titles to at most two lines, then truncate at the end."
         },
         "showWorkspaceDescription": {
           "type": "boolean",

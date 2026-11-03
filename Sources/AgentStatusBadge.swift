@@ -17,7 +17,8 @@ struct AgentStatusBadge: NSViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: AgentStatusBadgeView, context: Context) -> CGSize? {
-        CGSize(width: proposal.width ?? 0, height: nsView.intrinsicContentSize.height)
+        let width = proposal.width ?? nsView.bounds.width
+        return CGSize(width: width, height: nsView.measuredHeight(width: width))
     }
 
     static func dismantleNSView(_ view: AgentStatusBadgeView, coordinator: ()) {

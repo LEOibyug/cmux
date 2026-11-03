@@ -454408,55 +454408,55 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shows long workspace titles in full on multiple lines."
+            "value": "Wraps long workspace titles to two lines, then truncates at the end."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zeigt lange Arbeitsbereichstitel vollständig in mehreren Zeilen an."
+            "value": "Lange Arbeitsbereichstitel werden auf zwei Zeilen umbrochen und danach am Ende gekürzt."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Affiche en entier les titres longs des espaces de travail sur plusieurs lignes."
+            "value": "Les longs titres des espaces de travail passent sur deux lignes, puis sont tronqués à la fin."
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "يعرض عناوين مساحات العمل الطويلة كاملةً على عدة أسطر."
+            "value": "تُلفّ عناوين مساحات العمل الطويلة على سطرين، ثم يُقتطع ما يتجاوزهما من النهاية."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Muestra completos los títulos largos de los espacios de trabajo en varias líneas."
+            "value": "Los títulos largos de los espacios de trabajo ocupan dos líneas y después se truncan al final."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "較長的工作區標題會換行完整顯示。"
+            "value": "較長的工作區標題自動換行，最多兩行，超出後在結尾顯示省略號。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "较长的工作区标题会换行完整显示。"
+            "value": "较长的工作区标题自动换行，最多两行，超出后在末尾显示省略号。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "긴 워크스페이스 제목을 줄바꿈하여 모두 표시합니다."
+            "value": "긴 작업 공간 제목은 두 줄까지 줄바꿈하고 나머지는 끝에서 생략합니다."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "長いワークスペースタイトルを省略せずに複数行で表示します。"
+            "value": "長いワークスペース名は2行まで折り返し、それ以降は末尾を省略します。"
           }
         }
       }

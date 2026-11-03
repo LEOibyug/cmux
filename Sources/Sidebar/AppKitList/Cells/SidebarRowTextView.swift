@@ -50,10 +50,10 @@ final class SidebarRowTextView: NSTextField {
 
     override func layout() {
         super.layout()
-        let textRectSize = (cell?.titleRect(forBounds: bounds) ?? bounds).size
+        let textRectSize = textRect(for: bounds).size
         guard textRectSize != accessibilityLayoutSize else { return }
         accessibilityLayoutSize = textRectSize
-        cachedLinkHitLayout = nil
+        // Width/content changes invalidate the shared layout on demand.
         guard accessibilityLinksWereRequested else { return }
         accessibilityLinksAreStale = !linkDescriptors.isEmpty || !accessibilityLinks.isEmpty
         materializeAccessibilityLinks()
@@ -199,13 +199,30 @@ final class SidebarRowTextView: NSTextField {
 
     func measuredHeight(width: CGFloat) -> CGFloat {
         guard !isHidden else { return 0 }
-        let size = cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude)) ?? .zero
-        return ceil(size.height)
+        let layout = linkHitLayout(textRectSize: NSSize(
+            width: max(1, width - 4), height: CGFloat.greatestFiniteMagnitude
+        ))
+        return ceil(max(layout.usedSize.height, font.map { $0.ascender - $0.descender + $0.leading } ?? 0))
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let rect = textRect(for: bounds)
+        guard rect.width > 0, rect.height > 0 else { return }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.cgContext.clip(to: rect)
+        linkHitLayout(textRectSize: NSSize(
+            width: rect.width, height: CGFloat.greatestFiniteMagnitude
+        )).draw(at: rect.origin)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func textRect(for rect: NSRect) -> NSRect {
+        NSRect(x: rect.minX + 2, y: rect.minY, width: max(0, rect.width - 4), height: rect.height)
     }
 
     private func linkURL(at point: NSPoint) -> URL? {
         guard bounds.contains(point), attributedStringValue.length > 0 else { return nil }
-        let textRect = cell?.titleRect(forBounds: bounds) ?? bounds
+        let textRect = textRect(for: bounds)
         guard textRect.contains(point), textRect.width > 0, textRect.height > 0 else { return nil }
         let layout = linkHitLayout(textRectSize: textRect.size)
         let textPoint = NSPoint(x: point.x - textRect.minX, y: point.y - textRect.minY)
@@ -259,12 +276,12 @@ final class SidebarRowTextView: NSTextField {
     /// row layout stays allocation-free for assistive-technology-only work.
     func accessibilityFrame(forLinkRange characterRange: NSRange) -> NSRect {
         guard !isHidden else { return .zero }
-        let textRect = cell?.titleRect(forBounds: bounds) ?? bounds
+        let textRect = textRect(for: bounds)
         guard textRect.width > 0, textRect.height > 0 else { return .zero }
         let layout = linkHitLayout(textRectSize: textRect.size)
         let frame = layout.frame(forCharacterRange: characterRange)
         guard !frame.isEmpty else { return .zero }
-        return frame.offsetBy(dx: textRect.minX, dy: textRect.minY)
+        return frame.offsetBy(dx: textRect.minX, dy: textRect.minY).intersection(textRect)
     }
 
     /// Releases link state before the owning row takes on a new semantic identity.
@@ -351,6 +368,7 @@ final class SidebarRowTextView: NSTextField {
     }
 
     private func linkHitLayout(textRectSize: NSSize) -> SidebarRowTextLinkLayout {
+        let layoutSize = NSSize(width: max(1, textRectSize.width), height: CGFloat.greatestFiniteMagnitude)
         let layoutLineBreakMode: NSLineBreakMode = if cell?.truncatesLastVisibleLine == true,
                                                      lineBreakMode == .byWordWrapping
                                                      || lineBreakMode == .byCharWrapping {
@@ -359,7 +377,7 @@ final class SidebarRowTextView: NSTextField {
             lineBreakMode
         }
         if let cachedLinkHitLayout,
-           cachedLinkHitLayout.textRectSize == textRectSize,
+           cachedLinkHitLayout.textRectSize == layoutSize,
            cachedLinkHitLayout.lineBreakMode == layoutLineBreakMode,
            cachedLinkHitLayout.maximumNumberOfLines == maximumNumberOfLines,
            cachedLinkHitLayout.attributedString.isEqual(to: attributedStringValue) {
@@ -368,7 +386,7 @@ final class SidebarRowTextView: NSTextField {
 
         let layout = SidebarRowTextLinkLayout(
             attributedString: attributedStringValue,
-            textRectSize: textRectSize,
+            textRectSize: layoutSize,
             lineBreakMode: layoutLineBreakMode,
             maximumNumberOfLines: maximumNumberOfLines
         )

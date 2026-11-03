@@ -23,8 +23,9 @@ struct CodexpressSourceRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(displayName)
                     .cmuxFont(size: 13, weight: .semibold)
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 Image(systemName: source.activeRequests > 0 ? "waveform.path" : "circle.fill")
                     .cmuxFont(size: source.activeRequests > 0 ? 13 : 7, weight: .semibold)
@@ -42,6 +43,7 @@ struct CodexpressSourceRow: View {
                     .monospacedDigit()
             }
             .foregroundStyle(.secondary)
+            .cmuxFont(size: 10.5)
 
             if isOfficial {
                 quotaLine(strings.shortWindow, window: shortWindow)
@@ -62,7 +64,7 @@ struct CodexpressSourceRow: View {
                     Text(strings.balance)
                     Spacer(minLength: 0)
                     Text(balanceLabel)
-                        .fontWeight(.medium)
+                        .cmuxFont(size: 14, weight: .semibold)
                         .monospacedDigit()
                         .lineLimit(2)
                         .multilineTextAlignment(.trailing)
@@ -207,6 +209,7 @@ struct CodexpressSourceRow: View {
                 if let used = window?.usedPercent, used.isFinite {
                     Text(strings.remaining).foregroundStyle(.secondary)
                     Text((max(0, min(100, 100 - used)) / 100).formatted(.percent.precision(.fractionLength(0...1))))
+                        .cmuxFont(size: 14, weight: .semibold)
                         .monospacedDigit()
                 } else {
                     Text(strings.unknown).foregroundStyle(.secondary)
@@ -224,6 +227,7 @@ struct CodexpressSourceRow: View {
                 }
             }
             .foregroundStyle(.secondary)
+            .cmuxFont(size: 9.5)
         }
     }
 
@@ -242,6 +246,7 @@ struct CodexpressSourceRow: View {
             }
         }
         .lineLimit(2)
+        .cmuxFont(size: 9.5)
     }
 
     private var resetBlocked: Bool {

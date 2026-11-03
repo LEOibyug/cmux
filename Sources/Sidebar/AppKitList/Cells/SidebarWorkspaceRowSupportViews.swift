@@ -74,7 +74,7 @@ struct SidebarRowPalette {
 
 }
 
-/// One-line attributed metadata label whose individual Markdown links route
+/// Two-line attributed metadata label whose individual Markdown links route
 /// through the sidebar's existing workspace-selection and URL action path.
 /// The delegate consumes link clicks so AppKit never opens a destination on
 /// its own.
@@ -102,7 +102,7 @@ final class SidebarRowMarkdownTextView: NSTextView, NSTextViewDelegate {
         importsGraphics = false
         textContainerInset = .zero
         textContainer.lineFragmentPadding = 0
-        textContainer.maximumNumberOfLines = 1
+        textContainer.maximumNumberOfLines = 2
         textContainer.lineBreakMode = .byTruncatingTail
         textContainer.widthTracksTextView = true
         textContainer.heightTracksTextView = false
@@ -138,6 +138,9 @@ final class SidebarRowMarkdownTextView: NSTextView, NSTextViewDelegate {
             mutable = NSMutableAttributedString(string: markdown)
         }
         let fullRange = NSRange(location: 0, length: mutable.length)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        mutable.addAttribute(.paragraphStyle, value: paragraph, range: fullRange)
         mutable.addAttributes(
             [
                 .font: font,
@@ -187,9 +190,11 @@ final class SidebarRowMarkdownTextView: NSTextView, NSTextViewDelegate {
         textStorage?.setAttributedString(NSAttributedString(string: ""))
     }
 
-    func measuredHeight(width _: CGFloat) -> CGFloat {
-        guard !isHidden else { return 0 }
-        return lineHeight
+    func measuredHeight(width: CGFloat) -> CGFloat {
+        guard !isHidden, let layoutManager, let textContainer else { return 0 }
+        textContainer.containerSize = NSSize(width: max(1, width), height: CGFloat.greatestFiniteMagnitude)
+        layoutManager.ensureLayout(for: textContainer)
+        return ceil(max(lineHeight, layoutManager.usedRect(for: textContainer).height))
     }
 
     func textView(
@@ -262,10 +267,10 @@ final class SidebarRowIconTextLine: NSView {
 
     private let iconView = NSImageView()
     private let iconLabel = NSTextField(labelWithString: "")
-    private let textView = SidebarRowTextView(lines: 1)
+    private let textView = SidebarRowTextView(lines: 2)
     private let metadataButton = SidebarRowLinkButton()
     private let markdownTextView = SidebarRowMarkdownTextView()
-    private let secondTextView = SidebarRowTextView(lines: 1)
+    private let secondTextView = SidebarRowTextView(lines: 2)
     private var agentBadge: AgentStatusBadgeView?
     private var iconSize: CGFloat = 0
     private var stacked = false
@@ -310,7 +315,7 @@ final class SidebarRowIconTextLine: NSView {
                 addSubview(badge)
             }
             badge.isHidden = false
-            badge.configure(entry: entry, presentation: presentation, fontScale: model.scaled(12) / 12, onOpenURL: onOpenURL)
+            badge.configure(entry: entry, presentation: presentation, fontScale: model.typography.scale, onOpenURL: onOpenURL)
             needsLayout = true
             return
         }
@@ -338,7 +343,7 @@ final class SidebarRowIconTextLine: NSView {
                 }
             }
         }
-        let font = NSFont.systemFont(ofSize: model.scaled(10))
+        let font = NSFont.systemFont(ofSize: model.typography.description)
         if entry.format == .markdown {
             markdownTextView.isHidden = false
             markdownTextView.configure(
@@ -407,13 +412,12 @@ final class SidebarRowIconTextLine: NSView {
         iconView.contentTintColor = color
         iconSize = model.scaled(8) + 4
         textView.stringValue = log.message
-        textView.font = .systemFont(ofSize: model.scaled(10))
+        textView.font = .systemFont(ofSize: model.typography.auxiliary)
         textView.textColor = palette.secondary(0.8)
         needsLayout = true
     }
 
-    /// Branch/dir line with width-adaptive directory candidate selection
-    /// (manual ViewThatFits: longest candidate that fits wins).
+    /// Keeps the fullest alias/home-shortened directory candidate and wraps it.
     func configureBranchLine(
         _ content: BranchLineContent,
         model: SidebarWorkspaceRowModel,
@@ -425,52 +429,43 @@ final class SidebarRowIconTextLine: NSView {
         iconLabel.isHidden = true
         iconSize = 0
         stacked = content.stacked && content.branch != nil && !content.directoryCandidates.isEmpty
-        let font = NSFont.monospacedSystemFont(ofSize: model.scaled(10), weight: .regular)
+        let branchFont = NSFont.monospacedSystemFont(ofSize: model.typography.branch, weight: .regular)
+        let directoryFont = NSFont.monospacedSystemFont(ofSize: model.typography.directory, weight: .regular)
         let color = palette.secondary(0.75)
-        pendingCandidates = content.directoryCandidates
+        let directory = content.directoryCandidates.first
         if stacked {
-            textView.stringValue = content.branch ?? ""
-            textView.font = font
-            textView.textColor = color
+            textView.configurePlainText(content.branch ?? "", font: branchFont, color: color)
             secondTextView.isHidden = false
-            secondTextView.font = font
-            secondTextView.textColor = color
+            secondTextView.configurePlainText(directory ?? "", font: directoryFont, color: color)
         } else if let branch = content.branch {
-            // Inline: "branch · dir" (dot only when both present).
-            pendingInlineBranch = branch
-            textView.font = font
-            textView.textColor = color
+            textView.configurePlainText(branch, font: branchFont, color: color)
+            if let directory {
+                let text = NSMutableAttributedString(string: branch, attributes: [
+                    .font: branchFont, .foregroundColor: color,
+                ])
+                text.append(NSAttributedString(string: " · \(directory)", attributes: [
+                    .font: directoryFont, .foregroundColor: color,
+                ]))
+                textView.attributedStringValue = text
+            }
             secondTextView.isHidden = true
         } else {
-            pendingInlineBranch = nil
-            textView.font = font
-            textView.textColor = color
+            textView.configurePlainText(directory ?? "", font: directoryFont, color: color)
             secondTextView.isHidden = true
         }
         needsLayout = true
     }
 
-    private var pendingCandidates: [String] = []
-    private var pendingInlineBranch: String?
-
-    private func fittingCandidate(width: CGFloat, font: NSFont) -> String {
-        for candidate in pendingCandidates.dropLast() {
-            let candidateWidth = (candidate as NSString).size(withAttributes: [.font: font]).width
-            if ceil(candidateWidth) <= width {
-                return candidate
-            }
-        }
-        return pendingCandidates.last ?? ""
-    }
 
     func measuredHeight(width: CGFloat) -> CGFloat {
-        resolveCandidates(width: width)
-        let first = primaryMeasuredHeight(width: max(10, width - iconSize))
-        let second = secondTextView.isHidden ? 0 : secondTextView.measuredHeight(width: max(10, width - iconSize)) + 1
+        let textWidth = max(10, width - primaryTextInset)
+        let first = primaryMeasuredHeight(width: textWidth)
+        let second = secondTextView.isHidden ? 0 : secondTextView.measuredHeight(width: textWidth) + 1
         return first + second
     }
 
     private func resetPrimaryContent() {
+        stacked = false
         agentBadge?.isHidden = true
         agentBadge?.reset()
         textView.isHidden = true
@@ -484,12 +479,12 @@ final class SidebarRowIconTextLine: NSView {
     }
 
     private func primaryMeasuredHeight(width: CGFloat) -> CGFloat {
-        if let agentBadge, !agentBadge.isHidden { return agentBadge.intrinsicContentSize.height }
+        if let agentBadge, !agentBadge.isHidden { return agentBadge.measuredHeight(width: width) }
         if !markdownTextView.isHidden {
             return markdownTextView.measuredHeight(width: width)
         }
         if !metadataButton.isHidden {
-            return ceil(metadataButton.intrinsicContentSize.height)
+            return metadataButton.measuredHeight(width: width)
         }
         return textView.measuredHeight(width: width)
     }
@@ -502,27 +497,13 @@ final class SidebarRowIconTextLine: NSView {
         return metadataButton.isHidden ? textView : metadataButton
     }
 
-    private func resolveCandidates(width: CGFloat) {
-        guard let font = textView.font else { return }
-        let available = max(10, width - iconSize)
-        if stacked {
-            if !pendingCandidates.isEmpty {
-                secondTextView.stringValue = fittingCandidate(width: available, font: font)
-            }
-        } else if let branch = pendingInlineBranch {
-            let dir = pendingCandidates.isEmpty ? nil : fittingCandidate(
-                width: available - ceil((branch as NSString).size(withAttributes: [.font: font]).width) - 10,
-                font: font
-            )
-            textView.stringValue = dir.map { "\(branch) · \($0)" } ?? branch
-        } else if !pendingCandidates.isEmpty {
-            textView.stringValue = fittingCandidate(width: available, font: font)
-        }
+    private var primaryTextInset: CGFloat {
+        !iconView.isHidden || !iconLabel.isHidden ? iconSize + 4 : 0
     }
+
 
     override func layout() {
         super.layout()
-        resolveCandidates(width: bounds.width)
         var x: CGFloat = 0
         if !iconView.isHidden || !iconLabel.isHidden {
             let side = iconSize
@@ -546,9 +527,8 @@ final class SidebarRowIconTextLine: NSView {
 final class SidebarRowPullRequestLine: NSView {
     private let iconView = SidebarRowPullRequestIconView()
     private let titleButton = SidebarRowLinkButton()
-    private let titleLabel = SidebarRowTextView(lines: 1)
-    private let statusLabel = SidebarRowTextView(lines: 1)
-    private var lineHeight: CGFloat = 14
+    private let titleLabel = SidebarRowTextView(lines: 2)
+    private let statusLabel = SidebarRowTextView(lines: 2)
     private var iconSize = NSSize.zero
 
     override var isFlipped: Bool { true }
@@ -573,7 +553,7 @@ final class SidebarRowPullRequestLine: NSView {
         onOpen: @escaping () -> Void
     ) {
         let color = palette.secondary(0.75)
-        let font = NSFont.systemFont(ofSize: model.scaled(10), weight: .semibold)
+        let font = NSFont.systemFont(ofSize: model.typography.auxiliary, weight: .semibold)
         iconView.configure(status: display.status, color: color, fontScale: model.fontScale)
         iconSize = SidebarRowPullRequestIconView.size(status: display.status, fontScale: model.fontScale)
         let title = "\(display.label) #\(display.number)"
@@ -600,12 +580,26 @@ final class SidebarRowPullRequestLine: NSView {
         statusLabel.font = font
         statusLabel.textColor = color
         alphaValue = display.isStale ? 0.5 : 1
-        lineHeight = max(iconSize.height, ceil(font.ascender - font.descender + font.leading))
         needsLayout = true
     }
 
     func measuredHeight(width: CGFloat) -> CGFloat {
-        lineHeight
+        let sizes = textSizes(width: width)
+        return max(iconSize.height, sizes.title.height, sizes.status.height)
+    }
+
+    private func textSizes(width: CGFloat) -> (title: NSSize, status: NSSize) {
+        let available = max(2, width - iconSize.width - 8)
+        let statusWidth = min(ceil(statusLabel.sidebarNaturalCellSize.width), available / 2)
+        let naturalTitleWidth = titleButton.isHidden
+            ? titleLabel.sidebarNaturalCellSize.width : titleButton.intrinsicContentSize.width
+        let titleWidth = min(ceil(naturalTitleWidth), max(1, available - statusWidth))
+        let titleHeight = titleButton.isHidden
+            ? titleLabel.measuredHeight(width: titleWidth) : titleButton.measuredHeight(width: titleWidth)
+        return (
+            NSSize(width: titleWidth, height: titleHeight),
+            NSSize(width: statusWidth, height: statusLabel.measuredHeight(width: statusWidth))
+        )
     }
 
     override func layout() {
@@ -614,25 +608,16 @@ final class SidebarRowPullRequestLine: NSView {
             x: 0, y: (bounds.height - iconSize.height) / 2,
             width: iconSize.width, height: iconSize.height
         )
-        // sidebarNaturalCellSize, never intrinsicContentSize: see the
-        // extension note — a pooled truncating label laid out narrow once
-        // reports the truncated width forever ("PR #4  o…").
-        let statusSize = statusLabel.sidebarNaturalCellSize
+        let sizes = textSizes(width: bounds.width)
         let titleX = iconSize.width + 4
-        // The short status word keeps its natural width; the title absorbs
-        // any shortfall (it is the long, truncatable part).
-        let titleWidth = max(10, bounds.width - titleX - ceil(statusSize.width) - 8)
         let title: NSView = titleButton.isHidden ? titleLabel : titleButton
-        let titleSize = titleButton.isHidden
-            ? titleLabel.sidebarNaturalCellSize
-            : titleButton.intrinsicContentSize
         title.frame = NSRect(
-            x: titleX, y: (bounds.height - titleSize.height) / 2,
-            width: min(ceil(titleSize.width), titleWidth), height: titleSize.height
+            x: titleX, y: (bounds.height - sizes.title.height) / 2,
+            width: sizes.title.width, height: sizes.title.height
         )
         statusLabel.frame = NSRect(
-            x: title.frame.maxX + 4, y: (bounds.height - statusSize.height) / 2,
-            width: ceil(statusSize.width), height: statusSize.height
+            x: title.frame.maxX + 4, y: (bounds.height - sizes.status.height) / 2,
+            width: sizes.status.width, height: sizes.status.height
         )
     }
 }
@@ -641,6 +626,40 @@ final class SidebarRowPullRequestLine: NSView {
 @MainActor
 final class SidebarRowLinkButton: NSButton {
     private var onClick: (() -> Void)?
+    private var cachedTextLayout: SidebarRowTextLinkLayout?
+
+    override var isFlipped: Bool { true }
+
+    override var intrinsicContentSize: NSSize {
+        let size = attributedTitle.size()
+        return NSSize(width: ceil(size.width), height: ceil(size.height))
+    }
+
+    func measuredHeight(width: CGFloat) -> CGFloat {
+        ceil(textLayout(width: width).usedSize.height)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.cgContext.clip(to: bounds)
+        textLayout(width: bounds.width).draw(at: bounds.origin)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func textLayout(width: CGFloat) -> SidebarRowTextLinkLayout {
+        let size = NSSize(width: max(1, width), height: CGFloat.greatestFiniteMagnitude)
+        if let cachedTextLayout,
+           cachedTextLayout.textRectSize == size,
+           cachedTextLayout.attributedString.isEqual(to: attributedTitle) {
+            return cachedTextLayout
+        }
+        let layout = SidebarRowTextLinkLayout(
+            attributedString: attributedTitle, textRectSize: size,
+            lineBreakMode: .byTruncatingTail, maximumNumberOfLines: 2
+        )
+        cachedTextLayout = layout
+        return layout
+    }
 
     init() {
         super.init(frame: .zero)
@@ -670,12 +689,18 @@ final class SidebarRowLinkButton: NSButton {
             attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
         }
         attributedTitle = NSAttributedString(string: title, attributes: attributes)
+        cachedTextLayout = nil
+        invalidateIntrinsicContentSize()
+        needsDisplay = true
         self.toolTip = toolTip
         self.onClick = onClick
     }
 
     func reset() {
         attributedTitle = NSAttributedString(string: "")
+        cachedTextLayout = nil
+        invalidateIntrinsicContentSize()
+        needsDisplay = true
         toolTip = nil
         onClick = nil
     }

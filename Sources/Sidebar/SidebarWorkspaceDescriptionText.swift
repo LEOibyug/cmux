@@ -24,7 +24,7 @@ struct SidebarWorkspaceDescriptionText: View {
         self.customForegroundColor = customForegroundColor
         self.fontScale = fontScale
     }
-    private static let maxDisplayedLines = 12
+    private static let maxDisplayedLines = 2
     private static let maxDisplayedCharacters = 4096
 
     var renderedContent: (displayMarkdown: String, renderedMarkdown: AttributedString?) {
@@ -50,7 +50,7 @@ struct SidebarWorkspaceDescriptionText: View {
             text = Text(content.displayMarkdown)
         }
         return text
-            .cmuxFont(size: 10.5 * fontScale)
+            .cmuxFont(size: SidebarWorkspaceTypography(scale: fontScale).description)
             .foregroundColor(foregroundColor)
             .multilineTextAlignment(.leading)
             .lineLimit(Self.maxDisplayedLines)

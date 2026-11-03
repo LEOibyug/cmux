@@ -169,7 +169,7 @@ final class SidebarRowPullRequestIconView: NSView {
 final class SidebarRowProgressView: NSView {
     private let trackView = NSView()
     private let fillView = NSView()
-    let label = NSTextField(labelWithString: "")
+    let label = SidebarRowTextView(lines: 2)
     private var fraction: CGFloat = 0
     private var barHeight: CGFloat = 3
 
@@ -181,8 +181,6 @@ final class SidebarRowProgressView: NSView {
         fillView.wantsLayer = true
         addSubview(trackView)
         addSubview(fillView)
-        label.lineBreakMode = .byTruncatingTail
-        label.maximumNumberOfLines = 1
         addSubview(label)
     }
 
@@ -210,9 +208,8 @@ final class SidebarRowProgressView: NSView {
         needsLayout = true
     }
 
-    static func height(barHeight: CGFloat, labelText: String?, labelFont: NSFont) -> CGFloat {
-        guard labelText != nil else { return barHeight }
-        return barHeight + 2 + ceil(labelFont.ascender - labelFont.descender + labelFont.leading)
+    func measuredHeight(width: CGFloat) -> CGFloat {
+        barHeight + (label.isHidden ? 0 : 2 + label.measuredHeight(width: width))
     }
 
     override func layout() {
@@ -222,8 +219,10 @@ final class SidebarRowProgressView: NSView {
         fillView.frame = NSRect(x: 0, y: 0, width: bounds.width * fraction, height: barHeight)
         fillView.layer?.cornerRadius = barHeight / 2
         if !label.isHidden {
-            let size = label.sidebarNaturalCellSize
-            label.frame = NSRect(x: 0, y: barHeight + 2, width: min(ceil(size.width), bounds.width), height: size.height)
+            label.frame = NSRect(
+                x: 0, y: barHeight + 2, width: bounds.width,
+                height: label.measuredHeight(width: bounds.width)
+            )
         }
     }
 }

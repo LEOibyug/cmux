@@ -40,10 +40,10 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
     private var trailingSpinner: GPUSpinnerNSView?
     private let closeButton = SidebarHeaderGlyphButton()
     // Detail slots
-    private let descriptionView = SidebarRowTextView(lines: 12)
+    private let descriptionView = SidebarRowTextView(lines: 2)
     private let subtitleView = SidebarRowTextView(lines: 2)
-    private let remoteTargetView = SidebarRowTextView(lines: 1)
-    private let remoteStatusView = SidebarRowTextView(lines: 1)
+    private let remoteTargetView = SidebarRowTextView(lines: 2)
+    private let remoteStatusView = SidebarRowTextView(lines: 2)
     private let remoteReconnectButton = NSButton()
     private var metadataRows: [SidebarRowIconTextLine] = []
     private let metadataToggleButton = SidebarRowLinkButton()
@@ -597,8 +597,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         reconcileStatusPopover(model: model, showsAnchor: showsStatusGlyph)
         configureCompactStatusGlyph(model: model, palette: palette)
 
-        // Compact status rows are one line, so title wrapping does not undo it.
-        let titleLineLimit = settings.wrapsWorkspaceTitles && snapshot.compactStatusGlyph == nil ? 8 : 1
+        let titleLineLimit = settings.wrapsWorkspaceTitles ? 2 : 1
         titleView.maximumNumberOfLines = titleLineLimit
         titleView.lineBreakMode = titleLineLimit == 1 ? .byTruncatingTail : .byWordWrapping
         let boundedTitle = snapshot.displayTitle.sidebarBoundedDisplayString(
@@ -614,7 +613,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         }
 #endif
         titleView.stringValue = boundedTitle
-        titleView.font = .systemFont(ofSize: model.scaled(12.5), weight: .semibold)
+        titleView.font = .systemFont(ofSize: model.typography.title, weight: .semibold)
         titleView.textColor = palette.primaryText
         titleView.alphaValue = snapshot.isMuted ? 0.6 : 1
 
@@ -644,20 +643,20 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         let description = snapshot.customDescription
         descriptionView.isHidden = description == nil
         if let description {
-            let display = description.sidebarBoundedDisplayString(maxDisplayedLines: 12, maxDisplayedCharacters: 4096)
+            let display = description.sidebarBoundedDisplayString(maxDisplayedLines: 2, maxDisplayedCharacters: 4096)
             let customDescriptionColor = settings.workspaceDescriptionColorHex.flatMap(NSColor.init(hex:))
             let descriptionColor = customDescriptionColor ?? palette.secondary(0.84, inactiveOpacity: 0.95)
             if let rendered = SidebarMarkdownRenderer(markdown: display).workspaceDescription {
                 descriptionView.configureAttributedText(
                     rendered,
-                    font: .systemFont(ofSize: model.scaled(10.5)),
+                    font: .systemFont(ofSize: model.typography.description),
                     color: descriptionColor,
                     linkColor: customDescriptionColor ?? palette.linkText
                 )
             } else {
                 descriptionView.configurePlainText(
                     display,
-                    font: .systemFont(ofSize: model.scaled(10.5)),
+                    font: .systemFont(ofSize: model.typography.description),
                     color: descriptionColor
                 )
             }
@@ -672,7 +671,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         let effectiveSubtitle = snapshot.compactStatusGlyph != nil
             ? nil
             : model.latestNotificationText ?? conversationSubtitle
-        let subtitleLineLimit = model.latestNotificationText == nil ? 2 : settings.notificationMessageLineLimit
+        let subtitleLineLimit = 2
         subtitleView.isHidden = effectiveSubtitle == nil
         if let effectiveSubtitle {
             subtitleView.maximumNumberOfLines = subtitleLineLimit
@@ -683,7 +682,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
             subtitleView.stringValue = model.latestNotificationText == nil
                 ? display
                 : SidebarMarkdownRenderer(markdown: display).plainText
-            subtitleView.font = .systemFont(ofSize: model.scaled(10))
+            subtitleView.font = .systemFont(ofSize: model.typography.description)
             subtitleView.textColor = palette.secondary(0.8)
         }
 
@@ -694,18 +693,17 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         remoteReconnectButton.isHidden = !(showsRemote && snapshot.showsRemoteReconnectAffordance)
         if showsRemote {
             remoteTargetView.stringValue = snapshot.remoteWorkspaceSidebarText ?? ""
-            remoteTargetView.font = .monospacedSystemFont(ofSize: model.scaled(10), weight: .regular)
+            remoteTargetView.font = .monospacedSystemFont(ofSize: model.typography.directory, weight: .regular)
             remoteTargetView.textColor = palette.secondary(0.8)
-            remoteTargetView.lineBreakMode = .byTruncatingMiddle
             remoteTargetView.toolTip = snapshot.remoteStateHelpText
             remoteStatusView.stringValue = snapshot.remoteConnectionStatusText
-            remoteStatusView.font = .systemFont(ofSize: model.scaled(9), weight: .medium)
+            remoteStatusView.font = .systemFont(ofSize: model.typography.auxiliary, weight: .medium)
             remoteStatusView.textColor = palette.secondary(0.58)
             if !remoteReconnectButton.isHidden {
                 remoteReconnectButton.attributedTitle = NSAttributedString(
                     string: String(localized: "sidebar.remote.reconnect.button", defaultValue: "Reconnect"),
                     attributes: [
-                        .font: NSFont.systemFont(ofSize: model.scaled(9), weight: .semibold),
+                        .font: NSFont.systemFont(ofSize: model.typography.auxiliary, weight: .semibold),
                         .foregroundColor: palette.secondary(0.9),
                     ]
                 )
@@ -930,7 +928,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
                 self?.actions?.onOpenStatusURL(url)
             }
         }
-        let toggleFont = NSFont.systemFont(ofSize: model.scaled(10), weight: .semibold)
+        let toggleFont = NSFont.systemFont(ofSize: model.typography.description, weight: .semibold)
         let toggleColor = palette.secondary(0.9, inactiveOpacity: 0.9)
         metadataToggleButton.isHidden = allEntries.count <= 3
         if !metadataToggleButton.isHidden {
@@ -955,7 +953,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
                 onClick: { [weak self] in self?.actions?.onToggleMarkdownExpansion() }
             )
         }
-        Self.pool(&markdownBlocks, count: blocks.count, parent: contentContainer) { SidebarRowTextView(lines: 12) }
+        Self.pool(&markdownBlocks, count: blocks.count, parent: contentContainer) { SidebarRowTextView(lines: 2) }
         for (index, block) in blocks.enumerated() {
             let view = markdownBlocks[index]
             view.onOpenLink = { [weak self] url in
@@ -963,18 +961,18 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
                 self.actions?.commands.updateSelection()
                 self.actions?.onOpenStatusURL(url)
             }
-            let display = block.markdown.sidebarBoundedDisplayString(maxDisplayedLines: 12, maxDisplayedCharacters: 4096)
+            let display = block.markdown.sidebarBoundedDisplayString(maxDisplayedLines: 2, maxDisplayedCharacters: 4096)
             if let rendered = SidebarMetadataMarkdownRenderer.rendered(display) {
                 view.configureAttributedText(
                     rendered,
-                    font: .systemFont(ofSize: model.scaled(10)),
+                    font: .systemFont(ofSize: model.typography.description),
                     color: palette.secondary(0.8),
                     linkColor: palette.linkText
                 )
             } else {
                 view.configurePlainText(
                     display,
-                    font: .systemFont(ofSize: model.scaled(10)),
+                    font: .systemFont(ofSize: model.typography.description),
                     color: palette.secondary(0.8)
                 )
             }
@@ -990,7 +988,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         let progress = model.settings.visibleAuxiliaryDetails.showsProgress ? model.snapshot.progress : nil
         progressView.isHidden = progress == nil
         if let progress {
-            let labelFont = NSFont.systemFont(ofSize: model.scaled(9))
+            let labelFont = NSFont.systemFont(ofSize: model.typography.auxiliary)
             progressView.configure(
                 fraction: CGFloat(progress.value),
                 barHeight: max(3, 3 * model.fontScale),
@@ -1029,10 +1027,10 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
                         stacked: true
                     ))
                 }
-            } else if !snapshot.compactBranchDirectoryCandidates.isEmpty {
+            } else if snapshot.compactGitBranchSummaryText != nil || !snapshot.compactDirectoryCandidates.isEmpty {
                 lines.append(.init(
-                    branch: nil,
-                    directoryCandidates: snapshot.compactBranchDirectoryCandidates,
+                    branch: snapshot.compactGitBranchSummaryText,
+                    directoryCandidates: snapshot.compactDirectoryCandidates,
                     stacked: false
                 ))
             }
@@ -1073,7 +1071,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         for (index, port) in ports.enumerated() {
             portButtons[index].configure(
                 title: SidebarPortDisplayText.label(for: port),
-                font: .monospacedSystemFont(ofSize: model.scaled(10), weight: .regular),
+                font: .monospacedSystemFont(ofSize: model.typography.auxiliary, weight: .regular),
                 color: palette.secondary(0.75),
                 underlined: true,
                 toolTip: String(localized: "sidebar.port.openTooltip", defaultValue: "Open localhost port")
@@ -1176,7 +1174,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
                 self?.removeInlineRenameSession()
             }
         )
-        session.field.font = .systemFont(ofSize: model.scaled(12.5), weight: .semibold)
+        session.field.font = .systemFont(ofSize: model.typography.title, weight: .semibold)
         session.field.inlineRenameTextColor = palette(model).selectedForeground(1.0)
         renameSession = session
         titleView.isHidden = true
@@ -1272,7 +1270,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         var x = leading
         let badgeSide = 16 * model.fontScale
         let spinnerSide = max(10, 12 * model.fontScale)
-        let firstLineCenter = model.scaled(12.5) * 0.6 + y
+        let firstLineCenter = model.typography.title * 0.6 + y
 
         func place(_ view: NSView, size: NSSize, centerY: CGFloat) {
             guard apply else { return }
@@ -1375,20 +1373,25 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         if !remoteTargetView.isHidden {
             y += model.latestNotificationText == nil ? 1 : 2
             y += spacing
-            let statusSize = remoteStatusView.isHidden ? .zero : remoteStatusView.sidebarNaturalCellSize
             let reconnectSize = remoteReconnectButton.isHidden ? .zero : remoteReconnectButton.intrinsicContentSize
-            let rightWidth = statusSize.width + (reconnectSize.width > 0 ? reconnectSize.width + 6 : 0)
-            let targetWidth = max(10, contentWidth - rightWidth - 6)
-            let lineHeight = max(remoteTargetView.sidebarNaturalCellSize.height, statusSize.height, reconnectSize.height)
+            let reconnectWidth = min(reconnectSize.width, contentWidth / 3)
+            let availableWidth = max(10, contentWidth - (reconnectWidth > 0 ? reconnectWidth + 6 : 0))
+            let statusWidth = remoteStatusView.isHidden ? 0 : min(
+                ceil(remoteStatusView.sidebarNaturalCellSize.width), max(1, (availableWidth - 6) * 0.4)
+            )
+            let targetWidth = max(1, availableWidth - (statusWidth > 0 ? statusWidth + 6 : 0))
+            let targetHeight = remoteTargetView.measuredHeight(width: targetWidth)
+            let statusHeight = remoteStatusView.measuredHeight(width: statusWidth)
+            let lineHeight = max(targetHeight, statusHeight, reconnectSize.height)
             if apply {
-                remoteTargetView.frame = NSRect(x: leading, y: y, width: targetWidth, height: lineHeight)
-                var rightX = trailing - statusSize.width
+                remoteTargetView.frame = NSRect(x: leading, y: y, width: targetWidth, height: targetHeight)
+                let statusX = leading + targetWidth + 6
+                remoteStatusView.frame = NSRect(x: statusX, y: y, width: statusWidth, height: statusHeight)
                 if !remoteReconnectButton.isHidden {
-                    rightX = trailing - reconnectSize.width
-                    remoteReconnectButton.frame = NSRect(x: rightX, y: y, width: reconnectSize.width, height: lineHeight)
-                    rightX -= statusSize.width + 6
+                    remoteReconnectButton.frame = NSRect(
+                        x: trailing - reconnectWidth, y: y, width: reconnectWidth, height: lineHeight
+                    )
                 }
-                remoteStatusView.frame = NSRect(x: rightX, y: y, width: statusSize.width, height: lineHeight)
             }
             y += lineHeight
         }
@@ -1401,7 +1404,8 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         }
         if !metadataToggleButton.isHidden {
             y += 2
-            let size = metadataToggleButton.intrinsicContentSize
+            let size = NSSize(width: min(metadataToggleButton.intrinsicContentSize.width, contentWidth),
+                              height: metadataToggleButton.measuredHeight(width: contentWidth))
             if apply {
                 metadataToggleButton.frame = NSRect(
                     x: leading, y: y, width: min(size.width, contentWidth), height: size.height
@@ -1417,7 +1421,8 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         }
         if !markdownToggleButton.isHidden {
             y += 2
-            let size = markdownToggleButton.intrinsicContentSize
+            let size = NSSize(width: min(markdownToggleButton.intrinsicContentSize.width, contentWidth),
+                              height: markdownToggleButton.measuredHeight(width: contentWidth))
             if apply {
                 markdownToggleButton.frame = NSRect(
                     x: leading, y: y, width: min(size.width, contentWidth), height: size.height
@@ -1433,11 +1438,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         }
         if !progressView.isHidden {
             y += spacing
-            let height = SidebarRowProgressView.height(
-                barHeight: max(3, 3 * model.fontScale),
-                labelText: model.snapshot.progress?.label,
-                labelFont: .systemFont(ofSize: model.scaled(9))
-            )
+            let height = progressView.measuredHeight(width: contentWidth)
             if apply { progressView.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
             y += height
         }
@@ -1479,7 +1480,8 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
             var portX = leading
             var lineHeight: CGFloat = 0
             for button in visiblePorts {
-                let size = button.intrinsicContentSize
+                let buttonWidth = min(button.intrinsicContentSize.width, contentWidth)
+                let size = NSSize(width: buttonWidth, height: button.measuredHeight(width: buttonWidth))
                 if portX > leading, portX + size.width > trailing {
                     // Wrap to a new line instead of laying ports past the
                     // row's trailing edge (unbounded growth with many ports).
