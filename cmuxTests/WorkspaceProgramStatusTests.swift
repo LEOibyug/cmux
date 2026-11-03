@@ -39,6 +39,31 @@ struct WorkspaceProgramStatusTests {
         #expect(workspace.statusEntries[Workspace.programStatusKey]?.value == "brew · Needs sign-in")
     }
 
+    @Test func nativeOMPStatusesDriveBadgesWithoutHookPIDs() throws {
+        let workspace = Workspace()
+        let firstPanelId = try #require(workspace.focusedPanelId)
+        let secondPanel = try #require(
+            workspace.newTerminalSplit(from: firstPanelId, orientation: .horizontal, focus: false)
+        )
+        let firstTabId = try #require(workspace.surfaceIdFromPanelId(firstPanelId))
+        let secondTabId = try #require(workspace.surfaceIdFromPanelId(secondPanel.id))
+        workspace.applyProgramStatus(ProgramStatusReport(state: .working, app: "omp"), panelId: firstPanelId)
+        workspace.applyProgramStatus(ProgramStatusReport(state: .done, app: "omp"), panelId: secondPanel.id)
+
+        let workingEntry = try #require(workspace.agentStatusEntry(key: Workspace.programStatusKey, panelId: firstPanelId))
+        #expect(AgentStatusPresentation(entry: workingEntry)?.state == .running)
+        #expect(workspace.bonsplitController.tab(firstTabId)?.statusBadge?.isAnimating == true)
+        #expect(workspace.bonsplitController.tab(secondTabId)?.statusBadge?.isAnimating == false)
+        #expect(workspace.agentPIDs.isEmpty)
+        #expect(workspace.agentLifecycleStatesByPanelId.isEmpty)
+
+        workspace.applyProgramStatus(ProgramStatusReport(state: .clear), panelId: firstPanelId)
+        #expect(workspace.bonsplitController.tab(firstTabId)?.statusBadge == nil)
+        #expect(workspace.bonsplitController.tab(secondTabId)?.statusBadge?.isAnimating == false)
+        workspace.resetSidebarContext(reason: "native_status_badge_test")
+        #expect(workspace.bonsplitController.tab(secondTabId)?.statusBadge == nil)
+    }
+
     @Test func workingShowsPercentAndPromptDropsTransientRecords() throws {
         let workspace = Workspace()
         let panelId = try #require(workspace.focusedPanelId)
