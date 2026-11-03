@@ -30,6 +30,11 @@ with a rotating indicator for working, amber for blocked, red for error, and gre
 for done. Reduce Motion keeps the text and symbol static. Native OMP reports use
 this path without a hook PID; conversation age does not affect the presentation.
 
+When the same terminal also has a hook report for that agent, its live native report
+owns both status displays, even if a delayed hook arrives later. The hook is retained
+and becomes visible again when native status is removed. Unrelated program reports
+and hook reports from other terminals are not hidden.
+
 OMP 18.16 reports an `ask` prompt as `blocked:kind=question` and an approval prompt as
 `blocked:kind=permission`. cmux already handles both as needs-input; no text matching
 or extra OMP extension is needed. Finishing a turn is distinct from a blocking question.
