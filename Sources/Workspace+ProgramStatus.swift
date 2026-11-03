@@ -94,6 +94,7 @@ extension Workspace {
         programStatusStoresByPanelId.removeAll()
         programStatusUrgencyByPanelId.removeAll()
         for panelId in clearedPanelIds {
+            removePanelStatusEntry(key: Self.programStatusKey, panelId: panelId)
             CmuxEventBus.shared.publishProgramStatusChanged(
                 workspaceId: id,
                 surfaceId: panelId,
@@ -101,6 +102,7 @@ extension Workspace {
                 store: ProgramStatusRecordStore()
             )
         }
+        refreshProgramStatusWorkspaceEntry()
     }
 
     /// Drops a closed or detached terminal's records. Consumers saw those

@@ -1,7 +1,7 @@
 import CmuxSidebar
 import Foundation
 
-/// One hook-owned status presentation shared by workspace rows and surface tabs.
+/// One hook or native-terminal status presentation shared by workspace rows and surface tabs.
 struct AgentStatusPresentation: Equatable, Sendable {
     enum State: Equatable, Sendable {
         case running
@@ -16,7 +16,8 @@ struct AgentStatusPresentation: Equatable, Sendable {
     let symbolName: String
 
     init?(entry: SidebarStatusEntry) {
-        guard AgentHibernationLifecycleStatusKeys.isAllowed(entry.key) else { return nil }
+        guard AgentHibernationLifecycleStatusKeys.isAllowed(entry.key)
+            || entry.key == Workspace.programStatusKey else { return nil }
         let icon = entry.icon.map { $0.hasPrefix("sf:") ? String($0.dropFirst(3)) : $0 }
         if icon == "exclamationmark.triangle.fill" || icon == "xmark.circle.fill" {
             state = .error

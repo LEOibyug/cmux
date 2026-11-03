@@ -41,13 +41,18 @@ extension Workspace {
               let entries = agentStatusEntriesByPanelId[panelId] else { return nil }
         var newest: SidebarStatusEntry?
         for entry in entries.values {
-            guard AgentHibernationLifecycleStatusKeys.allowedStatusKeys.contains(entry.key),
-                  statusEntries[entry.key] != nil else { continue }
-            let ownsLocalPID = agentPIDKeysByPanelId[panelId]?.contains {
-                agentStatusKey(forAgentPIDKey: $0) == entry.key
-            } ?? false
-            guard ownsLocalPID || (showsRelayHostAgentStatus
-                && agentLifecycleStatesByPanelId[panelId]?[entry.key] != nil) else { continue }
+            guard statusEntries[entry.key] != nil else { continue }
+            if entry.key == Self.programStatusKey {
+                // OSC reports belong to their terminal store, not a hook PID.
+                guard programStatusStoresByPanelId[panelId]?.mostUrgentRecord() != nil else { continue }
+            } else {
+                guard AgentHibernationLifecycleStatusKeys.allowedStatusKeys.contains(entry.key) else { continue }
+                let ownsLocalPID = agentPIDKeysByPanelId[panelId]?.contains {
+                    agentStatusKey(forAgentPIDKey: $0) == entry.key
+                } ?? false
+                guard ownsLocalPID || (showsRelayHostAgentStatus
+                    && agentLifecycleStatesByPanelId[panelId]?[entry.key] != nil) else { continue }
+            }
             if let current = newest, !isSidebarStatusEntryLessCurrent(current, than: entry) {
                 continue
             }
