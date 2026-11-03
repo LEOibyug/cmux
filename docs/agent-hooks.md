@@ -20,6 +20,8 @@ title and as a compact badge beside that terminal's surface-tab title. Running
 work uses a blue rotating indicator; completed/idle turns are green, waiting or
 needs-input states amber, and reported failures red. Text and symbols remain
 visible when Reduce Motion disables animation.
+Tab captions use short localized state labels without repeating the provider name,
+leaving room for the conversation title.
 
 OMP uses its existing session extension: prompt submission starts activity and
 the final turn-end settles it. No additional plugin or model request is needed.

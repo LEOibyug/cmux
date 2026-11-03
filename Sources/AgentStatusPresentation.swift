@@ -51,6 +51,17 @@ struct AgentStatusPresentation: Equatable, Sendable {
 
     var isAnimating: Bool { state == .running }
 
+    /// The tab already carries the provider icon; omit its repeated name.
+    var tabText: String {
+        switch state {
+        case .running: String(localized: "agent.generic.status.running", defaultValue: "Running")
+        case .waiting: String(localized: "agent.generic.status.waiting", defaultValue: "Waiting")
+        case .needsInput: String(localized: "feed.status.needsInput", defaultValue: "Needs input")
+        case .completed: String(localized: "sidebar.status.done", defaultValue: "Done")
+        case .error: String(localized: "agent.generic.notification.subtitle.error", defaultValue: "Error")
+        }
+    }
+
     // Opaque palettes retain contrast on both the sidebar's blue selection and
     // unselected light/dark chrome; selection never washes the status to gray.
     var foregroundHex: String {
