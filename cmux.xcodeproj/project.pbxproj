@@ -238,6 +238,9 @@
 		A9E050000000000000000002 /* AgentSessionWebRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9E050000000000000000001 /* AgentSessionWebRendererTests.swift */; };
 		A9E02000000000000000000D /* AgentSessionWebTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9E01000000000000000000D /* AgentSessionWebTheme.swift */; };
 		A9F200000000000000000014 /* AgentSessionWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F100000000000000000014 /* AgentSessionWebView.swift */; };
+		D80E6AF6BF9D3D7B2FF6AD28 /* AgentStatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8F28346FFF8271CD7930F0B /* AgentStatusBadge.swift */; };
+		26941DC22BD52DEBF7F0A7EC /* AgentStatusBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC6F4F9BF05378FBD0B5BD6D /* AgentStatusBadgeView.swift */; };
+		C51FE387ADD17CC8BB4D5C39 /* AgentStatusPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FB36E306BB4921F173777BB /* AgentStatusPresentation.swift */; };
 		394139F275D94FB49356E9C7 /* AgentSurfaceResumeBindingClearOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A87C45F990549A8A0A6EE01 /* AgentSurfaceResumeBindingClearOutcome.swift */; };
 		2F9C29446E65820D941FA4DA /* AgentWakeFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 582CBC2A17C1808307BA9DD6 /* AgentWakeFailure.swift */; };
 		2A64B77D7128036F9D4F51FB /* AgentWakeFailureBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5073EBB80C7C6BD0741D7 /* AgentWakeFailureBanner.swift */; };
@@ -4384,6 +4387,9 @@
 		A9E050000000000000000001 /* AgentSessionWebRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSessionWebRendererTests.swift; sourceTree = "<group>"; };
 		A9E01000000000000000000D /* AgentSessionWebTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/AgentSessionWebTheme.swift; sourceTree = "<group>"; };
 		A9F100000000000000000014 /* AgentSessionWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/AgentSessionWebView.swift; sourceTree = "<group>"; };
+		B8F28346FFF8271CD7930F0B /* AgentStatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusBadge.swift; sourceTree = "<group>"; };
+		FC6F4F9BF05378FBD0B5BD6D /* AgentStatusBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusBadgeView.swift; sourceTree = "<group>"; };
+		0FB36E306BB4921F173777BB /* AgentStatusPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusPresentation.swift; sourceTree = "<group>"; };
 		8A87C45F990549A8A0A6EE01 /* AgentSurfaceResumeBindingClearOutcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSurfaceResumeBindingClearOutcome.swift; sourceTree = "<group>"; };
 		582CBC2A17C1808307BA9DD6 /* AgentWakeFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHibernation/AgentWakeFailure.swift; sourceTree = "<group>"; };
 		57E5073EBB80C7C6BD0741D7 /* AgentWakeFailureBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/AgentWakeFailureBanner.swift; sourceTree = "<group>"; };
@@ -10796,6 +10802,9 @@
 				DE719E954A4BC274DD348DCE /* TerminalOutputUpdateHub.swift */,
 				544D33FE44FE19DEFDF3A320 /* TuiImagePasteError+LocalizedMessage.swift */,
 				7F14F5A980F0B7520F304EC5 /* TuiPaneCreationFailurePresentation.swift */,
+				0FB36E306BB4921F173777BB /* AgentStatusPresentation.swift */,
+				FC6F4F9BF05378FBD0B5BD6D /* AgentStatusBadgeView.swift */,
+				B8F28346FFF8271CD7930F0B /* AgentStatusBadge.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -13090,6 +13099,9 @@
 				A9E02000000000000000000C /* AgentSessionWebRendererSession.swift in Sources */,
 				A9E02000000000000000000D /* AgentSessionWebTheme.swift in Sources */,
 				A9F200000000000000000014 /* AgentSessionWebView.swift in Sources */,
+				D80E6AF6BF9D3D7B2FF6AD28 /* AgentStatusBadge.swift in Sources */,
+				26941DC22BD52DEBF7F0A7EC /* AgentStatusBadgeView.swift in Sources */,
+				C51FE387ADD17CC8BB4D5C39 /* AgentStatusPresentation.swift in Sources */,
 				2F9C29446E65820D941FA4DA /* AgentWakeFailure.swift in Sources */,
 				2A64B77D7128036F9D4F51FB /* AgentWakeFailureBanner.swift in Sources */,
 				9861A876D2C45701659C1F89 /* AgentWakeVerification.swift in Sources */,

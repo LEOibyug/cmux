@@ -16796,7 +16796,16 @@ private struct SidebarMetadataEntryRow: View {
 
     var body: some View {
         Group {
-            if let url = entry.url {
+            if let presentation = AgentStatusPresentation(entry: entry) {
+                AgentStatusBadge(entry: entry, presentation: presentation, fontScale: fontScale) { url in
+                    onFocus()
+                    NSWorkspace.shared.open(url)
+                }
+                .frame(height: ceil(18 * fontScale + 6))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { onFocus() }
+            } else if let url = entry.url {
                 Button {
                     onFocus()
                     NSWorkspace.shared.open(url)

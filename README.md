@@ -6,6 +6,7 @@ Personal macOS fork of [cmux](https://github.com/manaflow-ai/cmux), maintained a
 
 - Native Ghostty terminal, workspaces, splits, embedded browser and local automation socket.
 - Vault history, including OMP, with live global `vault.enabledAgents` source selection; see [Vault](docs/vault.md).
+- Prominent colored agent activity badges shared by the sidebar and each terminal tab; processing animates without renaming conversations. See [agent hooks](docs/agent-hooks.md#visible-conversation-state).
 - User-configured SSH, mosh, tmux and explicitly installed remote helpers.
 - Local Computer Use and Simulator support.
 - No cmux Cloud, account sign-in, teams, subscriptions, phone pairing, managed VPN, product telemetry, remote feature flags or automatic updater.

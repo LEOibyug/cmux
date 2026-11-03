@@ -86,12 +86,12 @@ extension Workspace {
                 agentPIDIdentitiesForPanel[key] = agentPIDProcessIdentitiesByKey[key]
             }
             let statusKey = agentStatusKey(forAgentPIDKey: key)
-            if let statusEntry = agentStatusEntry(key: statusKey, panelId: panelId) ?? statusEntries[statusKey] {
+            if let statusEntry = agentStatusEntry(key: statusKey, panelId: panelId) {
                 statusEntriesForPanel[statusKey] = statusEntry
             }
         }
-        for (statusKey, lifecycle) in lifecycleStates where lifecycle == .needsInput {
-            if let statusEntry = agentStatusEntry(key: statusKey, panelId: panelId) ?? statusEntries[statusKey] {
+        for statusKey in lifecycleStates.keys {
+            if let statusEntry = agentStatusEntry(key: statusKey, panelId: panelId) {
                 statusEntriesForPanel[statusKey] = statusEntry
             }
         }
@@ -246,10 +246,14 @@ extension Workspace {
     }
 
     func clearAllAgentPIDs(refreshPorts: Bool = true) {
+        let panelIds = Array(agentPIDKeysByPanelId.keys)
         agentPIDs.removeAll()
         agentPIDProcessIdentitiesByKey.removeAll()
         agentPIDPanelIdsByKey.removeAll()
         agentPIDKeysByPanelId.removeAll()
+        for panelId in panelIds {
+            syncTerminalTabAgentIconAsset(forPanelId: panelId)
+        }
         if refreshPorts {
             refreshTrackedAgentPorts()
         } else {
@@ -437,6 +441,7 @@ extension Workspace {
         if didAdoptAgentPID {
             refreshTrackedAgentPorts()
         }
+        syncTerminalTabAgentIconAsset(forPanelId: runtimeState.panelId)
     }
 
     /// Starts the restored terminals held for this workspace's first visit.

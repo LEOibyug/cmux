@@ -266,6 +266,7 @@ final class SidebarRowIconTextLine: NSView {
     private let metadataButton = SidebarRowLinkButton()
     private let markdownTextView = SidebarRowMarkdownTextView()
     private let secondTextView = SidebarRowTextView(lines: 1)
+    private var agentBadge: AgentStatusBadgeView?
     private var iconSize: CGFloat = 0
     private var stacked = false
 
@@ -302,6 +303,17 @@ final class SidebarRowIconTextLine: NSView {
         iconLabel.isHidden = true
         iconView.isHidden = true
         iconSize = 0
+        if let presentation = AgentStatusPresentation(entry: entry) {
+            let badge = agentBadge ?? AgentStatusBadgeView()
+            if agentBadge == nil {
+                agentBadge = badge
+                addSubview(badge)
+            }
+            badge.isHidden = false
+            badge.configure(entry: entry, presentation: presentation, fontScale: model.scaled(12) / 12, onOpenURL: onOpenURL)
+            needsLayout = true
+            return
+        }
         if let icon = entry.icon {
             if icon.hasPrefix("emoji:") {
                 iconLabel.isHidden = false
@@ -459,6 +471,8 @@ final class SidebarRowIconTextLine: NSView {
     }
 
     private func resetPrimaryContent() {
+        agentBadge?.isHidden = true
+        agentBadge?.reset()
         textView.isHidden = true
         textView.toolTip = nil
         textView.stringValue = ""
@@ -470,6 +484,7 @@ final class SidebarRowIconTextLine: NSView {
     }
 
     private func primaryMeasuredHeight(width: CGFloat) -> CGFloat {
+        if let agentBadge, !agentBadge.isHidden { return agentBadge.intrinsicContentSize.height }
         if !markdownTextView.isHidden {
             return markdownTextView.measuredHeight(width: width)
         }
@@ -480,6 +495,7 @@ final class SidebarRowIconTextLine: NSView {
     }
 
     private var primaryView: NSView {
+        if let agentBadge, !agentBadge.isHidden { return agentBadge }
         if !markdownTextView.isHidden {
             return markdownTextView
         }

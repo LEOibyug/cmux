@@ -13,6 +13,21 @@ cmux hooks uninstall <agent>
 
 Supported agent names are `codex`, `grok`, `opencode`, `pi`, `omp`, `campfire`, `amp`, `cursor`, `gemini`, `kiro`, `antigravity` (or `agy`), `rovodev` (or `rovo`), `hermes-agent`, `copilot`, `codebuddy`, `factory`, `qoder`, `kimi`, and `muse`. `cmux hooks setup` skips agents whose binary is not on `PATH` and prints a summary.
 
+## Visible conversation state
+
+Hook-reported agent state appears as a larger colored badge below the workspace
+title and as a compact badge beside that terminal's surface-tab title. Running
+work uses a blue rotating indicator; completed/idle turns are green, waiting or
+needs-input states amber, and reported failures red. Text and symbols remain
+visible when Reduce Motion disables animation.
+
+OMP uses its existing session extension: prompt submission starts activity and
+the final turn-end settles it. No additional plugin or model request is needed.
+Each terminal keeps its own report, so two OMP conversations in one workspace
+can show different states. Moving or clearing one does not overwrite the other.
+Badges do not rename conversations or persist stale activity across app restarts.
+The existing sidebar metadata and compact-status visibility settings still apply.
+
 ## Remote hosts
 
 In a `cmux ssh` or `cmux mosh-tmux` workspace that uses the CLI relay, Claude Code on the remote host reports running state, notifications, and its session ID for resume through the relay. The remote `claude` shim adds the hooks with `--settings`, so it also covers launchers that pick `claude` from `PATH` with their own config directory. Permission prompts stay in Claude on the remote host. Details are in [daemon/remote/README.md](../daemon/remote/README.md#claude-code-hooks).

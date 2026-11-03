@@ -41,8 +41,31 @@ extension Workspace {
         }
     }
 
+    /// Maps only this terminal's authoritative live report into generic tab chrome.
+    func terminalTabAgentStatusBadge(forPanelId panelId: UUID) -> TabStatusBadge? {
+        guard let entry = terminalAgentStatusEntryVisibleForDisplay(panelId: panelId),
+              let presentation = AgentStatusPresentation(entry: entry) else { return nil }
+        return TabStatusBadge(
+            text: presentation.text,
+            symbolName: presentation.symbolName,
+            foregroundHex: presentation.foregroundHex,
+            backgroundHex: presentation.backgroundHex,
+            isAnimating: presentation.isAnimating
+        )
+    }
+
+    func syncTerminalTabAgentStatusBadge(forPanelId panelId: UUID) {
+        guard panels[panelId] is TerminalPanel,
+              let tabID = surfaceIdFromPanelId(panelId),
+              let tab = bonsplitController.tab(tabID) else { return }
+        let badge = terminalTabAgentStatusBadge(forPanelId: panelId)
+        guard tab.statusBadge != badge else { return }
+        bonsplitController.updateTab(tabID, statusBadge: .some(badge))
+    }
+
     /// Reconciles a terminal tab's provider mark after agent lifecycle state changes.
     func syncTerminalTabAgentIconAsset(forPanelId panelId: UUID) {
+        syncTerminalTabAgentStatusBadge(forPanelId: panelId)
         guard panels[panelId] is TerminalPanel,
               let tabID = surfaceIdFromPanelId(panelId),
               let tab = bonsplitController.tab(tabID) else { return }
