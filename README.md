@@ -29,7 +29,7 @@
 
 构建前提与命令见 [AGENTS.md](AGENTS.md)（tagged 构建、GhosttyKit 预编译、签名与替换）。已有可用产物时直接复用，不重复编译。
 
-改动只做对应功能的本机编译和隔离 smoke；不默认运行全量回归或远端 CI。不维护旧版本配置适配层。替换安装前，先由用户退出正在运行的 cmux；配置和原始对话独立保留。
+改动只做对应功能的本机编译和隔离 smoke；不默认运行全量回归或远端 CI。不维护旧版本配置适配层。正式更新统一使用下述本地入口：可以在 cmux 中准备更新，实际安装等待用户自行退出；不强退、不改写运行中的程序包。配置和原始对话独立保留。
 
 保留日常构建、签名、本地化和工程合并工具；这些工具不依赖 CI 合并解析器或发布签名检查。
 Computer Use 随程序提供的技能资料保存在 `Resources/cmux-cua/`，不属于仓库开发规则。
@@ -38,7 +38,22 @@ Computer Use 随程序提供的技能资料保存在 `Resources/cmux-cua/`，不
 
 ## 更新方式
 
-仅在用户主动要求时，检查上游并选择性合并需要的提交；不自动同步整个上游。合入时保留个人功能和纯本地边界，不重新引入账号服务、遥测或更新器。
+仅在用户主动要求时，检查上游并选择性合并需要的提交；不自动同步整个上游。合入时保留个人功能和纯本地边界，不重新引入账号服务、遥测或联网更新检查。
+
+正式安装只使用 `./scripts/update-local.sh`，不再手工拼装安装包或使用 ad-hoc 签名。它会增量构建 Release、清理 tagged 元数据、用固定本地证书签名，再提交一次性的本机安装任务。可以一直留在 cmux 工作；用户自行退出后，任务原子更新同一个安装位置，随后由用户正常打开。更新任务不会退出或重启 cmux，也不联网下载应用。已有待安装任务时不重复构建。
+
+```bash
+# 首次创建本机固定证书，仅需一次（本机已完成）：
+./scripts/dev.sh python3 scripts/local_signing.py init
+./scripts/update-local.sh
+./scripts/update-local.sh --status
+# 已经验证过的项目内 Release 产物可以显式复用，省去重建：
+./scripts/update-local.sh --reuse-artifact '<项目内 Release 产物>'
+```
+
+签名使用项目内固定的 `.cmux/signing/cmux.crt`、`.cmux/signing/cmux.key` 和公有指纹 `.cmux/signing/identity.json`，整个目录不提交。`init` 创建有效期 20 年的专用本地证书；私钥是无密码的 0600 文件，后续一直复用，缺失或不匹配时停止，不自动换证书、不降级 ad-hoc。使用 [rcodesign](https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign_signing.html) 直接读取 PEM，不访问钥匙串，不导入证书或修改系统信任，也不需要 Apple 开发者账号；工具固定版本及校验值，保存在项目缓存。请自行备份整个签名目录，清理构建缓存不会删除它。主程序、CLI 和助手保持固定签名标识及指定要求。首次从 ad-hoc 切换到证书签名后，系统可能仍需重新授权一次；这不是 Apple 公证签名，权限声明也不等于系统授权记录。
+
+安装包使用正常的 cmux 名称、正式 bundle/URL/Dock/sidebar 标识；资源 bundle 也移除调试身份，不携带开发 HOME、socket、调试日志或 tagged 启动环境。版本号和来源提交保留供诊断；Computer Use 必需的本地集成及禁用遥测/更新策略保留。开发验证仍使用隔离 tag，绝不覆盖运行中的正式应用。
 
 ## 使用参考
 

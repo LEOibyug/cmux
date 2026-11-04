@@ -49,6 +49,16 @@ if [[ "${CMUX_TIMESTAMP:-}" == "none" ]]; then
 else
   TS_FLAG=(--timestamp)
 fi
+if [[ "$IDENTITY" == "-" ]]; then
+  SIGN_COMMAND=("$CODESIGN_TOOL" --force --options runtime "${TS_FLAG[@]}" --sign "$IDENTITY")
+else
+  SIGNER="$(dirname "${BASH_SOURCE[0]}")/local_signing.py"
+  if [[ "$IDENTITY" != "$(python3 "$SIGNER")" ]]; then
+    echo "error: formal signing requires the pinned file identity" >&2
+    exit 1
+  fi
+  SIGN_COMMAND=(python3 "$SIGNER" sign)
+fi
 
 signed=()
 for payload in "$PAYLOAD_DIR"/*; do
@@ -58,8 +68,8 @@ for payload in "$PAYLOAD_DIR"/*; do
     continue
   fi
   echo "==> signing cmux-tui SSH payload $(basename "$payload")"
-  "$CODESIGN_TOOL" --force --options runtime "${TS_FLAG[@]}" --sign "$IDENTITY" \
-    --entitlements "$ENTITLEMENTS" "$payload"
+  "${SIGN_COMMAND[@]}" \
+    --identifier "com.cmuxterm.app.ssh.${payload##*/}" --entitlements "$ENTITLEMENTS" "$payload"
   signed+=("$(basename "$payload")")
 done
 

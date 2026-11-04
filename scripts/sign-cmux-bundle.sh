@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
-# Sign a local cmux bundle inside out with an explicitly selected identity.
+# Sign a local cmux bundle inside out with the pinned local certificate.
 #
-# Usage:
-#   scripts/sign-cmux-bundle.sh <app-path> <app-entitlements> <signing-identity>
-#
-# Use "-" as the identity for an ad hoc local signature.
+# Usage: scripts/sign-cmux-bundle.sh <app-path> <app-entitlements> [signing-identity]
+# An explicit "-" is only for isolated tagged development artifacts.
 #
 # Optional env:
 #   CMUX_HELPER_ENTITLEMENTS  (default: cmux-helper.entitlements)
@@ -34,15 +32,20 @@ source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [[ $# -lt 3 ]]; then
-  echo "usage: $0 <app-path> <app-entitlements> <signing-identity>" >&2
+if [[ $# -lt 2 || $# -gt 3 ]]; then
+  echo "usage: $0 <app-path> <app-entitlements> [signing-identity]" >&2
   exit 2
 fi
 
 APP_PATH="$1"
 cmux_require_project_path "$APP_PATH" || exit 1
 APP_ENTITLEMENTS="$2"
-IDENTITY="$3"
+if [[ $# -eq 3 ]]; then
+  IDENTITY="$3"
+else
+  IDENTITY="$(python3 "$SCRIPT_DIR/local_signing.py")"
+  export CMUX_TIMESTAMP="${CMUX_TIMESTAMP:-none}"
+fi
 HELPER_ENTITLEMENTS="${CMUX_HELPER_ENTITLEMENTS:-cmux-helper.entitlements}"
 SIGN_MODE="${CMUX_SIGN_MODE:-all}"
 
@@ -75,6 +78,15 @@ fi
 
 # Helpers and the main app share the ordinary local runtime signing options.
 COMMON=(--force --options runtime "${TS_FLAG[@]}" --sign "$IDENTITY")
+if [[ "$IDENTITY" == "-" ]]; then
+  SIGN_COMMAND=(/usr/bin/codesign "${COMMON[@]}")
+else
+  if [[ "$IDENTITY" != "$(python3 "$SCRIPT_DIR/local_signing.py")" ]]; then
+    echo "error: formal signing requires the pinned file identity; keychain identities are not used" >&2
+    exit 1
+  fi
+  SIGN_COMMAND=(python3 "$SCRIPT_DIR/local_signing.py" sign)
+fi
 COMPUTER_USE_HELPER="$APP_PATH/Contents/Library/cmux Computer Use.app"
 
 if [[ "$SIGN_MODE" == "all" || "$SIGN_MODE" == "all-except-computer-use" ]]; then
@@ -89,8 +101,11 @@ if [[ "$SIGN_MODE" == "all" || "$SIGN_MODE" == "all-except-computer-use" ]]; the
         echo "==> leaving non-Mach-O helper $(basename "$helper") to the bundle seal"
         continue
       fi
-      echo "==> signing helper $(basename "$helper")"
-      /usr/bin/codesign "${COMMON[@]}" --entitlements "$HELPER_ENTITLEMENTS" "$helper"
+      helper_name="${helper##*/}"
+      helper_id="com.cmuxterm.app.${helper_dir}.${helper_name}"
+      [[ "$helper_dir/$helper_name" != "bin/cmux" ]] || helper_id="com.cmuxterm.app.cli"
+      echo "==> signing helper $helper_name"
+      "${SIGN_COMMAND[@]}" --identifier "$helper_id" --entitlements "$HELPER_ENTITLEMENTS" "$helper"
     done
   done
   # cmux-tui builds for SSH hosts. Notarization requires the macOS ones to be
@@ -102,8 +117,8 @@ if [[ "$SIGN_MODE" == "all" || "$SIGN_MODE" == "all-except-computer-use" ]]; the
   # ticket that finish is waiting to staple.
   if [[ "$SIGN_MODE" == "all" && -d "$COMPUTER_USE_HELPER" ]]; then
     echo "==> signing nested helper $(basename "$COMPUTER_USE_HELPER")"
-    /usr/bin/codesign \
-      "${COMMON[@]}" \
+    "${SIGN_COMMAND[@]}" \
+      --identifier com.cmuxterm.cua \
       --entitlements "$HELPER_ENTITLEMENTS" \
       "$COMPUTER_USE_HELPER"
   fi
@@ -112,7 +127,7 @@ if [[ "$SIGN_MODE" == "all" || "$SIGN_MODE" == "all-except-computer-use" ]]; the
   if [[ -d "$APP_PATH/Contents/PlugIns" ]]; then
     while IFS= read -r -d '' plugin; do
       echo "==> signing plugin $(basename "$plugin")"
-      /usr/bin/codesign "${COMMON[@]}" --deep "$plugin"
+      "${SIGN_COMMAND[@]}" --deep "$plugin"
     done < <(find "$APP_PATH/Contents/PlugIns" -mindepth 1 -maxdepth 1 -print0)
   fi
 
@@ -120,7 +135,7 @@ if [[ "$SIGN_MODE" == "all" || "$SIGN_MODE" == "all-except-computer-use" ]]; the
   if [[ -d "$APP_PATH/Contents/Frameworks" ]]; then
     while IFS= read -r -d '' framework; do
       echo "==> signing framework $(basename "$framework")"
-      /usr/bin/codesign "${COMMON[@]}" --deep "$framework"
+      "${SIGN_COMMAND[@]}" --deep "$framework"
     done < <(find "$APP_PATH/Contents/Frameworks" -mindepth 1 -maxdepth 1 -print0)
   fi
 
@@ -128,7 +143,8 @@ fi
 
 # Main app bundle is sealed last, without recursively replacing helper signatures.
 echo "==> signing main bundle ($SIGN_MODE)"
-/usr/bin/codesign "${COMMON[@]}" --entitlements "$APP_ENTITLEMENTS" "$APP_PATH"
+MAIN_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Contents/Info.plist")"
+"${SIGN_COMMAND[@]}" --identifier "$MAIN_ID" --entitlements "$APP_ENTITLEMENTS" "$APP_PATH"
 
 echo "==> verifying"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_PATH"

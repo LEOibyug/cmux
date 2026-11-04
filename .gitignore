@@ -14,6 +14,7 @@ xcuserdata/
 .envrc
 !web/.envrc
 ios/Config/AppStoreConnect.local.plist
+.cmux/signing/
 
 # Swift Package Manager
 .swiftpm/
