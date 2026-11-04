@@ -6,10 +6,7 @@ usage() {
   exit 2
 }
 
-# --static-only skips the one check that runs the sidecar (its handshake).
-# Signing uses it while the CI signing keychain exists; the signing job runs
-# the full check again after the keychain is deleted.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# --static-only skips the sidecar handshake and checks the artifact without running it.
 
 [[ $# -ge 1 ]] || usage
 BINARY="$1"
@@ -91,9 +88,6 @@ if (( STATIC_ONLY )); then
   exit 0
 fi
 
-# shellcheck source=ci/lib/signing-runtime-guard.sh
-source "$SCRIPT_DIR/ci/lib/signing-runtime-guard.sh"
-cmux_signing_runtime_guard
 HANDSHAKE="$("$BINARY" handshake)"
 python3 - "$HANDSHAKE" <<'PY'
 import json

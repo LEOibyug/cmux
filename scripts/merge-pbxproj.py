@@ -8,10 +8,9 @@ that each add a different file therefore append to the same four regions and
 collide positionally, even though the entries are disjoint. That is the single
 most common conflict in this repository and never a semantic disagreement.
 
-The three-way union this performs is shared with the trusted local
-merge-main resolver, rather than being reimplemented here. Exposing it as a
-merge driver makes it available to everyone else: a local `git merge main`, a
-rebase, and pull requests from forks.
+The conservative merge primitives live in lib/pbxproj_merge.py. The driver
+handles source-entry validation and normalization for local git merges and
+rebases without depending on CI or merge-main automation.
 
 It is deliberately conservative. A hunk is merged only when both sides purely
 added distinct lines; if either side changed or removed a line the merge is
@@ -33,7 +32,7 @@ import tempfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-MERGE_RESOLVER = SCRIPT_DIR / "ci" / "merge_main_resolver.py"
+MERGE_HELPERS = SCRIPT_DIR / "lib" / "pbxproj_merge.py"
 NORMALIZER = SCRIPT_DIR / "normalize-pbxproj.py"
 SECTION_BEGIN_RE = re.compile(r"/\* Begin ([A-Za-z0-9]+) section \*/")
 SECTION_END_RE = re.compile(r"/\* End ([A-Za-z0-9]+) section \*/")
@@ -53,14 +52,11 @@ PBX_COMMENT_RE = re.compile(r"^\s*[0-9A-Za-z]+ /\* (.*?) \*/")
 
 
 def load_mergers():
-    """Load the trusted merge-main helpers."""
-    spec = importlib.util.spec_from_file_location("merge_main_resolver", MERGE_RESOLVER)
+    """Load the local project merge primitives independently of sys.path."""
+    spec = importlib.util.spec_from_file_location("pbxproj_merge", MERGE_HELPERS)
     if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load {MERGE_RESOLVER}")
+        raise ImportError(f"cannot load {MERGE_HELPERS}")
     module = importlib.util.module_from_spec(spec)
-    # The resolver declares dataclasses, and @dataclass resolves a field's
-    # type through sys.modules[cls.__module__], so register it before
-    # execution or the decorator raises.
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module

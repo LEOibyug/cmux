@@ -1468,16 +1468,6 @@ if [[ "$SWIFT_FRONTEND_WORKAROUND" -eq 1 || "${CMUX_SWIFT_FRONTEND_WORKAROUND:-}
 else
   SWIFT_FRONTEND_WORKAROUND_EFFECTIVE=0
 fi
-if [[ "${CMUX_SWIFT_INCREMENTAL_DIAGNOSTICS:-0}" == "1" ]]; then
-  SWIFT_INCREMENTAL_DIAGNOSTICS_EFFECTIVE=1
-  echo "==> Swift incremental diagnostics enabled for this reload"
-  # These Swift driver diagnostics report scheduling/rebuild decisions and job
-  # lifecycle without changing the incremental dependency decision itself.
-  SWIFT_OTHER_FLAGS+=" -v -driver-show-incremental -driver-show-job-lifecycle -driver-time-compilation"
-  XCODEBUILD_ARGS+=(-showBuildTimingSummary)
-else
-  SWIFT_INCREMENTAL_DIAGNOSTICS_EFFECTIVE=0
-fi
 if reload_skips_app_module_emission "$(selected_xcode_version)"; then
   # A dev build runs the app; nothing imports its Swift module (only cmuxTests,
   # which reload never builds) and no Objective-C includes its generated header.
@@ -1716,15 +1706,6 @@ fi
 validate_app_bundle "$APP_PATH" "$APP_EXECUTABLE_NAME"
 XCODEBUILD_OUTPUT_VALID=1
 
-if [[ "${SWIFT_INCREMENTAL_DIAGNOSTICS_EFFECTIVE:-0}" -eq 1 ]]; then
-  incremental_receipt="${RELOAD_LOG}.incremental.json"
-  if python3 "$SCRIPT_DIR/ci/swift_incremental_diagnostics.py" \
-      --log "$RELOAD_LOG" --output "$incremental_receipt"; then
-    echo "==> Swift incremental diagnostics: $incremental_receipt"
-  else
-    echo "==> Swift incremental diagnostics parser failed; raw evidence remains in $RELOAD_LOG" >&2
-  fi
-fi
 
 if [[ "$BUILD_ONLY" -ne 1 && -n "${TAG_SLUG:-}" ]]; then
   TMP_COMPAT_DERIVED_LINK="/tmp/cmux-${TAG_SLUG}"

@@ -34,6 +34,10 @@ fi
 mkdir -p "$(dirname "$DEST_PATH")"
 install -m 755 "$HELPER_PATH" "$DEST_PATH"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"$SCRIPT_DIR/ci/verify-binary-archs.sh" "$EXPECTED_ARCHS" "$DEST_PATH"
+EXPECTED_SORTED="$(printf '%s\n' $EXPECTED_ARCHS | sort | xargs)"
+ACTUAL_ARCHS="$(lipo -archs "$DEST_PATH" | tr ' ' '\n' | sort | xargs)"
+if [[ "$ACTUAL_ARCHS" != "$EXPECTED_SORTED" ]]; then
+  echo "error: $DEST_PATH slices are '$ACTUAL_ARCHS', expected exactly '$EXPECTED_SORTED'" >&2
+  exit 1
+fi
 echo "Installed Ghostty CLI helper ($EXPECTED_ARCHS) at $DEST_PATH"
