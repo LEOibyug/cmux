@@ -1,17 +1,24 @@
 import Bonsplit
 import Foundation
 
-/// Resolves the provider mark for a local terminal tab from the same agent
-/// definitions used by process and hook detection.
+/// Resolves agent identity and provider marks from the shared process/hook definitions.
 struct TerminalTabAgentIconResolver {
     func assetName(forStatusKey statusKey: String) -> String? {
-        let normalized = statusKey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        definition(forIdentity: statusKey)?.assetName
+    }
+
+    func agentID(forIdentity identity: String) -> String? {
+        definition(forIdentity: identity)?.id
+    }
+
+    private func definition(forIdentity identity: String) -> CmuxTaskManagerCodingAgentDefinition? {
+        let normalized = identity.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
         return CmuxTaskManagerCodingAgentDefinition.builtIns.first { definition in
             definition.id == normalized
                 || definition.launchKinds.contains(normalized)
                 || definition.directBasenames.contains(normalized)
-        }?.assetName
+        }
     }
 }
 
@@ -46,7 +53,7 @@ extension Workspace {
         guard let entry = terminalAgentStatusEntryVisibleForDisplay(panelId: panelId),
               let presentation = AgentStatusPresentation(entry: entry) else { return nil }
         return TabStatusBadge(
-            text: presentation.tabText,
+            text: presentation.text,
             symbolName: presentation.symbolName,
             foregroundHex: presentation.foregroundHex,
             backgroundHex: presentation.backgroundHex,

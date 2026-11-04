@@ -47,6 +47,7 @@ extension Workspace {
                 guard programStatusStoresByPanelId[panelId]?.mostUrgentRecord() != nil else { continue }
             } else {
                 guard AgentHibernationLifecycleStatusKeys.allowedStatusKeys.contains(entry.key) else { continue }
+                guard !isHookStatusShadowedByNativeAgent(key: entry.key, panelId: panelId) else { continue }
                 let ownsLocalPID = agentPIDKeysByPanelId[panelId]?.contains {
                     agentStatusKey(forAgentPIDKey: $0) == entry.key
                 } ?? false
@@ -116,6 +117,7 @@ extension Workspace {
             guard let entry = entries[key],
                   panelOwnsAgentStatus(key: key, panelId: panelId)
                     || key == Self.programStatusKey else { continue }
+            guard !isHookStatusShadowedByNativeAgent(key: key, panelId: panelId) else { continue }
             let rank = key == Self.programStatusKey
                 ? programStatusUrgencyByPanelId[panelId, default: 0]
                 : Self.sidebarStatusUrgencyRank(agentLifecycleStatesByPanelId[panelId]?[key])
@@ -125,6 +127,18 @@ extension Workspace {
             winner = (rank, entry)
         }
         return winner?.entry
+    }
+
+    /// One terminal's native agent state owns its display until that report is removed.
+    private func isHookStatusShadowedByNativeAgent(key: String, panelId: UUID) -> Bool {
+        guard key != Self.programStatusKey,
+              agentStatusEntriesByPanelId[panelId]?[Self.programStatusKey] != nil,
+              let store = programStatusStoresByPanelId[panelId],
+              let record = store.mostUrgentRecord(),
+              let app = store.effectiveApp(for: record) else { return false }
+        let resolver = TerminalTabAgentIconResolver()
+        guard let nativeAgentID = resolver.agentID(forIdentity: app) else { return false }
+        return nativeAgentID == resolver.agentID(forIdentity: key)
     }
 
     private func panelOwnsAgentStatus(key: String, panelId: UUID) -> Bool {
@@ -185,8 +199,11 @@ extension Workspace {
             statusKeysByPanelId[panelId, default: []].insert(statusKey)
         }
         var visibleStatusKeys = Set<String>()
-        for statusKeys in statusKeysByPanelId.values {
-            let winningEntry = statusKeys.compactMap { statusEntries[$0] }.max {
+        for (panelId, statusKeys) in statusKeysByPanelId {
+            let winningEntry = statusKeys.compactMap { key -> SidebarStatusEntry? in
+                guard !isHookStatusShadowedByNativeAgent(key: key, panelId: panelId) else { return nil }
+                return statusEntries[key]
+            }.max {
                 isSidebarStatusEntryLessCurrent($0, than: $1)
             }
             if let winningEntry {

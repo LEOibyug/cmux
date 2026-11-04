@@ -145,7 +145,7 @@ struct ManagedDevicePolicyTests {
         let (releaseDefaults, releaseCleanup) = try makeSuite("precedenceRelease")
         defer { releaseCleanup() }
 
-        let key = ManagedDevicePolicyKey.disableRemoteControl.rawValue
+        let key = ManagedDevicePolicyKey.disableEmbeddedBrowser.rawValue
         appDefaults.set(false, forKey: Self.forcedMirrorPrefix + key)
         releaseDefaults.set(true, forKey: Self.forcedMirrorPrefix + key)
         let policy = ManagedDevicePolicy(
@@ -154,8 +154,8 @@ struct ManagedDevicePolicyTests {
             forcedObject: Self.probe
         )
 
-        #expect(policy.forcedBool(for: .disableRemoteControl) == false)
-        #expect(!policy.isEnforced(.disableRemoteControl))
+        #expect(policy.forcedBool(for: .disableEmbeddedBrowser) == false)
+        #expect(!policy.isEnforced(.disableEmbeddedBrowser))
     }
 
     @Test func releaseBuildHasNoFallbackDomain() {

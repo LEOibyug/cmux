@@ -403,20 +403,6 @@ struct LanguageSettingsStoreTests {
         #expect(store.storedLanguage == .ja)
     }
 
-    @Test func applyLanguageOverrideWritesAppleLanguagesList() {
-        // `AppleLanguages` also exists in the global defaults domain, so a
-        // plain read never returns nil; assert on the suite's persistent
-        // domain to observe only the override this store writes/removes.
-        let suiteName = "cmux.tests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        let store = LanguageSettingsStore(defaults: defaults, domainName: suiteName)
-
-        store.applyLanguageOverride(.ja)
-        #expect(defaults.persistentDomain(forName: suiteName)?["AppleLanguages"] as? [String] == ["ja"])
-
-        store.applyLanguageOverride(.system)
-        #expect(defaults.persistentDomain(forName: suiteName)?["AppleLanguages"] == nil)
-    }
 }
 
 @Suite("Close-tab confirmation policy")

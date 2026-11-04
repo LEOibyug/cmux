@@ -11093,6 +11093,7 @@ struct VerticalTabsSidebar: View, Equatable {
     @Environment(\.sidebarReadabilityBackdrop) private var sidebarReadabilityBackdrop
     @Environment(\.cmuxGlobalFontMagnificationPercent) private var sidebarGlobalFontMagnificationPercent
     @State private var sidebarDisplayAccessibility = DisplayAccessibilityOptions.current
+    @Environment(CodexpressCoordinator.self) private var codexpressCoordinator: CodexpressCoordinator?
 
     // The provider to actually render. Built-in views are always honored; only
     // the hosted-extension selection falls back to the default workspaces
@@ -11557,13 +11558,29 @@ struct VerticalTabsSidebar: View, Equatable {
             visibleWorkspaceRowIds: visibleWorkspaceRowIds
         )
         let _ = SidebarProfilingSignposts.end(signpost)
-        ZStack(alignment: .bottomLeading) {
-            if CmuxExtensionSidebarSelection.resolvesToDefaultSidebar(effectiveProviderId: effectiveExtensionSidebarProviderId) {
-                workspaceScrollArea(renderContext: renderContext)
-            } else {
-                extensionSidebarScrollArea(renderContext: renderContext)
+        VStack(spacing: 0) {
+            Group {
+                if CmuxExtensionSidebarSelection.resolvesToDefaultSidebar(effectiveProviderId: effectiveExtensionSidebarProviderId) {
+                    workspaceScrollArea(renderContext: renderContext)
+                } else {
+                    extensionSidebarScrollArea(renderContext: renderContext)
+                }
             }
+            .frame(maxHeight: .infinity)
             if isPresented {
+                if let codexpressCoordinator {
+                    CodexpressSidebarCard(coordinator: codexpressCoordinator) {
+                        guard let applicationURL = NSWorkspace.shared.urlForApplication(
+                            withBundleIdentifier: "local.codexpress.mac"
+                        ) else { return }
+                        NSWorkspace.shared.openApplication(
+                            at: applicationURL,
+                            configuration: NSWorkspace.OpenConfiguration()
+                        )
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                }
                 SidebarFooter(
                     fileExplorerState: fileExplorerState,
                     modifierKeyMonitor: modifierKeyMonitor
@@ -15494,7 +15511,7 @@ struct TabItemView: View, Equatable {
     @State private var renameDraft = ""
     @State private var renameBaselineHadUserCustomTitle = false
 
-    private static let maxWrappedTitleLines = 8
+    private static let maxWrappedTitleLines = 2
     private static let maxDisplayedTitleCharacters = 2048
 
     var workspaceSnapshot: SidebarWorkspaceSnapshotBuilder.Snapshot { snapshot.workspace }
@@ -15609,6 +15626,10 @@ struct TabItemView: View, Equatable {
 
     private var fontScale: CGFloat {
         settings.sidebarFontScale
+    }
+
+    private var typography: SidebarWorkspaceTypography {
+        SidebarWorkspaceTypography(scale: fontScale)
     }
 
     private func scaledFontSize(_ baseSize: CGFloat) -> CGFloat {
@@ -15733,17 +15754,20 @@ struct TabItemView: View, Equatable {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(remoteWorkspaceSidebarText)
-                        .font(magnifiedFont(scaledFontSize(10), design: .monospaced))
+                        .font(magnifiedFont(typography.directory, design: .monospaced))
                         .foregroundColor(activeSecondaryColor(0.8))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Spacer(minLength: 0)
 
                     Text(workspaceSnapshot.remoteConnectionStatusText)
-                        .font(magnifiedFont(scaledFontSize(9), weight: .medium))
+                        .font(magnifiedFont(typography.auxiliary, weight: .medium))
                         .foregroundColor(activeSecondaryColor(0.58))
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if workspaceSnapshot.showsRemoteReconnectAffordance {
                         Button {
@@ -15754,7 +15778,7 @@ struct TabItemView: View, Equatable {
                                 systemImage: "arrow.clockwise"
                             )
                             .labelStyle(.titleAndIcon)
-                            .font(magnifiedFont(scaledFontSize(9), weight: .semibold))
+                            .font(magnifiedFont(typography.auxiliary, weight: .semibold))
                         }
                         .buttonStyle(.borderless)
                         .foregroundColor(activeSecondaryColor(0.9))
@@ -15808,9 +15832,9 @@ struct TabItemView: View, Equatable {
             ? workspaceSnapshot.latestConversationMessage?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
             : nil
         let effectiveSubtitle = latestNotificationSubtitle ?? conversationMessageSubtitle
-        let subtitleLineLimit = latestNotificationSubtitle == nil ? 2 : settings.notificationMessageLineLimit
+        let subtitleLineLimit = latestNotificationSubtitle == nil ? 2 : min(2, settings.notificationMessageLineLimit)
         // Bound notification payloads before shaping so pathological text stays cheap in lazy, Equatable rows.
-        // Compact status rows are one line; the notification leads the glyph's tooltip instead.
+        // Compact status keeps the notification in the glyph's tooltip instead.
         let displayedSubtitle = workspaceSnapshot.compactStatusGlyph != nil
             ? nil
             : effectiveSubtitle.map { subtitle in
@@ -15820,10 +15844,7 @@ struct TabItemView: View, Equatable {
                     : SidebarMarkdownRenderer(markdown: display).plainText
             }
         let detailVisibility = visibleAuxiliaryDetails
-        // Compact status rows are one line, so title wrapping does not undo it.
-        let titleLineLimit = settings.wrapsWorkspaceTitles && workspaceSnapshot.compactStatusGlyph == nil
-            ? Self.maxWrappedTitleLines
-            : 1
+        let titleLineLimit = settings.wrapsWorkspaceTitles ? Self.maxWrappedTitleLines : 1
         let displayedTitle = workspaceSnapshot.displayTitle.sidebarBoundedDisplayString(
             maxDisplayedLines: titleLineLimit,
             maxDisplayedCharacters: Self.maxDisplayedTitleCharacters
@@ -15831,7 +15852,7 @@ struct TabItemView: View, Equatable {
         let scaledUnreadBadgeSize = 16 * fontScale
         let scaledLoadingSpinnerSize = max(10, 12 * fontScale)
         let titleFirstLineCenter = GlobalFontMagnification.scaledSize(
-            scaledFontSize(12.5),
+            typography.title,
             percent: globalFontMagnificationPercent
         ) * 0.6
         let todoControlsEnabled = WorkspaceTodoFeature.isEnabled
@@ -15917,7 +15938,7 @@ struct TabItemView: View, Equatable {
                 if isEditing {
                     SidebarInlineRenameField(
                         initialText: renameDraft,
-                        fontSize: GlobalFontMagnification.scaledSize(scaledFontSize(12.5), percent: globalFontMagnificationPercent), textColor: selectedWorkspaceForegroundNSColor(opacity: 1.0),
+                        fontSize: GlobalFontMagnification.scaledSize(typography.title, percent: globalFontMagnificationPercent), textColor: selectedWorkspaceForegroundNSColor(opacity: 1.0),
                         accessibilityLabel: String(
                             localized: "sidebar.workspace.rename.field.accessibilityLabel",
                             defaultValue: "Rename workspace"
@@ -15944,7 +15965,7 @@ struct TabItemView: View, Equatable {
                     .layoutPriority(1)
                 } else {
                     Text(displayedTitle)
-                        .font(magnifiedFont(scaledFontSize(12.5), weight: titleFontWeight))
+                        .font(magnifiedFont(typography.title, weight: titleFontWeight))
                         .foregroundColor(activePrimaryTextColor)
                         .opacity(workspaceSnapshot.isMuted ? 0.6 : 1)
                         .lineLimit(titleLineLimit)
@@ -15972,7 +15993,7 @@ struct TabItemView: View, Equatable {
 
             if let subtitle = displayedSubtitle {
                 Text(subtitle)
-                    .font(magnifiedFont(scaledFontSize(10)))
+                    .font(magnifiedFont(typography.description))
                     .foregroundColor(activeSecondaryColor(0.8))
                     .lineLimit(subtitleLineLimit)
                     .truncationMode(.tail)
@@ -16011,9 +16032,11 @@ struct TabItemView: View, Equatable {
 
                     if let label = progress.label {
                         Text(label)
-                            .font(magnifiedFont(scaledFontSize(9)))
+                            .font(magnifiedFont(typography.auxiliary))
                             .foregroundColor(activeSecondaryColor(0.6))
-                            .lineLimit(1)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .transition(.opacity)
@@ -16032,10 +16055,11 @@ struct TabItemView: View, Equatable {
                                     if sidebarBranchDirectoryPlacement == .stacked {
                                         if let branch = line.branch {
                                             Text(branch)
-                                                .font(magnifiedFont(scaledFontSize(10), design: .monospaced))
+                                                .font(magnifiedFont(typography.branch, design: .monospaced))
                                                 .foregroundColor(activeSecondaryColor(0.75))
-                                                .lineLimit(1)
+                                                .lineLimit(2)
                                                 .truncationMode(.tail)
+                                                .fixedSize(horizontal: false, vertical: true)
                                         }
                                         if !line.directoryCandidates.isEmpty {
                                             SidebarDirectoryText(
@@ -16048,10 +16072,11 @@ struct TabItemView: View, Equatable {
                                         HStack(spacing: 3) {
                                             if let branch = line.branch {
                                                 Text(branch)
-                                                    .font(magnifiedFont(scaledFontSize(10), design: .monospaced))
+                                                    .font(magnifiedFont(typography.branch, design: .monospaced))
                                                     .foregroundColor(activeSecondaryColor(0.75))
-                                                    .lineLimit(1)
+                                                    .lineLimit(2)
                                                     .truncationMode(.tail)
+                                                    .fixedSize(horizontal: false, vertical: true)
                                             }
                                             if line.branch != nil, !line.directoryCandidates.isEmpty {
                                                 CmuxSystemSymbolImage(magnified: "circle.fill", pointSize: scaledFontSize(3), tint: activeSecondaryColor(0.6))
@@ -16080,10 +16105,11 @@ struct TabItemView: View, Equatable {
                         VStack(alignment: .leading, spacing: 1) {
                             if let branchRow = workspaceSnapshot.compactGitBranchSummaryText {
                                 Text(branchRow)
-                                    .font(magnifiedFont(scaledFontSize(10), design: .monospaced))
+                                    .font(magnifiedFont(typography.branch, design: .monospaced))
                                     .foregroundColor(activeSecondaryColor(0.75))
-                                    .lineLimit(1)
+                                    .lineLimit(2)
                                     .truncationMode(.tail)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             if !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
                                 SidebarDirectoryText(
@@ -16094,16 +16120,30 @@ struct TabItemView: View, Equatable {
                             }
                         }
                     }
-                } else if !workspaceSnapshot.compactBranchDirectoryCandidates.isEmpty {
+                } else if workspaceSnapshot.compactGitBranchSummaryText != nil || !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
                     HStack(spacing: 3) {
                         if sidebarShowGitBranchIcon, workspaceSnapshot.compactGitBranchSummaryText != nil {
                             CmuxSystemSymbolImage(magnified: "arrow.triangle.branch", pointSize: scaledFontSize(9), tint: activeSecondaryColor(0.6))
                         }
-                        SidebarDirectoryText(
-                            candidates: workspaceSnapshot.compactBranchDirectoryCandidates,
-                            color: activeSecondaryColor(0.75),
-                            fontScale: fontScale
-                        )
+                        if let branchRow = workspaceSnapshot.compactGitBranchSummaryText {
+                            Text(branchRow)
+                                .font(magnifiedFont(typography.branch, design: .monospaced))
+                                .foregroundColor(activeSecondaryColor(0.75))
+                                .lineLimit(2)
+                                .truncationMode(.tail)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        if workspaceSnapshot.compactGitBranchSummaryText != nil, !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
+                            CmuxSystemSymbolImage(magnified: "circle.fill", pointSize: scaledFontSize(3), tint: activeSecondaryColor(0.6))
+                                .padding(.horizontal, 1)
+                        }
+                        if !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
+                            SidebarDirectoryText(
+                                candidates: workspaceSnapshot.compactDirectoryCandidates,
+                                color: activeSecondaryColor(0.75),
+                                fontScale: fontScale
+                            )
+                        }
                     }
                 }
             }
@@ -16120,11 +16160,18 @@ struct TabItemView: View, Equatable {
                                 color: pullRequestForegroundColor,
                                 fontScale: fontScale
                             )
-                            Text(pullRequestTitle).underline(settings.makesPullRequestsClickable).lineLimit(1).truncationMode(.tail)
-                            Text(pullRequestStatusLabel(pullRequest.status)).lineLimit(1)
+                            Text(pullRequestTitle)
+                                .underline(settings.makesPullRequestsClickable)
+                                .lineLimit(2)
+                                .truncationMode(.tail)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text(pullRequestStatusLabel(pullRequest.status))
+                                .lineLimit(2)
+                                .truncationMode(.tail)
+                                .fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 0)
                         }
-                        .font(magnifiedFont(scaledFontSize(10), weight: .semibold))
+                        .font(magnifiedFont(typography.auxiliary, weight: .semibold))
                         .foregroundColor(pullRequestForegroundColor)
                         .opacity(pullRequest.isStale ? 0.5 : 1)
                         if settings.makesPullRequestsClickable {
@@ -16157,15 +16204,17 @@ struct TabItemView: View, Equatable {
                         }) {
                             Text(portLabel)
                                 .underline()
+                                .lineLimit(2)
+                                .truncationMode(.tail)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         .buttonStyle(.plain)
                         .safeHelp(portTooltip)
                     }
                     Spacer(minLength: 0)
                 }
-                .font(magnifiedFont(scaledFontSize(10), design: .monospaced))
+                .font(magnifiedFont(typography.auxiliary, design: .monospaced))
                 .foregroundColor(activeSecondaryColor(0.75))
-                .lineLimit(1)
             }
 
             // Rendered whenever there is content, a pending add request, or an OPEN
@@ -16502,10 +16551,11 @@ struct TabItemView: View, Equatable {
                     )
                 )
                 Text(latestLog.message)
-                    .font(magnifiedFont(scaledFontSize(10)))
+                    .font(magnifiedFont(typography.auxiliary))
                     .foregroundColor(activeSecondaryColor(0.8, isEmphasized: isEmphasized))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .transition(.opacity)
         }
@@ -16801,7 +16851,6 @@ private struct SidebarMetadataEntryRow: View {
                     onFocus()
                     NSWorkspace.shared.open(url)
                 }
-                .frame(height: ceil(18 * fontScale + 6))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture { onFocus() }
@@ -16832,11 +16881,12 @@ private struct SidebarMetadataEntryRow: View {
                     .foregroundColor(foregroundColor.opacity(0.95))
             }
             metadataText(underlined: underlined)
-                .lineLimit(1)
+                .lineLimit(2)
                 .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
-        .cmuxFont(size: 10 * fontScale)
+        .cmuxFont(size: SidebarWorkspaceTypography(scale: fontScale).description)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -16959,7 +17009,7 @@ private struct SidebarMetadataMarkdownBlockRow: View {
     let activeForegroundColor: Color
     let fontScale: CGFloat
     let onFocus: () -> Void
-    private static let maxDisplayedLines = 12
+    private static let maxDisplayedLines = 2
     private static let maxDisplayedCharacters = 4096
 
     var body: some View {
@@ -16981,7 +17031,7 @@ private struct SidebarMetadataMarkdownBlockRow: View {
                     .foregroundColor(foregroundColor)
             }
         }
-        .cmuxFont(size: 10 * fontScale)
+        .cmuxFont(size: SidebarWorkspaceTypography(scale: fontScale).description)
         .multilineTextAlignment(.leading)
         .lineLimit(Self.maxDisplayedLines)
         .truncationMode(.tail)

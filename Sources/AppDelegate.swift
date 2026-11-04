@@ -706,6 +706,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// re-applies `DisableComputerUse` through it.
     var computerUseRuntimeService: ComputerUseRuntimeService?
     private(set) var browserDataImportCoordinator: BrowserDataImportCoordinator?
+    private(set) var codexpressCoordinator: CodexpressCoordinator?
     weak var fileExplorerState: FileExplorerState?
     weak var fullscreenControlsViewModel: TitlebarControlsViewModel?
     weak var sidebarSelectionState: SidebarSelectionState?
@@ -2243,6 +2244,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         settingsRuntime: SettingsRuntime,
         automationEngine: AutomationEngine,
         browserDataImportCoordinator: BrowserDataImportCoordinator,
+        codexpressCoordinator: CodexpressCoordinator,
         computerUseRuntimeService: ComputerUseRuntimeService
     ) {
         captureSessionLaunchStateIfNeeded()
@@ -2261,6 +2263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         self.sidebarState = sidebarState
         self.browserDataImportCoordinator = browserDataImportCoordinator
         self.computerUseRuntimeService = computerUseRuntimeService
+        self.codexpressCoordinator = codexpressCoordinator
         caffeineController.onStateChange = { [weak self] _ in
             self?.menuBarExtraController?.refreshForDebugControls()
         }
@@ -9341,6 +9344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             // catalog default.
             .environment(\.settingsRuntime, settingsRuntime)
             .environment(browserDataImportCoordinator)
+            .environment(codexpressCoordinator)
             .cmuxFontMagnificationEnvironment()
 
         // Use the current key window's size for new windows so Cmd+Shift+N

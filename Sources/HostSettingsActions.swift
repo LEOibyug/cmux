@@ -122,7 +122,7 @@ final class HostSettingsActions: SettingsHostActions {
     }
 
     func resetAllSettingsSideEffects() {
-        LanguageSettingsStore(defaults: .standard, domainName: ProcessDefaultsDomain.name).applyLanguageOverride(.system)
+        applyLanguageOverride(.system)
         PaneChromeSettings.notifyDidChange()
         TerminalAdaptiveDefaultThemeSettings.notifyDidChange()
         AppDelegate.shared?.reconcileSocketListenerConfiguration(source: "settings.reset_all")
@@ -240,7 +240,10 @@ final class HostSettingsActions: SettingsHostActions {
     }
 
     func applyLanguageOverride(_ language: AppLanguage) {
-        LanguageSettingsStore(defaults: .standard, domainName: ProcessDefaultsDomain.name).applyLanguageOverride(language)
+        LanguageSettingsStore(
+            defaults: .standard,
+            systemLanguages: UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleLanguages"] as? [String] ?? []
+        ).applyLanguageOverride(language)
     }
 
     func openConfigInExternalEditor() {

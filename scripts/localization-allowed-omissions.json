@@ -1,4 +1,12 @@
 {
+  "codexpress.quota.week": {
+    "class": "format",
+    "source": "week"
+  },
+  "codexpress.panel.title": {
+    "class": "brand",
+    "source": "Codexpress"
+  },
   "actions.discovery.menuTitle": {
     "source": "Actions · cmux.json…",
     "identityLocales": {
@@ -2533,10 +2541,6 @@
   "sidebar.pathMenu.macintoshHD": {
     "class": "brand",
     "source": "Macintosh HD"
-  },
-  "sidebar.port.label": {
-    "class": "format",
-    "source": ":%lld"
   },
   "sidebar.pro.badge": {
     "source": "Upgrade",

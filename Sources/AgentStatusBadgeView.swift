@@ -2,11 +2,11 @@ import AppKit
 import CmuxSidebar
 import QuartzCore
 
-/// A fixed-height, compositor-animated lifecycle capsule shared by sidebar renderers.
+/// A wrapping, compositor-animated lifecycle capsule shared by sidebar renderers.
 @MainActor
 final class AgentStatusBadgeView: NSView {
     private let iconView = NSImageView()
-    private let label = NSTextField(labelWithString: "")
+    private let label = SidebarRowTextView(lines: 2)
     private let link = SidebarRowLinkButton()
     private let markdown = SidebarRowMarkdownTextView()
     private let arc = CAShapeLayer()
@@ -16,14 +16,12 @@ final class AgentStatusBadgeView: NSView {
 
     override var isFlipped: Bool { true }
     override var intrinsicContentSize: NSSize {
-        NSSize(width: NSView.noIntrinsicMetric, height: ceil(pointSize * 1.5 + 6))
+        NSSize(width: NSView.noIntrinsicMetric, height: measuredHeight(width: bounds.width))
     }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        label.lineBreakMode = .byTruncatingTail
-        label.maximumNumberOfLines = 1
         for view in [iconView, label, link, markdown] { addSubview(view) }
         arc.fillColor = nil
         arc.lineCap = .round
@@ -40,10 +38,12 @@ final class AgentStatusBadgeView: NSView {
 
     func configure(entry: SidebarStatusEntry, presentation: AgentStatusPresentation, fontScale: CGFloat, onOpenURL: @escaping (URL) -> Void) {
         self.presentation = presentation
-        pointSize = 12 * fontScale
+        pointSize = SidebarWorkspaceTypography(scale: fontScale).agentStatus
         let foreground = Self.color(presentation.foregroundHex)
         layer?.backgroundColor = Self.color(presentation.backgroundHex).cgColor
         let font = NSFont.systemFont(ofSize: pointSize, weight: .semibold)
+        let detailsHelp = entry.url.map { $0.absoluteString + "\n" + entry.sidebarHelpText }
+            ?? entry.sidebarHelpText
         iconView.image = RenderableSystemSymbol.configuredAppKitImage(systemName: presentation.symbolName, pointSize: pointSize, weight: .semibold)
         iconView.contentTintColor = foreground
         iconView.imageScaling = .scaleProportionallyDown
@@ -57,14 +57,14 @@ final class AgentStatusBadgeView: NSView {
             markdown.configure(markdown: presentation.text, font: font, color: foreground, explicitURL: entry.url, onOpenURL: onOpenURL)
         } else if let url = entry.url {
             link.isHidden = false
-            link.configure(title: presentation.text, font: font, color: foreground, underlined: true, toolTip: entry.sidebarToolTip(linkURL: url), onClick: { onOpenURL(url) })
+            link.configure(title: presentation.text, font: font, color: foreground, underlined: true, toolTip: detailsHelp, onClick: { onOpenURL(url) })
         } else {
             label.isHidden = false
             label.stringValue = presentation.text
             label.font = font
             label.textColor = foreground
         }
-        toolTip = entry.sidebarToolTip(linkURL: entry.url)
+        toolTip = detailsHelp
         arc.strokeColor = foreground.cgColor
         setAccessibilityLabel(presentation.text)
         invalidateIntrinsicContentSize()
@@ -80,15 +80,28 @@ final class AgentStatusBadgeView: NSView {
         markdown.reset()
     }
 
+    func measuredHeight(width: CGFloat) -> CGFloat {
+        let textWidth = max(1, width - (8 + pointSize + 2 + 6 + 8))
+        let textHeight: CGFloat
+        if !markdown.isHidden {
+            textHeight = markdown.measuredHeight(width: textWidth)
+        } else if !link.isHidden {
+            textHeight = link.measuredHeight(width: textWidth)
+        } else {
+            textHeight = label.measuredHeight(width: textWidth)
+        }
+        return ceil(max(pointSize * 1.5, textHeight) + 6)
+    }
+
     override func layout() {
         super.layout()
-        let height = intrinsicContentSize.height
+        let height = bounds.height
         layer?.cornerRadius = height / 2
         let side = pointSize + 2
         let iconFrame = NSRect(x: 8, y: (height - side) / 2, width: side, height: side)
         iconView.frame = iconFrame
         let textX = iconFrame.maxX + 6
-        let textHeight = ceil(pointSize * 1.5)
+        let textHeight = max(0, height - 6)
         content.frame = NSRect(x: textX, y: (height - textHeight) / 2, width: max(0, bounds.width - textX - 8), height: textHeight)
         CATransaction.begin()
         CATransaction.setDisableActions(true)

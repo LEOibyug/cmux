@@ -76,6 +76,12 @@ struct SidebarWorkspaceRowModel: Equatable {
 
     var fontScale: CGFloat { settings.sidebarFontScale }
 
+    var typography: SidebarWorkspaceTypography {
+        SidebarWorkspaceTypography(
+            scale: fontScale * CGFloat(globalFontMagnificationPercent) / CGFloat(GlobalFontMagnification.defaultPercent)
+        )
+    }
+
     func scaled(_ base: CGFloat) -> CGFloat {
         GlobalFontMagnification.scaledSize(base * fontScale, percent: globalFontMagnificationPercent)
     }

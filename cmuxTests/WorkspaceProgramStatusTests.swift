@@ -63,6 +63,36 @@ struct WorkspaceProgramStatusTests {
         #expect(workspace.bonsplitController.tab(secondTabId)?.statusBadge == nil)
     }
 
+    @Test func nativeWaitingInputShadowsALaterHookForTheSameLivePanel() throws {
+        let workspace = Workspace()
+        let panelId = try #require(workspace.focusedPanelId)
+        let reporter = Process()
+        reporter.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        reporter.arguments = ["30"]
+        try reporter.run()
+        defer {
+            _ = workspace.clearAgentPID(key: "omp", panelId: panelId, clearStatus: true, refreshPorts: false)
+            if reporter.isRunning { reporter.terminate() }
+            reporter.waitUntilExit()
+        }
+        workspace.recordAgentPID(key: "omp", pid: reporter.processIdentifier, panelId: panelId, refreshPorts: false)
+        workspace.applyProgramStatus(ProgramStatusReport(state: .blocked, kind: .question, app: "omp"), panelId: panelId)
+        workspace.setStatusEntry(SidebarStatusEntry(
+            key: "omp", value: "late hook", icon: "bolt.fill", timestamp: .distantFuture, workState: .running
+        ), key: "omp", panelId: panelId)
+
+        #expect(workspace.sidebarStatusEntriesVisibleForDisplay().map(\.key) == [Workspace.programStatusKey])
+        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId)?.symbolName == "bell.fill")
+        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId)?.isAnimating == false)
+
+        workspace.applyProgramStatus(ProgramStatusReport(state: .clear), panelId: panelId)
+        #expect(workspace.sidebarStatusEntriesVisibleForDisplay().map(\.key) == ["omp"])
+        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId)?.isAnimating == true)
+
+        workspace.applyProgramStatus(ProgramStatusReport(state: .blocked, kind: .permission, app: "cargo"), panelId: panelId)
+        #expect(Set(workspace.sidebarStatusEntriesVisibleForDisplay().map(\.key)) == ["omp", Workspace.programStatusKey])
+    }
+
     @Test func workingShowsPercentAndPromptDropsTransientRecords() throws {
         let workspace = Workspace()
         let panelId = try #require(workspace.focusedPanelId)
