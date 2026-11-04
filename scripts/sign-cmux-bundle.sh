@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 # Sign a local cmux bundle inside out with an explicitly selected identity.
 #
 # Usage:
@@ -39,6 +40,7 @@ if [[ $# -lt 3 ]]; then
 fi
 
 APP_PATH="$1"
+cmux_require_project_path "$APP_PATH" || exit 1
 APP_ENTITLEMENTS="$2"
 IDENTITY="$3"
 HELPER_ENTITLEMENTS="${CMUX_HELPER_ENTITLEMENTS:-cmux-helper.entitlements}"

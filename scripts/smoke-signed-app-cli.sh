@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 # Feature smoke for a signed cmux app bundle: launch the app, then drive it
 # through the CLI bundled inside the same .app over its control socket.
 #
@@ -28,14 +29,11 @@ if [[ ! -d "$APP_PATH/Contents" ]]; then
   exit 1
 fi
 
-# This script runs code from the bundle. It refuses to run while a CI signing
-# keychain exists and gives the app no signing or publishing credentials.
-# shellcheck source=ci/lib/signing-runtime-guard.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ci/lib/signing-runtime-guard.sh"
-cmux_signing_runtime_guard
 
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
 BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO_PLIST")"
+[[ "$BUNDLE_ID" == com.cmuxterm.app.debug.* ]] || { echo "Only isolated tagged bundles may be smoke-launched" >&2; exit 1; }
+cmux_require_project_path "$APP_PATH" || exit 1
 EXECUTABLE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$INFO_PLIST")"
 SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
 BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
@@ -67,8 +65,8 @@ DISABLE_ICON_PERSISTENCE_KEY="cmuxDisableBundleIconPersistence"
 
 # A short private socket path: sun_path is limited to 104 bytes, and a private
 # path cannot collide with a socket another cmux on the runner already owns.
-WORK_DIR="$(mktemp -d /tmp/cmux-cli-smoke.XXXXXX)"
-SOCKET_PATH="$WORK_DIR/s.sock"
+WORK_DIR="$(mktemp -d "$CMUX_TMP_DIR/cmux-cli-smoke.XXXXXX")"
+SOCKET_PATH="$(cmux_dev_socket_path "smoke-$$")"
 APP_LOG="$WORK_DIR/app.log"
 APP_PID=""
 STEP="setup"

@@ -1,8 +1,10 @@
 #!/bin/bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 # shellcheck source=scripts/build-phase-caller-path.sh
 . "$(dirname "${BASH_SOURCE[0]}")/build-phase-caller-path.sh"
 DEST="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+cmux_require_project_path "$DEST" || exit 1
 GHOSTTY_DEST="${DEST}/ghostty"
 TERMINFO_DEST="${DEST}/terminfo"
 CMUX_SHELL_DEST="${DEST}/shell-integration"
@@ -87,6 +89,7 @@ fingerprint_toolchain() {
 
 STAMP="${DERIVED_FILE_DIR}/cmux-bundled-resources.stamp"
 OUTPUT_MANIFEST="${DERIVED_FILE_DIR}/cmux-bundled-resources.outputs"
+cmux_require_project_path "$STAMP" "$OUTPUT_MANIFEST" || exit 1
 
 # This phase also runs when Xcode's dependency graph is conservative. Keep the
 # expensive helper builds incremental inside the phase by keying the output to

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -50,6 +51,10 @@ if [[ -z "$requested_archs" ]]; then
   esac
 fi
 
+cmux_require_project_path "$BUILD_OUTPUT_DIR" "$BUILD_WORK_DIR" || exit 1
+if [[ -n "${CMUX_DIFF_SIDECAR_STAMP:-}" ]]; then
+  cmux_require_project_path "$CMUX_DIFF_SIDECAR_STAMP" || exit 1
+fi
 mkdir -p "$BUILD_OUTPUT_DIR"
 mkdir -p "$BUILD_WORK_DIR"
 binaries=()

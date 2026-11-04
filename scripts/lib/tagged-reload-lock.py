@@ -8,6 +8,9 @@ import signal
 import subprocess
 import sys
 import tempfile
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from project_paths import configure_project_paths
+configure_project_paths()
 
 
 def main() -> int:

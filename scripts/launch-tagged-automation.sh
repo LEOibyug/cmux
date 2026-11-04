@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 
 usage() {
@@ -106,11 +107,11 @@ fi
 
 TAG_ID="$(sanitize_bundle "$TAG")"
 TAG_SLUG="$(sanitize_path "$TAG")"
-APP="$HOME/Library/Developer/Xcode/DerivedData/cmux-${TAG_SLUG}/Build/Products/Debug/cmux DEV ${TAG}.app"
+APP="$CMUX_DERIVED_DATA/Build/Products/Debug/cmux DEV ${TAG_SLUG}.app"
 BID="com.cmuxterm.app.debug.${TAG_ID}"
-SOCK="/tmp/cmux-debug-${TAG_SLUG}.sock"
-DSOCK="$HOME/Library/Application Support/cmux/cmuxd-dev-${TAG_SLUG}.sock"
-LOG="/tmp/cmux-debug-${TAG_SLUG}.log"
+SOCK="$(cmux_dev_socket_path "$TAG_SLUG")"
+DSOCK="$(cmux_dev_socket_path "daemon-${TAG_SLUG}")"
+LOG="$CMUX_RUNTIME_DIR/cmux-debug-${TAG_SLUG}.log"
 
 if [[ ! -d "$APP" ]]; then
   echo "error: tagged app not found at $APP" >&2
@@ -154,6 +155,11 @@ OPEN_ENV=(
   "CMUXD_UNIX_PATH=${DSOCK}"
   "CMUX_DEBUG_LOG=${LOG}"
   "CMUX_DISABLE_SESSION_RESTORE=1"
+  "CMUX_ALLOW_SOCKET_OVERRIDE=1"
+  "HOME=$CMUX_TMP_DIR/homes/${TAG_SLUG}"
+  "CFFIXED_USER_HOME=$CMUX_TMP_DIR/homes/${TAG_SLUG}"
+  "TMPDIR=$CMUX_TMP_DIR/"
+  "XDG_CACHE_HOME=$CMUX_CACHE_DIR/xdg"
 )
 
 if (( EXTRA_ENV_COUNT > 0 )); then
@@ -162,9 +168,11 @@ if (( EXTRA_ENV_COUNT > 0 )); then
   done
 fi
 if [[ -n "$SHELL_LOG" ]]; then
+  cmux_require_project_path "$SHELL_LOG" || exit 1
   OPEN_ENV+=("GHOSTTY_ZSH_INTEGRATION_LOG=${SHELL_LOG}")
 fi
 
+mkdir -p "$CMUX_TMP_DIR/homes/${TAG_SLUG}"
 "${OPEN_ENV[@]}" open -g "$APP"
 
 if [[ "$WAIT_SOCKET" != "0" ]]; then

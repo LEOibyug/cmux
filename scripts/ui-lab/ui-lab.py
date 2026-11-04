@@ -36,6 +36,9 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+from project_paths import configure_project_paths, require_project_path
+configure_project_paths()
 LAB = Path(__file__).resolve().parent
 DIRECTIVE = re.compile(r"^//\s*ui-lab:\s*(source|shim)\s+(\S+)\s*$")
 # `import CmuxFoo`, `@testable import CmuxFoo`, `import struct CmuxFoo.Bar`...
@@ -46,7 +49,7 @@ PACKAGE_IMPORT = re.compile(
     re.M,
 )
 CACHE_DAYS = 14
-CACHE = Path(os.environ.get("CMUX_UI_LAB_CACHE", Path.home() / "Library/Caches/cmux-ui-lab"))
+CACHE = require_project_path(Path(os.environ["CMUX_UI_LAB_CACHE"]))
 
 
 def inputs(harness: Path) -> list[Path]:
@@ -147,12 +150,12 @@ def render(harness: Path, out: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("harness", type=Path)
-    parser.add_argument("--out", type=Path, help="default: $TMPDIR/cmux-ui-lab/<harness name>")
+    parser.add_argument("--out", type=Path, help="default: project tmp/cmux-ui-lab/<harness name>")
     parser.add_argument("--watch", action="store_true", help="re-render whenever an input changes")
     args = parser.parse_args(argv)
 
     harness = args.harness.resolve()
-    out = args.out or Path(tempfile.gettempdir()) / "cmux-ui-lab" / harness.stem
+    out = require_project_path(args.out or Path(tempfile.gettempdir()) / "cmux-ui-lab" / harness.stem)
     try:
         render(harness, out)
     except SystemExit as error:

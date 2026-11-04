@@ -29,6 +29,9 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+if __name__ == "__main__":
+    from project_paths import configure_project_paths
+    configure_project_paths()
 
 DECODER = json.JSONDecoder()
 WHITESPACE = " \t\r\n"

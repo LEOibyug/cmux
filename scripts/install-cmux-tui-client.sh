@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 # Bundle an explicitly supplied SSH TUI client. Never fetch or upgrade artifacts.
 set -euo pipefail
 
@@ -24,7 +25,8 @@ while (( $# )); do
   esac
 done
 [[ -n "$APP_PATH" && -d "$APP_PATH/Contents" ]] || { echo 'error: app bundle is required' >&2; exit 64; }
-CLIENT="${CMUX_TUI_CLIENT_LOCAL:-$(dirname "$0")/../cmux-tui/target/release/cmux-tui}"
+cmux_require_project_path "$APP_PATH" || exit 1
+CLIENT="$CMUX_TUI_CLIENT_LOCAL"
 [[ -f "$CLIENT" && -x "$CLIENT" ]] || {
   echo 'error: build the local SSH TUI client or set CMUX_TUI_CLIENT_LOCAL to an existing executable; this personal build never downloads it' >&2
   exit 1

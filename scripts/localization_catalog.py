@@ -12,6 +12,8 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from project_paths import configure_project_paths, require_project_path
+configure_project_paths()
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -466,6 +468,10 @@ def main() -> int:
         parser.error("batch size must be positive; batch and limit must be nonnegative")
     omissions = load_metadata("localization-allowed-omissions.json")
     counts = load_metadata("localization-plurals.json")
+    if args.output:
+        args.output = require_project_path(args.output)
+    if args.command == "merge" and args.catalog:
+        args.catalog = require_project_path(args.catalog)
     if args.command == "merge":
         if not args.catalog or not args.locale or not args.input:
             parser.error("merge requires --catalog, --locale, and --input")

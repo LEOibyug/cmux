@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -75,6 +76,7 @@ if [ -z "${requested_targets}" ]; then
   done
 fi
 
+cmux_require_project_path "$BUILD_OUTPUT_DIR" || exit 1
 mkdir -p "${BUILD_OUTPUT_DIR}"
 libs=()
 seen_targets=""
@@ -85,7 +87,7 @@ for target in ${requested_targets}; do
   seen_targets="${seen_targets} ${target}"
   ensure_rust_target "$target"
   cargo build --manifest-path "${CRATE_DIR}/Cargo.toml" --release --target "$target"
-  source_lib="${CRATE_DIR}/target/${target}/release/${LIB_NAME}"
+  source_lib="${CARGO_TARGET_DIR}/${target}/release/${LIB_NAME}"
   if [ ! -f "${source_lib}" ]; then
     echo "error: expected nucleo FFI library at ${source_lib}" >&2
     exit 1
