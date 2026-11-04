@@ -18,11 +18,12 @@ Programs can detect support with `printf '\e]7501;?\e\\'`; cmux answers with the
 
 ## What cmux shows
 
-cmux keeps each terminal pane's records separately and selects the most urgent status:
-`blocked`, then `error`, `working`, `done`, and explicitly reported `idle`. Both `done`
-and `idle` present as a green Done badge; there is no persistent Idle badge. A pane
-without a report has no badge. Sidebar and terminal tabs share the same labels:
-in Chinese, working is “工作中”, blocked is “等待输入”, and completion is “已完成”.
+cmux keeps each terminal pane's records separately and selects the most urgent visible
+status: `blocked`, then `error`, `working`, and `done`. Only `done` presents as a green
+Done badge; `idle` retains its raw record but has no badge. This keeps OMP's initial
+idle report from appearing completed. A pane without a report also has no badge.
+Sidebar and terminal tabs share the same labels: in Chinese, working is “工作中”,
+blocked is “等待输入”, and completion is “已完成”.
 The original app name, message, title and progress remain in the badge's hover help.
 
 The row uses the same prominent colored badges as hook-integrated agents: blue

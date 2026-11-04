@@ -65,8 +65,7 @@ struct WorkspaceProgramStatusTests {
         #expect(workspace.bonsplitController.tab(secondTabId)?.statusBadge == nil)
     }
 
-    @Test(arguments: [ProgramStatusState.idle, .done])
-    func completionAcknowledgementSurvivesLateReportsUntilANewActiveTurn(state: ProgramStatusState) throws {
+    @Test func completionAcknowledgementSurvivesLateReportsUntilANewActiveTurn() throws {
         let workspace = Workspace()
         defer { workspace.teardownAllPanels() }
         let panelId = try #require(workspace.focusedPanelId)
@@ -84,7 +83,7 @@ struct WorkspaceProgramStatusTests {
         workspace.setStatusEntry(SidebarStatusEntry(
             key: "omp", value: "other pane working", icon: "bolt.fill", workState: .running
         ), key: "omp", panelId: otherPanel.id)
-        workspace.applyProgramStatus(ProgramStatusReport(state: state, app: "omp"), panelId: panelId)
+        workspace.applyProgramStatus(ProgramStatusReport(state: .done, app: "omp"), panelId: panelId)
 
         let completed = try #require(workspace.terminalAgentStatusEntryVisibleForDisplay(panelId: panelId))
         #expect(completed.key == Workspace.programStatusKey)
@@ -96,7 +95,7 @@ struct WorkspaceProgramStatusTests {
         #expect(workspace.bonsplitController.tab(tabId)?.statusBadge == nil)
         #expect(workspace.bonsplitController.tab(otherTabId)?.statusBadge?.isAnimating == true)
         #expect(workspace.sidebarStatusEntriesVisibleForDisplay().map(\.value) == ["other pane working"])
-        #expect(workspace.programStatusStoresByPanelId[panelId]?.record(id: "")?.state == state)
+        #expect(workspace.programStatusStoresByPanelId[panelId]?.record(id: "")?.state == .done)
         #expect(workspace.agentLifecycleStatesByPanelId[panelId]?["omp"] == .idle)
 
         workspace.setStatusEntry(SidebarStatusEntry(key: "omp", value: "late hook end", icon: "pause.circle.fill"), key: "omp", panelId: panelId)
@@ -122,7 +121,7 @@ struct WorkspaceProgramStatusTests {
 
         workspace.applyProgramStatus(ProgramStatusReport(state: .working, app: "omp"), panelId: panelId)
         #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.isAnimating == true)
-        workspace.applyProgramStatus(ProgramStatusReport(state: state, app: "omp"), panelId: panelId)
+        workspace.applyProgramStatus(ProgramStatusReport(state: .done, app: "omp"), panelId: panelId)
         #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.symbolName == "checkmark.circle.fill")
         workspace.dismissCompletedAgentStatus()
         #expect(workspace.bonsplitController.tab(tabId)?.statusBadge == nil)
@@ -154,7 +153,7 @@ struct WorkspaceProgramStatusTests {
             #expect((workspace.bonsplitController.tab(tabId)?.statusBadge == nil) == hidden)
         }
 
-        workspace.applyProgramStatus(ProgramStatusReport(state: .idle, app: "omp"), panelId: panelId)
+        workspace.applyProgramStatus(ProgramStatusReport(state: .done, app: "omp"), panelId: panelId)
         defaults.set(true, forKey: "sidebarShowInactiveAgentStatus")
         workspace.refreshTerminalTabAgentStatusBadges()
         #expect(workspace.sidebarStatusEntriesVisibleForDisplay().count == 1)
@@ -194,6 +193,16 @@ struct WorkspaceProgramStatusTests {
             reporter.waitUntilExit()
         }
         workspace.recordAgentPID(key: "omp", pid: reporter.processIdentifier, panelId: panelId, refreshPorts: false)
+        workspace.applyProgramStatus(ProgramStatusReport(state: .idle, app: "omp"), panelId: panelId)
+        #expect(workspace.sidebarStatusEntriesVisibleForDisplay().isEmpty)
+        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId) == nil)
+        #expect(workspace.programStatusStoresByPanelId[panelId]?.record(id: "")?.state == .idle)
+        workspace.setStatusEntry(SidebarStatusEntry(
+            key: "omp", value: "stale hook", icon: "bolt.fill", workState: .running
+        ), key: "omp", panelId: panelId)
+        #expect(workspace.sidebarStatusEntriesVisibleForDisplay().isEmpty)
+        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId) == nil)
+
         workspace.applyProgramStatus(ProgramStatusReport(state: .blocked, kind: .question, app: "omp"), panelId: panelId)
         workspace.setStatusEntry(SidebarStatusEntry(
             key: "omp", value: "late hook", icon: "bolt.fill", timestamp: .distantFuture, workState: .running
@@ -204,6 +213,9 @@ struct WorkspaceProgramStatusTests {
         #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId)?.isAnimating == false)
 
         workspace.applyProgramStatus(ProgramStatusReport(state: .idle, app: "omp"), panelId: panelId)
+        #expect(workspace.sidebarStatusEntriesVisibleForDisplay().isEmpty)
+        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId) == nil)
+        workspace.applyProgramStatus(ProgramStatusReport(state: .done, app: "omp"), panelId: panelId)
         #expect(workspace.sidebarStatusEntriesVisibleForDisplay().map(\.key) == [Workspace.programStatusKey])
         #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId)?.symbolName == "checkmark.circle.fill")
         defaults.set(false, forKey: "sidebarShowInactiveAgentStatus")

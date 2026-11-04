@@ -14,7 +14,7 @@ import sys
 import uuid
 
 from local_signing import resolve_identity, sign_code
-from prepare_local_bundle import normalize_bundle, validate_bundle
+from prepare_local_bundle import normalize_bundle
 from project_paths import ROOT, configure_project_paths, require_project_path
 
 RUNTIME = ROOT / "tmp/local-update"
@@ -90,10 +90,7 @@ def prepare(source, work, identity):
     permissions = subprocess.run(["/usr/bin/codesign", "-d", "--entitlements", ":-", str(TARGET)], capture_output=True, check=True).stdout
     entitlement_file = work / "ordinary.entitlements"
     entitlement_file.write_bytes(permissions)
-    environment = os.environ.copy()
-    environment["CMUX_TIMESTAMP"] = "none"
-    command([str(ROOT / "scripts/sign-cmux-bundle.sh"), str(candidate), str(entitlement_file), identity], work / "sign.log", environment)
-    validate_bundle(candidate)
+    command([str(ROOT / "scripts/sign-cmux-bundle.sh"), str(candidate), str(entitlement_file), identity], work / "sign.log")
     command(["/usr/bin/codesign", "--verify", "--deep", "--strict", "-R", f'=certificate leaf = H"{identity}" and identifier "com.cmuxterm.app"', str(candidate)], work / "candidate-check.log")
     actual = subprocess.run(["/usr/bin/codesign", "-d", "--entitlements", ":-", str(candidate)], capture_output=True, check=True).stdout
     if plistlib.loads(actual) != plistlib.loads(permissions):

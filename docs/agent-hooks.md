@@ -19,8 +19,8 @@ Hook-reported agent state and [native terminal status](program-status.md) appear
 a larger colored badge below the workspace title and as a compact badge beside
 that terminal's surface-tab title. Running
 work uses a blue rotating indicator; finished turns show a green Done badge, waiting or
-needs-input states amber, and reported failures red. Idle reports use Done too, rather
-than leaving a persistent Idle badge. Text and symbols remain visible with Reduce Motion.
+needs-input states amber, and reported failures red. Native `idle` reports have no badge;
+native `done` reports and completed hooks show Done. Text and symbols remain visible with Reduce Motion.
 Tab captions use short localized state labels without repeating the provider name,
 leaving room for the conversation title.
 Done badges and numeric completion indicators remain visible while you view the workspace.

@@ -7,14 +7,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 #
 # Optional env:
 #   CMUX_HELPER_ENTITLEMENTS  (default: cmux-helper.entitlements)
-#   CMUX_TIMESTAMP             set to "none" for un-timestamped local sigs
 #   CMUX_SIGN_SKIP_NUCLEO_FFI  set to "1" for an app that embeds no command palette
 #                              Nucleo FFI (cmux NEXT DEV: cmux-next removed it)
 #   CMUX_SIGN_MODE             "all" (default), "all-except-computer-use", or
-#                              "main-only". The split Computer Use notarization
-#                              flow uses all-except-computer-use while Apple's
-#                              service processes the helper, then main-only after
-#                              stapling so the submitted helper CDHash survives.
+#                              "main-only"
 #
 # Signs in the Apple-documented inside-out order:
 #   1. Helpers under Contents/Resources/bin/* and libexec/* with minimal
@@ -25,9 +21,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 #   3. Each nested plugin under Contents/PlugIns/* with --deep.
 #   4. Each nested framework under Contents/Frameworks/* with --deep.
 #   5. The main app bundle with the supplied app-level entitlements,
-#      WITHOUT --deep. --deep here would overwrite helper/plugin
-#      signatures and re-introduce the app-id mismatch that amfi on
-#      notarized macOS 26 Tahoe rejects with errno 163.
+#      without --deep, preserving nested signatures.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -44,7 +38,6 @@ if [[ $# -eq 3 ]]; then
   IDENTITY="$3"
 else
   IDENTITY="$(python3 "$SCRIPT_DIR/local_signing.py")"
-  export CMUX_TIMESTAMP="${CMUX_TIMESTAMP:-none}"
 fi
 HELPER_ENTITLEMENTS="${CMUX_HELPER_ENTITLEMENTS:-cmux-helper.entitlements}"
 SIGN_MODE="${CMUX_SIGN_MODE:-all}"
@@ -70,18 +63,10 @@ case "$SIGN_MODE" in
 esac
 
 
-if [[ "$IDENTITY" == "-" || "${CMUX_TIMESTAMP:-}" == "none" ]]; then
-  TS_FLAG=(--timestamp=none)
-else
-  TS_FLAG=(--timestamp)
-fi
-
-# Helpers and the main app share the ordinary local runtime signing options.
-COMMON=(--force --options runtime "${TS_FLAG[@]}" --sign "$IDENTITY")
 if [[ "$IDENTITY" == "-" ]]; then
-  SIGN_COMMAND=(/usr/bin/codesign "${COMMON[@]}")
+  SIGN_COMMAND=(/usr/bin/codesign --force --options runtime --timestamp=none --sign "$IDENTITY")
 else
-  if [[ "$IDENTITY" != "$(python3 "$SCRIPT_DIR/local_signing.py")" ]]; then
+  if [[ $# -eq 3 && "$IDENTITY" != "$(python3 "$SCRIPT_DIR/local_signing.py")" ]]; then
     echo "error: formal signing requires the pinned file identity; keychain identities are not used" >&2
     exit 1
   fi
@@ -94,9 +79,7 @@ if [[ "$SIGN_MODE" == "all" || "$SIGN_MODE" == "all-except-computer-use" ]]; the
   for helper_dir in bin libexec; do
     for helper in "$APP_PATH/Contents/Resources/$helper_dir"/*; do
       [[ -f "$helper" && -x "$helper" ]] || continue
-      # Scripts are sealed by the bundle signature. Code-signing them directly
-      # stores the signature in an extended attribute, which Sparkle's
-      # BinaryDelta refuses to diff, so it would block delta updates.
+      # Scripts are sealed by the bundle signature, not xattr signatures.
       if ! /usr/bin/file -b "$helper" | grep -q 'Mach-O'; then
         echo "==> leaving non-Mach-O helper $(basename "$helper") to the bundle seal"
         continue
@@ -108,13 +91,10 @@ if [[ "$SIGN_MODE" == "all" || "$SIGN_MODE" == "all-except-computer-use" ]]; the
       "${SIGN_COMMAND[@]}" --identifier "$helper_id" --entitlements "$HELPER_ENTITLEMENTS" "$helper"
     done
   done
-  # cmux-tui builds for SSH hosts. Notarization requires the macOS ones to be
-  # Developer ID signed; the script re-pins them in the bundled manifest.
+  # Sign macOS SSH payloads and re-pin their manifest checksums.
   "$SCRIPT_DIR/sign-cmux-tui-ssh-payloads.sh" "$APP_PATH" "$HELPER_ENTITLEMENTS" "$IDENTITY"
 
-  # 2. Computer Use helper app. An early notarization submission owns this
-  # signature in all-except-computer-use mode; changing it would invalidate the
-  # ticket that finish is waiting to staple.
+  # 2. Computer Use helper app.
   if [[ "$SIGN_MODE" == "all" && -d "$COMPUTER_USE_HELPER" ]]; then
     echo "==> signing nested helper $(basename "$COMPUTER_USE_HELPER")"
     "${SIGN_COMMAND[@]}" \
@@ -148,9 +128,6 @@ MAIN_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Con
 
 echo "==> verifying"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-if [[ -d "$COMPUTER_USE_HELPER" ]]; then
-  /usr/bin/codesign --verify --strict --verbose=2 "$COMPUTER_USE_HELPER"
-fi
 if [[ "${CMUX_SIGN_SKIP_NUCLEO_FFI:-}" != 1 ]]; then
   "$SCRIPT_DIR/verify-command-palette-nucleo-ffi-artifact.sh" "$APP_PATH"
 fi
@@ -160,39 +137,33 @@ SIDECAR_CHECK=(--archs "$(lipo -archs "$APP_PATH/Contents/MacOS/cmux")" --requir
   "$APP_PATH/Contents/Resources/bin/cmux-diff-sidecar" \
   "${SIDECAR_CHECK[@]}"
 
-APP_ID="$(/usr/libexec/PlistBuddy -c "Print :com.apple.application-identifier" \
-  /dev/stdin <<<"$(plutil -convert xml1 -o - "$APP_ENTITLEMENTS")" 2>/dev/null || true)"
-
-if [[ -n "$APP_ID" ]]; then
-  /usr/bin/codesign -d --entitlements :- "$APP_PATH" 2>&1 | grep -q "$APP_ID" || {
-    echo "error: signed app missing application-identifier $APP_ID" >&2
-    exit 1
-  }
-fi
-# The WebAuthn browser entitlement is an Apple-approved capability request.
-# Stable and nightly request it; the RC App ID's request is still pending, so
-# cmux.rc.entitlements omits it. Assert it only when the channel asks for it,
-# so a channel that requests it can never ship without it.
-if plutil -convert xml1 -o - "$APP_ENTITLEMENTS" 2>/dev/null \
-  | grep -q "com.apple.developer.web-browser.public-key-credential"; then
-  /usr/bin/codesign -d --entitlements :- "$APP_PATH" 2>&1 \
-    | grep -q "com.apple.developer.web-browser.public-key-credential" || {
-      echo "error: signed app missing web-browser entitlement" >&2
-      exit 1
-    }
-else
-  echo "note: $(basename "$APP_ENTITLEMENTS") does not request the web-browser entitlement; skipping that check"
-fi
-
-# These capabilities identify cmux as the responsible app for child-process
-# requests to macOS personal-information services. Keep this check next to the
-# signing step so a release cannot silently regress to the old denial behavior.
 SIGNED_ENTITLEMENTS="$(mktemp "${TMPDIR:-/tmp}/cmux-signed-entitlements.XXXXXX")"
 trap 'rm -f "$SIGNED_ENTITLEMENTS"' EXIT
 /usr/bin/codesign -d --entitlements :- "$APP_PATH" 2>/dev/null > "$SIGNED_ENTITLEMENTS" || {
   echo "error: unable to read signed app entitlements" >&2
   exit 1
 }
+APP_ID="$(/usr/libexec/PlistBuddy -c "Print :com.apple.application-identifier" \
+  /dev/stdin <<<"$(plutil -convert xml1 -o - "$APP_ENTITLEMENTS")" 2>/dev/null || true)"
+
+if [[ -n "$APP_ID" ]]; then
+  grep -q "$APP_ID" "$SIGNED_ENTITLEMENTS" || {
+    echo "error: signed app missing application-identifier $APP_ID" >&2
+    exit 1
+  }
+fi
+# Preserve the browser capability when requested by the supplied entitlements.
+if plutil -convert xml1 -o - "$APP_ENTITLEMENTS" 2>/dev/null \
+  | grep -q "com.apple.developer.web-browser.public-key-credential"; then
+  grep -q "com.apple.developer.web-browser.public-key-credential" "$SIGNED_ENTITLEMENTS" || {
+    echo "error: signed app missing web-browser entitlement" >&2
+    exit 1
+  }
+else
+  echo "note: $(basename "$APP_ENTITLEMENTS") does not request the web-browser entitlement; skipping that check"
+fi
+
+# Required for child-process requests to macOS personal-information services.
 
 for entitlement in \
   com.apple.security.personal-information.addressbook \

@@ -1,16 +1,12 @@
 #!/usr/bin/env bash
 source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
-# Developer ID sign the macOS cmux-tui SSH payloads in an app bundle and re-pin
-# their checksums in the bundled manifest.
+# Sign macOS cmux-tui SSH payloads with the local identity and re-pin checksums.
 #
 #   scripts/sign-cmux-tui-ssh-payloads.sh <app-path> <entitlements> <signing-identity>
 #
-# install-cmux-tui-client.sh copies the cmux-tui builds a packaged client cannot
-# serve itself into Contents/Resources/bin/cmux-tui-ssh/ (none for a current
-# client, which leaves only manifest.json; then nothing is signed or re-pinned). Notarization rejects the bundle while the two
-# *-apple-darwin payloads there are unsigned or only linker-signed, so each
-# Mach-O payload is signed with the hardened runtime and a secure timestamp,
-# the same way sign-cmux-bundle.sh signs Resources/bin helpers.
+# install-cmux-tui-client.sh copies payloads the packaged client cannot serve
+# into Contents/Resources/bin/cmux-tui-ssh/. A current client needs only the
+# manifest, with no payloads to sign.
 #
 # Signing rewrites the file, and cmux-tui checks a payload's sha256 against
 # manifest.json before uploading it, so the manifest's entry for each signed
@@ -18,7 +14,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 # Linux builds) are left alone and must still match the manifest. The manifest
 # is sealed by the app signature, which is applied after this script runs.
 #
-# Env: CMUX_TIMESTAMP=none for un-timestamped local signatures;
+# Env: CMUX_TIMESTAMP=none for un-timestamped ad hoc signatures;
 # CMUX_CODESIGN_TOOL and CMUX_FILE_TOOL override the tools (tests).
 set -euo pipefail
 

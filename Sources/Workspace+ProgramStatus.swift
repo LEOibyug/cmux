@@ -128,15 +128,15 @@ extension Workspace {
 
     /// Chooses chrome independently of the raw record used by activity consumers.
     func programStatusRecordVisibleForDisplay(panelId: UUID, store: ProgramStatusRecordStore) -> ProgramStatusRecord? {
-        guard let winner = store.mostUrgentRecord(includingIdle: true) else { return nil }
+        guard let winner = store.mostUrgentRecord() else { return nil }
         guard let identities = dismissedAgentCompletionIdentitiesByPanelId[panelId],
-              (winner.state == .idle || winner.state == .done),
+              winner.state == .done,
               identities.contains(programStatusCompletionIdentity(for: winner, store: store)) else {
             return winner
         }
         return store.records.lazy.filter { record in
-            (record.state != .idle && record.state != .done)
-                || !identities.contains(self.programStatusCompletionIdentity(for: record, store: store))
+            record.state != .idle && (record.state != .done
+                || !identities.contains(self.programStatusCompletionIdentity(for: record, store: store)))
         }.max { lhs, rhs in
             let left = ProgramStatusRecordStore.urgencyRank(lhs.state)
             let right = ProgramStatusRecordStore.urgencyRank(rhs.state)
@@ -176,13 +176,13 @@ extension Workspace {
         case .working:
             icon = "bolt.fill"
             fallback = String(localized: "programStatus.state.working", defaultValue: "Working")
-        case .done, .idle:
+        case .done:
             icon = "checkmark.circle.fill"
             fallback = String(localized: "programStatus.state.done", defaultValue: "Done")
         case .error:
             icon = "exclamationmark.triangle.fill"
             fallback = String(localized: "programStatus.state.failed", defaultValue: "Failed")
-        case .clear:
+        case .idle, .clear:
             return
         }
         let detail = message ?? title ?? fallback
