@@ -84,7 +84,7 @@ public struct SidebarCatalogSection: SettingCatalogSection {
         userDefaultsKey: "sidebarInformationLineLimit"
     )
 
-    /// Show idle and completed agent status in workspace rows and terminal tabs.
+    /// Show completed agent status in workspace rows and terminal tabs until the workspace is opened or marked as read.
     public let showInactiveAgentStatus = DefaultsKey<Bool>(
         id: "sidebar.showInactiveAgentStatus",
         defaultValue: true,

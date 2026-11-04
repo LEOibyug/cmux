@@ -4140,6 +4140,7 @@ class TabManager: ObservableObject {
         _ tabId: UUID,
         notificationDismissalContext: NotificationDismissalContext?
     ) {
+        workspacesById[tabId]?.dismissCompletedAgentStatus()
         guard selectedTabId != tabId else {
             // Selecting the workspace that is already selected (its sidebar row, ⌘1…9, the
             // palette, `cmux select-workspace`) still means "show this workspace": leave Chief

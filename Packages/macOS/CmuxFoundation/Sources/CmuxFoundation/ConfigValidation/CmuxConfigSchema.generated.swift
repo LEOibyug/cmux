@@ -1563,7 +1563,7 @@ enum CmuxEmbeddedConfigSchema {
         "showInactiveAgentStatus": {
           "type": "boolean",
           "default": true,
-          "description": "Show idle and completed agent status in workspace rows and terminal tabs."
+          "description": "Show completed agent status in workspace rows and terminal tabs until the workspace is opened or marked as read."
         },
         "animateAgentStatus": {
           "type": "boolean",

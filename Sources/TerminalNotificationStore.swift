@@ -765,6 +765,7 @@ final class TerminalNotificationStore: ObservableObject {
         let workspace = appDelegate.workspaceFor(tabId: tabId) ??
             appDelegate.tabManager?.tabs.first(where: { $0.id == tabId })
         workspace?.clearAllPanelUnreadIndicatorsForWorkspaceRead()
+        workspace?.dismissCompletedAgentStatus()
     }
 
     private func clearAllWorkspacePanelUnread(forTabIds tabIds: Set<UUID>) {
@@ -1621,6 +1622,7 @@ final class TerminalNotificationStore: ObservableObject {
         var activeIDs: [String] = []
         for index in updated.indices where ids.contains(updated[index].id) && !updated[index].isRead {
             updated[index].isRead = true
+            dismissCompletedAgentStatus(forTabId: updated[index].tabId, surfaceId: updated[index].surfaceId)
             activeIDs.append(updated[index].id.uuidString)
         }
         if !activeIDs.isEmpty {
@@ -1696,6 +1698,7 @@ final class TerminalNotificationStore: ObservableObject {
 
     func markRead(forTabId tabId: UUID, surfaceId: UUID?) {
         defer { readTargetObserver?(.surface(workspaceID: tabId, surfaceID: surfaceId)) }
+        dismissCompletedAgentStatus(forTabId: tabId, surfaceId: surfaceId)
         inFlightPolicyRequests.discard(forTabId: tabId, surfaceId: surfaceId)
         notificationFeedHistory.markRead(inWorkspace: tabId, surfaceId: surfaceId)
         var updated = notifications
@@ -1830,6 +1833,7 @@ final class TerminalNotificationStore: ObservableObject {
 
     func markAllRead() {
         defer { readTargetObserver?(.all) }
+        dismissAllCompletedAgentStatus()
         notificationFeedHistory.markAllRead()
         var updated = notifications
         var idsToClear: [String] = []
@@ -2034,6 +2038,7 @@ final class TerminalNotificationStore: ObservableObject {
     private func replaceNotificationsForClear(_ next: [TerminalNotification]) { suppressNotificationDiffPublishing = true; notifications = next; suppressNotificationDiffPublishing = false }
     func clearAll(discardQueuedNotifications: Bool = true, throughNotificationGeneration: UInt64? = nil) {
         defer { readTargetObserver?(.all) }
+        dismissAllCompletedAgentStatus()
         inFlightPolicyRequests.discardAll(through: throughNotificationGeneration)
         if discardQueuedNotifications { TerminalMutationBus.shared.discardPendingNotifications() }
         guard !notifications.isEmpty ||

@@ -13,7 +13,15 @@ extension Workspace {
         if report.event == .promptStart || report.state == .clear,
            programStatusStoresByPanelId[panelId] == nil { return }
         let previousStore = programStatusStoresByPanelId[panelId] ?? ProgramStatusRecordStore()
-        let updatedStore = updateProgramStatusStore(panelId: panelId) { $0.apply(report) }
+        let updatedStore = updateProgramStatusStore(panelId: panelId) { store in
+            store.apply(report)
+            if report.event == .report, report.state == .working || report.state == .blocked,
+               let record = store.record(id: report.id ?? "") {
+                dismissedAgentCompletionIdentitiesByPanelId[panelId]?.remove(
+                    programStatusCompletionIdentity(for: record, store: store)
+                )
+            }
+        }
         guard let store = updatedStore else { return }
         scheduleAgentTurnSettlement(panelId: panelId, previous: previousStore, current: store)
         CmuxEventBus.shared.publishProgramStatusChanged(
@@ -34,18 +42,6 @@ extension Workspace {
             workspaceId: id,
             surfaceId: panelId,
             event: .transientDrop,
-            store: store
-        )
-    }
-
-    /// Removes done and error records after the user returns to a pane.
-    func dismissCompletedProgramStatus(panelId: UUID) {
-        let updatedStore = updateProgramStatusStore(panelId: panelId, createIfMissing: false) { $0.dismissCompleted() }
-        guard let store = updatedStore else { return }
-        CmuxEventBus.shared.publishProgramStatusChanged(
-            workspaceId: id,
-            surfaceId: panelId,
-            event: .dismissed,
             store: store
         )
     }
@@ -93,6 +89,7 @@ extension Workspace {
             .sorted { $0.uuidString < $1.uuidString }
         programStatusStoresByPanelId.removeAll()
         programStatusUrgencyByPanelId.removeAll()
+        dismissedAgentCompletionIdentitiesByPanelId.removeAll()
         for panelId in clearedPanelIds {
             removePanelStatusEntry(key: Self.programStatusKey, panelId: panelId)
             CmuxEventBus.shared.publishProgramStatusChanged(
@@ -110,6 +107,7 @@ extension Workspace {
     func clearProgramStatusPanel(panelId: UUID) {
         let removedStore = programStatusStoresByPanelId.removeValue(forKey: panelId)
         programStatusUrgencyByPanelId.removeValue(forKey: panelId)
+        dismissedAgentCompletionIdentitiesByPanelId.removeValue(forKey: panelId)
         removePanelStatusEntry(key: Self.programStatusKey, panelId: panelId)
         refreshProgramStatusWorkspaceEntry()
         guard let removedStore, !removedStore.records.isEmpty else { return }
@@ -121,9 +119,27 @@ extension Workspace {
         )
     }
 
-    private func projectProgramStatus(panelId: UUID) {
+    /// Chooses chrome independently of the raw record used by activity consumers.
+    func programStatusRecordVisibleForDisplay(panelId: UUID, store: ProgramStatusRecordStore) -> ProgramStatusRecord? {
+        guard let winner = store.mostUrgentRecord(includingIdle: true) else { return nil }
+        guard let identities = dismissedAgentCompletionIdentitiesByPanelId[panelId],
+              (winner.state == .idle || winner.state == .done),
+              identities.contains(programStatusCompletionIdentity(for: winner, store: store)) else {
+            return winner
+        }
+        return store.records.lazy.filter { record in
+            (record.state != .idle && record.state != .done)
+                || !identities.contains(self.programStatusCompletionIdentity(for: record, store: store))
+        }.max { lhs, rhs in
+            let left = ProgramStatusRecordStore.urgencyRank(lhs.state)
+            let right = ProgramStatusRecordStore.urgencyRank(rhs.state)
+            return left == right ? lhs.updateOrder < rhs.updateOrder : left < right
+        }
+    }
+
+    func projectProgramStatus(panelId: UUID) {
         guard let store = programStatusStoresByPanelId[panelId],
-              let record = store.mostUrgentRecord(includingIdle: true) else {
+              let record = programStatusRecordVisibleForDisplay(panelId: panelId, store: store) else {
             programStatusUrgencyByPanelId.removeValue(forKey: panelId)
             removePanelStatusEntry(key: Self.programStatusKey, panelId: panelId)
             refreshProgramStatusWorkspaceEntry()
@@ -153,15 +169,12 @@ extension Workspace {
         case .working:
             icon = "bolt.fill"
             fallback = String(localized: "programStatus.state.working", defaultValue: "Working")
-        case .done:
+        case .done, .idle:
             icon = "checkmark.circle.fill"
             fallback = String(localized: "programStatus.state.done", defaultValue: "Done")
         case .error:
             icon = "exclamationmark.triangle.fill"
             fallback = String(localized: "programStatus.state.failed", defaultValue: "Failed")
-        case .idle:
-            icon = "pause.circle.fill"
-            fallback = String(localized: "agent.generic.notification.status.idle", defaultValue: "Idle")
         case .clear:
             return
         }

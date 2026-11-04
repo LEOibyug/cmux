@@ -4,6 +4,27 @@ import Foundation
 extension TerminalNotificationStore {
     private static let workspaceContextMenuNotificationLimit = 50
 
+    func dismissCompletedAgentStatus(forTabId tabId: UUID, surfaceId: UUID? = nil) {
+        guard let appDelegate = AppDelegate.shared,
+              let workspace = appDelegate.workspaceFor(tabId: tabId)
+                ?? appDelegate.tabManager?.tabs.first(where: { $0.id == tabId }) else { return }
+        if let surfaceId {
+            guard let panelId = workspace.surfaceOwnershipTarget(for: surfaceId)?.containerPanelID else { return }
+            workspace.dismissCompletedAgentStatus(panelId: panelId)
+        } else {
+            workspace.dismissCompletedAgentStatus()
+        }
+    }
+
+    func dismissAllCompletedAgentStatus() {
+        guard let appDelegate = AppDelegate.shared else { return }
+        for context in appDelegate.mainWindowContexts.values {
+            for workspace in context.tabManager.tabs {
+                workspace.dismissCompletedAgentStatus()
+            }
+        }
+    }
+
     func notifications(forTabIds tabIds: [UUID]) -> [TerminalNotification] {
         guard !tabIds.isEmpty else { return [] }
         let targetIds = Set(tabIds)

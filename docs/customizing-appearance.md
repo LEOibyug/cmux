@@ -59,9 +59,11 @@ also hides the conversation-preview fallback; turning off custom metadata does n
 `sidebar.detailOrder` stores those groups as `description`, `notification`, `branchDirectory`,
 `pullRequests`, `ports`, `metadata`, `log`, and `progress`. Missing groups follow in default order.
 `sidebar.showAgentStatusInSidebar` and `sidebar.showAgentStatusInTabs` are independent;
-`sidebar.showInactiveAgentStatus` controls Idle and Done together. Active, input-required, and
-error states are unaffected by the inactive toggle. `sidebar.animateAgentStatus` controls badge
-motion, with system Reduce Motion taking precedence.
+`sidebar.showInactiveAgentStatus` controls completed badges. Native and hook idle reports
+are shown as Done, not Idle, until the workspace is opened or marked read. Acknowledged
+completion stays hidden until a new active turn; active, input-required, and error states
+are unaffected by the completion toggle. `sidebar.animateAgentStatus` controls badge motion,
+with system Reduce Motion taking precedence.
 
 The title, agent status, description, branch, directory, and auxiliary font sizes are separate
 `sidebar.*FontSize` preferences, from 8–24 points before sidebar and global scaling.

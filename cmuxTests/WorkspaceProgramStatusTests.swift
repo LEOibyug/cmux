@@ -65,31 +65,76 @@ struct WorkspaceProgramStatusTests {
         #expect(workspace.bonsplitController.tab(secondTabId)?.statusBadge == nil)
     }
 
-    @Test func explicitlyReportedIdleRemainsDistinctFromDoneUntilClear() throws {
-        let suiteName = "WorkspaceProgramStatusTests.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let workspace = Workspace(settings: UserDefaultsSettingsClient(defaults: defaults))
+    @Test(arguments: [ProgramStatusState.idle, .done])
+    func completionAcknowledgementSurvivesLateReportsUntilANewActiveTurn(state: ProgramStatusState) throws {
+        let workspace = Workspace()
         defer { workspace.teardownAllPanels() }
         let panelId = try #require(workspace.focusedPanelId)
+        let otherPanel = try #require(workspace.newTerminalSplit(from: panelId, orientation: .horizontal, focus: false))
         let tabId = try #require(workspace.surfaceIdFromPanelId(panelId))
-        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId) == nil)
-        workspace.applyProgramStatus(ProgramStatusReport(state: .working, app: "omp"), panelId: panelId)
+        let otherTabId = try #require(workspace.surfaceIdFromPanelId(otherPanel.id))
+        workspace.remoteConfiguration = WorkspaceRemoteConfiguration(
+            destination: "example.invalid", port: nil, identityFile: nil, sshOptions: [],
+            localProxyPort: nil, relayPort: 64_011, relayID: nil, relayToken: nil,
+            localSocketPath: nil, terminalStartupCommand: nil
+        )
+        workspace.setAgentLifecycle(key: "omp", panelId: panelId, lifecycle: .idle)
+        workspace.setStatusEntry(SidebarStatusEntry(key: "omp", value: "hook ended", icon: "pause.circle.fill"), key: "omp", panelId: panelId)
+        workspace.setAgentLifecycle(key: "omp", panelId: otherPanel.id, lifecycle: .running)
+        workspace.setStatusEntry(SidebarStatusEntry(
+            key: "omp", value: "other pane working", icon: "bolt.fill", workState: .running
+        ), key: "omp", panelId: otherPanel.id)
+        workspace.applyProgramStatus(ProgramStatusReport(state: state, app: "omp"), panelId: panelId)
 
-        for (state, expected) in [(ProgramStatusState.idle, AgentStatusPresentation.State.idle), (.done, .completed), (.idle, .idle)] {
-            workspace.applyProgramStatus(ProgramStatusReport(state: state, app: "omp"), panelId: panelId)
-            let entry = try #require(workspace.sidebarStatusEntriesVisibleForDisplay().first)
-            let presentation = try #require(AgentStatusPresentation(entry: entry))
-            #expect(presentation.state == expected)
-            #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.symbolName == presentation.symbolName)
-            #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.isAnimating == false)
-        }
+        let completed = try #require(workspace.terminalAgentStatusEntryVisibleForDisplay(panelId: panelId))
+        #expect(completed.key == Workspace.programStatusKey)
+        #expect(AgentStatusPresentation(entry: completed)?.state == .completed)
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.symbolName == "checkmark.circle.fill")
+        #expect(workspace.sidebarStatusEntriesVisibleForDisplay().count == 2)
 
-        workspace.dismissCompletedProgramStatus(panelId: panelId)
-        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId)?.symbolName == "pause.circle.fill")
-        workspace.applyProgramStatus(ProgramStatusReport(state: .clear), panelId: panelId)
-        #expect(workspace.sidebarStatusEntriesVisibleForDisplay().isEmpty)
+        workspace.dismissCompletedAgentStatus(panelId: panelId)
         #expect(workspace.bonsplitController.tab(tabId)?.statusBadge == nil)
+        #expect(workspace.bonsplitController.tab(otherTabId)?.statusBadge?.isAnimating == true)
+        #expect(workspace.sidebarStatusEntriesVisibleForDisplay().map(\.value) == ["other pane working"])
+        #expect(workspace.programStatusStoresByPanelId[panelId]?.record(id: "")?.state == state)
+        #expect(workspace.agentLifecycleStatesByPanelId[panelId]?["omp"] == .idle)
+
+        workspace.setStatusEntry(SidebarStatusEntry(key: "omp", value: "late hook end", icon: "pause.circle.fill"), key: "omp", panelId: panelId)
+        workspace.applyProgramStatus(ProgramStatusReport(state: .idle, app: "omp"), panelId: panelId)
+        workspace.refreshTerminalTabAgentStatusBadges()
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge == nil)
+        #expect(workspace.sidebarStatusEntriesVisibleForDisplay().map(\.value) == ["other pane working"])
+
+        workspace.applyProgramStatus(ProgramStatusReport(state: .clear), panelId: panelId)
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge == nil)
+        #expect(!workspace.agentLifecycleStatesVisibleForDisplay().contains(.idle))
+        workspace.setAgentLifecycle(key: "omp", panelId: panelId, lifecycle: .running)
+        workspace.setStatusEntry(SidebarStatusEntry(
+            key: "omp", value: "new hook turn", icon: "bolt.fill", workState: .running
+        ), key: "omp", panelId: panelId)
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.isAnimating == true)
+        workspace.setAgentLifecycle(key: "omp", panelId: panelId, lifecycle: .idle)
+        workspace.setStatusEntry(SidebarStatusEntry(key: "omp", value: "new hook end", icon: "pause.circle.fill"), key: "omp", panelId: panelId)
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.symbolName == "checkmark.circle.fill")
+        workspace.dismissCompletedAgentStatus()
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge == nil)
+        #expect(workspace.bonsplitController.tab(otherTabId)?.statusBadge?.isAnimating == true)
+
+        workspace.applyProgramStatus(ProgramStatusReport(state: .working, app: "omp"), panelId: panelId)
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.isAnimating == true)
+        workspace.applyProgramStatus(ProgramStatusReport(state: state, app: "omp"), panelId: panelId)
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.symbolName == "checkmark.circle.fill")
+        workspace.dismissCompletedAgentStatus()
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge == nil)
+        workspace.applyProgramStatus(ProgramStatusReport(state: .working, id: "build", app: "cargo"), panelId: panelId)
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.isAnimating == true)
+        workspace.applyProgramStatus(ProgramStatusReport(state: .done, id: "build", app: "cargo", message: "Build complete"), panelId: panelId)
+        #expect(workspace.terminalAgentStatusEntryVisibleForDisplay(panelId: panelId)?.value == "cargo · Build complete")
+        workspace.applyProgramStatus(ProgramStatusReport(state: .clear, id: "build"), panelId: panelId)
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge == nil)
+        workspace.applyProgramStatus(ProgramStatusReport(state: .error, app: "omp"), panelId: panelId)
+        workspace.dismissCompletedAgentStatus()
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.symbolName == "exclamationmark.triangle.fill")
     }
 
     @Test func badgePreferencesUpdateExistingReportsWithoutHidingActiveOrErrorStates() throws {
@@ -113,7 +158,7 @@ struct WorkspaceProgramStatusTests {
         defaults.set(true, forKey: "sidebarShowInactiveAgentStatus")
         workspace.refreshTerminalTabAgentStatusBadges()
         #expect(workspace.sidebarStatusEntriesVisibleForDisplay().count == 1)
-        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.symbolName == "pause.circle.fill")
+        #expect(workspace.bonsplitController.tab(tabId)?.statusBadge?.symbolName == "checkmark.circle.fill")
 
         workspace.applyProgramStatus(ProgramStatusReport(state: .working, app: "omp"), panelId: panelId)
         defaults.set(false, forKey: "sidebarAnimateAgentStatus")
@@ -160,7 +205,7 @@ struct WorkspaceProgramStatusTests {
 
         workspace.applyProgramStatus(ProgramStatusReport(state: .idle, app: "omp"), panelId: panelId)
         #expect(workspace.sidebarStatusEntriesVisibleForDisplay().map(\.key) == [Workspace.programStatusKey])
-        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId)?.symbolName == "pause.circle.fill")
+        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId)?.symbolName == "checkmark.circle.fill")
         defaults.set(false, forKey: "sidebarShowInactiveAgentStatus")
         workspace.refreshTerminalTabAgentStatusBadges()
         #expect(workspace.sidebarStatusEntriesVisibleForDisplay().isEmpty)
@@ -176,8 +221,8 @@ struct WorkspaceProgramStatusTests {
         defaults.set(true, forKey: "sidebarShowInactiveAgentStatus")
         workspace.refreshTerminalTabAgentStatusBadges()
         let hookIdle = try #require(workspace.sidebarStatusEntriesVisibleForDisplay().first)
-        #expect(AgentStatusPresentation(entry: hookIdle)?.state == .idle)
-        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId)?.symbolName == "pause.circle.fill")
+        #expect(AgentStatusPresentation(entry: hookIdle)?.state == .completed)
+        #expect(workspace.terminalTabAgentStatusBadge(forPanelId: panelId)?.symbolName == "checkmark.circle.fill")
 
         workspace.applyProgramStatus(ProgramStatusReport(state: .blocked, kind: .permission, app: "cargo"), panelId: panelId)
         #expect(Set(workspace.sidebarStatusEntriesVisibleForDisplay().map(\.key)) == ["omp", Workspace.programStatusKey])
@@ -231,8 +276,9 @@ struct WorkspaceProgramStatusTests {
         #expect(entry.icon == "checkmark.circle.fill")
         #expect(entry.value == "cargo · Lint clean")
 
-        workspace.dismissCompletedProgramStatus(panelId: panelId)
-        #expect(workspace.statusEntries[Workspace.programStatusKey] == nil)
+        workspace.dismissCompletedAgentStatus(panelId: panelId)
+        #expect(workspace.sidebarStatusEntriesVisibleForDisplay().isEmpty)
+        #expect(workspace.programStatusStoresByPanelId[panelId]?.record(id: "lint")?.state == .done)
     }
 
     @Test(arguments: [ProgramStatusState.blocked, .idle])
@@ -360,7 +406,7 @@ struct WorkspaceProgramStatusTests {
         #expect(records.isEmpty)
     }
 
-    @Test func dismissingCompletedStatusPublishesUpdatedSnapshot() throws {
+    @Test func acknowledgingCompletionPreservesProtocolSnapshotAndEventStream() throws {
         let workspace = Workspace()
         let panelId = try #require(workspace.focusedPanelId)
         CmuxEventBus.shared.resetForTesting()
@@ -370,21 +416,22 @@ struct WorkspaceProgramStatusTests {
             ProgramStatusReport(state: .done, id: "build"),
             panelId: panelId
         )
-        workspace.dismissCompletedProgramStatus(panelId: panelId)
-        workspace.dismissCompletedProgramStatus(panelId: panelId)
+        workspace.dismissCompletedAgentStatus(panelId: panelId)
+        workspace.dismissCompletedAgentStatus(panelId: panelId)
         CmuxEventBus.shared.flushEventLogForTesting()
 
         let events = CmuxEventBus.shared.retainedSnapshot().filter {
             $0["name"] as? String == "program_status.changed"
         }
-        #expect(events.count == 2)
-        let dismissedPayload = try #require(events.last?["payload"] as? [String: Any])
-        #expect(dismissedPayload["event"] as? String == "dismissed")
-        let records = try #require(dismissedPayload["records"] as? [[String: Any]])
-        #expect(records.isEmpty)
+        #expect(events.count == 1)
+        let payload = try #require(events.first?["payload"] as? [String: Any])
+        let records = try #require(payload["records"] as? [[String: Any]])
+        #expect(records.first?["state"] as? String == "done")
+        #expect(workspace.programStatusStoresByPanelId[panelId]?.record(id: "build")?.state == .done)
     }
 
-    @Test func movedPaneKeepsItsProgramStatusRecords() throws {
+    @Test(arguments: [ProgramStatusState.blocked, .idle])
+    func movedPaneKeepsItsProgramStatusAndCompletionAcknowledgement(state: ProgramStatusState) throws {
         let source = Workspace()
         let destination = Workspace()
         let firstPanelId = try #require(source.focusedPanelId)
@@ -392,17 +439,23 @@ struct WorkspaceProgramStatusTests {
             source.newTerminalSplit(from: firstPanelId, orientation: .horizontal, focus: false)
         )
         source.applyProgramStatus(
-            ProgramStatusReport(state: .blocked, kind: .question, app: "deploy", message: "Region?"),
+            ProgramStatusReport(state: state, kind: .question, app: "deploy", message: "Region?"),
             panelId: movedPanel.id
         )
+        if state == .idle { source.dismissCompletedAgentStatus(panelId: movedPanel.id) }
 
         let detached = try #require(source.detachSurface(panelId: movedPanel.id))
         let destinationPane = try #require(destination.bonsplitController.allPaneIds.first)
         _ = try #require(destination.attachDetachedSurface(detached, inPane: destinationPane, focus: false))
 
         #expect(source.statusEntries[Workspace.programStatusKey] == nil)
-        #expect(destination.programStatusStoresByPanelId[movedPanel.id]?.mostUrgentRecord()?.state == .blocked)
-        #expect(destination.statusEntries[Workspace.programStatusKey]?.value == "deploy · Region?")
+        #expect(destination.programStatusStoresByPanelId[movedPanel.id]?.mostUrgentRecord(includingIdle: true)?.state == state)
+        if state == .idle {
+            #expect(destination.terminalTabAgentStatusBadge(forPanelId: movedPanel.id) == nil)
+            #expect(destination.sidebarStatusEntriesVisibleForDisplay().isEmpty)
+        } else {
+            #expect(destination.statusEntries[Workspace.programStatusKey]?.value == "deploy · Region?")
+        }
     }
 
     @Test func closingTerminalsPublishesRemovedSnapshotOnlyForReportingPanes() throws {

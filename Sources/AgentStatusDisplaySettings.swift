@@ -36,7 +36,7 @@ struct AgentStatusDisplaySettings: Equatable, Sendable {
 
     func allows(_ presentation: AgentStatusPresentation) -> Bool {
         switch presentation.state {
-        case .idle, .completed: showInactiveAgentStatus
+        case .completed: showInactiveAgentStatus
         case .running, .waiting, .needsInput, .error: true
         }
     }

@@ -56,6 +56,7 @@ extension Workspace {
         /// OSC 7501 records belong to the terminal, so they follow it across
         /// workspace and Dock moves instead of waiting for the next report.
         var programStatusStore: ProgramStatusRecordStore? = nil
+        var dismissedAgentCompletionIdentities: Set<String> = []
         let restorableAgent: SessionRestorableAgentSnapshot?
         let restorableAgentResumeState: RestoredAgentResumeState?
         let restoredAgentCompletedGeneration: RestoredAgentCompletedGeneration?
@@ -121,6 +122,7 @@ extension Workspace {
                 restoredUnreadIndicator: restoredUnreadIndicator,
                 promptState: promptState,
                 programStatusStore: programStatusStore,
+                dismissedAgentCompletionIdentities: dismissedAgentCompletionIdentities,
                 restorableAgent: restorableAgent,
                 restorableAgentResumeState: restorableAgentResumeState,
                 restoredAgentCompletedGeneration: restoredAgentCompletedGeneration,

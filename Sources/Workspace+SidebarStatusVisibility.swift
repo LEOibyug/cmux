@@ -14,10 +14,10 @@ extension Workspace {
             }
             let projected: SidebarStatusEntry
             if entry.key == Self.programStatusKey {
-                guard let native = mostUrgentPanelStatusEntry(forKey: entry.key) else { return nil }
+                guard let native = mostUrgentPanelStatusEntry(forKey: entry.key, forDisplay: true) else { return nil }
                 projected = native
             } else {
-                projected = mostUrgentPanelStatusEntry(forKey: entry.key) ?? entry
+                projected = mostUrgentPanelStatusEntry(forKey: entry.key, forDisplay: true) ?? entry
             }
             if let presentation = AgentStatusPresentation(entry: projected), !displaySettings.allows(presentation) {
                 return nil
@@ -53,6 +53,7 @@ extension Workspace {
         var newest: SidebarStatusEntry?
         for entry in entries.values {
             guard statusEntries[entry.key] != nil else { continue }
+            guard !isCompletedAgentStatusDismissed(entry, panelId: panelId) else { continue }
             if entry.key == Self.programStatusKey {
                 // OSC reports belong to their terminal store, not a hook PID.
                 guard programStatusStoresByPanelId[panelId]?.mostUrgentRecord(includingIdle: true) != nil else { continue }
@@ -73,9 +74,58 @@ extension Workspace {
         return newest
     }
 
+    /// Acknowledges completed chrome without changing activity or hibernation evidence.
+    /// Native and hook reports share identities, so a late report cannot revive it.
+    func dismissCompletedAgentStatus(panelId: UUID? = nil) {
+        let panelIds = panelId.map { [$0] } ?? Array(panels.keys)
+        for panelId in panelIds where panels[panelId] != nil {
+            var identities = dismissedAgentCompletionIdentitiesByPanelId[panelId, default: []]
+            let previous = identities
+            for entry in agentStatusEntriesByPanelId[panelId, default: [:]].values
+            where entry.key != Self.programStatusKey && AgentStatusPresentation(entry: entry)?.state == .completed {
+                identities.insert(agentCompletionIdentity(for: entry.key))
+            }
+            if let store = programStatusStoresByPanelId[panelId] {
+                for record in store.records where record.state == .idle || record.state == .done {
+                    identities.insert(programStatusCompletionIdentity(for: record, store: store))
+                }
+            }
+            guard identities != previous else { continue }
+            dismissedAgentCompletionIdentitiesByPanelId[panelId] = identities
+            projectProgramStatus(panelId: panelId)
+            syncTerminalTabAgentStatusBadge(forPanelId: panelId)
+        }
+    }
+
+    func agentCompletionIdentity(for identity: String) -> String {
+        let normalized = identity.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return "agent:\(TerminalTabAgentIconResolver().agentID(forIdentity: normalized) ?? normalized)"
+    }
+
+    func programStatusCompletionIdentity(for record: ProgramStatusRecord, store: ProgramStatusRecordStore) -> String {
+        if let app = store.effectiveApp(for: record) {
+            return agentCompletionIdentity(for: app)
+        }
+        return "program:\(record.id)"
+    }
+
+    func isCompletedAgentStatusDismissed(_ entry: SidebarStatusEntry, panelId: UUID) -> Bool {
+        // Native projection already excludes acknowledged records from its store.
+        guard entry.key != Self.programStatusKey,
+              AgentStatusPresentation(entry: entry)?.state == .completed,
+              let identities = dismissedAgentCompletionIdentitiesByPanelId[panelId] else { return false }
+        return identities.contains(agentCompletionIdentity(for: entry.key))
+    }
+
     func setStatusEntry(_ entry: SidebarStatusEntry, key: String, panelId: UUID?) {
         statusEntries[key] = entry
         if let panelId, panels[panelId] != nil {
+            if key != Self.programStatusKey,
+               !isHookStatusShadowedByNativeAgent(key: key, panelId: panelId),
+               let state = AgentStatusPresentation(entry: entry)?.state,
+               state == .running || state == .waiting || state == .needsInput {
+                dismissedAgentCompletionIdentitiesByPanelId[panelId]?.remove(agentCompletionIdentity(for: key))
+            }
             agentStatusEntriesByPanelId[panelId, default: [:]][key] = entry
             syncTerminalTabAgentStatusBadge(forPanelId: panelId)
         }
@@ -122,10 +172,11 @@ extension Workspace {
     /// PID for the key) count, so an ended pane's last report never lingers.
     /// Nil when no pane-scoped report exists; callers fall back to the
     /// workspace entry.
-    func mostUrgentPanelStatusEntry(forKey key: String) -> SidebarStatusEntry? {
+    func mostUrgentPanelStatusEntry(forKey key: String, forDisplay: Bool = false) -> SidebarStatusEntry? {
         var winner: (rank: Int, entry: SidebarStatusEntry)?
         for (panelId, entries) in agentStatusEntriesByPanelId where panels[panelId] != nil {
             guard let entry = entries[key] else { continue }
+            if forDisplay && isCompletedAgentStatusDismissed(entry, panelId: panelId) { continue }
             if key == Self.programStatusKey {
                 guard programStatusStoresByPanelId[panelId]?.mostUrgentRecord(includingIdle: true) != nil else { continue }
             } else {
@@ -149,6 +200,10 @@ extension Workspace {
         for (panelId, states) in agentLifecycleStatesByPanelId where panels[panelId] != nil {
             for (key, state) in states where !AgentHibernationLifecycleStatusKeys.isManualKey(key)
                 && !isHookStatusShadowedByNativeAgent(key: key, panelId: panelId) {
+                if state == .idle,
+                   dismissedAgentCompletionIdentitiesByPanelId[panelId]?.contains(agentCompletionIdentity(for: key)) == true {
+                    continue
+                }
                 result.append(state)
             }
         }
@@ -158,7 +213,6 @@ extension Workspace {
     /// One terminal's native agent state owns its display until that report is removed.
     private func isHookStatusShadowedByNativeAgent(key: String, panelId: UUID) -> Bool {
         guard key != Self.programStatusKey,
-              agentStatusEntriesByPanelId[panelId]?[Self.programStatusKey] != nil,
               let store = programStatusStoresByPanelId[panelId],
               let record = store.mostUrgentRecord(includingIdle: true),
               let app = store.effectiveApp(for: record) else { return false }
@@ -228,7 +282,9 @@ extension Workspace {
         for (panelId, statusKeys) in statusKeysByPanelId {
             let winningEntry = statusKeys.compactMap { key -> SidebarStatusEntry? in
                 guard !isHookStatusShadowedByNativeAgent(key: key, panelId: panelId) else { return nil }
-                return agentStatusEntriesByPanelId[panelId]?[key] ?? statusEntries[key]
+                guard let entry = agentStatusEntriesByPanelId[panelId]?[key] ?? statusEntries[key],
+                      !isCompletedAgentStatusDismissed(entry, panelId: panelId) else { return nil }
+                return entry
             }.max {
                 isSidebarStatusEntryLessCurrent($0, than: $1)
             }

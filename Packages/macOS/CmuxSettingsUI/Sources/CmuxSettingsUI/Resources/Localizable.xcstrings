@@ -13776,55 +13776,55 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show Inactive Agent Status"
+            "value": "Show Completed Agent Status"
           }
         },
         "ar": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "إظهار حالة الوكلاء غير النشطين"
           }
         },
         "de": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Inaktiven Agentenstatus anzeigen"
           }
         },
         "es": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Mostrar el estado de agentes inactivos"
           }
         },
         "fr": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Afficher l’état des agents inactifs"
           }
         },
         "ja": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "非アクティブなエージェントの状態を表示"
           }
         },
         "ko": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "비활성 에이전트 상태 표시"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "显示非活跃智能体状态"
+            "value": "显示智能体已完成状态"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "顯示非活躍代理程式狀態"
+            "value": "顯示代理程式已完成狀態"
           }
         }
       }
@@ -14425,55 +14425,55 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keep Idle and Done badges visible. Running, waiting for input, and error badges are always shown."
+            "value": "Show Done badges until the workspace is opened or marked as read. Running, waiting for input, and error badges are always shown."
           }
         },
         "ar": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "إبقاء شارات الخمول والانتهاء ظاهرة. تظهر دائمًا شارات التشغيل وانتظار الإدخال والخطأ."
           }
         },
         "de": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Die Kennzeichen „Inaktiv“ und „Fertig“ bleiben sichtbar. Laufende, auf Eingaben wartende und fehlerhafte Zustände werden immer angezeigt."
           }
         },
         "es": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Mantener visibles las insignias de inactividad y finalización. Siempre se muestran las de ejecución, espera de entrada y error."
           }
         },
         "fr": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Conserver les badges de repos et de fin. Les badges d’exécution, d’attente de saisie et d’erreur sont toujours affichés."
           }
         },
         "ja": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "待機中と完了のバッジを表示し続けます。実行中、入力待ち、エラーのバッジは常に表示されます。"
           }
         },
         "ko": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "유휴 및 완료 배지를 계속 표시합니다. 실행 중, 입력 대기 및 오류 배지는 항상 표시됩니다."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "保留“空闲”和“完成”徽章。运行中、等待输入和错误徽章始终显示。"
+            "value": "显示“已完成”徽章，直到工作区被打开或标记为已读。运行中、等待输入和错误徽章始终显示。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "保留「閒置」和「完成」標章。執行中、等待輸入和錯誤標章一律顯示。"
+            "value": "顯示「已完成」標章，直到工作區被開啟或標記為已讀。執行中、等待輸入和錯誤標章一律顯示。"
           }
         }
       }

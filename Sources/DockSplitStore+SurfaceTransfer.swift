@@ -310,6 +310,7 @@ extension DockSplitStore {
             restoredUnreadIndicator: preservedTransfer?.restoredUnreadIndicator,
             promptState: preservedTransfer?.promptState,
             programStatusStore: preservedTransfer?.programStatusStore,
+            dismissedAgentCompletionIdentities: preservedTransfer?.dismissedAgentCompletionIdentities ?? [],
             restorableAgent: transferredRestorableAgent,
             restorableAgentResumeState: transferredResumeState,
             restoredAgentCompletedGeneration: transferredCompletedGeneration,

@@ -367,6 +367,7 @@ extension Workspace {
         // restarts because the processes that set them are gone.
         statusEntries.removeAll()
         agentStatusEntriesByPanelId.removeAll()
+        dismissedAgentCompletionIdentitiesByPanelId.removeAll()
         clearAllAgentPIDs(refreshPorts: false)
         clearAllAgentLifecycleStates()
         agentListeningPorts.removeAll()
@@ -3225,6 +3226,12 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
     /// writer wins), so two panes running the same agent would otherwise hide
     /// each other; the row resolves the most urgent pane from these instead.
     var agentStatusEntriesByPanelId: [UUID: [String: SidebarStatusEntry]] = [:]
+    /// Presentation acknowledgements shared by hook and native agent identities.
+    /// Raw lifecycle and native records remain available to activity consumers.
+    var dismissedAgentCompletionIdentitiesByPanelId: [UUID: Set<String>] {
+        get { sidebarAgentRuntimeObservation.dismissedAgentCompletionIdentitiesByPanelId }
+        set { sidebarAgentRuntimeObservation.setDismissedAgentCompletionIdentitiesByPanelId(newValue) }
+    }
     var programStatusStoresByPanelId: [UUID: ProgramStatusRecordStore] = [:]
     var programStatusUrgencyByPanelId: [UUID: Int] = [:]
     /// One pending agent turn settlement per panel and status key; see
@@ -5856,6 +5863,7 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
 
     func markPanelRead(_ panelId: UUID) {
         guard panels[panelId] != nil else { return }
+        dismissCompletedAgentStatus(panelId: panelId)
         let notificationStore = AppDelegate.shared?.notificationStore
         notificationStore?.markRead(forTabId: id, surfaceId: panelId)
         // An explicit user mark-read dismisses the focused-read indicator too.
@@ -6737,6 +6745,9 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
         panelShellActivityStates = panelShellActivityStates.filter { validSurfaceIds.contains($0.key) }
         programStatusStoresByPanelId = programStatusStoresByPanelId.filter { validSurfaceIds.contains($0.key) }
         programStatusUrgencyByPanelId = programStatusUrgencyByPanelId.filter { validSurfaceIds.contains($0.key) }
+        dismissedAgentCompletionIdentitiesByPanelId = dismissedAgentCompletionIdentitiesByPanelId.filter {
+            validSurfaceIds.contains($0.key)
+        }
         restoredPanelTitleBoundariesByPanelId = restoredPanelTitleBoundariesByPanelId.filter {
             validSurfaceIds.contains($0.key)
         }
@@ -11446,6 +11457,7 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
         bindSurface(newTabId, toPanelId: detached.panelId)
         detached.panel.retainTransferredSurfaceMachine(detached.surfaceMachine)
         panels[detached.panelId] = detached.panel
+        dismissedAgentCompletionIdentitiesByPanelId[detached.panelId] = detached.dismissedAgentCompletionIdentities
         restoreProgramStatusStore(detached.programStatusStore, panelId: detached.panelId)
         if let restoredPanelTitleBoundary = detached.restoredPanelTitleBoundary {
             restoredPanelTitleBoundariesByPanelId[detached.panelId] = restoredPanelTitleBoundary
@@ -13851,8 +13863,8 @@ extension Workspace: BonsplitDelegate {
         let activationIntent = focusIntent ?? activationPanel.preferredFocusIntentForActivation()
         activationPanel.prepareFocusIntentForActivation(activationIntent)
         let panelId = effectiveFocusedPanelId
-        // The user reached this pane, so its finished OSC 7501 records have been seen.
-        dismissCompletedProgramStatus(panelId: panelId)
+        // Opening a pane acknowledges its completion without changing agent lifecycle.
+        dismissCompletedAgentStatus(panelId: panelId)
         if let terminalPanel = panel as? TerminalPanel {
             if terminalPanel.isAgentHibernated, shouldResumeHibernatedAgent {
                 _ = resumeAgentHibernation(panelId: panelId, focus: false)
@@ -14505,6 +14517,7 @@ extension Workspace: BonsplitDelegate {
                 restoredUnreadIndicator: restoredUnreadPanelIndicators[panelId],
                 promptState: panelPrompts[panelId],
                 programStatusStore: programStatusStoresByPanelId[panelId],
+                dismissedAgentCompletionIdentities: dismissedAgentCompletionIdentitiesByPanelId[panelId] ?? [],
                 restorableAgent: restorableAgent,
                 restorableAgentResumeState: restorableAgentResumeState,
                 restoredAgentCompletedGeneration: restoredAgentLifecycle.completedGeneration(panelId: panelId),

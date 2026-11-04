@@ -18,11 +18,14 @@ Supported agent names are `codex`, `grok`, `opencode`, `pi`, `omp`, `campfire`, 
 Hook-reported agent state and [native terminal status](program-status.md) appear as
 a larger colored badge below the workspace title and as a compact badge beside
 that terminal's surface-tab title. Running
-work uses a blue rotating indicator; completed/idle turns are green, waiting or
-needs-input states amber, and reported failures red. Text and symbols remain
-visible when Reduce Motion disables animation.
+work uses a blue rotating indicator; finished turns show a green Done badge, waiting or
+needs-input states amber, and reported failures red. Idle reports use Done too, rather
+than leaving a persistent Idle badge. Text and symbols remain visible with Reduce Motion.
 Tab captions use short localized state labels without repeating the provider name,
 leaving room for the conversation title.
+Opening the workspace or pane, or marking it read, clears completed badges in both
+locations. Late native or hook completion reports stay cleared until a new active turn.
+Working, waiting-for-input, and error reports are not cleared as completed work.
 
 OMP can report through its existing session extension or native OSC 7501 output.
 Both use the same badges; native reports do not require a hook or agent PID.
