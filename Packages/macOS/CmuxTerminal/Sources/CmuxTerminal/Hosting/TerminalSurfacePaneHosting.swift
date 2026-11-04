@@ -48,5 +48,5 @@ public protocol TerminalSurfacePaneHosting: NSView {
     ///   - size: The capped content size in points, or nil to clear.
     ///   - drawRight: Whether the cap shrinks the width (right border).
     ///   - drawBottom: Whether the cap shrinks the height (bottom border).
-    func setMobileViewportBorder(size: CGSize?, drawRight: Bool, drawBottom: Bool)
+    func setSharedViewportBorder(size: CGSize?, drawRight: Bool, drawBottom: Bool)
 }

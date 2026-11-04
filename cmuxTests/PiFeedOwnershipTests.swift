@@ -215,9 +215,7 @@ struct PiFeedOwnershipTests {
         let surfaceId = try #require(workspace.focusedPanelId)
         let registry = AgentChatSessionRegistry()
         TerminalController.shared.agentChatTranscriptService = AgentChatTranscriptService(
-            registry: registry,
-            hasEventSubscribers: { false },
-            emitEventPayload: { _ in }
+            registry: registry
         )
         defer {
             if tabManager.tabs.contains(where: { $0.id == workspace.id }) {

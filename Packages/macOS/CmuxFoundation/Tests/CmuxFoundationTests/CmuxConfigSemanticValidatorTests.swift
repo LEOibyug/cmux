@@ -22,12 +22,32 @@ struct CmuxConfigSemanticValidatorTests {
         }
     }
 
-    @Test("embedded schema is byte-for-byte web/data/cmux.schema.json")
+    @Test("embedded schema is byte-for-byte schemas/cmux.schema.json")
     func embeddedSchemaMatchesSource() throws {
         var root = URL(fileURLWithPath: #filePath)
         for _ in 0..<6 { root.deleteLastPathComponent() }
-        let source = try Data(contentsOf: root.appendingPathComponent("web/data/cmux.schema.json"))
+        let source = try Data(contentsOf: root.appendingPathComponent("schemas/cmux.schema.json"))
         #expect(CmuxEmbeddedConfigSchema.data == source)
+    }
+
+    @Test("Vault history selection accepts exact IDs and empty selection only globally")
+    func vaultHistorySelection() throws {
+        for ids in [[], ["omp"], ["My.Agent", "my.agent", "future-agent_2"]] as [[String]] {
+            let result = try issues(["vault": ["enabledAgents": ids]])
+            #expect(result.isEmpty)
+        }
+        let legacy = try issues(["vault": ["agents": []]])
+        #expect(legacy.isEmpty)
+        let project = try issues(["vault": ["enabledAgents": ["omp"]]], scope: .project)
+        #expect(!project.isEmpty)
+        for invalid in ["", ".", "..", "bad agent", "é", String(repeating: "a", count: 65)] {
+            let result = try issues(["vault": ["enabledAgents": [invalid]]])
+            #expect(!result.isEmpty)
+        }
+        let wrongType = try issues(["vault": ["enabledAgents": "omp"]])
+        #expect(!wrongType.isEmpty)
+        let wrongItem = try issues(["vault": ["enabledAgents": [42]]])
+        #expect(!wrongItem.isEmpty)
     }
 
     @Test("accepts valid settings and preserved config sections")
@@ -80,7 +100,6 @@ struct CmuxConfigSemanticValidatorTests {
             (["notifications": ["dockBadge": "yes"]], "$.notifications.dockBadge", "expected boolean"),
             (["app": ["appearance": "neon"]], "$.app.appearance", "must be one of"),
             (["fileEditor": ["tabWidth": 0]], "$.fileEditor.tabWidth", "must be >= 1"),
-            (["agentChat": ["fonts": ["baseSize": 0]]], "$.agentChat.fonts.baseSize", "must be > 0"),
             (["commands": "echo hello"], "$.commands", "expected array"),
         ]
 

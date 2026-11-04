@@ -69,7 +69,7 @@ extension GhosttyNSView {
         onCancel: @escaping () -> Void
     ) -> Bool {
         if mode == .paste, case .fileURLs(let urls) = preparedContent,
-           target == .cloud,
+           target == .tui,
            deferRuntimeInputDuringClipboardRead(
                estimatedBytes: urls.reduce(0) { $0 + $1.path.utf8.count + 256 },
                replay: { [weak self] in

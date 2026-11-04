@@ -1467,6 +1467,7 @@ final class WorkspaceTerminalFontSizeCoordinator {
         }
         let lastIndex = transferObligations.count - 1
         if index != lastIndex {
+
             swapTransferObligations(at: index, lastIndex)
         }
         let removed = transferObligations.removeLast()

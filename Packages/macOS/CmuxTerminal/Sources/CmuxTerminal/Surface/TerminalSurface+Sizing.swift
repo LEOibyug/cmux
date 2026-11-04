@@ -218,7 +218,7 @@ extension TerminalSurface {
         defer {
             if uncappedPixelSizeChanged { onNaturalGridInputsChanged?() }
         }
-        let fittedSize = mobileViewportFittedSize(
+        let fittedSize = sharedViewportFittedSize(
             width: rawWpx,
             height: rawHpx,
             surface: surface,
@@ -286,8 +286,8 @@ extension TerminalSurface {
         Self.sizeLog("updateSize-call surface=\(id.uuidString.prefix(8)) size=\(wpx)x\(hpx) prev=\(lastPixelWidth)x\(lastPixelHeight) changed=\((scaleChanged || sizeChanged) ? 1 : 0)")
         #endif
 
-        if mobileViewportCellLimit != nil {
-            updateMobileViewportBorder(
+        if sharedViewportCellLimit != nil {
+            updateSharedViewportBorder(
                 appliedWidth: wpx,
                 appliedHeight: hpx,
                 baseWidth: rawWpx,

@@ -12,7 +12,7 @@ pane borders, notification rings, icon) lives in `~/.config/cmux/cmux.json`.
 | `~/.config/ghostty/config` or `~/.config/ghostty/config.ghostty` | Terminal rendering, shared with standalone Ghostty | **Reload Configuration** (Cmd+Shift+,) or `cmux reload-config` |
 | `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty` | Same, Ghostty's macOS location | Same |
 | `~/Library/Application Support/com.cmuxterm.app/config.ghostty` | cmux-only Ghostty overrides. `cmux themes` and the Settings font-size controls write here | Same |
-| `~/.config/cmux/cmux.json` | App chrome and behavior ([schema](https://github.com/manaflow-ai/cmux/blob/main/web/data/cmux.schema.json)) | Reloads automatically when you save |
+| `~/.config/cmux/cmux.json` | App chrome and behavior ([schema](../schemas/cmux.schema.json)) | Reloads automatically when you save |
 
 cmux loads its own `config.ghostty` after Ghostty's files, so a key set there
 wins. Nightly and RC builds use their own folder (for example
@@ -191,7 +191,7 @@ In `cmux.json`:
 - `sidebar.*` keys pick which rows appear (branch, PRs, ports, logs, progress,
   notification text, and so on), and `sidebar.workspaceDescriptionColor`
   recolors workspace descriptions. See the
-  [schema](https://github.com/manaflow-ai/cmux/blob/main/web/data/cmux.schema.json)
+  [schema](../schemas/cmux.schema.json)
   for the full list.
 
 The Ghostty keys `sidebar-background` (a hex color, or
@@ -276,7 +276,6 @@ surface-tab-bar-font-size = 12
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json",
   "schemaVersion": 1,
   "app": {
     "appearance": "system",

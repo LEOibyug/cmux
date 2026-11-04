@@ -1,4 +1,3 @@
-import CmuxCloud
 import AppKit
 import CmuxFoundation
 import CmuxSettings
@@ -416,26 +415,15 @@ extension AppDelegate {
 
     func bootstrapInitialMainWindowAfterAcceptedExternalOpen(
         debugSource: String,
-        shouldActivate: Bool = true,
-        suppressWelcome: Bool = false
+        shouldActivate: Bool = true
     ) {
         shouldDeferInitialMainWindowBootstrapForExternalConfirmation = false
         _ = bootstrapInitialMainWindowIfNeeded(
             debugSource: debugSource,
-            shouldActivate: shouldActivate,
-            suppressWelcome: suppressWelcome
+            shouldActivate: shouldActivate
         )
     }
 
-    func claimAuthCallbackURLSchemes() {
-        // Pin the current build's callback scheme so auth, SSH, and navigation deeplinks
-        // route back to this app instead of an unrelated LaunchServices entry.
-        let bundleURL = Bundle.main.bundleURL
-        NSWorkspace.shared.setDefaultApplication(
-            at: bundleURL,
-            toOpenURLsWithScheme: AuthEnvironment.callbackScheme
-        ) { _ in }
-    }
 
     @discardableResult
     func handleCmuxExternalURLs(from urls: [URL]) -> Bool {
@@ -604,12 +592,12 @@ extension AppDelegate {
         // `DisableRemoteConnections` (MDM): refuse before the trust dialog and
         // the window bootstrap. The CLI would fail closed downstream, but only
         // with a generic exit-status alert.
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
 #if DEBUG
             cmuxDebugLog("sshURL.blocked_managed_policy")
 #endif
             let alert = NSAlert()
-            alert.messageText = ManagedRemoteConnectionsPolicy.disabledMessage
+            alert.messageText = ManagedRemoteConnectionsPolicy().disabledMessage
             alert.informativeText = String(
                 localized: "managedPolicy.remoteConnections.sshURLRefused",
                 defaultValue: "cmux cannot open SSH links while remote connections are disabled by your organization's device policy."
@@ -655,8 +643,7 @@ extension AppDelegate {
         prepareForExplicitOpenIntentAtStartup()
         bootstrapInitialMainWindowAfterAcceptedExternalOpen(
             debugSource: "textURL.confirmed",
-            shouldActivate: !request.noFocus,
-            suppressWelcome: true
+            shouldActivate: !request.noFocus
         )
         if !request.noFocus {
             NSApp.activate(ignoringOtherApps: true)
@@ -721,7 +708,7 @@ extension AppDelegate {
             ? String(localized: "dialog.textURL.prompt.title", defaultValue: "Paste a Prompt From an External Link?")
             : String(localized: "dialog.textURL.rules.title", defaultValue: "Paste Rules From an External Link?")
 
-        let scheme = request.originalURL.scheme ?? AuthEnvironment.callbackScheme
+        let scheme = request.originalURL.scheme ?? "cmux"
         let messageFormat = request.kind == .prompt
             ? String(
                 localized: "dialog.textURL.prompt.message",

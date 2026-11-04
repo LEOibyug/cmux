@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -16,10 +16,10 @@ import Testing
 struct CloudWorkspaceNameSurfaces: Equatable, Sendable {
     let sidebarRow: String
     let titleBar: String
-    let cloudTree: String?
+    let catalogName: String?
 
     static func all(_ name: String) -> Self {
-        Self(sidebarRow: name, titleBar: name, cloudTree: name)
+        Self(sidebarRow: name, titleBar: name, catalogName: name)
     }
 }
 
@@ -44,22 +44,22 @@ enum CloudWorkspaceManifestVintage: String, CaseIterable, Sendable {
 /// Drives the shared catalog, the in-memory daemon and one local workspace the
 /// way the app does, and reads back every surface that shows the name.
 @MainActor
-private final class CloudWorkspaceRenameParityHarness {
+private final class TuiWorkspaceRenameParityHarness {
     let fixture: CloudNameAuthorityFixture
     let settings: SidebarTabItemSettingsSnapshot
-    private let originalService: CloudWorkspaceRenameService
+    private let originalService: TuiWorkspaceRenameService
 
     init() throws {
         fixture = try CloudNameAuthorityFixture()
         settings = SidebarTabItemSettingsSnapshot(
             defaults: try #require(UserDefaults(suiteName: "cloud-rename-parity-\(UUID().uuidString)"))
         )
-        originalService = fixture.catalog.cloudWorkspaceRenameService
-        fixture.catalog.installCloudWorkspaceRenameService(fixture.renameService)
+        originalService = fixture.catalog.tuiWorkspaceRenameService
+        fixture.catalog.installTuiWorkspaceRenameService(fixture.renameService)
     }
 
     func close() async {
-        fixture.catalog.installCloudWorkspaceRenameService(originalService)
+        fixture.catalog.installTuiWorkspaceRenameService(originalService)
         await fixture.close()
     }
 
@@ -83,17 +83,8 @@ private final class CloudWorkspaceRenameParityHarness {
             workspace: workspace, settings: settings, showsAgentActivity: false
         ).makeSnapshot().title
         let titleBar = manager.resolvedWorkspaceDisplayTitle(for: workspace)
-        let nodes = CloudTreeNodeBuilder.flattened(CloudTreeNodeBuilder.nodes(
-            machines: [], snapshot: catalog.snapshot, localWorkspaces: [], includeLocalMachine: false
-        ))
-        let workspaceNodeID = CloudTreeNodeBuilder.nodeID(workspace: "a", machine: machine)
-        var cloudTree: String?
-        if let node = nodes.first(where: { $0.id == workspaceNodeID }),
-           case .workspace(_, let remote, _, _, _) = node.kind {
-            // The value `CloudTreeRowContentView` paints for a workspace row.
-            cloudTree = remote.name
-        }
-        return CloudWorkspaceNameSurfaces(sidebarRow: sidebarRow, titleBar: titleBar, cloudTree: cloudTree)
+        let catalogName = catalog.snapshot.machines.first { $0.id == machine }?.remoteWorkspaces?.first { $0.id == "a" }?.name
+        return CloudWorkspaceNameSurfaces(sidebarRow: sidebarRow, titleBar: titleBar, catalogName: catalogName)
     }
 
     func projectPane(workspaceID: UUID, panelID: UUID) {
@@ -110,10 +101,10 @@ private final class CloudWorkspaceRenameParityHarness {
     /// the daemon, and the equal confirmation keeps user provenance.
     func renameDuringCreation(_ name: String) async throws {
         catalog.endProjections(panelID: fixture.panelID, reason: .replaced)
-        workspace.cloudVMBinding = nil
+        workspace.remoteWorkspaceBinding = nil
         #expect(manager.setCustomTitle(tabId: workspace.id, title: name))
         #expect(workspace.effectiveCustomTitleSource == .user)
-        catalog.bindCloudWorkspace(
+        catalog.bindRemoteWorkspace(
             localWorkspaceID: workspace.id, machine: machine, remoteWorkspaceID: "a", generatedTitle: "Cloud VM"
         )
         try await fixture.settle()
@@ -136,9 +127,9 @@ private final class CloudWorkspaceRenameParityHarness {
         #expect(provider.install(try #require(CmuxTuiSnapshotParser.state(fromSnapshot: document, machine: machine))))
     }
 
-    /// The Cloud tree's "Rename…" action: `CloudTreeNodeActions.renameWorkspace`
+    /// The Cloud tree's "Rename…" action: `SurfaceCatalog.renameRemoteWorkspace`
     /// calls exactly this on the catalog and never touches the local workspace.
-    func renameFromCloudTree(_ name: String) async throws {
+    func renameFromCatalog(_ name: String) async throws {
         try await catalog.renameRemoteWorkspace(on: machine, id: "a", name: name)
     }
 
@@ -169,9 +160,9 @@ private final class CloudWorkspaceRenameParityHarness {
 /// `SurfaceCatalog` and `TerminalController`.
 @MainActor
 @Suite(.serialized)
-struct CloudWorkspaceRenameSurfaceParityTests {
-    private func withHarness(_ body: (CloudWorkspaceRenameParityHarness) async throws -> Void) async throws {
-        let harness = try CloudWorkspaceRenameParityHarness()
+struct TuiWorkspaceRenameSurfaceParityTests {
+    private func withHarness(_ body: (TuiWorkspaceRenameParityHarness) async throws -> Void) async throws {
+        let harness = try TuiWorkspaceRenameParityHarness()
         do { try await body(harness) } catch {
             await harness.close()
             throw error
@@ -180,18 +171,18 @@ struct CloudWorkspaceRenameSurfaceParityTests {
     }
 
     @Test("A Cloud tree rename of a user-titled workspace reaches the sidebar row and the title bar")
-    func cloudTreeRenameReachesEverySurface() async throws {
+    func catalogNameRenameReachesEverySurface() async throws {
         try await withHarness { harness in
             #expect(harness.surfaces() == .all("Same workspace"))
             try await harness.renameDuringCreation("Chosen during creation")
 
-            try await harness.renameFromCloudTree("Renamed in tree")
+            try await harness.renameFromCatalog("Renamed in tree")
             #expect(harness.surfaces() == .all("Renamed in tree"))
             await harness.provider.refresh()
             #expect(harness.surfaces() == .all("Renamed in tree"))
 
             // Renaming again from the tree, then locally, keeps converging.
-            try await harness.renameFromCloudTree("Renamed in tree again")
+            try await harness.renameFromCatalog("Renamed in tree again")
             #expect(harness.surfaces() == .all("Renamed in tree again"))
             #expect(harness.manager.setCustomTitle(tabId: harness.workspace.id, title: "Renamed locally"))
             try await harness.fixture.settle()
@@ -228,7 +219,7 @@ struct CloudWorkspaceRenameSurfaceParityTests {
             #expect(harness.surfaces() == .all("Renamed from cmux-tui"))
 
             let other = try #require(harness.manager.addWorkspaceIfActive(
-                title: "Other", select: true, autoWelcomeIfNeeded: false
+                title: "Other", select: true
             ))
             defer { for panel in other.panels.values { panel.close() } }
             #expect(harness.manager.selectedTabId == other.id)
@@ -245,7 +236,7 @@ struct CloudWorkspaceRenameSurfaceParityTests {
           arguments: CloudWorkspaceManifestVintage.allCases)
     func restoreConvergesOnDaemonName(vintage: CloudWorkspaceManifestVintage) async throws {
         try await withHarness { harness in
-            try await harness.renameFromCloudTree("Named before quit")
+            try await harness.renameFromCatalog("Named before quit")
             #expect(harness.surfaces() == .all("Named before quit"))
             let saved = try harness.manifest(vintage)
 
@@ -257,7 +248,7 @@ struct CloudWorkspaceRenameSurfaceParityTests {
             let restoredPanelID = try #require(panelMap[harness.fixture.panelID])
             defer { for panel in restored.panels.values { panel.close() } }
             harness.manager.tabs = [restored]
-            #expect(restored.cloudVMBinding?.remoteWorkspaceID == "a")
+            #expect(restored.remoteWorkspaceBinding?.remoteWorkspaceID == "a")
             #expect(restored.title == "Named before quit")
 
             // Re-projecting the pane and the reconnect publish both apply the
@@ -275,7 +266,7 @@ struct CloudWorkspaceRenameSurfaceParityTests {
     @Test("A rejected rename leaves every surface on the accepted name")
     func rejectedRenameKeepsSurfacesTogether() async throws {
         try await withHarness { harness in
-            try await harness.renameFromCloudTree("Accepted name")
+            try await harness.renameFromCatalog("Accepted name")
             #expect(harness.surfaces() == .all("Accepted name"))
             harness.provider.beforeRename = { throw SurfaceCatalogError.unsupported("refused by daemon") }
 
@@ -283,7 +274,7 @@ struct CloudWorkspaceRenameSurfaceParityTests {
             await #expect(throws: SurfaceCatalogError.self) { try await harness.fixture.settle() }
             #expect(harness.surfaces() == .all("Accepted name"))
 
-            await #expect(throws: SurfaceCatalogError.self) { try await harness.renameFromCloudTree("Refused in tree") }
+            await #expect(throws: SurfaceCatalogError.self) { try await harness.renameFromCatalog("Refused in tree") }
             #expect(harness.surfaces() == .all("Accepted name"))
             await harness.provider.refresh()
             #expect(harness.surfaces() == .all("Accepted name"))
@@ -295,17 +286,17 @@ struct CloudWorkspaceRenameSurfaceParityTests {
         try await withHarness { harness in
             let oldGraph = harness.provider.graph
             harness.catalog.endProjections(panelID: harness.fixture.panelID, reason: .replaced)
-            harness.workspace.cloudVMBinding = nil
+            harness.workspace.remoteWorkspaceBinding = nil
             #expect(harness.manager.setCustomTitle(tabId: harness.workspace.id, title: "Chosen during creation"))
 
             let gate = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
             harness.provider.beforeRename = { for await _ in gate.stream { break } }
-            harness.catalog.bindCloudWorkspace(
+            harness.catalog.bindRemoteWorkspace(
                 localWorkspaceID: harness.workspace.id, machine: harness.machine,
                 remoteWorkspaceID: "a", generatedTitle: "Cloud VM"
             )
-            let key = CloudRenameCoordinator.Key.workspace(machine: harness.machine, id: "a")
-            #expect(harness.catalog.pendingCloudRenameName(for: key) == "Chosen during creation")
+            let key = TuiRenameCoordinator.Key.workspace(machine: harness.machine, id: "a")
+            #expect(harness.catalog.pendingTuiRenameName(for: key) == "Chosen during creation")
 
             // The older accepted graph arrives while the intent is still
             // unacknowledged. Every display reader keeps the pending name, while
@@ -313,7 +304,7 @@ struct CloudWorkspaceRenameSurfaceParityTests {
             harness.fixture.renameService.reconcileRemoteState(
                 machine: harness.machine, state: oldGraph, catalog: harness.catalog, observation: .current
             )
-            #expect(harness.catalog.cloudRenameCoordinator.pendingName(for: key) == "Chosen during creation")
+            #expect(harness.catalog.tuiRenameCoordinator.pendingName(for: key) == "Chosen during creation")
             #expect(harness.surfaces() == .all("Chosen during creation"))
             #expect(harness.confirmedWorkspaceName == "Same workspace")
 
@@ -323,8 +314,8 @@ struct CloudWorkspaceRenameSurfaceParityTests {
             harness.projectPane(workspaceID: harness.workspace.id, panelID: harness.fixture.panelID)
             // The acknowledged write installs the new graph and releases the
             // intent, so no optimistic overlay remains to hide convergence.
-            #expect(harness.catalog.cloudRenameCoordinator.pendingName(for: key) == nil)
-            #expect(harness.catalog.pendingCloudRenameName(for: key) == nil)
+            #expect(harness.catalog.tuiRenameCoordinator.pendingName(for: key) == nil)
+            #expect(harness.catalog.pendingTuiRenameName(for: key) == nil)
             #expect(harness.surfaces() == .all("Chosen during creation"))
             #expect(harness.confirmedWorkspaceName == "Chosen during creation")
             #expect(harness.provider.writes.count == 1)

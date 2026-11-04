@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -28,11 +28,11 @@ struct CloudCursorlessSnapshotTests {
     }
 
     private func makeProvider() -> (CmuxTuiSurfaceProvider, SurfaceCatalog) {
-        let summary = VMSummary(id: "cursorless", provider: "freestyle", status: "running", image: "cmux-devbox", createdAt: 0, base: nil)
+        let host = TuiTestHost(destination: "cursorless.example.test")
         let catalog = SurfaceCatalog()
         let provider = CmuxTuiSurfaceProvider(
-            summary: summary,
-            links: CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil }),
+            summary: host.summary,
+            links: host.links(),
             catalog: catalog
         )
         return (provider, catalog)
@@ -47,7 +47,7 @@ struct CloudCursorlessSnapshotTests {
 
         let second = try #require(CmuxTuiSnapshotParser.state(fromSnapshot: snapshot(workspaceName: "After"), machine: provider.machine))
         #expect(provider.installSnapshotIfNewer(second), "a missing cursor is not an equal cursor")
-        #expect(provider.cloudState?.lookupIndex.workspace(id: "ws_main")?.name == "After")
+        #expect(provider.tuiState?.lookupIndex.workspace(id: "ws_main")?.name == "After")
     }
 
     @Test("A cursorless read that started before a newer install does not overwrite it")
@@ -59,7 +59,7 @@ struct CloudCursorlessSnapshotTests {
 
         let stale = try #require(CmuxTuiSnapshotParser.state(fromSnapshot: snapshot(workspaceName: "Older"), machine: provider.machine))
         #expect(!provider.installSnapshotIfNewer(stale, requestVersion: 0))
-        #expect(provider.cloudState?.lookupIndex.workspace(id: "ws_main")?.name == "Newer")
+        #expect(provider.tuiState?.lookupIndex.workspace(id: "ws_main")?.name == "Newer")
         #expect(provider.installSnapshotIfNewer(stale, requestVersion: 1))
     }
 
@@ -74,6 +74,6 @@ struct CloudCursorlessSnapshotTests {
 
         let legacy = try #require(CmuxTuiSnapshotParser.state(fromSnapshot: snapshot(workspaceName: "Legacy"), machine: provider.machine))
         #expect(!provider.installSnapshotIfNewer(legacy))
-        #expect(provider.cloudState?.lookupIndex.workspace(id: "ws_main")?.name == "Journaled")
+        #expect(provider.tuiState?.lookupIndex.workspace(id: "ws_main")?.name == "Journaled")
     }
 }

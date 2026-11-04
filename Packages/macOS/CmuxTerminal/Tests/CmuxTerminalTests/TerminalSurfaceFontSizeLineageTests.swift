@@ -780,8 +780,8 @@ private func setFontBindingResult(_ result: Bool)
             ownerId: surface.id
         )
         surface.installRuntimeSurfaceForTesting(runtimeSurface)
-        surface.mobileViewportFontFitState =
-            MobileViewportFontFitState(
+        surface.sharedViewportFontFitState =
+            SharedViewportFontFitState(
                 baseRuntimePointSize: 12,
                 fittedRuntimePointSize: 8
             )
@@ -805,8 +805,8 @@ private func setFontBindingResult(_ result: Bool)
         )
 
         #expect(
-            surface.mobileViewportFontFitState
-                == MobileViewportFontFitState(
+            surface.sharedViewportFontFitState
+                == SharedViewportFontFitState(
                     baseRuntimePointSize: 24,
                     fittedRuntimePointSize: 8
                 )
@@ -824,15 +824,15 @@ private func setFontBindingResult(_ result: Bool)
     }
 
     @Test
-    func mobileViewportFitOwnershipSurvivesDurableEquality() {
-        var state = MobileViewportFontFitState(
+    func sharedViewportFitOwnershipSurvivesDurableEquality() {
+        var state = SharedViewportFontFitState(
             baseRuntimePointSize: 13,
             fittedRuntimePointSize: 8
         )
 
         state.updateDurableBase(to: 7)
         #expect(
-            state == MobileViewportFontFitState(
+            state == SharedViewportFontFitState(
                 baseRuntimePointSize: 7,
                 fittedRuntimePointSize: 7,
                 viewportFitCeilingRuntimePointSize: 8
@@ -841,7 +841,7 @@ private func setFontBindingResult(_ result: Bool)
 
         state.updateDurableBase(to: 8)
         #expect(
-            state == MobileViewportFontFitState(
+            state == SharedViewportFontFitState(
                 baseRuntimePointSize: 8,
                 fittedRuntimePointSize: 8
             )
@@ -849,7 +849,7 @@ private func setFontBindingResult(_ result: Bool)
 
         state.updateDurableBase(to: 9)
         #expect(
-            state == MobileViewportFontFitState(
+            state == SharedViewportFontFitState(
                 baseRuntimePointSize: 9,
                 fittedRuntimePointSize: 8
             )
@@ -1409,8 +1409,8 @@ private func setFontBindingResult(_ result: Bool)
             ownerId: surface.id
         )
         surface.installRuntimeSurfaceForTesting(runtimeSurface)
-        surface.mobileViewportFontFitState =
-            MobileViewportFontFitState(
+        surface.sharedViewportFontFitState =
+            SharedViewportFontFitState(
                 baseRuntimePointSize: 13,
                 fittedRuntimePointSize: 8
             )
@@ -1445,8 +1445,8 @@ private func setFontBindingResult(_ result: Bool)
             )
 
         #expect(
-            surface.mobileViewportFontFitState
-                == MobileViewportFontFitState(
+            surface.sharedViewportFontFitState
+                == SharedViewportFontFitState(
                     baseRuntimePointSize: 26,
                     fittedRuntimePointSize: 8
                 )
@@ -1511,7 +1511,7 @@ private func setFontBindingResult(_ result: Bool)
             ownerId: surface.id
         )
         surface.installRuntimeSurfaceForTesting(runtimeSurface)
-        surface.mobileViewportFontFitState = MobileViewportFontFitState(
+        surface.sharedViewportFontFitState = SharedViewportFontFitState(
             baseRuntimePointSize: 13,
             fittedRuntimePointSize: 8
         )
@@ -1530,8 +1530,8 @@ private func setFontBindingResult(_ result: Bool)
                 )
         )
         #expect(
-            surface.mobileViewportFontFitState
-                == MobileViewportFontFitState(
+            surface.sharedViewportFontFitState
+                == SharedViewportFontFitState(
                     baseRuntimePointSize: 12,
                     fittedRuntimePointSize: 8
                 )
@@ -1557,7 +1557,7 @@ private func setFontBindingResult(_ result: Bool)
             ownerId: surface.id
         )
         surface.installRuntimeSurfaceForTesting(runtimeSurface)
-        surface.mobileViewportFontFitState = MobileViewportFontFitState(
+        surface.sharedViewportFontFitState = SharedViewportFontFitState(
             baseRuntimePointSize: 13,
             fittedRuntimePointSize: 8
         )
@@ -1576,8 +1576,8 @@ private func setFontBindingResult(_ result: Bool)
                 )
         )
         #expect(
-            surface.mobileViewportFontFitState
-                == MobileViewportFontFitState(
+            surface.sharedViewportFontFitState
+                == SharedViewportFontFitState(
                     baseRuntimePointSize: 7,
                     fittedRuntimePointSize: 7,
                     viewportFitCeilingRuntimePointSize: 8
@@ -1607,7 +1607,7 @@ private func setFontBindingResult(_ result: Bool)
             ownerId: surface.id
         )
         surface.installRuntimeSurfaceForTesting(runtimeSurface)
-        surface.mobileViewportFontFitState = MobileViewportFontFitState(
+        surface.sharedViewportFontFitState = SharedViewportFontFitState(
             baseRuntimePointSize: TerminalFontSizePolicy.minimumRuntimePoints,
             fittedRuntimePointSize: TerminalFontSizePolicy.minimumRuntimePoints
         )
@@ -1646,7 +1646,7 @@ private func setFontBindingResult(_ result: Bool)
             ownerId: surface.id
         )
         surface.installRuntimeSurfaceForTesting(runtimeSurface)
-        surface.mobileViewportFontFitState = MobileViewportFontFitState(
+        surface.sharedViewportFontFitState = SharedViewportFontFitState(
             baseRuntimePointSize: 13,
             fittedRuntimePointSize: 8
         )
@@ -1666,8 +1666,8 @@ private func setFontBindingResult(_ result: Bool)
         )
         #expect(surface.sessionFontSizeOverrideBasePoints() == nil)
         #expect(
-            surface.mobileViewportFontFitState
-                == MobileViewportFontFitState(
+            surface.sharedViewportFontFitState
+                == SharedViewportFontFitState(
                     baseRuntimePointSize: 14,
                     fittedRuntimePointSize: 8
                 )

@@ -8,8 +8,6 @@ nonisolated private let cmuxSettingsFileStoreLogger = Logger(subsystem: "com.cmu
 
 final class CmuxSettingsFileStore {
     static let currentSchemaVersion = 1
-    static let schemaURLString = "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json"
-    private static let legacySchemaURLString = "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux-settings.schema.json"
     private static let releaseBundleIdentifier = "com.cmuxterm.app"
     private static let backupsDefaultsKey = "cmux.settingsFile.backups.v1"
     private static let importedManagedDefaultsDefaultsKey = "cmux.settingsFile.importedManagedDefaults.v1"
@@ -271,11 +269,7 @@ final class CmuxSettingsFileStore {
             guard case .parsed = loadSettings(at: fallbackPath) else {
                 continue
             }
-            guard let source = String(data: data, encoding: .utf8) else {
-                return data
-            }
-            let updated = source.replacingOccurrences(of: Self.legacySchemaURLString, with: Self.schemaURLString)
-            return Data(updated.utf8)
+            return data
         }
         return nil
     }
@@ -481,9 +475,6 @@ final class CmuxSettingsFileStore {
         parseClassicCatalogSections(root, sourcePath: sourcePath, snapshot: &snapshot)
         if let browserSection = root["browser"] as? [String: Any] {
             parseBrowserSection(browserSection, sourcePath: sourcePath, snapshot: &snapshot)
-        }
-        if let mobileSection = root["mobile"] as? [String: Any] {
-            parseMobileSection(mobileSection, sourcePath: sourcePath, snapshot: &snapshot)
         }
         if let markdownSection = root["markdown"] as? [String: Any] {
             parseMarkdownSection(markdownSection, sourcePath: sourcePath, snapshot: &snapshot)

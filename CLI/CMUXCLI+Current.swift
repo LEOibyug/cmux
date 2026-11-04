@@ -5,8 +5,8 @@ struct CurrentCommand {
     static let usage = String(localized: "cli.current.help", defaultValue: """
             Usage: cmux current [--limit <1...200>] [--json]
 
-            Read bounded current-work facts already known to cmux across local and Cloud surfaces.
-            Does not refresh machines, read transcripts, or mutate work.
+            Read bounded current-work facts already known to cmux across local and SSH surfaces.
+            Does not read transcripts or mutate work.
 
             Flags:
               --limit <1...200>  Maximum items (default: 100)

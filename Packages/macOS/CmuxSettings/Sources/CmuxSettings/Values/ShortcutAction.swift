@@ -9,7 +9,6 @@ import Foundation
 public enum ShortcutAction: String, CaseIterable, Sendable, Hashable, SettingCodable {
     // MARK: App
     case openSettings
-    case openTeamPicker
     case reloadConfiguration
     case showHideAllWindows
     case globalSearch
@@ -27,18 +26,14 @@ public enum ShortcutAction: String, CaseIterable, Sendable, Hashable, SettingCod
     case newTab
     case newLocalWorkspace
     case newBrowserWorkspace
-    case newCloudWorkspace
-    case newCloudMachine
     case saveLayoutTemplate
     case openFolder
     case reopenPreviousSession
     case goToWorkspace
     case commandPalette
-    case agentInbox
     case openChief
     case commandPaletteNext
     case commandPalettePrevious
-    case sendFeedback
     case showNotifications
     case jumpToUnread
     /// Focuses the surface where the user last submitted an agent prompt.
@@ -55,7 +50,6 @@ public enum ShortcutAction: String, CaseIterable, Sendable, Hashable, SettingCod
     case switchRightSidebarToSessions
     case switchRightSidebarToFeed
     case switchRightSidebarToDock
-    case switchRightSidebarToMachines
     case triggerFlash
 
     // MARK: Navigation
@@ -320,8 +314,7 @@ extension ShortcutAction {
     public var defaultFocusWhenClause: ShortcutWhenClause {
         switch self {
         case .switchRightSidebarToFiles, .switchRightSidebarToFind,
-             .switchRightSidebarToSessions, .switchRightSidebarToFeed, .switchRightSidebarToDock,
-             .switchRightSidebarToMachines:
+             .switchRightSidebarToSessions, .switchRightSidebarToFeed, .switchRightSidebarToDock:
             return .atom(.sidebarFocus)
         case .fileExplorerOpenSelection, .fileExplorerOpenSelectionFinderAlias:
             return .atom(.sidebarFocus)

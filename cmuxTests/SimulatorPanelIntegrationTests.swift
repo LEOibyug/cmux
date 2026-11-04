@@ -78,11 +78,6 @@ struct SimulatorPanelIntegrationTests {
 
     @Test("Session restore preserves preferred Simulator identity")
     func sessionPersistence() throws {
-        let flags = CmuxFeatureFlags.shared
-        let simulatorFlag = CmuxFeatureFlags.simulatorFlag
-        let previousOverride = flags.overrideValue(for: simulatorFlag)
-        flags.setOverride(true, for: simulatorFlag)
-        defer { flags.setOverride(previousOverride, for: simulatorFlag) }
         let preferredDeviceID = "00000000-0000-0000-0000-000000000001"
         let preferredRuntimeID = "com.apple.CoreSimulator.SimRuntime.iOS-26-5"
         let preferredDeviceTypeID = "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5"
@@ -106,7 +101,6 @@ struct SimulatorPanelIntegrationTests {
         #expect(panelSnapshot.simulator?.runtimeIdentifier == preferredRuntimeID)
         #expect(panelSnapshot.simulator?.deviceTypeIdentifier == preferredDeviceTypeID)
 
-        flags.setOverride(false, for: simulatorFlag)
         let restoredWorkspace = Workspace()
         restoredWorkspace.restoreSessionSnapshot(snapshot)
         let restoredPanel = try #require(
@@ -119,7 +113,6 @@ struct SimulatorPanelIntegrationTests {
         #expect(restoredPanel.selectedDeviceTypeIdentifier == preferredDeviceTypeID)
         let restoredSurfaceID = try #require(restoredWorkspace.surfaceIdFromPanelId(restoredPanel.id))
         #expect(restoredWorkspace.bonsplitController.tab(restoredSurfaceID)?.kind == SurfaceKind.simulator.rawValue)
-        flags.setOverride(true, for: simulatorFlag)
     }
 
     @Test("Remote tmux mirror workspaces reject local Simulator surfaces")
@@ -160,41 +153,10 @@ struct SimulatorPanelIntegrationTests {
         #expect(window.firstResponder !== view)
     }
 
-    @Test("Remote disable closes the worker and re-enable replaces it")
-    func remoteFeatureFlagLifecycle() async throws {
-        let flags = CmuxFeatureFlags.shared
-        let simulatorFlag = CmuxFeatureFlags.simulatorFlag
-        let previousOverride = flags.overrideValue(for: simulatorFlag)
-        flags.setOverride(true, for: simulatorFlag)
-        defer { flags.setOverride(previousOverride, for: simulatorFlag) }
-        let firstClient = SimulatorFeatureFlagPaneClient(blockStop: true)
-        let secondClient = SimulatorFeatureFlagPaneClient()
-        var clients: [SimulatorFeatureFlagPaneClient] = [firstClient, secondClient]
-        let panel = SimulatorPanel(clientFactory: { clients.removeFirst() })
-        defer { panel.close() }
-        let firstCoordinator = panel.coordinator
-
-        flags.setOverride(false, for: simulatorFlag)
-        try await waitUntil { await firstClient.stopCount != 0 }
-
-        #expect(await firstClient.stopCount == 1)
-        flags.setOverride(true, for: simulatorFlag)
-        panel.setVisibleInUI(true)
-        for _ in 0..<100 { await Task.yield() }
-        #expect(panel.coordinator === firstCoordinator)
-        #expect(!panel.isFeatureReady)
-        #expect(await secondClient.discoveryCount == 0)
-
-        await firstClient.releaseStop()
-        try await waitUntil { await secondClient.discoveryCount != 0 }
-        #expect(panel.coordinator !== firstCoordinator)
-        #expect(panel.isFeatureReady)
-        #expect(await secondClient.discoveryCount == 1)
-    }
 
     @Test("Awaitable close does not finish before worker rollback")
     func awaitableCloseWaitsForWorkerRollback() async throws {
-        let client = SimulatorFeatureFlagPaneClient(blockStop: true)
+        let client = SimulatorLifecyclePaneClient(blockStop: true)
         let panel = SimulatorPanel(client: client)
         let completion = SimulatorCloseCompletionProbe()
         let closeTask = Task { @MainActor in
@@ -214,7 +176,7 @@ struct SimulatorPanelIntegrationTests {
 
     @Test("Application termination retains cleanup after a closed panel deallocates")
     func applicationTerminationRetainsOrphanedClose() async throws {
-        let client = SimulatorFeatureFlagPaneClient(blockStop: true)
+        let client = SimulatorLifecyclePaneClient(blockStop: true)
         weak var releasedPanel: SimulatorPanel?
         do {
             let panel = SimulatorPanel(client: client)
@@ -243,14 +205,9 @@ struct SimulatorPanelIntegrationTests {
 
     @Test("Cancelling application termination restores the live Simulator panel")
     func cancelledApplicationTerminationRestoresPanel() async throws {
-        let flags = CmuxFeatureFlags.shared
-        let simulatorFlag = CmuxFeatureFlags.simulatorFlag
-        let previousOverride = flags.overrideValue(for: simulatorFlag)
-        flags.setOverride(true, for: simulatorFlag)
-        defer { flags.setOverride(previousOverride, for: simulatorFlag) }
 
-        let firstClient = SimulatorFeatureFlagPaneClient(blockStop: true)
-        let secondClient = SimulatorFeatureFlagPaneClient()
+        let firstClient = SimulatorLifecyclePaneClient(blockStop: true)
+        let secondClient = SimulatorLifecyclePaneClient()
         var clients = [firstClient, secondClient]
         let panel = SimulatorPanel(clientFactory: { clients.removeFirst() })
         defer { panel.close() }
@@ -281,14 +238,9 @@ struct SimulatorPanelIntegrationTests {
 
     @Test("External file drops target Simulator import instead of file previews")
     func externalFileDropRouting() async throws {
-        let flags = CmuxFeatureFlags.shared
-        let simulatorFlag = CmuxFeatureFlags.simulatorFlag
-        let previousOverride = flags.overrideValue(for: simulatorFlag)
-        flags.setOverride(true, for: simulatorFlag)
-        defer { flags.setOverride(previousOverride, for: simulatorFlag) }
         let workspace = Workspace()
         let terminalPanelID = try #require(workspace.focusedPanelId)
-        let client = SimulatorFeatureFlagPaneClient(devices: [SimulatorDevice(
+        let client = SimulatorLifecyclePaneClient(devices: [SimulatorDevice(
             id: "phone",
             name: "iPhone",
             runtimeIdentifier: "runtime",
@@ -344,7 +296,6 @@ struct SimulatorPanelIntegrationTests {
             urls: [URL(fileURLWithPath: "/tmp/Fixture.app")], panelId: panel.id
         ) == false)
 
-        flags.setOverride(false, for: simulatorFlag)
         #expect(workspace.handleSimulatorExternalFileDrop(
             urls: [URL(fileURLWithPath: "/tmp/Fixture.txt")],
             panelId: terminalPanelID
@@ -477,11 +428,6 @@ struct SimulatorPanelIntegrationTests {
 
     @Test("Context discovers the default device before returning identity")
     func contextDiscoversDefaultDevice() async throws {
-        let flags = CmuxFeatureFlags.shared
-        let simulatorFlag = CmuxFeatureFlags.simulatorFlag
-        let previousOverride = flags.overrideValue(for: simulatorFlag)
-        flags.setOverride(true, for: simulatorFlag)
-        defer { flags.setOverride(previousOverride, for: simulatorFlag) }
 
         let manager = TabManager()
         let workspace = manager.addWorkspace(select: true, eagerLoadTerminal: false)
@@ -501,7 +447,7 @@ struct SimulatorPanelIntegrationTests {
             isAvailable: true,
             lastBootedAt: nil
         )
-        let client = SimulatorFeatureFlagPaneClient(devices: [device])
+        let client = SimulatorLifecyclePaneClient(devices: [device])
         let panel = SimulatorPanel(client: client)
         workspace.panels[panel.id] = panel
 
@@ -535,11 +481,6 @@ struct SimulatorPanelIntegrationTests {
 
     @Test("Context reads persisted identity without starting a stopped Simulator")
     func contextReadsPersistedIdentityWithoutStartingDevice() async throws {
-        let flags = CmuxFeatureFlags.shared
-        let simulatorFlag = CmuxFeatureFlags.simulatorFlag
-        let previousOverride = flags.overrideValue(for: simulatorFlag)
-        flags.setOverride(true, for: simulatorFlag)
-        defer { flags.setOverride(previousOverride, for: simulatorFlag) }
 
         let manager = TabManager()
         let workspace = manager.addWorkspace(select: true, eagerLoadTerminal: false)
@@ -559,7 +500,7 @@ struct SimulatorPanelIntegrationTests {
             isAvailable: true,
             lastBootedAt: nil
         )
-        let client = SimulatorFeatureFlagPaneClient(devices: [device])
+        let client = SimulatorLifecyclePaneClient(devices: [device])
         let panel = SimulatorPanel(
             preferredDeviceID: device.id,
             preferredRuntimeIdentifier: device.runtimeIdentifier,
@@ -600,11 +541,6 @@ struct SimulatorPanelIntegrationTests {
 
     @Test("Event log reads cached history without starting a stopped Simulator")
     func eventLogReadsCachedHistoryWithoutStartingDevice() async throws {
-        let flags = CmuxFeatureFlags.shared
-        let simulatorFlag = CmuxFeatureFlags.simulatorFlag
-        let previousOverride = flags.overrideValue(for: simulatorFlag)
-        flags.setOverride(true, for: simulatorFlag)
-        defer { flags.setOverride(previousOverride, for: simulatorFlag) }
 
         let manager = TabManager()
         let workspace = manager.addWorkspace(select: true, eagerLoadTerminal: false)
@@ -624,7 +560,7 @@ struct SimulatorPanelIntegrationTests {
             isAvailable: true,
             lastBootedAt: nil
         )
-        let client = SimulatorFeatureFlagPaneClient(devices: [device])
+        let client = SimulatorLifecyclePaneClient(devices: [device])
         let panel = SimulatorPanel(
             preferredDeviceID: device.id,
             preferredRuntimeIdentifier: device.runtimeIdentifier,
@@ -663,11 +599,6 @@ struct SimulatorPanelIntegrationTests {
 
     @Test("Screenshot preparation starts a restored shutdown Simulator")
     func screenshotPreparationStartsRestoredShutdownDevice() async throws {
-        let flags = CmuxFeatureFlags.shared
-        let simulatorFlag = CmuxFeatureFlags.simulatorFlag
-        let previousOverride = flags.overrideValue(for: simulatorFlag)
-        flags.setOverride(true, for: simulatorFlag)
-        defer { flags.setOverride(previousOverride, for: simulatorFlag) }
 
         let manager = TabManager()
         let workspace = manager.addWorkspace(select: true, eagerLoadTerminal: false)
@@ -687,7 +618,7 @@ struct SimulatorPanelIntegrationTests {
             isAvailable: true,
             lastBootedAt: nil
         )
-        let client = SimulatorFeatureFlagPaneClient(devices: [device])
+        let client = SimulatorLifecyclePaneClient(devices: [device])
         let panel = SimulatorPanel(
             preferredDeviceID: device.id,
             preferredRuntimeIdentifier: device.runtimeIdentifier,
@@ -816,7 +747,7 @@ struct SimulatorPanelIntegrationTests {
     }
 }
 
-private actor SimulatorFeatureFlagPaneClient: SimulatorPaneClient {
+private actor SimulatorLifecyclePaneClient: SimulatorPaneClient {
     private let events = SimulatorWorkerEventStreamSource(
         maximumBufferedBytes: 1_024,
         maximumBufferedEvents: 4,

@@ -71,14 +71,8 @@ enum CompletionCandidates {
         return sanitized(box.value)
     }
 
-    @Sendable static func vms(_ arguments: [String], _ index: Int = 0, _ prefix: String = "") -> [String] {
-        fetch(arguments, method: "vm.list", mapping: identifier)
-    }
-
     /// The listing key every entity uses, with `ref` preferred and `id` as the
-    /// fallback. `vm.list` publishes only `id`, and any list item that carries an
-    /// `id` without a `ref` would otherwise be dropped from the candidate set --
-    /// the same `id ?? ref` shape the rest of the CLI reads these lists with.
+    /// fallback for list items without a short reference.
     private static func identifier(_ item: [String: Any]) -> String? {
         (item["ref"] as? String) ?? (item["id"] as? String)
     }
@@ -257,7 +251,6 @@ struct CompleteCandidates: ParsableCommand {
         case "panels": candidates = CompletionCandidates.panels(words)
         case "tabs": candidates = CompletionCandidates.tabs(words)
         case "themes": candidates = CompletionCandidates.themes(words)
-        case "vms": candidates = CompletionCandidates.vms(words)
         default: candidates = []
         }
 

@@ -8,12 +8,8 @@ extension Workspace {
     func beginTerminalGeometryTransition(_ transition: TerminalWorkContext.Transition) -> @MainActor () -> Void {
         let previous = terminalGeometryTransition
         if previous == .unknown { terminalGeometryTransition = transition }
-        let work = TerminalGeometryDiagnostics().begin(
-            .geometryPublication, workspaceID: id, transition: terminalGeometryTransition
-        )
         return {
             self.terminalGeometryTransition = previous
-            work.end()
         }
     }
 

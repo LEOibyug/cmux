@@ -16,7 +16,6 @@ final class ComputerUseUXCoordinator {
     private let liveAgentIndex: SharedLiveAgentIndex
     private let userDefaults: UserDefaults
     private let workspaceTitle: @MainActor (UUID) -> String?
-    private let featureEnabled: @MainActor () -> Bool
     private let ownsSurface: @MainActor (UUID, UUID?) -> Bool
     private let liveSessionProjection: ComputerUseLiveSessionProjection
     private let activityLifecycle = ComputerUseActivityLifecycle()
@@ -50,7 +49,6 @@ final class ComputerUseUXCoordinator {
         runtimeService: ComputerUseRuntimeService,
         userDefaults: UserDefaults,
         workspaceTitle: @escaping @MainActor (UUID) -> String?,
-        featureEnabled: @escaping @MainActor () -> Bool,
         onboardingCoordinator: ComputerUseOnboardingCoordinator? = nil,
         ownsSurface: @escaping @MainActor (UUID, UUID?) -> Bool = { _, _ in false }
     ) {
@@ -64,7 +62,6 @@ final class ComputerUseUXCoordinator {
         self.liveAgentIndex = liveAgentIndex
         self.userDefaults = userDefaults
         self.workspaceTitle = workspaceTitle
-        self.featureEnabled = featureEnabled
         self.ownsSurface = ownsSurface
         self.liveSessionProjection = ComputerUseLiveSessionProjection(
             liveAgentIndex: liveAgentIndex
@@ -138,7 +135,6 @@ final class ComputerUseUXCoordinator {
         // controller, so background/view mode cannot drift between entrypoints.
         let watchTarget = ComputerUseWatchTargetController(
             stateDirectoryURL: stateDirectoryURL,
-            featureEnabled: featureEnabled,
             liveDriverSessions: { [liveSessionProjection] in
                 liveSessionProjection.sessionsByDriverSessionID()
             },
@@ -185,8 +181,7 @@ final class ComputerUseUXCoordinator {
             stateDirectoryURL: stateDirectoryURL,
             configStore: configStore,
             showInMenuBarKey: showInMenuBarKey,
-            workspaceTitle: workspaceTitle,
-            featureEnabled: featureEnabled
+            workspaceTitle: workspaceTitle
         )
         menuBarSnapshotStore = snapshotStore
         menuBarController = ComputerUseMenuBarController(
@@ -269,7 +264,7 @@ final class ComputerUseUXCoordinator {
 
         // Bring the app the local driver is steering to the front (once per target)
         // so the user watches the automation instead of the cmux-hosted cursor
-        // clicking on top of a hidden target. Gated the same way via `featureEnabled`.
+        // clicking on top of a hidden target.
         watchTarget.start()
         watchTargetController = watchTarget
 
@@ -342,7 +337,6 @@ final class ComputerUseUXCoordinator {
         guard isComputerUseInvocation || isCompletion else { return }
         let isFunctionalInvocation = isComputerUseInvocation
             && toolName != "check_permissions"
-            && featureEnabled()
             && runtimeService.desiredEnabled
         let surfaceID = event.surfaceId.flatMap(UUID.init(uuidString:))
         let hasValidSurface = surfaceID != nil

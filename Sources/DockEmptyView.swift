@@ -46,17 +46,6 @@ struct DockEmptyView: View {
                     }
                 }
 
-                Button {
-                    openDockDocs()
-                } label: {
-                    Label(
-                        String(localized: "dock.empty.openDocs", defaultValue: "Docs"),
-                        systemImage: "questionmark.circle"
-                    )
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help(String(localized: "dock.empty.openDocs.help", defaultValue: "Open the Dock documentation"))
             }
             .padding(.top, 4)
         }
@@ -87,10 +76,6 @@ struct DockEmptyView: View {
         )
     }
 
-    private func openDockDocs() {
-        guard let url = URL(string: "https://cmux.com/docs/dock") else { return }
-        NSWorkspace.shared.open(url)
-    }
 
     private var agentPrompt: String {
         String(
@@ -99,9 +84,8 @@ struct DockEmptyView: View {
             Set up cmux Dock controls for the current context.
 
             First, learn the feature before editing:
-            1. Run `cmux docs dock` if the cmux CLI is available. If it is not, read https://cmux.com/docs/dock.
-            2. Inspect the repository or current directory to understand the project type, scripts, package manager, dev servers, logs, task runners, test commands, and any existing TUI tools.
-            3. If the desired Dock is ambiguous, ask the user what they want monitored or controlled before writing files.
+            1. Inspect the repository or current directory to understand the project type, scripts, package manager, dev servers, logs, task runners, test commands, and any existing TUI tools.
+            2. If the desired Dock is ambiguous, ask the user what they want monitored or controlled before writing files.
 
             Dock is cmux's right-sidebar terminal and browser control area. A Dock config is JSON with a top-level `controls` array. Terminal controls run commands in Ghostty-backed sections using the user's login shell; browser controls embed URLs. Controls are useful for project dashboards, git/status views, dev server or build status, test watchers, log tails, queues, local services, or fixed web dashboards.
 

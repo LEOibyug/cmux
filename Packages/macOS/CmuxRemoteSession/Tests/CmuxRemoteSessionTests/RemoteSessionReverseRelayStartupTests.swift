@@ -155,7 +155,7 @@ struct RemoteSessionReverseRelayStartupTests {
                 cloudNotificationClearSurfaceInvalid: ""
             ),
             strings: RemoteSessionStrings(
-                connectedVMNoProxyFormat: "%@",
+                connectedWithoutDaemonFormat: "%@",
                 suspendedDetailFormat: "%@",
                 reverseRelayUnavailableRetrying:
                     "test relay unavailable",

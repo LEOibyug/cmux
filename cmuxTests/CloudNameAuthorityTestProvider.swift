@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -13,23 +13,24 @@ import Testing
 final class CloudNameAuthorityTestProvider: SurfaceAgentNaming {
     let machine: SurfaceMachineID
     let catalog: SurfaceCatalog
-    let renameService: CloudWorkspaceRenameService
+    let renameService: TuiWorkspaceRenameService
     let receiver: CmuxTuiSurfaceProvider
     var info: SurfaceMachineInfo
-    var graph: CloudVMState
+    var graph: TuiState
     var writes: [(String, String)] = []
     var beforeRename: (() async throws -> Void)?
 
-    init(machine: SurfaceMachineID, catalog: SurfaceCatalog, renameService: CloudWorkspaceRenameService) throws {
+    init(destination: String, catalog: SurfaceCatalog, renameService: TuiWorkspaceRenameService) throws {
+        let host = TuiTestHost(destination: destination)
         self.renameService = renameService
-        self.machine = machine
+        self.machine = host.machine
         self.catalog = catalog
         info = SurfaceMachineInfo(id: machine, name: machine.rawValue, status: "running", image: nil,
-                                  hasDesktop: false, memoryMb: nil, diskMb: nil, linkState: .connected,
+                                  memoryMb: nil, diskMb: nil, linkState: .connected,
                                   linkError: nil, cpuPercent: nil, memoryUsedMb: nil, diskUsedMb: nil)
         receiver = CmuxTuiSurfaceProvider(
-            summary: VMSummary(id: machine.rawValue, provider: "freestyle", status: "running", image: "cmux-devbox", createdAt: 0, base: nil),
-            links: CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil }), catalog: catalog
+            summary: host.summary,
+            links: host.links(), catalog: catalog
         )
         let snapshot: [String: Any] = [
             "cursor": ["generation": "fixture", "revision": "1"],
@@ -49,10 +50,10 @@ final class CloudNameAuthorityTestProvider: SurfaceAgentNaming {
     }
 
     @discardableResult
-    func install(_ state: CloudVMState) -> Bool {
+    func install(_ state: TuiState) -> Bool {
         guard receiver.installSnapshotIfNewer(state) else { return false }
         graph = state
-        catalog.replaceCloudState(state, resources: CmuxTuiSnapshotParser.resources(from: state), info: info)
+        catalog.replaceTuiState(state, resources: CmuxTuiSnapshotParser.resources(from: state), info: info)
         renameService.reconcileRemoteState(machine: machine, state: state, catalog: catalog, observation: .current)
         return true
     }
@@ -67,9 +68,9 @@ final class CloudNameAuthorityTestProvider: SurfaceAgentNaming {
         try commit(collection: "tabs", id: id, name: name)
     }
 
-    func renameAgentTab(context: CloudAgentNameContext, name: String) async throws {
+    func renameAgentTab(context: TuiAgentNameContext, name: String) async throws {
         try await beforeRename?()
-        guard CloudAgentNameContext(projection: context.projection, state: graph) == context else {
+        guard TuiAgentNameContext(projection: context.projection, state: graph) == context else {
             throw CancellationError()
         }
         try commit(collection: "tabs", id: try #require(context.projection.remoteTabID), name: name, source: "auto")

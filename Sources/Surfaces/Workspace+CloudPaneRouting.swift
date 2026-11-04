@@ -4,7 +4,7 @@ import CmuxSurfaceCatalogModel
 import Foundation
 
 /// Identifies one remote workspace placement for a local projection.
-struct CloudWorkspaceRemoteIdentity: Hashable, Sendable {
+struct TuiWorkspaceRemoteIdentity: Hashable, Sendable {
     let machine: SurfaceMachineID
     let workspaceID: String
 }
@@ -13,7 +13,7 @@ struct CloudWorkspaceRemoteIdentity: Hashable, Sendable {
 ///
 /// The closures keep the rename service independent from the app delegate. Tests can
 /// provide an isolated registry, while the composition root supplies the live one.
-struct CloudWorkspaceRenameEnvironment {
+struct TuiWorkspaceRenameEnvironment {
     let workspace: @MainActor (UUID) -> Workspace?
     let tabManager: @MainActor (UUID) -> TabManager?
     let workspaces: @MainActor () -> [Workspace]
@@ -35,10 +35,10 @@ struct CloudWorkspaceRenameEnvironment {
 /// catalog. It has no process-wide mutable state. The catalog remains the owner of
 /// remote ordering and accepted cloud snapshots; this service only resolves local
 /// owners, applies titles, and submits intents through that catalog.
-final class CloudWorkspaceRenameService {
-    let environment: CloudWorkspaceRenameEnvironment
+final class TuiWorkspaceRenameService {
+    let environment: TuiWorkspaceRenameEnvironment
 
-    init(environment: CloudWorkspaceRenameEnvironment = CloudWorkspaceRenameEnvironment()) {
+    init(environment: TuiWorkspaceRenameEnvironment = TuiWorkspaceRenameEnvironment()) {
         self.environment = environment
     }
     /// A local workspace can be automatically associated with a remote workspace only
@@ -55,7 +55,7 @@ final class CloudWorkspaceRenameService {
             resources.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
-        var targets = Set<CloudWorkspaceRemoteIdentity>()
+        var targets = Set<TuiWorkspaceRemoteIdentity>()
         for projection in projections {
             guard !projection.resource.machine.isLocal,
                   let resource = resourceIndex[projection.resource] else { return nil }
@@ -66,8 +66,8 @@ final class CloudWorkspaceRenameService {
             } else if let tabID = projection.remoteTabID {
                 guard let view = resource.remoteViews?.first(where: { $0.tabID == tabID }) else { return nil }
                 remoteID = view.workspace.id
-            } else if resource.remoteWorkspaces.isEmpty || (resource.kind == .display && projection.remoteTabID == nil) {
-                // A cloud display, port browser, or pool terminal may be projected
+            } else if resource.remoteWorkspaces.isEmpty {
+                // A port browser or pool terminal may lack a daemon workspace.
                 // without a daemon-workspace placement. It cannot establish a target,
                 // but it also cannot contradict an exact terminal/workspace anchor.
                 continue
@@ -77,7 +77,7 @@ final class CloudWorkspaceRenameService {
                 remoteID = candidates.first
             }
             guard let remoteID, !remoteID.isEmpty else { return nil }
-            targets.insert(CloudWorkspaceRemoteIdentity(
+            targets.insert(TuiWorkspaceRemoteIdentity(
                 machine: projection.resource.machine,
                 workspaceID: remoteID
             ))
@@ -93,7 +93,7 @@ final class CloudWorkspaceRenameService {
     @MainActor
     func reconcileBinding(localWorkspaceID: UUID, catalog: SurfaceCatalog) {
         guard let workspace = environment.workspace(localWorkspaceID) else { return }
-        if let remoteWorkspaceID = workspace.cloudVMBinding?.remoteWorkspaceID,
+        if let remoteWorkspaceID = workspace.remoteWorkspaceBinding?.remoteWorkspaceID,
            !remoteWorkspaceID.isEmpty {
             return
         }
@@ -103,11 +103,11 @@ final class CloudWorkspaceRenameService {
             projections: projections,
             resources: snapshot.resources
         ) else { return }
-        if let binding = workspace.cloudVMBinding,
-           binding.vmID != target.machine.tuiMachineID {
+        if let binding = workspace.remoteWorkspaceBinding,
+           binding.machineID != target.machine.tuiMachineID {
             return
         }
-        catalog.bindCloudWorkspace(
+        catalog.bindRemoteWorkspace(
             localWorkspaceID: localWorkspaceID,
             machine: target.machine,
             remoteWorkspaceID: target.remoteWorkspaceID
@@ -119,17 +119,18 @@ final class CloudWorkspaceRenameService {
     /// panes from several remote workspaces (or pool terminals) has no one name to
     /// write, so nothing propagates.
     func remoteTarget(
-        binding: WorkspaceCloudVMBinding?,
+        binding: RemoteWorkspaceBinding?,
         projectedResources: [SurfaceResource]
     ) -> (machine: SurfaceMachineID, remoteWorkspaceID: String)? {
-        if let binding, let remote = binding.remoteWorkspaceID, !remote.isEmpty {
-            return (SurfaceMachineID(rawValue: binding.vmID), remote)
+        if let binding, let machine = SurfaceMachineID(rawValue: binding.machineID),
+           let remote = binding.remoteWorkspaceID, !remote.isEmpty {
+            return (machine, remote)
         }
-        var seen = Set<CloudWorkspaceRemoteIdentity>()
+        var seen = Set<TuiWorkspaceRemoteIdentity>()
         var found: (SurfaceMachineID, String)?
         for resource in projectedResources where !resource.machine.isLocal {
             for workspace in resource.remoteWorkspaces {
-                seen.insert(CloudWorkspaceRemoteIdentity(
+                seen.insert(TuiWorkspaceRemoteIdentity(
                     machine: resource.machine,
                     workspaceID: workspace.id
                 ))
@@ -194,7 +195,7 @@ final class CloudWorkspaceRenameService {
         let snapshot = catalog.snapshot
         let projected = snapshot.projections.filter { $0.workspaceID == workspace.id }
         let target: (machine: SurfaceMachineID, remoteWorkspaceID: String)?
-        if let bindingTarget = remoteTarget(binding: workspace.cloudVMBinding, projectedResources: []) {
+        if let bindingTarget = remoteTarget(binding: workspace.remoteWorkspaceBinding, projectedResources: []) {
             target = bindingTarget
         } else if let inferred = inferredRemoteWorkspaceTarget(
             projections: projected,
@@ -205,7 +206,7 @@ final class CloudWorkspaceRenameService {
             // A pre-catalog session may still have no projection records. Keep the
             // historical resource-only fallback for that narrow legacy case.
             target = remoteTarget(
-                binding: workspace.cloudVMBinding,
+                binding: workspace.remoteWorkspaceBinding,
                 projectedResources: catalog.resourcesProjected(inWorkspace: workspace.id)
             )
         } else {
@@ -215,7 +216,7 @@ final class CloudWorkspaceRenameService {
         let remoteWorkspaceName = snapshot.resources(on: target.machine)
             .flatMap(\.remoteWorkspaces)
             .first(where: { $0.id == target.remoteWorkspaceID })?.name
-        let stripGeneratedPrefix = workspace.cloudVMBinding?.remoteWorkspaceID == nil
+        let stripGeneratedPrefix = workspace.remoteWorkspaceBinding?.remoteWorkspaceID == nil
             && remoteWorkspaceName.map {
                 isGeneratedPrefixedTitle(
                     previousCustomTitle,
@@ -237,12 +238,12 @@ final class CloudWorkspaceRenameService {
         let manager = workspace.owningTabManager ?? environment.tabManager(workspace.id)
         catalog.enqueueRemoteWorkspaceRename(on: target.machine, id: target.remoteWorkspaceID, name: name) { [weak workspace, weak manager] _ in
             guard let workspace, workspace.customTitle == expectedTitle, let manager else { return }
-            let canonical = catalog.cloudStateObservations[target.machine]?.pendingWrites?.first {
+            let canonical = catalog.tuiStateObservations[target.machine]?.pendingWrites?.first {
                 $0.kind == .workspaceRename && $0.remoteWorkspaceID == target.remoteWorkspaceID
-            }?.name ?? catalog.cloudStates[target.machine]?.lookupIndex.workspace(id: target.remoteWorkspaceID)?.name
+            }?.name ?? catalog.tuiStates[target.machine]?.lookupIndex.workspace(id: target.remoteWorkspaceID)?.name
             let restored = canonical ?? previousCustomTitle
             _ = manager.setCustomTitle(tabId: workspace.id, title: restored,
-                source: .remote, propagateToRemoteTmux: false, propagateToCloud: false)
+                source: .remote, propagateToRemoteTmux: false, propagateToRemoteWorkspace: false)
             if restored == previousCustomTitle { workspace.customTitleSource = previousCustomTitleSource ?? .user }
         }
     }
@@ -270,7 +271,7 @@ final class CloudWorkspaceRenameService {
         previousCustomTitleSource: Workspace.CustomTitleSource? = .user,
         catalog: SurfaceCatalog
     ) {
-        let name = CloudRemoteRenameName(rawValue: name).wireValue
+        let name = TuiRemoteRenameName(rawValue: name).wireValue
         let expectedTitle = workspace.panelCustomTitles[panelID]
         let projection = catalog.projection(forPanel: panelID)
         // A daemon name belongs to one tab placement. A persisted projection id is
@@ -285,59 +286,51 @@ final class CloudWorkspaceRenameService {
         }
         guard catalog.provider(for: resource.machine) != nil else { return }
         let expectedName = workspace.panelCustomTitleSources[panelID] == .auto
-            ? catalog.pendingCloudRenameName(for: .tab(machine: resource.machine, id: tabID))
+            ? catalog.pendingTuiRenameName(for: .tab(machine: resource.machine, id: tabID))
                 ?? resource.remoteViews?.first(where: { $0.tabID == tabID })?.name ?? ""
             : nil
         catalog.enqueueRemoteTabRename(on: resource.machine, id: tabID, name: name, expectedName: expectedName) { [weak workspace] _ in
             guard let workspace, workspace.panelCustomTitles[panelID] == expectedTitle else { return }
-            let receipt = catalog.cloudStateObservations[resource.machine]?.pendingWrites?.first {
+            let receipt = catalog.tuiStateObservations[resource.machine]?.pendingWrites?.first {
                 $0.kind == .tabRename && $0.remoteTabID == tabID
             }
-            let canonical = catalog.cloudStates[resource.machine]?.lookupIndex.tab(id: tabID)
+            let canonical = catalog.tuiStates[resource.machine]?.lookupIndex.tab(id: tabID)
             let restored = receipt?.name ?? (canonical != nil ? canonical?.name : previousCustomTitle)
             _ = workspace.setPanelCustomTitle(panelId: panelID, title: restored,
-                source: .remote, propagateToRemoteTmux: false, propagateToCloud: false)
+                source: .remote, propagateToRemoteTmux: false, propagateToRemoteWorkspace: false)
             if restored == previousCustomTitle { workspace.panelCustomTitleSources[panelID] = previousCustomTitleSource ?? .user }
         }
     }
 
 }
 
-extension CloudWorkspaceRenameService {
+extension TuiWorkspaceRenameService {
     /// Records the stable machine/workspace identity for a local projection.
     @MainActor
     func bind(
         localWorkspaceID: UUID,
         machine: SurfaceMachineID,
         remoteWorkspaceID: String?,
-        isBase: Bool? = nil,
         generatedTitle: String? = nil,
         remoteWorkspaceName: String? = nil
     ) {
-        guard let vmID = machine.tuiMachineID,
+        guard let machineID = machine.tuiMachineID,
               let manager = environment.tabManager(localWorkspaceID),
               let workspace = manager.workspacesById[localWorkspaceID] else { return }
-        let previousBinding = workspace.cloudVMBinding
-        let sameMachine = previousBinding?.vmID == vmID
-        workspace.cloudVMBinding = WorkspaceCloudVMBinding(
-            vmID: vmID,
-            isBase: isBase ?? (sameMachine ? (previousBinding?.isBase ?? false) : false),
-            remoteWorkspaceID: remoteWorkspaceID ?? (sameMachine ? previousBinding?.remoteWorkspaceID : nil),
-            teamID: WorkspaceCloudVMBinding.owningTeamID(forVMID: vmID, previous: previousBinding)
+        let previousBinding = workspace.remoteWorkspaceBinding
+        let sameMachine = previousBinding?.machineID == machineID
+        workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(
+            machineID: machineID,
+            remoteWorkspaceID: remoteWorkspaceID ?? (sameMachine ? previousBinding?.remoteWorkspaceID : nil)
         )
 
-        // The placeholder is marked automatic at creation. An explicit user
-        // title, including the literal "Cloud VM", is never inferred from text
-        // and therefore wins over a delayed daemon receipt. When the first
-        // remote workspace receipt includes its accepted name, apply it here so
-        // the local projection adopts that identity in the same turn instead of
-        // briefly presenting two names for one workspace.
+        // Explicit user titles win over a delayed daemon name receipt.
         if let generatedTitle,
            (workspace.effectiveCustomTitleSource == .auto || workspace.customTitleSource == nil),
            workspace.customTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
                == generatedTitle.trimmingCharacters(in: .whitespacesAndNewlines) {
             _ = manager.setCustomTitle(tabId: localWorkspaceID, title: remoteWorkspaceName ?? generatedTitle, source: .remote,
-                                       propagateToRemoteTmux: false, propagateToCloud: false)
+                                       propagateToRemoteTmux: false, propagateToRemoteWorkspace: false)
         }
 
     }

@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -17,7 +17,7 @@ extension TerminalController {
         guard Set(params.keys).isSubset(of: ["limit"]) else {
             return v2Error(id: id, code: "invalid_params", message: "current.list accepts only limit; it never refreshes or mutates work")
         }
-        return v2VmCall(id: id, timeoutSeconds: 10) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: 10) {
             guard let input = await Self.captureCurrentWork() else {
                 throw SurfaceCatalogError.unsupported("Current-work owners are unavailable")
             }

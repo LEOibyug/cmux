@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxCore
 import CmuxSurfaceCatalogModel
 import Foundation
@@ -16,13 +16,13 @@ extension SurfaceCatalog {
         let machineSnapshot = snapshot
         let machineInfo = machineSnapshot.machines.first { $0.id == machine }
         var workspace = machineInfo?.remoteWorkspaces?.first { $0.id == workspaceID }
-        let resources = machineSnapshot.cloudWorkspaceResources(on: machine)
+        let resources = machineSnapshot.resources(on: machine)
 
         struct Candidate {
             let placement: SurfaceResourcePlacement
             let layout: RemoteWorkspacePlacement
         }
-        let orderedKinds: [SurfaceResourceKind] = [.terminal, .browser, .display]
+        let orderedKinds: [SurfaceResourceKind] = [.terminal, .browser]
         var candidates: [Candidate] = []
         for kind in orderedKinds {
             let kindOrder = kind == .terminal ? 0 : (kind == .browser ? 1 : 2)

@@ -21,8 +21,10 @@ extension TerminalController {
         let limit = max(1, min(requestedLimit, Self.vaultSessionsMaxLimit))
 
         let ampSessionRepository = AmpHookSessionRepository()
+        let registry = await SessionIndexStore.vaultAgentRegistry(workingDirectory: nil)
         var entries = await SessionIndexStore.loadInitialEntries(
-            ampSessionRepository: ampSessionRepository
+            ampSessionRepository: ampSessionRepository,
+            registry: registry
         )
         if let agentFilter {
             entries = entries.filter { $0.agent.rawValue == agentFilter }
@@ -31,6 +33,9 @@ extension TerminalController {
             entries = entries.filter { ($0.cwd ?? "") == folderFilter }
         }
         let liveKeys = await Self.vaultLiveSessionKeys()
+        guard !Task.isCancelled, registry.historyConfigurationIsCurrent else {
+            return .ok(["sessions": [[String: Any]]()])
+        }
         let now = Date()
         return .ok([
             "sessions": entries.prefix(limit).map {
@@ -53,16 +58,22 @@ extension TerminalController {
         let requestedLimit = v2Int(params, "limit") ?? Self.vaultSessionsDefaultLimit
         let limit = max(1, min(requestedLimit, Self.vaultSessionsMaxLimit))
         let ampSessionRepository = AmpHookSessionRepository()
+        let registry = await SessionIndexStore.vaultAgentRegistry(workingDirectory: nil)
         let entries = await SessionIndexStore.loadInitialEntries(
-            ampSessionRepository: ampSessionRepository
+            ampSessionRepository: ampSessionRepository,
+            registry: registry
         )
         let outcome = await SessionIndexStore.searchAllSessions(
             rawQuery: query,
             entries: entries,
             scopedDirectory: nil,
-            ampSessionRepository: ampSessionRepository
+            ampSessionRepository: ampSessionRepository,
+            registry: registry
         )
         let liveKeys = await Self.vaultLiveSessionKeys()
+        guard !Task.isCancelled, registry.historyConfigurationIsCurrent else {
+            return .ok(["query": query, "errors": [String](), "sessions": [[String: Any]]()])
+        }
         let now = Date()
         return .ok([
             "query": query,
@@ -269,10 +280,13 @@ extension TerminalController {
             ))
         }
         let ampSessionRepository = AmpHookSessionRepository()
+        let registry = await SessionIndexStore.vaultAgentRegistry(workingDirectory: nil)
         let quick = await SessionIndexStore.loadInitialEntries(
-            ampSessionRepository: ampSessionRepository
+            ampSessionRepository: ampSessionRepository,
+            registry: registry
         )
-        if let entry = quick.first(where: { $0.agent.rawValue == agentID && $0.sessionId == sessionID }) {
+        if !Task.isCancelled, registry.historyConfigurationIsCurrent,
+           let entry = quick.first(where: { $0.agent.rawValue == agentID && $0.sessionId == sessionID }) {
             return .success(entry)
         }
         guard let agent = SessionAgent(rawValue: agentID) else {
@@ -283,7 +297,6 @@ extension TerminalController {
                 data: nil
             ))
         }
-        let registry = await SessionIndexStore.vaultAgentRegistry(workingDirectory: nil)
         let deep = await SessionIndexStore.searchAgent(
             needle: "",
             agent: agent,
@@ -294,7 +307,8 @@ extension TerminalController {
             registry: registry,
             ampSessionRepository: ampSessionRepository
         )
-        if let entry = deep.first(where: { $0.sessionId == sessionID }) {
+        if !Task.isCancelled, registry.historyConfigurationIsCurrent,
+           let entry = deep.first(where: { $0.sessionId == sessionID }) {
             return .success(entry)
         }
         return .failure(.err(

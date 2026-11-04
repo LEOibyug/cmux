@@ -3483,7 +3483,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         XCTAssertFalse(initialAccessory.isHidden, "Expected visible-titlebar mode to show the titlebar accessory")
 
         defaults.set(WorkspacePresentationModeSettings.Mode.minimal.rawValue, forKey: WorkspacePresentationModeSettings.modeKey)
-        appDelegate.attachUpdateAccessory(to: window)
+        appDelegate.attachTitlebarControls(to: window)
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
 
         guard let minimalAccessory = titlebarAccessory() else {
@@ -6473,7 +6473,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 #endif
     }
 
-    func testWindowSendEventPreservesFirstCloudKeyBeforePortalMount() throws {
+    func testWindowSendEventPreservesFirstSSHKeyBeforePortalMount() throws {
         let appDelegate = try XCTUnwrap(AppDelegate.shared)
         let windowId = appDelegate.createMainWindow()
         defer { closeWindow(withId: windowId) }
@@ -6481,7 +6481,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         let manager = try XCTUnwrap(appDelegate.tabManagerFor(windowId: windowId))
         let workspace = try XCTUnwrap(manager.selectedWorkspace)
         let panel = coldCloudTerminalPanel(workspace: workspace)
-        _ = try workspace.insertCloudManualMirrorPanel(
+        _ = try workspace.insertTuiManualMirrorPanel(
             panel, at: .workspace(id: workspace.id, placement: .tab), focus: true, isLoading: false
         )
         // Keep the real manual pane unmounted and cold. Early typing must reach
@@ -8157,8 +8157,8 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         )
     }
 
-    func testTextBoxSubmitCloudImagesUploadsAtPromptPosition() throws {
-        let imageURL = try makeTemporaryPNGFile(named: "cloud-prompt.png")
+    func testTextBoxSubmitTuiImagesUploadsAtPromptPosition() throws {
+        let imageURL = try makeTemporaryPNGFile(named: "tui-prompt.png")
         let attachment = TextBoxAttachment(
             localURL: imageURL,
             submissionText: TextBoxAttachment.submissionText(forLocalFileURL: imageURL)
@@ -8168,12 +8168,12 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             TextBoxSubmit.dispatchEvents(
                 for: [.text("what is "), .attachment(attachment), .text("now")],
                 terminalAgentContext: "restoredAgent:codex",
-                imageTransferTarget: .cloud
+                imageTransferTarget: .tui
             ),
             [
-                .validateCloudImages([imageURL.standardizedFileURL]),
+                .validateTuiImages([imageURL.standardizedFileURL]),
                 .pasteText("what is "),
-                .pasteCloudImages([imageURL.standardizedFileURL]),
+                .pasteTuiImages([imageURL.standardizedFileURL]),
                 .pasteText(" now"),
                 .namedKey("return")
             ]
@@ -8182,9 +8182,9 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 
     /// Every image is checked before the first text reaches the terminal, so a
     /// refused later image cannot leave a partial prompt that a retry repeats.
-    func testTextBoxSubmitCloudImagesValidateEveryImageBeforeAnyText() throws {
-        let first = try makeTemporaryPNGFile(named: "cloud-first.png")
-        let second = try makeTemporaryPNGFile(named: "cloud-second.png")
+    func testTextBoxSubmitTuiImagesValidateEveryImageBeforeAnyText() throws {
+        let first = try makeTemporaryPNGFile(named: "tui-first.png")
+        let second = try makeTemporaryPNGFile(named: "tui-second.png")
         let attachments = [first, second].map {
             TextBoxAttachment(
                 localURL: $0,
@@ -8195,22 +8195,22 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         let events = TextBoxSubmit.dispatchEvents(
             for: [.text("compare "), .attachment(attachments[0]), .text("with"), .attachment(attachments[1])],
             terminalAgentContext: "restoredAgent:codex",
-            imageTransferTarget: .cloud
+            imageTransferTarget: .tui
         )
         XCTAssertEqual(
             events.first,
-            .validateCloudImages([first.standardizedFileURL, second.standardizedFileURL])
+            .validateTuiImages([first.standardizedFileURL, second.standardizedFileURL])
         )
         XCTAssertEqual(events.dropFirst().filter {
-            if case .validateCloudImages = $0 { return true }
+            if case .validateTuiImages = $0 { return true }
             return false
         }.count, 0)
     }
 
-    /// After a Cloud submit the image bytes live on the machine, so the local
+    /// After an SSH submit the image bytes live on the host, so the local
     /// file is disposable even though its submission text is a local path.
-    func testTextBoxSubmitCloudImagesCleanUpAfterSuccessfulSubmit() throws {
-        let imageURL = try makeTemporaryPNGFile(named: "cloud-uploaded.png")
+    func testTextBoxSubmitTuiImagesCleanUpAfterSuccessfulSubmit() throws {
+        let imageURL = try makeTemporaryPNGFile(named: "tui-uploaded.png")
         let attachment = TextBoxAttachment(
             localURL: imageURL,
             submissionText: TextBoxAttachment.submissionText(forLocalFileURL: imageURL),
@@ -8221,7 +8221,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             TextBoxSubmit.cleanupAttachmentsAfterSubmit(
                 from: [.attachment(attachment)],
                 terminalAgentContext: "restoredAgent:codex",
-                imageTransferTarget: .cloud
+                imageTransferTarget: .tui
             ).compactMap(\.localURL),
             [imageURL.standardizedFileURL]
         )

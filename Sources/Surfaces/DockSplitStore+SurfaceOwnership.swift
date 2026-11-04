@@ -1,18 +1,13 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Bonsplit
 import CmuxSurfaceCatalogModel
 import Foundation
 
 extension DockSplitStore {
     var surfaceOwnershipPolicy: SurfaceOwnershipPolicy {
-        scope == .workspace ? (Workspace.liveWorkspace(id: workspaceId)?.surfaceOwnershipPolicy ?? .init(cloudMachine: nil)) : .init(cloudMachine: nil)
+        scope == .workspace ? (Workspace.liveWorkspace(id: workspaceId)?.surfaceOwnershipPolicy ?? .init(remoteMachine: nil)) : .init(remoteMachine: nil)
     }
 
-    func acceptsUnownedBrowserURL(_ url: URL?) -> Bool {
-        if scope == .global { return true }
-        guard url?.path == "/vnc.html" else { return true }
-        return surfaceOwnershipPolicy.rejection(for: nil) == nil
-    }
 
     func surfaceDropRejection(
         _ transfer: PaneDragTransfer,
@@ -45,11 +40,8 @@ extension DockSplitStore {
     }
 
     func acceptsRestoredDisplay(_ snapshot: SessionPanelSnapshot) -> Bool {
-        if let resource = snapshot.browser?.cloudResource {
+        if let resource = snapshot.browser?.remoteResource {
             return surfaceOwnershipPolicy.rejection(for: resource.machine, kind: resource.kind) == nil
-        }
-        if let raw = snapshot.browser?.urlString, URL(string: raw)?.path == "/vnc.html" {
-            return scope == .global || surfaceOwnershipPolicy.rejection(for: nil) == nil
         }
         return true
     }
@@ -57,7 +49,7 @@ extension DockSplitStore {
     func machineOwningSurface(_ panelID: UUID) -> SurfaceMachineID? {
         guard panels[panelID] != nil else { return nil }
         if let machine = SurfaceCatalog.shared.machineOwningPanel(panelID), !machine.isLocal { return machine }
-        if let resource = (panels[panelID] as? DeferredBrowserPanel)?.sessionPanelSnapshot.browser?.cloudResource { return resource.machine }
+        if let resource = (panels[panelID] as? DeferredBrowserPanel)?.sessionPanelSnapshot.browser?.remoteResource { return resource.machine }
         return panels[panelID]?.transferredSurfaceMachine
             ?? detachedSurfaceTransfersByPanelId[panelID]?.surfaceMachine
             ?? .local

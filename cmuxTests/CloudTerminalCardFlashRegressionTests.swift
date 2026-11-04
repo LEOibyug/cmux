@@ -16,9 +16,9 @@ import Testing
 struct CloudTerminalCardFlashRegressionTests {
     @Test @MainActor
     func startingAnAttachDoesNotShowACardImmediately() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_flash", remoteSurfaceID: 17,
             onNeedsReconnect: {}
         )
@@ -35,10 +35,10 @@ struct CloudTerminalCardFlashRegressionTests {
 
     @Test @MainActor
     func aDisconnectUnderAutomaticRecoveryIsNotAnnouncedAsUnavailable() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         var recoveries = 0
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_recover", remoteSurfaceID: 17,
             onNeedsReconnect: { recoveries += 1 }
         )

@@ -1,8 +1,8 @@
 # All settings keys
 
-Hand-maintained from `web/data/cmux.schema.json` and known to lag it. The schema is
-authoritative; `cmux-settings list-supported` enumerates what the helper accepts. For the
-rendered docs, see `https://cmux.com/docs/configuration`.
+Hand-maintained from `schemas/cmux.schema.json` and known to lag it. The schema is
+authoritative; `cmux-settings list-supported` enumerates what the helper accepts.
+The app embeds this schema for offline validation; new configs need no remote `$schema` URL.
 
 ## app
 
@@ -28,7 +28,6 @@ General app preferences from Settings > App.
 | `app.devWindowDisplay` | string | `""` | DEBUG-only display name used when opening new windows. An empty value uses the system default. |
 | `app.reorderOnNotification` | boolean or `off`, `notifications`, `agentActivity` | `true` | Move workspaces with new notifications toward the top. `agentActivity` also moves them when a prompt is sent or an agent finishes a turn, needs input, or fails, throttled and never while the pointer is over the sidebar. |
 | `app.iMessageMode` | boolean | `false` | Move a workspace to the top and show the submitted message when sending an agent prompt. |
-| `app.sendAnonymousTelemetry` | boolean | `true` | Allow anonymous telemetry. |
 | `app.warnBeforeQuit` | boolean | `true` | Show a confirmation before quitting cmux. |
 | `app.warnBeforeClosingTab` | boolean | `true` | Show a confirmation before closing a tab. |
 | `app.warnBeforeClosingAgentSession` | boolean | `true` | Show a confirmation before closing an agent session while it is mid-turn. |
@@ -81,7 +80,7 @@ Terminal presentation settings from Settings > Terminal.
 | `terminal.showPasswordInputIndicator` | boolean | `true` | Show a lock badge in the terminal corner while the foreground program has turned echo off for a password prompt (sudo, ssh, passwd, gpg). cmux draws the badge itself and never changes terminal text. Only prompts on the local terminal are detected: an ssh password prompt counts, but sudo run inside an ssh session does not. Changes apply to an open prompt at once. |
 | `terminal.showPasswordInputDots` | boolean | `false` | When the password input badge is shown, also draw one dot per typed character. cmux keeps only a count, never the typed characters. Backspace removes a dot; Enter or echo turning back on clears them. Pasted text is not counted. |
 | `terminal.showJumpToBottomButton` | boolean | — | Removed. cmux no longer shows a Jump to Bottom button in terminal panes, and ignores this key. It stays in the schema so existing configs still validate. |
-| `terminal.predictiveLocalEcho` | boolean | `true` | Draw typed characters immediately in a terminal whose shell runs on another machine (cmux ssh, Cloud, remote tmux) when the link is slow, underlined until the remote echo confirms them, and withdraw them if the remote disagrees. Local terminals, password prompts and full-screen apps are excluded. |
+| `terminal.predictiveLocalEcho` | boolean | `true` | Draw typed characters immediately in a terminal whose shell runs on another machine (cmux ssh, remote tmux) when the link is slow, underlined until the remote echo confirms them, and withdraw them if the remote disagrees. Local terminals, password prompts and full-screen apps are excluded. |
 | `terminal.showTextBoxOnNewTerminals` | boolean | `false` | Show the TextBox input by default for newly created workspaces, terminal tabs, and terminal splits. |
 | `terminal.focusTextBoxOnNewTerminals` | boolean | `false` | Focus the TextBox input by default for newly created workspaces, terminal tabs, and terminal splits. Focusing also shows the TextBox. |
 | `terminal.agentHibernation` | object | — | Routine Agent Hibernation settings. cmux kills idle background agent processes to free RAM and CPU, then resumes them with their saved session when their tab is visited. Routine hibernation requires a restorable coding agent whose lifecycle reports idle, an off-screen terminal, a live-terminal count above the configured limit, and unchanged output through the idle and confirmation windows. Independently, under memory pressure (critical pressure from macOS or from the cmux app's own footprint, or cmux's total memory use past its aggregate warning threshold) cmux may hibernate every safe idle background agent even when enabled is false; visible, running, needs-input, recently changed, and unprotectable agents remain excluded. The placeholder Resume button is a manual fallback. |
@@ -134,7 +133,6 @@ Sidebar content and metadata visibility from Settings > Sidebar.
 | `sidebar.pathLastSegmentOnly` | boolean | `false` | Truncate sidebar paths from the start, showing as much of the trailing path as fits with a leading …/. When false, full paths are abbreviated with ~/. |
 | `sidebar.showNotificationMessage` | boolean | `true` | Show the latest notification text in the sidebar. |
 | `sidebar.showBranchDirectory` | boolean | `true` | Show the workspace working directory. |
-| `sidebar.showCloudDeviceIcons` | boolean | `true` | Show Cloud machine and device icons beside remote workspace titles independently of Git branch and directory details. |
 | `sidebar.showPullRequests` | boolean | `true` | Show pull request metadata in the sidebar. |
 | `sidebar.makePullRequestsClickable` | boolean | `true` | Allow sidebar pull request metadata to open links when clicked. |
 | `sidebar.openPullRequestLinksInCmuxBrowser` | boolean | `true` | Open sidebar pull request links in the embedded cmux browser. |
@@ -287,7 +285,7 @@ Built-in text editor settings used by text file previews.
 
 ## fileExplorer
 
-Right-sidebar file explorer routing for file previews.
+Right-sidebar file explorer routing for local files and user-configured SSH workspaces. SSH previews download into a read-only, lease-owned temporary cache; closing a preview releases its files. Find content search is local-only.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -295,7 +293,7 @@ Right-sidebar file explorer routing for file previews.
 
 ## diffViewer
 
-Built-in diff viewer settings. See [the detailed diff configuration](https://cmux.com/docs/configuration#schema-diffViewer) for invocation overrides.
+Built-in diff viewer settings. `cmux diff --layout` overrides the configured layout for one invocation.
 
 | Key | Type | Default | Description |
 |---|---|---|---|

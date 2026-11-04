@@ -1,6 +1,5 @@
 import AppKit
 import Bonsplit
-import CmuxCloud
 import CmuxTerminal
 import CmuxTerminalSharing
 import CmuxTerminalSizing
@@ -8,113 +7,41 @@ import Foundation
 import SwiftUI
 import SystemConfiguration
 
-/// Shared terminal sizing for local terminals (the Mac is the host) and the
-/// mobile side of Cloud terminals (the Mac is the relay).
-/// Contract: docs/shared-terminal-sizing.md.
+/// Local terminal sizing and user-controlled SSH viewer presentation.
 @MainActor
 extension TerminalController {
-    static let mobileSizeStateTopic = "mobile.terminal.size_state"
-    static let mobileDetachedTopic = "mobile.terminal.detached"
-
-    /// The Mac's user-visible computer name, read once without DNS.
     static let localComputerName: String? = SCDynamicStoreCopyComputerName(nil, nil) as String?
-
-    /// This Mac's identity as a participant.
+    static var localSizingDeviceID: String {
+        let key = "cmux.terminal-sharing.install-id"
+        if let saved = UserDefaults.standard.string(forKey: key) { return saved }
+        let id = UUID().uuidString.lowercased()
+        UserDefaults.standard.set(id, forKey: key)
+        return id
+    }
     func localSizingIdentity() -> TerminalSharingIdentity {
-        let user = MobileHostService.shared.currentLocalSizingUser()
-        return TerminalSharingIdentity(
-            userID: user?.id,
-            displayName: user?.displayName,
-            deviceName: Self.localComputerName,
-            deviceID: Self.localSizingDeviceID
-        )
+        TerminalSharingIdentity(userID: nil, displayName: nil, deviceName: Self.localComputerName,
+                                deviceID: Self.localSizingDeviceID)
     }
-
-    /// This Mac's sizing `device_id`, derived once from its host identity.
-    static let localSizingDeviceID = TerminalSharingIdentity.sizingDeviceID(installID: MobileHostIdentity.deviceID())
-
-    // MARK: - Engine resolution
-
-    /// Runs the shared-sizing decision after the phone reports for a surface
-    /// changed, then applies it to the Ghostty surface. Replaces the legacy
-    /// "smallest attached viewport wins" rule.
-    ///
-    /// - Parameter immediate: `true` when a phone explicitly left, so the
-    ///   resulting size applies without the governor's stability window.
-    /// - Returns: the grid the phone's replay fence should expect.
-    func resolveSharedSizing(
-        surfaceID: UUID,
-        reports: [String: MobileViewportReport],
-        countsOverride: (clientID: String, value: Bool?)? = nil,
-        immediate: Bool = false,
-        reason: String
-    ) -> (columns: Int, rows: Int)? {
-        if let relay = cloudSizingRelaysBySurfaceID[surfaceID]?.value, relay.relaysPhones {
-            // The cmux-tui daemon decides a Cloud terminal's grid; the local
-            // mirror follows the remote grid it reports back.
-            relay.relayPhones(phoneParticipants(reports: reports, surfaceID: surfaceID))
-            if let countsOverride {
-                relay.relayPhoneCountsOverride(clientID: countsOverride.clientID, value: countsOverride.value)
-            }
-            return currentMobileViewportGrid(surfaceID: surfaceID)
-        }
-        guard var host = localSizingHost(surfaceID: surfaceID, create: !reports.isEmpty) else {
-            return legacyMinimumSizing(surfaceID: surfaceID, reports: reports, immediate: immediate, reason: reason)
-        }
-        let previous = host.state
-        if let viewport = localSizingControllersBySurfaceID[surfaceID]?.naturalViewport() {
-            host.updateMacViewport(viewport)
-        }
-        host.syncPhones(Array(phoneParticipants(reports: reports, surfaceID: surfaceID).values))
-        if let countsOverride {
-            host.setCountsOverride(
-                LocalTerminalSizingHost.phoneParticipantID(clientID: countsOverride.clientID),
-                countsOverride.value
-            )
-        }
-        localSizingHostsBySurfaceID[surfaceID] = host
-        return applyLocalSizing(surfaceID: surfaceID, previous: previous, immediate: immediate, reason: reason)
-    }
-
-    /// The pre-shared-sizing rule, kept for manual-I/O mirrors whose remote
-    /// side has no sizing host (for example remote tmux).
-    private func legacyMinimumSizing(
-        surfaceID: UUID,
-        reports: [String: MobileViewportReport],
-        immediate: Bool,
-        reason: String
-    ) -> (columns: Int, rows: Int)? {
-        guard let minColumns = reports.values.map(\.columns).min(),
-              let minRows = reports.values.map(\.rows).min() else {
-            governMobileViewportTarget(surfaceID: surfaceID, target: .uncapped, immediate: immediate, reason: reason)
+    @discardableResult
+    func applyLocalSizing(surfaceID: UUID, previous: TerminalSizingState?, immediate: Bool = false, reason: String) -> (columns: Int, rows: Int)? {
+        guard let host = localSizingHostsBySurfaceID[surfaceID],
+              let surface = localSizingControllersBySurfaceID[surfaceID]?.surface else { return nil }
+        if host.state != previous { publishLocalSizing(surfaceID: surfaceID) }
+        switch host.applyTarget {
+        case .grid(let size): return surface.applySharedViewportLimit(columns: size.cols, rows: size.rows, reason: reason)
+        case .uncapped:
+            _ = surface.clearSharedViewportLimit(reason: reason)
             return nil
         }
-        return governMobileViewportTarget(
-            surfaceID: surfaceID,
-            target: .cap(columns: minColumns, rows: minRows),
-            immediate: immediate,
-            reason: reason
-        )
     }
-
-    private func phoneParticipants(
-        reports: [String: MobileViewportReport],
-        surfaceID: UUID
-    ) -> [String: TerminalSizingParticipant] {
-        let identity = localSizingIdentity()
-        var phones: [String: TerminalSizingParticipant] = [:]
-        for (clientID, report) in reports where !isMobileClientDetached(surfaceID: surfaceID, clientID: clientID) {
-            phones[clientID] = TerminalSizingParticipant(
-                id: LocalTerminalSizingHost.phoneParticipantID(clientID: clientID),
-                userID: identity.userID,
-                displayName: identity.displayName,
-                deviceKind: report.deviceKind,
-                deviceName: report.deviceName,
-                deviceID: report.deviceID,
-                viewport: TerminalGridSize(cols: report.columns, rows: report.rows)
-            )
-        }
-        return phones
+    func localSizingDisconnect(surfaceID: UUID, participantID: String, by actor: TerminalDetachActor?) -> Bool {
+        guard var host = localSizingHostsBySurfaceID[surfaceID], host.state.participant(participantID) != nil else { return false }
+        let previous = host.state
+        let detachment = TerminalSharingDetachment(reason: .disconnectedBy(actor ?? localSizingIdentity().detachActor), at: Date())
+        guard host.disconnect(participantID, detachment: detachment) else { return false }
+        localSizingHostsBySurfaceID[surfaceID] = host
+        applyLocalSizing(surfaceID: surfaceID, previous: previous, immediate: true, reason: "terminal.participant.disconnect")
+        return true
     }
 
     /// Returns the local host of a surface, creating it (with the Mac pane as
@@ -149,47 +76,6 @@ extension TerminalController {
         return host
     }
 
-    /// Applies the host's decision and publishes it when it changed.
-    @discardableResult
-    func applyLocalSizing(
-        surfaceID: UUID,
-        previous: TerminalSizingState?,
-        immediate: Bool = false,
-        reason: String
-    ) -> (columns: Int, rows: Int)? {
-        guard let host = localSizingHostsBySurfaceID[surfaceID] else { return nil }
-        if host.state != previous { publishLocalSizing(surfaceID: surfaceID) }
-        switch host.applyTarget {
-        case let .grid(size):
-            return governMobileViewportTarget(
-                surfaceID: surfaceID,
-                target: .cap(columns: size.cols, rows: size.rows),
-                immediate: immediate,
-                reason: reason
-            )
-        case .uncapped:
-            if host.phoneParticipantIDs.isEmpty {
-                // The last phone left. An explicit leave restores the pane
-                // now; a TTL expiry keeps the governor's uncap window
-                // (issue 13474).
-                governMobileViewportTarget(
-                    surfaceID: surfaceID,
-                    target: .uncapped,
-                    immediate: immediate,
-                    reason: reason
-                )
-            } else if let governor = mobileViewportApplyGovernorsBySurfaceID[surfaceID] {
-                // Ownership moved back to this Mac while phones stay attached:
-                // restore the pane now instead of after the uncap window.
-                teardownMobileViewportGovernor(surfaceID: surfaceID)
-                if let applied = governor.applied, applied != .uncapped {
-                    _ = performMobileViewportTarget(surfaceID: surfaceID, target: .uncapped, reason: reason)
-                }
-            }
-            return currentMobileViewportGrid(surfaceID: surfaceID)
-        }
-    }
-
     /// The Mac pane resized: re-report its grid as the Mac participant's viewport.
     func localSizingMacViewportChanged(surfaceID: UUID) {
         guard var host = localSizingHostsBySurfaceID[surfaceID],
@@ -213,28 +99,11 @@ extension TerminalController {
         applyLocalSizing(surfaceID: surfaceID, previous: previous, reason: "mac.activity")
     }
 
-    /// Records accepted input from one phone for the shared-sizing policy.
-    ///
-    /// RPC input and the independent Iroh input lane both call this seam so
-    /// `latest` ownership cannot depend on which transport delivered the key.
-    func noteMobileSizingActivity(surfaceID: UUID, clientID: String) {
-        if let relay = cloudSizingRelaysBySurfaceID[surfaceID]?.value, relay.relaysPhones {
-            relay.relayPhoneActivity(clientID: clientID)
-            return
-        }
-        guard var host = localSizingHostsBySurfaceID[surfaceID] else { return }
-        let previous = host.state
-        guard host.noteActivity(LocalTerminalSizingHost.phoneParticipantID(clientID: clientID)) else { return }
-        localSizingHostsBySurfaceID[surfaceID] = host
-        applyLocalSizing(surfaceID: surfaceID, previous: previous, reason: "mobile.activity")
-    }
-
-    /// Drops every local host (account change or test reset).
+    /// Drops every local host during a lifecycle or test reset.
     func resetLocalSizingHosts() {
         for surfaceID in Set(localSizingHostsBySurfaceID.keys).union(localSizingControllersBySurfaceID.keys) {
             removeLocalSizingHost(surfaceID: surfaceID)
         }
-        cloudDetachedPhonesBySurfaceID.removeAll()
     }
 
     /// Drops one surface's local host, its sharing controller and its store
@@ -246,10 +115,7 @@ extension TerminalController {
             terminalSharing.unregister(controller, surfaceID: surfaceID)
         }
         localSizingHostsBySurfaceID[surfaceID] = nil
-        cloudDetachedPhonesBySurfaceID[surfaceID] = nil
     }
-
-    // MARK: - Presentation
 
     /// Routes store changes to the pane overlay and the tab accessory. Set
     /// once, the first time any host or relay registers.
@@ -324,9 +190,7 @@ extension TerminalController {
         return (pane, corner)
     }
 
-    // MARK: - Publishing
-
-    /// Publishes a local host's state to the store and to every phone.
+    /// Publishes a local host's state to the local presentation store.
     func publishLocalSizing(surfaceID: UUID) {
         guard let host = localSizingHostsBySurfaceID[surfaceID] else {
             terminalSharing.publish(nil, surfaceID: surfaceID)
@@ -336,117 +200,11 @@ extension TerminalController {
             TerminalSharingSnapshot(
                 state: host.state,
                 selfParticipantID: host.macParticipantID,
-                detachment: host.macDetachment,
-                isCloud: false
+                detachment: host.macDetachment
             ),
             surfaceID: surfaceID
         )
-        emitMobileSizeState(surfaceID: surfaceID, state: host.state) { clientIDs in
-            clientIDs
-                .map { LocalTerminalSizingHost.phoneParticipantID(clientID: $0) }
-                .first { host.state.participant($0) != nil }
-        }
     }
-
-    /// Pushes `mobile.terminal.size_state` with each phone's own participant id.
-    func emitMobileSizeState(
-        surfaceID: UUID,
-        state: TerminalSizingState,
-        selfParticipantID: @escaping (Set<String>) -> String?
-    ) {
-        let stateObject = TerminalSizingWireCoder().jsonObject(state)
-        MobileHostService.shared.emitClientScopedEvent(topic: Self.mobileSizeStateTopic) { clientIDs in
-            [
-                "surface_id": surfaceID.uuidString,
-                "state": stateObject,
-                "self_participant_id": selfParticipantID(clientIDs) ?? NSNull(),
-            ]
-        }
-    }
-
-    /// Pushes `mobile.terminal.detached` to the one phone it concerns.
-    func emitMobileDetached(surfaceID: UUID, clientID: String, detachment: TerminalSharingDetachment) {
-        let payload = TerminalSizingWireCoder().detachedPayload(surfaceID: surfaceID.uuidString, detachment: detachment)
-        MobileHostService.shared.emitClientScopedEvent(topic: Self.mobileDetachedTopic) { clientIDs in
-            clientIDs.contains(clientID) ? payload : nil
-        }
-    }
-
-    /// Adds `size_state` and `self_participant_id` to a replay answer.
-    func addSharedSizingReplayFields(to payload: inout [String: Any], surfaceID: UUID, clientID: String?) {
-        let coder = TerminalSizingWireCoder()
-        if let relay = cloudSizingRelaysBySurfaceID[surfaceID]?.value, relay.relaysPhones {
-            if let state = relay.relayedSizeState { payload["size_state"] = coder.jsonObject(state) }
-            payload["self_participant_id"] = clientID.flatMap { relay.relayHostParticipantID(clientID: $0) } ?? NSNull()
-            return
-        }
-        guard let host = localSizingHost(surfaceID: surfaceID, create: clientID != nil) else { return }
-        payload["size_state"] = coder.jsonObject(host.state)
-        let selfID = clientID.map { LocalTerminalSizingHost.phoneParticipantID(clientID: $0) }
-        payload["self_participant_id"] = selfID.flatMap { host.state.participant($0) != nil ? $0 : nil } ?? NSNull()
-    }
-
-    // MARK: - Detach gate
-
-    /// Whether someone disconnected this phone from the surface.
-    func isMobileClientDetached(surfaceID: UUID, clientID: String) -> Bool {
-        if cloudDetachedPhonesBySurfaceID[surfaceID]?[clientID] != nil { return true }
-        return localSizingHostsBySurfaceID[surfaceID]?
-            .isDetached(LocalTerminalSizingHost.phoneParticipantID(clientID: clientID)) ?? false
-    }
-
-    private var hasDetachedMobileClients: Bool {
-        !cloudDetachedPhonesBySurfaceID.isEmpty
-            || localSizingHostsBySurfaceID.values.contains { !$0.detachedPhones.isEmpty }
-    }
-
-    func mobileClientDetachedError(surfaceID: UUID, clientID: String) -> V2CallResult? {
-        guard isMobileClientDetached(surfaceID: surfaceID, clientID: clientID) else { return nil }
-        return .err(
-            code: "detached",
-            message: "This device was disconnected from the terminal. Reattach to continue.",
-            data: ["surface_id": surfaceID.uuidString]
-        )
-    }
-
-    /// Refuses input, viewport and replay from a disconnected phone and records
-    /// input as activity for the latest-input policy.
-    func mobileDetachedGateError(method: String, params: [String: Any]) -> V2CallResult? {
-        let isInput: Bool
-        switch method {
-        case "mobile.terminal.input", "terminal.input",
-             "mobile.terminal.paste", "terminal.paste",
-             "mobile.terminal.paste_image", "terminal.paste_image",
-             "mobile.terminal.mouse", "terminal.mouse":
-            isInput = true
-        case "mobile.terminal.scroll", "terminal.scroll",
-             "mobile.terminal.replay", "terminal.replay":
-            isInput = false
-        default:
-            return nil
-        }
-        guard let clientID = v2String(params, "client_id") else { return nil }
-        let needsGate = hasDetachedMobileClients
-        guard needsGate || (isInput && (!localSizingHostsBySurfaceID.isEmpty || !cloudSizingRelaysBySurfaceID.isEmpty)) else {
-            return nil
-        }
-        guard let surfaceID = mobileCanonicalTerminalTarget(params: params)?.surfaceID else { return nil }
-        if needsGate, let error = mobileClientDetachedError(surfaceID: surfaceID, clientID: clientID) {
-            return error
-        }
-        if isInput { noteMobileSizingActivity(surfaceID: surfaceID, clientID: clientID) }
-        return nil
-    }
-
-    /// The `counts_override` viewport field: absent leaves it unchanged,
-    /// `null` clears it, a boolean sets it.
-    func mobileCountsOverrideParam(_ params: [String: Any]) -> Bool?? {
-        guard let value = params["counts_override"] else { return nil }
-        if value is NSNull { return .some(nil) }
-        return (value as? Bool).map { .some($0) }
-    }
-
-    // MARK: - Local controller actions
 
     func localSizingSetPolicy(surfaceID: UUID, policy: TerminalSizingPolicy) -> Bool {
         guard var host = localSizingHostsBySurfaceID[surfaceID] else { return false }
@@ -467,34 +225,6 @@ extension TerminalController {
         return true
     }
 
-    /// Disconnects a phone, a viewing Mac, or (when another participant asks)
-    /// this Mac pane's own view. The pane's view detach keeps the PTY and
-    /// every other viewer; the pane shows the Detached card until Reattach.
-    func localSizingDisconnect(surfaceID: UUID, participantID: String, by actor: TerminalDetachActor?) -> Bool {
-        let prefix = LocalTerminalSizingHost.phoneParticipantID(clientID: "")
-        guard var host = localSizingHostsBySurfaceID[surfaceID] else { return false }
-        let isMacView = participantID == host.macParticipantID
-        guard isMacView || participantID.hasPrefix(prefix) else { return false }
-        let detachment = TerminalSharingDetachment(
-            reason: .disconnectedBy(actor ?? localSizingIdentity().detachActor),
-            at: Date()
-        )
-        let previous = host.state
-        guard host.disconnect(participantID, detachment: detachment) else { return false }
-        localSizingHostsBySurfaceID[surfaceID] = host
-        if isMacView {
-            applyLocalSizing(surfaceID: surfaceID, previous: previous, immediate: true, reason: "terminal.participant.disconnect.mac")
-            return true
-        }
-        let clientID = String(participantID.dropFirst(prefix.count))
-        emitMobileDetached(surfaceID: surfaceID, clientID: clientID, detachment: detachment)
-        // Drop the phone's report so it no longer pins anything; the host
-        // refuses its reports until it reattaches.
-        _ = clearMobileViewportReport(surfaceID: surfaceID, clientID: clientID, reason: "terminal.participant.disconnect")
-        applyLocalSizing(surfaceID: surfaceID, previous: previous, immediate: true, reason: "terminal.participant.disconnect")
-        return true
-    }
-
     func localSizingNoteSelfActivity(surfaceID: UUID) {
         noteLocalTerminalSizingActivity(surfaceID: surfaceID)
     }
@@ -512,106 +242,6 @@ extension TerminalController {
         return true
     }
 
-    // MARK: - Cloud relay registration
-
-    func registerCloudSizingRelay(_ relay: any CloudSizingPhoneRelaying, surfaceID: UUID) {
-        ensureTerminalSharingPresentation()
-        cloudSizingRelaysBySurfaceID[surfaceID] = CloudSizingRelayReference(value: relay)
-        // Phones may already be viewing this mirror: forward them now.
-        if let reports = mobileViewportReportsBySurfaceID[surfaceID], !reports.isEmpty {
-            relay.relayPhones(phoneParticipants(reports: reports, surfaceID: surfaceID))
-        }
-    }
-
-    func unregisterCloudSizingRelay(_ relay: any CloudSizingPhoneRelaying, surfaceID: UUID) {
-        guard cloudSizingRelaysBySurfaceID[surfaceID]?.value === relay else { return }
-        cloudSizingRelaysBySurfaceID[surfaceID] = nil
-    }
-
-    /// The Cloud host detached one phone behind this Mac.
-    func cloudPhoneDetached(surfaceID: UUID, clientID: String, detachment: TerminalSharingDetachment) {
-        cloudPhonesDetached(surfaceID: surfaceID, clientIDs: [clientID], detachment: detachment)
-    }
-
-    /// The Cloud host detached phones behind this Mac, one phone's view or
-    /// this Mac's own attachment (the phones lose their path with it). Each
-    /// gets `mobile.terminal.detached` and its report is dropped; every phone
-    /// is marked first so clearing one report never re-relays another.
-    func cloudPhonesDetached(surfaceID: UUID, clientIDs: [String], detachment: TerminalSharingDetachment) {
-        if !detachment.reason.reconnectsAutomatically {
-            for clientID in clientIDs {
-                cloudDetachedPhonesBySurfaceID[surfaceID, default: [:]][clientID] = detachment
-            }
-        }
-        for clientID in clientIDs {
-            emitMobileDetached(surfaceID: surfaceID, clientID: clientID, detachment: detachment)
-            _ = clearMobileViewportReport(surfaceID: surfaceID, clientID: clientID, reason: "cloud.participant.detached")
-        }
-    }
-
-    // MARK: - Mobile RPC
-
-    /// `mobile.terminal.reattach {surface_id, client_id, as_viewer}`: lifts a
-    /// disconnect and answers like `mobile.terminal.replay`.
-    func v2MobileTerminalReattach(params: [String: Any]) -> V2CallResult {
-        guard let resolved = mobileCanonicalTerminalTarget(params: params) else {
-            return .err(code: "not_found", message: "Terminal surface not found", data: nil)
-        }
-        guard let clientID = v2String(params, "client_id") else {
-            return .err(code: "invalid_params", message: "Missing client_id", data: nil)
-        }
-        let asViewer = v2Bool(params, "as_viewer") ?? false
-        let surfaceID = resolved.surfaceID
-        cloudDetachedPhonesBySurfaceID[surfaceID]?[clientID] = nil
-        if cloudDetachedPhonesBySurfaceID[surfaceID]?.isEmpty == true { cloudDetachedPhonesBySurfaceID[surfaceID] = nil }
-        if var host = localSizingHostsBySurfaceID[surfaceID] {
-            host.reattach(LocalTerminalSizingHost.phoneParticipantID(clientID: clientID), asViewer: asViewer)
-            localSizingHostsBySurfaceID[surfaceID] = host
-        }
-        var replayParams = params
-        if asViewer, cloudSizingRelaysBySurfaceID[surfaceID]?.value?.relaysPhones == true {
-            replayParams["counts_override"] = false
-        }
-        return v2MobileTerminalReplay(params: replayParams)
-    }
-
-    /// `mobile.terminal.size_policy.set {surface_id, policy}`.
-    func v2MobileTerminalSizePolicySet(params: [String: Any]) -> V2CallResult {
-        guard let resolved = mobileCanonicalTerminalTarget(params: params) else {
-            return .err(code: "not_found", message: "Terminal surface not found", data: nil)
-        }
-        guard let policy = TerminalSizingWireCoder().policy(from: params["policy"]) else {
-            return .err(code: "invalid_params", message: "Missing or invalid policy", data: nil)
-        }
-        guard policy.fixedSizeIsWithinLimit else { return Self.fixedSizeTooLarge }
-        _ = localSizingHost(surfaceID: resolved.surfaceID, create: true)
-        guard terminalSharing.setPolicy(policy, surfaceID: resolved.surfaceID) else {
-            return .err(code: "unavailable", message: "Terminal size policy is unavailable", data: nil)
-        }
-        return .ok(sizeStatePayload(surfaceID: resolved.surfaceID))
-    }
-
-    /// `mobile.terminal.participant.disconnect {surface_id, participant_id}`.
-    func v2MobileTerminalParticipantDisconnect(params: [String: Any], connectionID: UUID?) -> V2CallResult {
-        guard let resolved = mobileCanonicalTerminalTarget(params: params) else {
-            return .err(code: "not_found", message: "Terminal surface not found", data: nil)
-        }
-        guard let participantID = v2String(params, "participant_id") else {
-            return .err(code: "invalid_params", message: "Missing participant_id", data: nil)
-        }
-        let identity = localSizingIdentity()
-        let clientID = v2String(params, "client_id")
-            ?? connectionID.flatMap { MobileHostService.shared.clientIDs(forConnectionID: $0).sorted().first }
-        let deviceName = clientID.flatMap { mobileViewportReportsBySurfaceID[resolved.surfaceID]?[$0]?.deviceName }
-        let actor = TerminalDetachActor(userID: identity.userID, displayName: identity.displayName, deviceName: deviceName)
-        guard terminalSharing.disconnect(participantID: participantID, surfaceID: resolved.surfaceID, by: actor) else {
-            return .err(code: "not_found", message: "Participant not found", data: nil)
-        }
-        return .ok(sizeStatePayload(surfaceID: resolved.surfaceID))
-    }
-
-    // MARK: - Socket / CLI
-
     func sizeStatePayload(surfaceID: UUID) -> [String: Any] {
         TerminalSizingWireCoder().sizeStatePayload(
             surfaceID: surfaceID.uuidString,
@@ -619,27 +249,14 @@ extension TerminalController {
         )
     }
 
-    /// Resolves the terminal a socket request names, making sure a local
-    /// terminal has a host so policy commands work before any phone attaches.
+    /// Resolves the terminal a socket request names, ensuring a local
+    /// terminal has a host before applying its sizing policy.
     private func sharingSocketSurfaceID(params: [String: Any]) -> UUID? {
-        guard let surfaceID = mobileCanonicalTerminalTarget(params: params)?.surfaceID else { return nil }
+        guard let surfaceID = canonicalTerminalTarget(params: params)?.surfaceID else { return nil }
         if terminalSharing.snapshot(for: surfaceID) == nil {
             _ = localSizingHost(surfaceID: surfaceID, create: true)
         }
         return surfaceID
-    }
-
-    private static var sharingSurfaceNotFound: V2CallResult {
-        .err(code: "not_found", message: "Terminal surface not found", data: nil)
-    }
-
-    private static var fixedSizeTooLarge: V2CallResult {
-        let limit = TerminalSizingPolicy.maximumFixedSize
-        return .err(
-            code: "invalid_params",
-            message: "Fixed size must be at most \(limit.cols) x \(limit.rows)",
-            data: nil
-        )
     }
 
     /// `terminal.size_state {surface_id?}`.
@@ -723,4 +340,18 @@ extension TerminalController {
         payload["disconnected"] = count
         return .ok(payload)
     }
+
+    private static var sharingSurfaceNotFound: V2CallResult {
+        .err(code: "not_found", message: "Terminal surface not found", data: nil)
+    }
+
+    private static var fixedSizeTooLarge: V2CallResult {
+        let limit = TerminalSizingPolicy.maximumFixedSize
+        return .err(
+            code: "invalid_params",
+            message: "Fixed size must be at most \(limit.cols) x \(limit.rows)",
+            data: nil
+        )
+    }
+
 }

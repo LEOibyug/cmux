@@ -34,7 +34,6 @@ struct NewWorkspaceMenuModelTests {
     @Test func emptyMenuStillOffersSaveWorkspaceAsLayout() throws {
         let model = NewWorkspaceMenuModel.build(
             newWorkspaceContextMenuItems: [],
-            agentChatAction: nil,
             templateNames: [],
             loadedActions: [],
             newWorkspaceActionID: nil,
@@ -100,10 +99,8 @@ struct NewWorkspaceMenuModelTests {
         """)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let agent = CmuxResolvedConfigAction.builtIn(.newAgentChat)
         let model = NewWorkspaceMenuModel.build(
             newWorkspaceContextMenuItems: store.newWorkspaceContextMenuItems,
-            agentChatAction: agent,
             templateNames: ["Template A"],
             loadedActions: store.loadedActions,
             newWorkspaceActionID: store.newWorkspaceActionID,
@@ -129,7 +126,6 @@ struct NewWorkspaceMenuModelTests {
         #expect(createIDs == [
             CmuxSurfaceTabBarBuiltInAction.newWorkspace.configID,
             "terminal-command",
-            CmuxSurfaceTabBarBuiltInAction.newAgentChat.configID,
         ])
         #expect(createRows.contains(.separator))
         #expect(layoutRows.map { $0.menuAction.action.id } == ["review-layout"])

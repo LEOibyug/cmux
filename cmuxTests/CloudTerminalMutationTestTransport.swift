@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import Foundation
 
 #if canImport(cmux_DEV)
@@ -10,18 +10,18 @@ import Foundation
 
 /// Holds an already-issued command until explicitly released, even after cancellation.
 @MainActor
-final class CloudTerminalMutationTestTransport: CloudTuiCommandRunning {
-    let started = CloudLinkFirstValue<Bool>()
-    let cancelled: CloudLinkFirstValue<Bool>
+final class TuiTerminalMutationTestTransport: TuiCommandRunning {
+    let started = RemoteLinkFirstValue<Bool>()
+    let cancelled: RemoteLinkFirstValue<Bool>
     private(set) var commands: [String] = []
     private var response: Data?
     private var waiters: [CheckedContinuation<Data, Never>] = []
 
-    init(cancelled: CloudLinkFirstValue<Bool> = CloudLinkFirstValue<Bool>()) {
+    init(cancelled: RemoteLinkFirstValue<Bool> = RemoteLinkFirstValue<Bool>()) {
         self.cancelled = cancelled
     }
 
-    func runTuiCommand(arguments: CloudTuiRequest, deadline: Duration) async throws -> Data {
+    func runTuiCommand(arguments: TuiRequest, deadline: Duration) async throws -> Data {
         commands.append(arguments.operation)
         if let response { return response }
         let cancelled = self.cancelled

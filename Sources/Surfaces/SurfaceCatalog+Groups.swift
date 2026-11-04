@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxCore
 import CmuxSurfaceCatalogModel
 import Foundation
@@ -19,6 +19,11 @@ struct SurfaceResourceGroup: Hashable, Codable, Sendable {
 
     func withRemoteWorkspaceID(_ id: String?) -> Self {
         SurfaceResourceGroup(title: title, placements: placements, remoteWorkspaceID: id ?? remoteWorkspaceID, representsWorkspace: representsWorkspace)
+    }
+
+    func localWorkspaceTitle(hostName: String) -> String {
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? hostName : name
     }
 
     init(title: String, resources: [SurfaceResourceID], remoteWorkspaceID: String? = nil) {
@@ -130,7 +135,7 @@ extension SurfaceCatalog {
         try validateOwnership(of: group.resources, at: destination)
         let scope = beginProjectionMutation(for: group.resources)
         defer { endProjectionMutation(scope) }
-        let group = try currentCloudWorkspace(group)?.group ?? group
+        let group = try currentTuiWorkspace(group)?.group ?? group
         try validateOwnership(of: group.resources, at: destination)
         if let optimistic, let reserved = reserveTerminalGroup(group, into: destination, focus: focus, paneLookup: paneLookup, host: optimistic) {
             return reserved
@@ -223,20 +228,20 @@ extension SurfaceCatalog {
     struct OptimisticPaneHost {
         /// A reserved pane at `destination` for a terminal on `machine`, or nil when the
         /// destination is gone. `focus` moves input focus to the new pane.
-        var reserve: @MainActor (_ machine: SurfaceMachineID, _ destination: SurfaceDestination, _ focus: Bool) -> CloudTerminalPaneReservation?
+        var reserve: @MainActor (_ machine: SurfaceMachineID, _ destination: SurfaceDestination, _ focus: Bool) -> TuiTerminalPaneReservation?
         /// Starts the attach loop for a reserved pane whose projection is already recorded.
-        var attach: @MainActor (_ reservation: CloudTerminalPaneReservation, _ resource: SurfaceResource, _ remoteTabID: String?) -> Void
+        var attach: @MainActor (_ reservation: TuiTerminalPaneReservation, _ resource: SurfaceResource, _ remoteTabID: String?) -> Void
 
         @MainActor
         static let app = OptimisticPaneHost(
             reserve: { machine, destination, focus in
                 Workspace.liveWorkspace(id: destination.workspaceID)?
-                    .reserveCloudTerminalPane(machine: machine, at: destination, focus: focus)
+                    .reserveTuiTerminalPane(machine: machine, at: destination, focus: focus)
             },
             attach: { reservation, resource, remoteTabID in
                 guard let provider = SurfaceCatalog.shared.provider(for: resource.machine) as? CmuxTuiSurfaceProvider else {
                     Workspace.liveWorkspace(id: reservation.workspaceID)?
-                        .failReservedCloudTerminalPane(reservation, error: SurfaceCatalogError.noProvider(resource.machine))
+                        .failReservedTuiTerminalPane(reservation, error: SurfaceCatalogError.noProvider(resource.machine))
                     return
                 }
                 provider.attachReservedTerminalPane(reservation, resource: resource, remoteTabID: remoteTabID)
@@ -268,7 +273,7 @@ extension SurfaceCatalog {
     /// Placement-aware new-workspace projection. The local workspace is created
     /// before the first remote call so the user's destination is deterministic.
     ///
-    /// With a `layout` (the machine screen's geometry, `CloudWorkspaceLayoutTranslator`),
+    /// With a `layout` (the machine screen's geometry, `TuiWorkspaceLayoutTranslator`),
     /// the tree decides everything the grid used to guess: which pane each placement
     /// lands in, which pane is split for the next one and in which direction, and the
     /// ratio every divider gets — so the workspace opens looking the way it does on the
@@ -283,16 +288,11 @@ extension SurfaceCatalog {
     ) async throws -> (workspaceID: UUID, projections: [SurfaceProjection]) {
         let scope = beginProjectionMutation(for: group.resources)
         defer { endProjectionMutation(scope) }
-        let current = try currentCloudWorkspace(group)
+        let current = try currentTuiWorkspace(group)
         let group = current?.group ?? group
         let title = current?.group.title ?? title
-        // A Cloud VM's installed graph owns its geometry, even when it has none.
-        // Another Mac installs no geometry: the layout its caller fetched from
-        // that Mac stays authoritative, and DeviceWorkspaceLayoutCoordinator
-        // reconciles it afterwards.
-        let layout = group.placements.first?.resource.machine.isDevice == true
-            ? layout
-            : (current.map { $0.layout } ?? layout)
+        // The installed SSH daemon graph owns the bound workspace geometry.
+        let layout = current.map { $0.layout } ?? layout
         let ids = group.resources
         guard !ids.isEmpty else { throw SurfaceCatalogError.destinationNotFound("empty group") }
         let created = try host.create(title, focus)
@@ -415,7 +415,7 @@ extension SurfaceCatalog {
     /// keeps the placement out of the coordinator's "missing" plan while the attach runs.
     @discardableResult
     func recordReservedProjection(
-        _ reservation: CloudTerminalPaneReservation,
+        _ reservation: TuiTerminalPaneReservation,
         placement: SurfaceResourcePlacement,
         remoteView: SurfaceRemoteView?
     ) -> SurfaceProjection {
@@ -492,7 +492,7 @@ extension SurfaceCatalog {
             guard let resolved = catalog.reservableTerminals(members) else { return nil }
             var views: [SurfaceResourcePlacement: (SurfaceResource, SurfaceRemoteView?)] = [:]
             for (placement, resource, view) in resolved { views[placement] = (resource, view) }
-            var pending: [(CloudTerminalPaneReservation, SurfaceResource, SurfaceRemoteView?)] = []
+            var pending: [(TuiTerminalPaneReservation, SurfaceResource, SurfaceRemoteView?)] = []
             @MainActor func reserve(_ placement: SurfaceResourcePlacement, into destination: SurfaceDestination) -> String?? {
                 guard let (resource, view) = views[placement] else { return nil }
                 guard let reservation = host.reserve(resource.machine, destination, projected.isEmpty && focus) else { return nil }

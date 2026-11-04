@@ -1,5 +1,5 @@
 import Bonsplit
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -36,9 +36,9 @@ extension AppDelegate {
             return resource.kind
         }
         if let deferred = panel as? DeferredBrowserPanel {
-            return deferred.sessionPanelSnapshot.browser?.cloudResource?.kind
+            return deferred.sessionPanelSnapshot.browser?.remoteResource?.kind
         }
-        if let browser = panel as? BrowserPanel, let resource = browser.cloudAccess.resourceID {
+        if let browser = panel as? BrowserPanel, let resource = browser.remoteAccess.resourceID {
             return resource.kind
         }
         return panel.panelType == .terminal ? .terminal : nil

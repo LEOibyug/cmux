@@ -4,11 +4,12 @@ The cmux control-socket domain: the listener and the transport/policy layer unde
 
 This package owns the listener server (`SocketControlServer`: reservation, bind/listen lifecycle, accept source with backoff/rearm recovery, socket-path monitor) plus the path/bind/probe/lock machinery and recovery policy under it, lifted out of the app target's `TerminalController`. Client command handling (the per-connection read loop, auth, v1/v2 dispatch) still lives in the app and is planned to move here in the control-plane coordinator wave.
 
+The personal macOS build exposes local terminal, browser, Vault, agent-message/inbox, and user-controlled SSH operations only. Official account, team, Cloud VM, billing, phone-host, feedback, and CodeRouter handlers and discovery entries are removed. Socket password authentication and HMAC-backed local client capabilities remain enforced. Listener diagnostics stay on this Mac; they are not sent to a reporting service.
+
 ## Layout
 
 - `Server/` — `SocketControlServer`, its host-event seam, the bounded async
-  connection pool, async client transport, polling limiter, read snapshots,
-  and the telemetry dedupe cache.
+  connection pool, async client transport, polling limiter, and read snapshots.
 - `Transport/` — `SocketTransport` and its capability extensions (path identity/probe, lock files, bind, client-socket configuration, peer verification, raw I/O).
 - `Policy/` — `SocketListenerPolicy`, the pure decision logic.
 - `Model/` — the Sendable value types they exchange.
@@ -19,7 +20,7 @@ This package owns the listener server (`SocketControlServer`: reservation, bind/
 
 - `SocketControlServer` — the listener state machine: startup path reservation, `start`/`stop`, generation-counted accept source with failure backoff and rearm, the socket-path monitor, and synchronous reads (`isRunning`, `activeSocketPath`, `listenerHealth`). State lives under one lock because every driver is synchronous (DispatchSource handlers, client reader threads, app-termination teardown); see the type docs for the carve-out rationale.
 - `SocketControlServerConfiguration` and `SocketControlServer.reconfigure(accessMode:)` — the value snapshot and live policy update seam used by config reload and Settings changes. Connection workers read the published current mode; active listeners reapply file permissions without rebinding, and `off` stops the listener.
-- `SocketControlServerEvents` — the host-callback seam: telemetry breadcrumbs/failures, listener-started, accepted-client hand-off (host owns the fd), path-missing and rearm restart triggers, last-socket-path recording.
+- `SocketControlServerEvents` — the host-callback seam: local diagnostics/failures, listener-started, accepted-client hand-off (host owns the fd), path-missing and rearm restart triggers, last-socket-path recording.
 - `SocketFastPathState` — per-surface dedupe for high-frequency `report_*` telemetry.
 - `SocketTransport` — stateless syscall layer: socket-path identity (`SocketPathIdentity`) and liveness probing (`SocketPathProbeResult`), advisory lock-file arbitration (`SocketPathLockAcquisition`), listener binding (`SocketBindAttemptResult`), accepted-client configuration, peer PID/UID/ancestry checks, `writeAll`, and the one-shot `probeCommand` client.
 - `SocketListenerPolicy` — pure decisions: accept-failure classification (`SocketAcceptErrorClassification`) and recovery (`AcceptFailureRecoveryAction`), socket-path unlink rules, and bind-failure fallback from the stable default path to the user-scoped path.
@@ -44,7 +45,7 @@ restart that could not bind. The interval is the recovery-clock delay supplied
 to the host, so a host that does not claim the generation must surface that
 failure rather than silently treating the listener as healthy.
 
-Stage failures carry stable `stage` strings (`SocketStageFailure`) that feed telemetry breadcrumbs and the fallback policy; do not rename existing stages.
+Stage failures carry stable `stage` strings (`SocketStageFailure`) for local diagnostics and fallback policy; do not rename existing stages.
 
 ## Testing
 

@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxTerminalSizing
 import CmuxTerminalSharing
 import Darwin
@@ -15,7 +15,7 @@ import Testing
 /// cloud terminal must always be attachable, a slow daemon must never be
 /// reported as a missing terminal, and a wedged attachment must be detected
 /// and recovered on a deadline instead of waiting for an external edge.
-@Suite struct CloudTerminalAttachmentRecoveryTests {
+@Suite struct RemoteTerminalAttachmentRecoveryTests {
     private static let terminalID = "term_41fb0b7fe0f204d428acf9db124023f4"
     private static let socketPath = "/tmp/cmux-12362-fixture.sock"
 
@@ -25,12 +25,12 @@ import Testing
     @Test @MainActor
     func attachmentDiagnosticsKeepOneCorrelationIDAcrossResolverAndSession() {
         let correlationID = "attachment-correlation-12567"
-        let resolver = CloudTerminalAttachmentResolver(
+        let resolver = RemoteTerminalAttachmentResolver(
             commandRunner: ScriptedTuiCommandRunner(),
             socketPath: Self.socketPath,
             correlationID: correlationID
         )
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine",
             terminalID: Self.terminalID,
             remoteSurfaceID: 17,
@@ -58,7 +58,7 @@ import Testing
         runner.onSubcommand(["session", "current", "snapshot"]) {
             Self.snapshot(terminalTabs: [])
         }
-        let resolver = CloudTerminalAttachmentResolver(commandRunner: runner, socketPath: Self.socketPath)
+        let resolver = RemoteTerminalAttachmentResolver(commandRunner: runner, socketPath: Self.socketPath)
 
         let resolution = await resolver.resolve(terminalID: Self.terminalID)
 
@@ -80,7 +80,7 @@ import Testing
         runner.onSubcommand(["session", "current", "snapshot"]) {
             Self.snapshot(terminalTabs: ["tab_8bd11b4d0162d60500bd898c6651679a"])
         }
-        let resolver = CloudTerminalAttachmentResolver(commandRunner: runner, socketPath: Self.socketPath)
+        let resolver = RemoteTerminalAttachmentResolver(commandRunner: runner, socketPath: Self.socketPath)
 
         let resolution = await resolver.resolve(terminalID: Self.terminalID)
 
@@ -95,13 +95,13 @@ import Testing
     func transportTimeoutIsRetryableNotMissing() async {
         let runner = ScriptedTuiCommandRunner()
         runner.onRawCommand("resolve-terminal") {
-            throw CloudMachineLink.LinkError.exited(
+            throw RemoteMachineLink.LinkError.exited(
                 status: 3,
                 output: "transport timed out before raw response: Resource temporarily unavailable (os error 35)"
             )
         }
         runner.onRawCommand("identify") { Self.identifyEnvelope(protocol: 12) }
-        let resolver = CloudTerminalAttachmentResolver(commandRunner: runner, socketPath: Self.socketPath)
+        let resolver = RemoteTerminalAttachmentResolver(commandRunner: runner, socketPath: Self.socketPath)
 
         let resolution = await resolver.resolve(terminalID: Self.terminalID)
 
@@ -117,14 +117,14 @@ import Testing
     /// ones. The handshake deadline must end that state and ask for a reconnect.
     @Test @MainActor
     func sessionStuckInConnectingIsRecoveredByTheHandshakeDeadline() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         let reconnects = ReconnectCounter()
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine",
             terminalID: Self.terminalID,
             remoteSurfaceID: 17,
-            deadlines: CloudTuiManualMirrorDeadlines(
+            deadlines: TuiManualMirrorDeadlines(
                 handshake: .milliseconds(300),
                 livenessInterval: .seconds(30),
                 livenessAnswer: .seconds(5)
@@ -147,10 +147,10 @@ import Testing
     /// Keep the pane recoverable, but stop retrying the same stale VM forever.
     @Test @MainActor
     func staleReplayDaemonStopsAutomaticReconnectWithActionablePresentation() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         let reconnects = ReconnectCounter()
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine",
             terminalID: Self.terminalID,
             remoteSurfaceID: 17,
@@ -179,7 +179,7 @@ import Testing
         #expect(reconnects.count == 0)
         #expect(session.sizingRelay.state == nil)
         #expect(session.connectionPresentation != nil)
-        #expect(session.connectionPresentation?.detail == CloudTerminalAttachmentInterruption.staleDaemon.localizedDescription)
+        #expect(session.connectionPresentation?.detail == RemoteTerminalAttachmentInterruption.staleDaemon.localizedDescription)
         guard case let .reconnecting(_, reason) = session.attachmentStatus.state else {
             Issue.record("expected a reconnecting state")
             return
@@ -193,14 +193,14 @@ import Testing
     /// reconnected, instead of sitting silent behind a frozen pane.
     @Test @MainActor
     func attachedStreamWithoutFramesIsProbedAndReconnectedWhenUnanswered() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         let reconnects = ReconnectCounter()
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine",
             terminalID: Self.terminalID,
             remoteSurfaceID: 17,
-            deadlines: CloudTuiManualMirrorDeadlines(
+            deadlines: TuiManualMirrorDeadlines(
                 handshake: .seconds(5),
                 livenessInterval: .milliseconds(200),
                 livenessAnswer: .milliseconds(200)
@@ -229,11 +229,11 @@ import Testing
     /// an open pane keeps retrying at the capped interval forever.
     @Test
     func retryPoliciesBoundOneOpenAndCapBackgroundRecovery() {
-        let materialize = CloudTerminalAttachmentRetryPolicy.materialize
+        let materialize = RemoteTerminalAttachmentRetryPolicy.materialize
         #expect(materialize.boundedDelay(afterFailures: 1) == .seconds(1))
         #expect(materialize.boundedDelay(afterFailures: 2) == .seconds(2))
         #expect(materialize.boundedDelay(afterFailures: 3) == nil)
-        let background = CloudTerminalAttachmentRetryPolicy.background
+        let background = RemoteTerminalAttachmentRetryPolicy.background
         #expect(background.cappedDelay(afterFailures: 1) == .seconds(1))
         #expect(background.cappedDelay(afterFailures: 6) == .seconds(30))
         #expect(background.cappedDelay(afterFailures: 60) == .seconds(30))
@@ -244,8 +244,8 @@ import Testing
     /// backoff so the next failure starts from the shortest delay again.
     @Test @MainActor
     func retrySchedulerArmsOneRetryPerFailedPassAndResetsOnSuccess() async {
-        let scheduler = CloudTerminalAttachmentRetryScheduler(
-            policy: CloudTerminalAttachmentRetryPolicy(delays: [.milliseconds(50), .milliseconds(80)])
+        let scheduler = RemoteTerminalAttachmentRetryScheduler(
+            policy: RemoteTerminalAttachmentRetryPolicy(delays: [.milliseconds(50), .milliseconds(80)])
         )
         let fired = ReconnectCounter()
         #expect(scheduler.scheduleRetry { fired.increment() } == .milliseconds(50))
@@ -265,7 +265,7 @@ import Testing
     /// The raw bridge wraps transport errors inside details.error on some daemons.
     @Test(arguments: ["transport.timeout", "transport.closed"])
     func nestedTransportFailuresRemainRetryable(code: String) {
-        let answer = CloudTuiDaemonAnswer(error: Self.daemonRejection(code))
+        let answer = TuiDaemonAnswer(error: Self.daemonRejection(code))
         #expect(answer == .transportFailure(code))
         #expect(answer.isRetryable)
         #expect(!answer.cannotServeTerminalID)
@@ -275,7 +275,7 @@ import Testing
     @Test
     func reconnectingReasonsDoNotDisplayDaemonDiagnostics() {
         let diagnostic = "private-command /home/user/secret transport.timeout"
-        for reason in [CloudTerminalAttachmentInterruption.rejected(diagnostic), .unresolved(diagnostic)] {
+        for reason in [RemoteTerminalAttachmentInterruption.rejected(diagnostic), .unresolved(diagnostic)] {
             #expect(reason.detail == diagnostic)
             #expect(!reason.localizedDescription.contains(diagnostic))
             #expect(!reason.localizedDescription.contains("cmux-tui"))
@@ -286,7 +286,7 @@ import Testing
     @Test
     func batchResolutionOverlapsAtMostFourDaemonRequests() async {
         let runner = GatedResolutionRunner()
-        let resolver = CloudTerminalAttachmentResolver(commandRunner: runner, socketPath: Self.socketPath)
+        let resolver = RemoteTerminalAttachmentResolver(commandRunner: runner, socketPath: Self.socketPath)
         let ids = Set((0..<12).map { number in
             let suffix = String(number, radix: 16)
             return "term_" + String(repeating: "0", count: 32 - suffix.count) + suffix
@@ -315,7 +315,7 @@ import Testing
 
     // MARK: - Fixtures
 
-    private actor GatedResolutionRunner: CloudTuiCommandRunning {
+    private actor GatedResolutionRunner: TuiCommandRunning {
         private var active = 0
         private(set) var maximumActive = 0
         private(set) var calls = 0
@@ -345,7 +345,7 @@ import Testing
             for waiter in pending { waiter.resume() }
         }
 
-        func runTuiCommand(arguments: CloudTuiRequest, deadline: Duration) async throws -> Data {
+        func runTuiCommand(arguments: TuiRequest, deadline: Duration) async throws -> Data {
             active += 1
             calls += 1
             maximumActive = max(maximumActive, active)
@@ -358,7 +358,7 @@ import Testing
         }
     }
 
-    private static func daemonRejection(_ code: String) -> CloudMachineLink.LinkError {
+    private static func daemonRejection(_ code: String) -> RemoteMachineLink.LinkError {
         .exited(
             status: 1,
             output: #"{"code":"raw.command_failed","details":{"error":"\#(code)","id":1,"ok":false},"message":"\#(code)","retryable":false}"#
@@ -431,15 +431,15 @@ private final class ReconnectCounter {
 /// Answers each cmux-tui CLI invocation from a script keyed on its argv, so
 /// the resolver's decisions are observable without a client process.
 // @unchecked Sendable: every mutable field is guarded by `lock`.
-private final class ScriptedTuiCommandRunner: CloudTuiCommandRunning, @unchecked Sendable {
+private final class ScriptedTuiCommandRunner: TuiCommandRunning, @unchecked Sendable {
     typealias Answer = @Sendable () throws -> Data
 
     private let lock = NSLock()
-    private var scripts: [(matches: @Sendable (CloudTuiRequest) -> Bool, answer: Answer)] = []
-    private var recorded: [CloudTuiRequest] = []
+    private var scripts: [(matches: @Sendable (TuiRequest) -> Bool, answer: Answer)] = []
+    private var recorded: [TuiRequest] = []
 
     /// Every invocation seen so far, in order.
-    var calls: [CloudTuiRequest] {
+    var calls: [TuiRequest] {
         lock.lock(); defer { lock.unlock() }
         return recorded
     }
@@ -454,18 +454,18 @@ private final class ScriptedTuiCommandRunner: CloudTuiCommandRunning, @unchecked
         on({ $0.operation == "session.snapshot" && words == ["session", "current", "snapshot"] }, answer)
     }
 
-    private func on(_ matches: @escaping @Sendable (CloudTuiRequest) -> Bool, _ answer: @escaping Answer) {
+    private func on(_ matches: @escaping @Sendable (TuiRequest) -> Bool, _ answer: @escaping Answer) {
         lock.lock(); defer { lock.unlock() }
         scripts.append((matches: matches, answer: answer))
     }
 
-    func runTuiCommand(arguments: CloudTuiRequest, deadline: Duration) async throws -> Data {
+    func runTuiCommand(arguments: TuiRequest, deadline: Duration) async throws -> Data {
         lock.lock()
         recorded.append(arguments)
         let script = scripts.first { $0.matches(arguments) }
         lock.unlock()
         guard let script else {
-            throw CloudMachineLink.LinkError.exited(
+            throw RemoteMachineLink.LinkError.exited(
                 status: 2,
                 output: "unscripted cmux-tui invocation: \(arguments.operation)"
             )

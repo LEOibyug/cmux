@@ -3,31 +3,11 @@ public import Foundation
 internal import CmuxSettings
 internal import CryptoKit
 
-/// Mediates the cmuxd-remote release manifest and the local cache of
-/// verified daemon binaries it indexes: downloads binaries, verifies them
-/// against the checksum pinned in the signed app's embedded manifest, and
-/// validates/places them in the shared on-disk cache the separately-signed
-/// CLI also reads. The live release manifest is never consulted: it shares a
-/// trust domain with the release assets, so it cannot vouch for them.
+/// Validates locally cached and bundled daemon artifacts without network acquisition.
 ///
-/// Faithful lift of the manifest/cache/download half of the legacy
-/// `WorkspaceRemoteSessionController` bootstrap path. The embedded-manifest
-/// read stays app-side (`Bundle.main` never crosses into the package); the
-/// dev-only local `go build` fallback stays with the session controller.
-///
-/// Isolation design: stateless `Sendable` value (injected `FileManager` +
-/// home directory only), so no actor is warranted; methods are synchronous
-/// and blocking by contract because the caller is the session controller's
-/// serial utility queue mid-bootstrap, which cannot await. The network call
-/// bridges `URLSession`'s callbacks with a semaphore exactly like the
-/// legacy code; converting them to `async` is deferred modernization for the
-/// coordinator phase.
+/// The embedded checksum remains authoritative. Missing artifacts are reported to
+/// the caller so the user can explicitly build or install the remote prerequisite.
 public struct RemoteDaemonManifestRepository: Sendable {
-    /// Result of ``downloadBinary(entry:version:)``.
-    public struct Download: Sendable {
-        /// Final cached location of the verified binary.
-        public let binaryURL: URL
-    }
 
     // FileManager is documented thread-safe for these path-based operations;
     // scoping the escape hatch to the one property beats `@unchecked
@@ -43,8 +23,8 @@ public struct RemoteDaemonManifestRepository: Sendable {
     ///   - homeDirectory: The user's home directory; composition roots pass
     ///     `FileManager.default.homeDirectoryForCurrentUser` so the app and
     ///     CLI agree on the cache path independently of `$HOME` overrides.
-    ///   - bundledAssetsDirectory: Signed app resources for unpublished builds;
-    ///     nil preserves the release download path.
+    ///   - bundledAssetsDirectory: Locally bundled compressed daemon resources;
+    ///     nil means no bundled artifact is available.
     public init(
         fileManager: FileManager = .default,
         homeDirectory: URL,
@@ -92,82 +72,18 @@ public struct RemoteDaemonManifestRepository: Sendable {
         return nil
     }
 
-    /// Installs a checksum-verified bundled binary when available, otherwise
-    /// downloads `entry`'s binary and verifies it against `entry`'s checksum
-    /// (always throwing on a mismatch), marks it executable, and atomically installs it at the cache path (blocking;
-    /// 60s request timeout, 75s overall wait).
-    public func downloadBinary(
+    /// Installs one checksum-verified bundled artifact into the local cache.
+    ///
+    /// - Parameters:
+    ///   - entry: Embedded checksum and platform of the local artifact.
+    ///   - version: Versioned cache namespace.
+    /// - Returns: The local executable, or nil when no resources were bundled.
+    /// - Throws: A filesystem, decompression, or checksum verification failure.
+    public func bundledBinary(
         entry: WorkspaceRemoteDaemonManifest.Entry,
         version: String
-    ) throws -> Download {
-        if let binaryURL = try installBundledBinary(entry: entry, version: version) {
-            return Download(binaryURL: binaryURL)
-        }
-        guard let url = URL(string: entry.downloadURL) else {
-            throw NSError(domain: "cmux.remote.daemon", code: 25, userInfo: [
-                NSLocalizedDescriptionKey: "remote daemon manifest has an invalid download URL",
-            ])
-        }
-
-        let cacheURL = try cachedBinaryURL(version: version, goOS: entry.goOS, goArch: entry.goArch)
-        try fileManager.createDirectory(at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-        let request = NSMutableURLRequest(url: url)
-        request.timeoutInterval = 60
-        request.setValue("cmux/\(version)", forHTTPHeaderField: "User-Agent")
-        let session = URLSession(configuration: .ephemeral)
-
-        let semaphore = DispatchSemaphore(value: 0)
-        // Single-assignment hand-offs signalled exactly once by the
-        // download-task callback before the blocking wait returns (legacy
-        // bridge shape).
-        nonisolated(unsafe) var downloadedURL: URL?
-        nonisolated(unsafe) var downloadError: (any Error)?
-        session.downloadTask(with: request as URLRequest) { localURL, response, error in
-            defer { semaphore.signal() }
-            if let error {
-                downloadError = error
-                return
-            }
-            if let httpResponse = response as? HTTPURLResponse,
-               !(200...299).contains(httpResponse.statusCode) {
-                downloadError = NSError(domain: "cmux.remote.daemon", code: 26, userInfo: [
-                    NSLocalizedDescriptionKey: "remote daemon download failed with HTTP \(httpResponse.statusCode)",
-                ])
-                return
-            }
-            downloadedURL = localURL
-        }.resume()
-        _ = semaphore.wait(timeout: .now() + 75.0)
-        session.finishTasksAndInvalidate()
-
-        if let downloadError {
-            throw downloadError
-        }
-        guard let downloadedURL else {
-            throw NSError(domain: "cmux.remote.daemon", code: 27, userInfo: [
-                NSLocalizedDescriptionKey: "remote daemon download did not produce a file",
-            ])
-        }
-
-        // Only the checksum embedded in the signed app is trusted. Release
-        // assets are published per build and never overwritten, so a mismatch
-        // means a tampered or corrupted asset, never a stale pin.
-        guard try sha256Hex(forFile: downloadedURL) == entry.sha256.lowercased() else {
-            try? fileManager.removeItem(at: downloadedURL)
-            throw NSError(domain: "cmux.remote.daemon", code: 28, userInfo: [
-                NSLocalizedDescriptionKey: "remote daemon checksum mismatch for \(entry.assetName)",
-            ])
-        }
-
-        let tempURL = cacheURL.deletingLastPathComponent()
-            .appendingPathComponent(".\(cacheURL.lastPathComponent).tmp-\(UUID().uuidString)")
-        try? fileManager.removeItem(at: tempURL)
-        try fileManager.moveItem(at: downloadedURL, to: tempURL)
-        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempURL.path)
-        try? fileManager.removeItem(at: cacheURL)
-        try fileManager.moveItem(at: tempURL, to: cacheURL)
-        return Download(binaryURL: cacheURL)
+    ) throws -> URL? {
+        try installBundledBinary(entry: entry, version: version)
     }
 
     private func cacheRoot() throws -> URL {

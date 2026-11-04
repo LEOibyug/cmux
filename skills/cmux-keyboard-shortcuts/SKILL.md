@@ -73,7 +73,7 @@ fi
    ```bash
    "$CMUX_SETTINGS" set shortcuts.bindings.newSurface '["ctrl+b","c"]'
    "$CMUX_SETTINGS" set shortcuts.bindings.focusLeft cmd+opt+h
-   "$CMUX_SETTINGS" set shortcuts.bindings.sendFeedback null
+   "$CMUX_SETTINGS" set shortcuts.bindings.triggerFlash null
    ```
 
 5. Read back each changed action: `"$CMUX_SETTINGS" get shortcuts.bindings.newSurface`.
@@ -188,7 +188,7 @@ done
 Fewer app-level shortcuts. Prefer unbinding only the actions the user names; this is a starting proposal.
 
 ```bash
-for a in renameTab renameWorkspace editWorkspaceDescription triggerFlash sendFeedback; do
+for a in renameTab renameWorkspace editWorkspaceDescription triggerFlash; do
   "$CMUX_SETTINGS" set "shortcuts.bindings.$a" null
 done
 ```

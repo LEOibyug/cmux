@@ -1,17 +1,16 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxSurfaceCatalogModel
+import CmuxFoundation
 import Foundation
 
 extension CmuxTuiSurfaceProvider {
     // MARK: Notifications
     func installNotificationSync() {
-        // The registry never creates a provider while the managed-device
-        // policy disables Cloud, so no policy check is repeated here.
         let machineID = self.machineID
-        let clientID = CloudTuiClientPaths().notificationClientID()
-        let hub = CloudNotificationSyncHub.shared
-        let sync = CloudNotificationSync(
+        let clientID = TuiClientPaths().notificationClientID()
+        let hub = catalog.tuiNotificationSyncHub
+        let sync = TuiNotificationSync(
             machineID: machineID,
             clientID: clientID, store: hub.persistenceStore,
             resolveTarget: { [weak self] row in self?.notificationDeliveryTarget(for: row) },
@@ -19,12 +18,12 @@ extension CmuxTuiSurfaceProvider {
             send: { [weak self] batch in
                 // A vanished provider must not report success: the batch stays
                 // pending in the durable state for the replacement sync.
-                guard let self else { throw ProviderError.machineAsleep(machineID) }
+                guard let self else { throw ProviderError.connectionUnavailable(machineID) }
                 let connected = try await self.links.connected(machineID: machineID)
                 guard let link = await self.links.link(machineID: machineID) else {
-                    throw ProviderError.machineAsleep(machineID)
+                    throw ProviderError.connectionUnavailable(machineID)
                 }
-                _ = try await link.run(arguments: CloudTuiRequests.notificationAckArguments(
+                _ = try await link.run(arguments: TuiRequests.notificationAckArguments(
                     socketPath: connected.socketPath,
                     clientID: clientID,
                     notificationIDs: batch.ids,
@@ -39,7 +38,7 @@ extension CmuxTuiSurfaceProvider {
                 // the local banners for those rows go with them.
                 guard let store = AppDelegate.shared?.notificationStore else { return }
                 let removedIDs = Set(ids)
-                for notification in store.notifications where notification.correlationKey.map({ CloudNotificationCorrelation.matches($0, machineID: machineID, notificationIDs: removedIDs) }) == true {
+                for notification in store.notifications where notification.correlationKey.map({ TuiNotificationCorrelation.matches($0, machineID: machineID, notificationIDs: removedIDs) }) == true {
                     store.remove(id: notification.id)
                 }
             }
@@ -48,30 +47,33 @@ extension CmuxTuiSurfaceProvider {
         hub.register(sync)
         notificationPlacementObserver = NotificationCenter.default.addObserver(
             forName: SurfaceCatalog.didChangeNotification,
-            object: nil,
+            object: catalog,
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, let state = self.cloudState else { return }
+                guard let self, self.isRegisteredInCatalog(), let state = self.tuiState,
+                      self.catalog.tuiStateObservations[self.machine]?.freshness == .current else { return }
                 self.syncNotifications(from: state)
             }
         }
     }
-    func syncNotifications(from state: CloudVMState) {
+    func syncNotifications(from state: TuiState) {
+        guard isRegisteredInCatalog(), !isRetired, catalog.tuiStateObservations[machine]?.freshness == .current else { return }
+        if notificationSync == nil { installNotificationSync() }
         syncAgentHooks(from: state)
         updateGuestURLMembership()
         guestURLService?.recoverOnLinkProgress()
         guard let notificationSync else { return }
-        let rows = CloudVMNotificationRow.rows(from: state)
+        let rows = TuiNotificationRow.rows(from: state)
         notificationSync.apply(rows: rows)
         #if DEBUG
-        cmuxDebugLog("cloud.notifications.sync machine=\(machineID) revision=\((state.cursor?.revision).map(String.init) ?? "nil") rows=\(rows.count) unreadTerminals=\(notificationSync.unreadTerminalIDs.count) pending=\(notificationSync.state.pendingAcks.count)")
+        cmuxDebugLog("SSH.notifications.sync machine=\(machineID) revision=\((state.cursor?.revision).map(String.init) ?? "nil") rows=\(rows.count) unreadTerminals=\(notificationSync.unreadTerminalIDs.count) pending=\(notificationSync.state.pendingAcks.count)")
         #endif
     }
     // MARK: Agent hooks
     /// The remote workspaces whose tabs show `terminalID` in the accepted graph,
     /// in graph order. Hook routing and notification placement both use it.
-    nonisolated static func remoteWorkspaceIDs(showing terminalID: String, in state: CloudVMState) -> [String] {
+    nonisolated static func remoteWorkspaceIDs(showing terminalID: String, in state: TuiState) -> [String] {
         state.tabs.compactMap { tab in
             guard tab.contentID == terminalID,
                   let pane = state.lookupIndex.pane(id: tab.paneID),
@@ -109,7 +111,7 @@ extension CmuxTuiSurfaceProvider {
     /// change, so a session whose pane was not open yet is caught up when it
     /// opens. Sidebar status comes from the roster projection, and visible
     /// notifications from the daemon's durable rows (`syncNotifications`).
-    func syncAgentHooks(from state: CloudVMState) {
+    func syncAgentHooks(from state: TuiState) {
         guard machine.isSSH else { return }
         let machine = self.machine
         let catalog = self.catalog
@@ -138,42 +140,41 @@ extension CmuxTuiSurfaceProvider {
                 surfaceID: projection.panelID
             )
             #if DEBUG
-            cmuxDebugLog("cloud.agentHook.mirror machine=\(machineID) terminal=\(event.terminalID) subcommand=\(event.subcommand) queued=\(queued)")
+            cmuxDebugLog("SSH.agentHook.mirror machine=\(machineID) terminal=\(event.terminalID) subcommand=\(event.subcommand) queued=\(queued)")
             #else
             _ = queued
             #endif
         }
     }
     /// Placement from the catalog as it is right now; see
-    /// `CloudNotificationPlacementResolver`.
-    var notificationPlacementResolver: CloudNotificationPlacementResolver {
-        CloudNotificationPlacementResolver(
+    /// `TuiNotificationPlacementResolver`.
+    var notificationPlacementResolver: TuiNotificationPlacementResolver {
+        TuiNotificationPlacementResolver(
             machine: machine,
             projections: { [catalog] in catalog.projections(of: $0) },
             remoteWorkspaceIDs: { [weak self] terminalID in
-                guard let state = self?.cloudState else { return [] }
+                guard let state = self?.tuiState else { return [] }
                 return Self.remoteWorkspaceIDs(showing: terminalID, in: state)
             },
-            boundWorkspaces: { [machineID] in
-                (AppDelegate.shared?.tabManager?.tabs ?? []).compactMap { workspace in
-                    guard let binding = workspace.cloudVMBinding, binding.vmID == machineID else { return nil }
-                    return CloudNotificationBoundWorkspace(workspaceID: workspace.id, remoteWorkspaceID: binding.remoteWorkspaceID)
+            boundWorkspaces: { [catalog, machineID] in
+                catalog.tuiWorkspaceRenameService.environment.workspaces().compactMap { workspace in
+                    guard let binding = workspace.remoteWorkspaceBinding, binding.machineID == machineID else { return nil }
+                    return TuiNotificationBoundWorkspace(workspaceID: workspace.id, remoteWorkspaceID: binding.remoteWorkspaceID)
                 }
             }
         )
     }
-    func notificationDeliveryTarget(for row: CloudVMNotificationRow) -> CloudNotificationDeliveryTarget? {
+    func notificationDeliveryTarget(for row: TuiNotificationRow) -> TuiNotificationDeliveryTarget? {
         notificationPlacementResolver.target(for: row)
     }
-    func deliverNotification(_ row: CloudVMNotificationRow, to target: CloudNotificationDeliveryTarget) -> CloudNotificationDeliveryOutcome {
+    func deliverNotification(_ row: TuiNotificationRow, to target: TuiNotificationDeliveryTarget) -> TuiNotificationDeliveryOutcome {
         let machineID = self.machineID
-        return CloudNotificationLocalDelivery(
+        return TuiNotificationLocalDelivery(
             machineID: machineID,
-            origin: .cloudVM(machineID: machineID),
             store: { AppDelegate.shared?.notificationStore },
-            admit: { CloudNotificationSyncHub.shared.admit($0, machineID: machineID) },
+            admit: { [catalog] in catalog.tuiNotificationSyncHub.admit($0, machineID: machineID) },
             machineName: { [summary] in summary.preferredName },
-            terminalTitle: { [weak self] in self?.cloudState?.lookupIndex.terminal(id: $0)?.title }
+            terminalTitle: { [weak self] in self?.tuiState?.lookupIndex.terminal(id: $0)?.title }
         ).deliver(row, to: target)
     }
 }

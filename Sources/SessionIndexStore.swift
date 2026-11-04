@@ -4,6 +4,7 @@ import Bonsplit
 import CMUXAgentLaunch
 import Combine
 import CmuxAgentSessionStore
+import CmuxSettings
 import Darwin
 import Foundation
 import os
@@ -22,7 +23,7 @@ final class SessionIndexRipgrepCancellation: @unchecked Sendable {
     private var activeProcessIdentifier: pid_t?
     private var finishedProcessIdentifier: pid_t?
 
-    init(sendSignal: @escaping @Sendable (pid_t, Int32) -> Int32 = Darwin.kill) {
+    init(sendSignal: @escaping @Sendable (pid_t, Int32) -> Int32 = { Darwin.kill($0, $1) }) {
         self.sendSignal = sendSignal
     }
 
@@ -204,6 +205,27 @@ final class SessionIndexStore: ObservableObject {
     // injected repository and its actor-backed source cache.
     let ampSessionRepository: any AmpHookSessionReading
 
+    struct SourceRequest: Sendable {
+        let agent: SessionAgent
+        let needle: String
+        let cwdFilter: String?
+        let offset: Int
+        let limit: Int
+    }
+    typealias SourceReader = @Sendable (SourceRequest) async -> [SessionEntry]
+    typealias RegistryProvider = @Sendable (String?) async -> CmuxVaultAgentRegistry
+    let sourceReader: SourceReader?
+    let registryProvider: RegistryProvider
+    @Published private(set) var enabledAgentIDs: Set<String>?
+    @Published private(set) var historyConfigurationRevision: UInt64 = 0
+    private var configurationRequestRevision: UInt64 = 0
+    private var appliedHistoryRegistry: CmuxVaultAgentRegistry?
+    @Published private(set) var historyAgentOptions: [SessionIndexFilterOption] = []
+    private var configStore: JSONConfigStore?
+    private let userDefaults: UserDefaults
+    private let liveSessionKeysProvider: @MainActor () -> Set<String>
+    private let liveSessionNotifications: NotificationCenter?
+
     @Published private(set) var entries: [SessionEntry] = [] {
         didSet {
             guard entries != oldValue else { return }
@@ -237,7 +259,7 @@ final class SessionIndexStore: ObservableObject {
     @Published var grouping: SessionGrouping {
         didSet {
             guard grouping != oldValue else { return }
-            UserDefaults.standard.set(grouping.rawValue, forKey: Self.groupingKey)
+            userDefaults.set(grouping.rawValue, forKey: Self.groupingKey)
             invalidateSectionsCache()
             // Switching into directory grouping can expose cwds that were never
             // backfilled while the user was viewing agent grouping.
@@ -257,7 +279,7 @@ final class SessionIndexStore: ObservableObject {
     @Published var recencySort: VaultSessionSort {
         didSet {
             guard recencySort != oldValue else { return }
-            UserDefaults.standard.set(recencySort.rawValue, forKey: Self.recencySortKey)
+            userDefaults.set(recencySort.rawValue, forKey: Self.recencySortKey)
             invalidateSectionsCache()
         }
     }
@@ -278,7 +300,7 @@ final class SessionIndexStore: ObservableObject {
     @Published var agentOrder: [SessionAgent] {
         didSet {
             guard !Self.agentOrderPresentationEqual(agentOrder, oldValue) else { return }
-            Self.persistAgentOrder(agentOrder)
+            Self.persistAgentOrder(agentOrder, defaults: userDefaults)
             invalidateSectionsCache()
         }
     }
@@ -287,7 +309,7 @@ final class SessionIndexStore: ObservableObject {
     @Published var directoryOrder: [String] {
         didSet {
             guard directoryOrder != oldValue else { return }
-            Self.persistDirectoryOrder(directoryOrder)
+            Self.persistDirectoryOrder(directoryOrder, defaults: userDefaults)
             invalidateSectionsCache()
         }
     }
@@ -303,33 +325,51 @@ final class SessionIndexStore: ObservableObject {
 
     init(
         snapshotLoader: SessionIndexSnapshotLoader = SessionIndexSnapshotLoader(),
-        ampSessionRepository: any AmpHookSessionReading = AmpHookSessionRepository()
+        ampSessionRepository: any AmpHookSessionReading = AmpHookSessionRepository(),
+        registryProvider: @escaping RegistryProvider = { workingDirectory in
+            await SessionIndexStore.vaultAgentRegistry(workingDirectory: workingDirectory)
+        },
+        sourceReader: SourceReader? = nil,
+        configStore: JSONConfigStore? = nil,
+        userDefaults: UserDefaults = .standard,
+        liveSessionKeysProvider: @escaping @MainActor () -> Set<String> = {
+            VaultLiveSessionKeys.runningKeys(in: SharedLiveAgentIndex.shared.currentIndexSchedulingRefresh())
+        },
+        liveSessionNotifications: NotificationCenter? = .default
     ) {
         self.snapshotLoader = snapshotLoader
         self.ampSessionRepository = ampSessionRepository
-        self.agentOrder = Self.loadAgentOrder()
-        self.directoryOrder = Self.loadDirectoryOrder()
-        let storedGrouping = UserDefaults.standard.string(forKey: Self.groupingKey)
+        self.registryProvider = registryProvider
+        self.sourceReader = sourceReader
+        self.configStore = configStore
+        self.userDefaults = userDefaults
+        self.liveSessionKeysProvider = liveSessionKeysProvider
+        self.liveSessionNotifications = liveSessionNotifications
+        self.agentOrder = Self.loadAgentOrder(defaults: userDefaults)
+        self.directoryOrder = Self.loadDirectoryOrder(defaults: userDefaults)
+        let storedGrouping = userDefaults.string(forKey: Self.groupingKey)
         // Vault's primary job is to surface the session a person was just in;
         // keep the recency-first view as the first-run default while honoring
         // an existing grouping preference.
         self.grouping = SessionGrouping(rawValue: storedGrouping ?? "") ?? .recency
-        let storedSort = UserDefaults.standard.string(forKey: Self.recencySortKey)
+        let storedSort = userDefaults.string(forKey: Self.recencySortKey)
         self.recencySort = VaultSessionSort(rawValue: storedSort ?? "") ?? .lastActivity
-        liveIndexObserver = NotificationCenter.default.addObserver(
-            forName: .sharedLiveAgentIndexDidChange,
-            object: SharedLiveAgentIndex.shared,
-            queue: nil
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.refreshLiveSessionKeys()
+        if let liveSessionNotifications {
+            liveIndexObserver = liveSessionNotifications.addObserver(
+                forName: .sharedLiveAgentIndexDidChange,
+                object: SharedLiveAgentIndex.shared,
+                queue: nil
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.refreshLiveSessionKeys()
+                }
             }
         }
     }
 
     deinit {
         if let liveIndexObserver {
-            NotificationCenter.default.removeObserver(liveIndexObserver)
+            liveSessionNotifications?.removeObserver(liveIndexObserver)
         }
     }
 
@@ -338,8 +378,7 @@ final class SessionIndexStore: ObservableObject {
     /// above refreshes this projection whenever the owner publishes a new
     /// index, while reload/grouping changes still seed it synchronously.
     func refreshLiveSessionKeys() {
-        let index = SharedLiveAgentIndex.shared.currentIndexSchedulingRefresh()
-        let next = VaultLiveSessionKeys.runningKeys(in: index)
+        let next = liveSessionKeysProvider()
         guard next != liveSessionKeys else { return }
         liveSessionKeys = next
         invalidateSectionsCache()
@@ -618,8 +657,8 @@ final class SessionIndexStore: ObservableObject {
         }
     }
 
-    private static func loadAgentOrder() -> [SessionAgent] {
-        let stored = UserDefaults.standard.array(forKey: agentOrderDefaultsKey) as? [String] ?? []
+    private static func loadAgentOrder(defaults: UserDefaults) -> [SessionAgent] {
+        let stored = defaults.array(forKey: agentOrderDefaultsKey) as? [String] ?? []
         var ordered: [SessionAgent] = stored.compactMap { SessionAgent(rawValue: $0) }
         for agent in SessionAgent.builtInCases where !ordered.contains(agent) {
             ordered.append(agent)
@@ -641,8 +680,20 @@ final class SessionIndexStore: ObservableObject {
     }
 
     nonisolated private static func defaultAgentOrderSync(workingDirectory: String?) -> LoadedAgentOrder {
+        agentOrder(registry: CmuxVaultAgentRegistry.load(workingDirectory: workingDirectory))
+    }
+
+    nonisolated static func agentOrder(registry: CmuxVaultAgentRegistry) -> LoadedAgentOrder {
+        let order = presentationAgentOrder(registry: registry)
+        return LoadedAgentOrder(
+            agents: order.agents.filter { registry.isHistoryEnabled(for: $0.rawValue) },
+            registry: registry
+        )
+    }
+
+    /// Live presentation includes agents whose history is disabled.
+    nonisolated static func presentationAgentOrder(registry: CmuxVaultAgentRegistry) -> LoadedAgentOrder {
         let builtInIDs = Set(SessionAgent.builtInCases.map(\.rawValue))
-        let registry = CmuxVaultAgentRegistry.load(workingDirectory: workingDirectory)
         let agents = SessionAgent.builtInCases + registry.registrations.compactMap {
             builtInIDs.contains($0.id) ? nil : .registered(RegisteredSessionAgent(registration: $0))
         }
@@ -655,12 +706,12 @@ final class SessionIndexStore: ObservableObject {
         }.value
     }
 
-    private static func loadDirectoryOrder() -> [String] {
-        UserDefaults.standard.array(forKey: directoryOrderDefaultsKey) as? [String] ?? []
+    private static func loadDirectoryOrder(defaults: UserDefaults) -> [String] {
+        defaults.array(forKey: directoryOrderDefaultsKey) as? [String] ?? []
     }
 
-    private static func persistAgentOrder(_ order: [SessionAgent]) {
-        UserDefaults.standard.set(order.map { $0.rawValue }, forKey: agentOrderDefaultsKey)
+    private static func persistAgentOrder(_ order: [SessionAgent], defaults: UserDefaults) {
+        defaults.set(order.map { $0.rawValue }, forKey: agentOrderDefaultsKey)
     }
 
     private static func agentOrderPresentationEqual(_ lhs: [SessionAgent], _ rhs: [SessionAgent]) -> Bool {
@@ -677,30 +728,102 @@ final class SessionIndexStore: ObservableObject {
         }
     }
 
-    private static func persistDirectoryOrder(_ order: [String]) {
-        UserDefaults.standard.set(order, forKey: directoryOrderDefaultsKey)
+    private static func persistDirectoryOrder(_ order: [String], defaults: UserDefaults) {
+        defaults.set(order, forKey: directoryOrderDefaultsKey)
     }
 
     private var loadTask: Task<Void, Never>?
+    private var loadRevision: UInt64 = 0
 
-    func reload() {
+    /// Called by the existing config watcher and after a source-picker write.
+    func refreshHistoryConfiguration() async {
+        configurationRequestRevision &+= 1
+        let request = configurationRequestRevision
+        let registry = await registryProvider(nil)
+        guard request == configurationRequestRevision, !Task.isCancelled,
+              registry.historyConfigurationIsCurrent else { return }
+        // A rejected first load still needs replacement after its loading
+        // flag clears; the revision distinguishes it from an unopened Vault.
+        let needsInitialLoad = loadRevision > 0 && appliedHistoryRegistry == nil
+        if applyHistoryConfiguration(registry) || needsInitialLoad { reload() }
+    }
+
+    func setEnabledAgentIDs(_ ids: Set<String>?) async throws {
+        let store = configStore ?? JSONConfigStore(
+            fileURL: URL(fileURLWithPath: CmuxConfigStore.defaultGlobalConfigPath())
+        )
+        configStore = store
+        if let ids {
+            _ = try await store.apply(.set(path: "vault.enabledAgents", value: .array(ids.sorted().map {
+                .string($0)
+            })))
+        } else {
+            _ = try await store.apply(.unset(path: "vault.enabledAgents"))
+        }
+        await refreshHistoryConfiguration()
+    }
+
+    @discardableResult
+    private func applyHistoryConfiguration(_ registry: CmuxVaultAgentRegistry, cancelLoad: Bool = true) -> Bool {
+        var agents = SessionAgent.builtInCases
+        var seen = Set(agents.map(\.rawValue))
+        for registration in registry.registrations where seen.insert(registration.id).inserted {
+            agents.append(.registered(RegisteredSessionAgent(registration: registration)))
+        }
+        for id in (registry.enabledAgentIDs ?? []).sorted() where seen.insert(id).inserted {
+            if let agent = SessionAgent(rawValue: id) { agents.append(agent) }
+        }
+        let options = agents.map { SessionIndexFilterOption(id: $0.rawValue, label: $0.displayName) }
+        if historyAgentOptions != options { historyAgentOptions = options }
+        let generationChanged = appliedHistoryRegistry.map { !$0.historyConfigurationIsCurrent } ?? false
+        let selectionChanged = enabledAgentIDs != registry.enabledAgentIDs
+        appliedHistoryRegistry = registry
+        guard selectionChanged || generationChanged else { return false }
+        enabledAgentIDs = registry.enabledAgentIDs
+        historyConfigurationRevision &+= 1
+        if cancelLoad { loadTask?.cancel() }
+        directorySnapshotGeneration &+= 1
+        invalidateDirectorySnapshots()
+        entries.removeAll { !registry.isHistoryEnabled(for: $0.agent.rawValue) }
+        return true
+    }
+
+    @discardableResult
+    func reload() -> Task<Void, Never> {
         loadTask?.cancel()
+        loadRevision &+= 1
+        let request = loadRevision
         isLoading = true
         directorySnapshotGeneration += 1
         invalidateDirectorySnapshots()
         let snapshotLoader = self.snapshotLoader
         let ampSessionRepository = self.ampSessionRepository
-        loadTask = Task { @MainActor [weak self] in
+        let registryProvider = self.registryProvider
+        let sourceReader = self.sourceReader
+        let task = Task { @MainActor [weak self] in
+            let registry = await registryProvider(nil)
+            guard let self, request == self.loadRevision else { return }
+            defer {
+                if request == self.loadRevision { self.isLoading = false }
+            }
+            guard !Task.isCancelled, registry.historyConfigurationIsCurrent else { return }
+            self.applyHistoryConfiguration(registry, cancelLoad: false)
+            let generation = self.directorySnapshotGeneration
             let scanned = await snapshotLoader.load(
-                ampSessionRepository: ampSessionRepository
+                ampSessionRepository: ampSessionRepository,
+                registry: registry,
+                sourceReader: sourceReader
             )
-            guard let self, !Task.isCancelled else { return }
+            guard !Task.isCancelled, request == self.loadRevision,
+                  generation == self.directorySnapshotGeneration,
+                  registry.historyConfigurationIsCurrent else { return }
             self.entries = scanned
-            self.isLoading = false
             self.backfillAgentOrderFromEntries()
             self.backfillDirectoryOrderFromEntries()
             self.refreshLiveSessionKeys()
         }
+        loadTask = task
+        return task
     }
 
 #if DEBUG
@@ -713,7 +836,7 @@ final class SessionIndexStore: ObservableObject {
 
     // MARK: - Directory snapshot cache
 
-    private var directorySnapshotCache: [String: DirectorySnapshot] = [:]
+    private var directorySnapshotCache: [String: (snapshot: DirectorySnapshot, registry: CmuxVaultAgentRegistry)] = [:]
     private var directorySnapshotLRU: [String] = []
     /// Bumped on every `reload()`. Snapshot builds capture this at start;
     /// if it changes before the build completes (reload raced with an
@@ -747,7 +870,11 @@ final class SessionIndexStore: ObservableObject {
         // Claude's `searchMaxFiles` cap still applies (currently 1500); if
         // anyone has more Claude sessions in a single cwd we'll bump it.
         let bigLimit = 10_000
-        let order = await Self.defaultAgentOrder(workingDirectory: cwdFilter)
+        let order = Self.agentOrder(registry: await registryProvider(cwdFilter))
+        guard generation == directorySnapshotGeneration, !Task.isCancelled,
+              order.registry.historyConfigurationIsCurrent else {
+            return DirectorySnapshot(cwd: key, entries: [], errors: [])
+        }
         let merged = await Self.loadAgents(
             order.agents,
             registry: order.registry,
@@ -756,9 +883,10 @@ final class SessionIndexStore: ObservableObject {
             cwdFilter: cwdFilter,
             offset: 0,
             limit: bigLimit,
-            errorBag: bag
+            errorBag: bag,
+            sourceReader: sourceReader
         )
-        if Task.isCancelled {
+        if Task.isCancelled || !order.registry.historyConfigurationIsCurrent {
             return DirectorySnapshot(cwd: key, entries: [], errors: [])
         }
         let snapshot = await SessionIndexEntryProjection().directorySnapshot(
@@ -767,32 +895,37 @@ final class SessionIndexStore: ObservableObject {
             noFolderScope: noFolderScope,
             errors: bag.snapshot()
         )
-        // Only cache this result if no `reload()` raced in while the
-        // build was running. Otherwise the caller gets a fresh snapshot
-        // but the cache stays invalidated; the next open will rebuild.
-        if generation == directorySnapshotGeneration {
-            storeDirectorySnapshot(key: key, snapshot: snapshot)
+        // Obsolete results must not reach an already-open popover either.
+        guard generation == directorySnapshotGeneration, !Task.isCancelled,
+              order.registry.historyConfigurationIsCurrent else {
+            return DirectorySnapshot(cwd: key, entries: [], errors: [])
         }
+        storeDirectorySnapshot(key: key, snapshot: snapshot, registry: order.registry)
         return snapshot
     }
 
     private func touchDirectorySnapshotLRU(_ key: String) -> DirectorySnapshot? {
         guard let cached = directorySnapshotCache[key] else { return nil }
+        guard cached.registry.historyConfigurationIsCurrent else {
+            directorySnapshotCache.removeValue(forKey: key)
+            directorySnapshotLRU.removeAll { $0 == key }
+            return nil
+        }
         if let idx = directorySnapshotLRU.firstIndex(of: key) {
             directorySnapshotLRU.remove(at: idx)
         }
         directorySnapshotLRU.append(key)
-        return cached
+        return cached.snapshot
     }
 
-    private func storeDirectorySnapshot(key: String, snapshot: DirectorySnapshot) {
+    private func storeDirectorySnapshot(key: String, snapshot: DirectorySnapshot, registry: CmuxVaultAgentRegistry) {
         if directorySnapshotCache[key] == nil,
            directorySnapshotCache.count >= Self.directorySnapshotCacheCapacity,
            let oldestKey = directorySnapshotLRU.first {
             directorySnapshotCache.removeValue(forKey: oldestKey)
             directorySnapshotLRU.removeFirst()
         }
-        directorySnapshotCache[key] = snapshot
+        directorySnapshotCache[key] = (snapshot, registry)
         if let idx = directorySnapshotLRU.firstIndex(of: key) {
             directorySnapshotLRU.remove(at: idx)
         }
@@ -830,13 +963,17 @@ final class SessionIndexStore: ObservableObject {
     @Sendable
 #endif
     nonisolated static func loadInitialEntries(
-        ampSessionRepository: any AmpHookSessionReading
+        ampSessionRepository: any AmpHookSessionReading,
+        registry: CmuxVaultAgentRegistry? = nil,
+        sourceReader: SourceReader? = nil
     ) async -> [SessionEntry] {
         // Initial scan errors are silently ignored — UI just shows the cached
         // entries we did get. Errors get surfaced when the user actively
         // searches via the popover.
         let bag = ErrorBag()
-        let order = await defaultAgentOrder(workingDirectory: nil)
+        let order: LoadedAgentOrder
+        if let registry { order = agentOrder(registry: registry) }
+        else { order = await defaultAgentOrder(workingDirectory: nil) }
         let combined = await loadAgents(
             order.agents,
             registry: order.registry,
@@ -845,8 +982,10 @@ final class SessionIndexStore: ObservableObject {
             cwdFilter: nil,
             offset: 0,
             limit: perAgentLimit,
-            errorBag: bag
+            errorBag: bag,
+            sourceReader: sourceReader
         )
+        guard !Task.isCancelled, order.registry.historyConfigurationIsCurrent else { return [] }
         return combined.sorted { $0.modified > $1.modified }
     }
 
@@ -1066,6 +1205,7 @@ final class SessionIndexStore: ObservableObject {
     /// bytes of a transcript, for a session named between the head and tail
     /// windows. Searches the mapped file backwards for the record marker, so
     /// a name near the end costs one short scan; nil when there is none.
+
     /// Every lookup stays inside the window, so a line that starts before it
     /// cannot pull the rest of the file in.
     nonisolated static func lastClaudeCustomTitle(url: URL) -> String? {
@@ -1421,6 +1561,7 @@ final class SessionIndexStore: ObservableObject {
         offset: Int,
         limit: Int
     ) async -> SearchOutcome {
+        let generation = historyConfigurationRevision
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let parsedQuery = VaultSessionSearchQuery.parse(trimmed)
         var seenNeedles: Set<String> = []
@@ -1452,19 +1593,40 @@ final class SessionIndexStore: ObservableObject {
             return SearchOutcome(entries: [], errors: [])
         }
 
+        let cwdFilter: String?
+        switch scope {
+        case .agent(let agent):
+            switch agent {
+            case .registered, .grok:
+                let scopedCwd = currentDirectory?.trimmingCharacters(in: .whitespacesAndNewlines)
+                cwdFilter = scopedCwd?.isEmpty == false ? scopedCwd : nil
+            default:
+                cwdFilter = nil
+            }
+        case .directory(let path):
+            cwdFilter = path?.isEmpty == false ? path : nil
+        }
+        let registry = await registryProvider(cwdFilter)
+        guard !Task.isCancelled, generation == historyConfigurationRevision,
+              registry.historyConfigurationIsCurrent else {
+            return SearchOutcome(entries: [], errors: [])
+        }
         var resultIDsByTerm: [Set<String>] = []
         var entriesByID: [String: SessionEntry] = [:]
         for needle in needles {
-            guard !Task.isCancelled else {
+            guard !Task.isCancelled, registry.historyConfigurationIsCurrent else {
                 return SearchOutcome(entries: [], errors: [])
             }
             let termEntries = await searchSessionsForNeedle(
                 needle,
                 scope: scope,
                 limit: target,
-                errorBag: bag
+                errorBag: bag,
+                registry: registry,
+                cwdFilter: cwdFilter
             )
-            guard !Task.isCancelled else {
+            guard !Task.isCancelled, generation == historyConfigurationRevision,
+                  registry.historyConfigurationIsCurrent else {
                 return SearchOutcome(entries: [], errors: [])
             }
             var termIDs: Set<String> = []
@@ -1487,6 +1649,10 @@ final class SessionIndexStore: ObservableObject {
                 if $0.modified != $1.modified { return $0.modified > $1.modified }
                 return $0.id < $1.id
             }
+        guard !Task.isCancelled, generation == historyConfigurationRevision,
+              registry.historyConfigurationIsCurrent else {
+            return SearchOutcome(entries: [], errors: [])
+        }
         return SearchOutcome(
             entries: Array(entries.dropFirst(safeOffset).prefix(safeLimit)),
             errors: Array(Set(bag.snapshot())).sorted()
@@ -1497,37 +1663,25 @@ final class SessionIndexStore: ObservableObject {
         _ needle: String,
         scope: SearchScope,
         limit: Int,
-        errorBag bag: ErrorBag
+        errorBag bag: ErrorBag,
+        registry: CmuxVaultAgentRegistry,
+        cwdFilter: String?
     ) async -> [SessionEntry] {
         switch scope {
         case .agent(let a):
-            let registry: CmuxVaultAgentRegistry
-            let cwdFilter: String?
-            if case .registered = a {
-                let scopedCwd = currentDirectory?.trimmingCharacters(in: .whitespacesAndNewlines)
-                cwdFilter = scopedCwd?.isEmpty == false ? scopedCwd : nil
-                registry = await Self.vaultAgentRegistry(workingDirectory: cwdFilter)
-            } else if a == .grok {
-                let scopedCwd = currentDirectory?.trimmingCharacters(in: .whitespacesAndNewlines)
-                cwdFilter = scopedCwd?.isEmpty == false ? scopedCwd : nil
-                registry = await Self.vaultAgentRegistry(
-                    workingDirectory: cwdFilter
-                )
-            } else {
-                cwdFilter = nil
-                registry = CmuxVaultAgentRegistry(registrations: [])
-            }
+            guard !Task.isCancelled, registry.historyConfigurationIsCurrent else { return [] }
             return await Self.searchAgent(
                 needle: needle, agent: a, cwdFilter: cwdFilter,
                 offset: 0, limit: limit, errorBag: bag, registry: registry,
-                ampSessionRepository: ampSessionRepository
+                ampSessionRepository: ampSessionRepository, sourceReader: sourceReader
             )
         case .directory(let path):
             let noFolderScope = (path == nil) || ((path ?? "").isEmpty)
-            let cwdFilter = noFolderScope ? nil : path
+            let cwdFilter = noFolderScope ? nil : cwdFilter
             // Multi-agent merge: fetch the bounded union per agent so the
             // caller can intersect terms and apply one stable final page.
-            let order = await Self.defaultAgentOrder(workingDirectory: cwdFilter)
+            let order = Self.agentOrder(registry: registry)
+            guard !Task.isCancelled, registry.historyConfigurationIsCurrent else { return [] }
             let merged = await Self.loadAgents(
                 order.agents,
                 registry: order.registry,
@@ -1536,7 +1690,8 @@ final class SessionIndexStore: ObservableObject {
                 cwdFilter: cwdFilter,
                 offset: 0,
                 limit: limit,
-                errorBag: bag
+                errorBag: bag,
+                sourceReader: sourceReader
             )
             return await SessionIndexEntryProjection().page(
                 entries: merged,
@@ -1555,10 +1710,11 @@ final class SessionIndexStore: ObservableObject {
         cwdFilter: String?,
         offset: Int,
         limit: Int,
-        errorBag: ErrorBag
+        errorBag: ErrorBag,
+        sourceReader: SourceReader? = nil
     ) async -> [SessionEntry] {
-        await withTaskGroup(of: [SessionEntry].self) { group in
-            for agent in agents {
+        let merged = await withTaskGroup(of: [SessionEntry].self) { group in
+            for agent in agents where registry.isHistoryEnabled(for: agent.rawValue) {
                 group.addTask {
                     await timedAgent(
                         needle: needle,
@@ -1568,7 +1724,8 @@ final class SessionIndexStore: ObservableObject {
                         limit: limit,
                         errorBag: errorBag,
                         registry: registry,
-                        ampSessionRepository: ampSessionRepository
+                        ampSessionRepository: ampSessionRepository,
+                        sourceReader: sourceReader
                     )
                 }
             }
@@ -1578,13 +1735,16 @@ final class SessionIndexStore: ObservableObject {
             }
             return merged
         }
+        guard !Task.isCancelled, registry.historyConfigurationIsCurrent else { return [] }
+        return merged
     }
 
     nonisolated private static func timedAgent(
         needle: String, agent: SessionAgent, cwdFilter: String?,
         offset: Int, limit: Int, errorBag: ErrorBag,
         registry: CmuxVaultAgentRegistry,
-        ampSessionRepository: any AmpHookSessionReading
+        ampSessionRepository: any AmpHookSessionReading,
+        sourceReader: SourceReader?
     ) async -> [SessionEntry] {
         #if DEBUG
         let start = ProcessInfo.processInfo.systemUptime
@@ -1596,7 +1756,7 @@ final class SessionIndexStore: ObservableObject {
             limit: limit,
             errorBag: errorBag,
             registry: registry,
-            ampSessionRepository: ampSessionRepository
+            ampSessionRepository: ampSessionRepository, sourceReader: sourceReader
         )
         let ms = (ProcessInfo.processInfo.systemUptime - start) * 1000
         cmuxDebugLog("session.search.agent agent=\(agent.rawValue) ms=\(String(format: "%.0f", ms)) results=\(result.count) cwd=\(cwdFilter?.suffix(40) ?? "nil")")
@@ -1610,7 +1770,7 @@ final class SessionIndexStore: ObservableObject {
             limit: limit,
             errorBag: errorBag,
             registry: registry,
-            ampSessionRepository: ampSessionRepository
+            ampSessionRepository: ampSessionRepository, sourceReader: sourceReader
         )
         #endif
     }
@@ -1624,36 +1784,48 @@ final class SessionIndexStore: ObservableObject {
         needle: String, agent: SessionAgent, cwdFilter: String?,
         offset: Int, limit: Int, errorBag: ErrorBag,
         registry: CmuxVaultAgentRegistry,
-        ampSessionRepository: any AmpHookSessionReading
+        ampSessionRepository: any AmpHookSessionReading,
+        sourceReader: SourceReader? = nil
     ) async -> [SessionEntry] {
-        switch agent {
-        case .claude: return await loadClaudeEntries(needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit)
-        case .codex: return await loadCodexEntries(needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit, errorBag: errorBag)
-        case .grok:
-            return await loadGrokEntries(
-                registration: registry.registration(id: "grok") ?? .builtInGrok,
-                needle: needle,
-                cwdFilter: cwdFilter,
-                offset: offset,
-                limit: limit
-            )
-        case .opencode: return loadOpenCodeEntries(needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit, errorBag: errorBag)
-        case .rovodev: return loadRovoDevEntries(needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit, errorBag: errorBag)
-        case .hermesAgent: return loadHermesAgentEntries(needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit, errorBag: errorBag)
-        case .registered(let agent):
-            guard let registration = registry.registration(id: agent.id) else {
-                return []
+        guard !Task.isCancelled, registry.historyConfigurationIsCurrent,
+              registry.isHistoryEnabled(for: agent.rawValue) else { return [] }
+        let entries: [SessionEntry]
+        if let sourceReader {
+            entries = await sourceReader(SourceRequest(
+                agent: agent, needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit
+            ))
+        } else {
+            switch agent {
+            case .claude: entries = await loadClaudeEntries(needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit)
+            case .codex: entries = await loadCodexEntries(needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit, errorBag: errorBag, registry: registry)
+            case .grok:
+                entries = await loadGrokEntries(
+                    registration: registry.registration(id: "grok") ?? .builtInGrok,
+                    needle: needle,
+                    cwdFilter: cwdFilter,
+                    offset: offset,
+                    limit: limit
+                )
+            case .opencode: entries = loadOpenCodeEntries(needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit, errorBag: errorBag)
+            case .rovodev: entries = loadRovoDevEntries(needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit, errorBag: errorBag)
+            case .hermesAgent: entries = loadHermesAgentEntries(needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit, errorBag: errorBag)
+            case .registered(let agent):
+                guard let registration = registry.registration(id: agent.id) else {
+                    return []
+                }
+                entries = await loadRegisteredAgentEntries(
+                    registration: registration,
+                    needle: needle,
+                    cwdFilter: cwdFilter,
+                    offset: offset,
+                    limit: limit,
+                    errorBag: errorBag,
+                    ampSessionRepository: ampSessionRepository
+                )
             }
-            return await loadRegisteredAgentEntries(
-                registration: registration,
-                needle: needle,
-                cwdFilter: cwdFilter,
-                offset: offset,
-                limit: limit,
-                errorBag: errorBag,
-                ampSessionRepository: ampSessionRepository
-            )
         }
+        guard !Task.isCancelled, registry.historyConfigurationIsCurrent else { return [] }
+        return entries
     }
 
     /// Path to `rg` (ripgrep), if installed. nil when not found — the search
@@ -1941,7 +2113,8 @@ final class SessionIndexStore: ObservableObject {
     /// Fallback (DB missing): the file-scan path below.
     nonisolated private static func loadCodexEntries(
         needle: String, cwdFilter: String?, offset: Int, limit: Int,
-        errorBag: ErrorBag
+        errorBag: ErrorBag,
+        registry: CmuxVaultAgentRegistry
     ) async -> [SessionEntry] {
         if let viaSQL = await loadCodexEntriesViaSQL(
             needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit,
@@ -1949,6 +2122,7 @@ final class SessionIndexStore: ObservableObject {
         ) {
             return viaSQL
         }
+        guard !Task.isCancelled, registry.historyConfigurationIsCurrent else { return [] }
         return await loadCodexEntriesFromDisk(
             needle: needle, cwdFilter: cwdFilter, offset: offset, limit: limit
         )
@@ -2152,6 +2326,7 @@ final class SessionIndexStore: ObservableObject {
                 }
                 messageCount = Int(sqlite3_column_int64(stmt, 6))
             }
+
             results.append(SessionEntry(
                 id: "opencode:" + sid,
                 agent: .opencode,

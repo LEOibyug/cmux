@@ -14,9 +14,6 @@ extension CMUXCLI {
           open <name> [--cwd <dir>] [--focus <true|false>]
           delete <name>
 
-        \(Self.workflowText("cli.workflow.headings.starters", "Discover workflow starters:"))
-          cmux docs workflows
-          cmux docs workflows --json
 
         Examples:
           cmux layout save dev --overwrite

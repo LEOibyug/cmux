@@ -1,4 +1,4 @@
-import CmuxCloudTui
+import CmuxTui
 import CmuxTerminalSizing
 import Foundation
 import Testing
@@ -22,7 +22,7 @@ import Testing
             "by": ["user_id": "u_maya", "display_name": "Maya", "device_name": "Mac Studio"],
             "view": "mobile:p1",
         ])
-        let frame = try #require(CloudTuiManualIOFrameDecoder().decode(line))
+        let frame = try #require(TuiManualIOFrameDecoder().decode(line))
         guard case let .detached(surfaceID, reason, view, _) = frame else {
             Issue.record("expected a detached frame, got \(frame)")
             return
@@ -35,7 +35,7 @@ import Testing
 
     @Test func legacyDetachedEventStillMeansNetwork() throws {
         let line = try JSONSerialization.data(withJSONObject: ["event": "detached", "surface": 17])
-        let frame = try #require(CloudTuiManualIOFrameDecoder().decode(line))
+        let frame = try #require(TuiManualIOFrameDecoder().decode(line))
         #expect(frame == .detached(surfaceID: 17, reason: .network, view: nil))
     }
 
@@ -50,7 +50,7 @@ import Testing
             ]],
         ]
         let event = try JSONSerialization.data(withJSONObject: ["event": "size-state", "surface": 17, "state": state])
-        guard case let .sizeState(_, decoded) = try #require(CloudTuiManualIOFrameDecoder().decode(event)) else {
+        guard case let .sizeState(_, decoded) = try #require(TuiManualIOFrameDecoder().decode(event)) else {
             Issue.record("expected a size-state frame")
             return
         }
@@ -60,7 +60,7 @@ import Testing
         let response = try JSONSerialization.data(withJSONObject: [
             "id": 4, "ok": true, "data": ["lease": "l1", "participant": "c1"],
         ])
-        guard case let .response(_, _, lease, _, _, _, _, sizing) = try #require(CloudTuiManualIOFrameDecoder().decode(response)) else {
+        guard case let .response(_, _, lease, _, _, _, _, sizing) = try #require(TuiManualIOFrameDecoder().decode(response)) else {
             Issue.record("expected a response frame")
             return
         }
@@ -69,7 +69,7 @@ import Testing
     }
 
     @Test func relayViewCommandCarriesIdentityAndViewport() throws {
-        let command = try #require(CloudTuiManualIOCommand().resizeRelayView(
+        let command = try #require(TuiManualIOCommand().resizeRelayView(
             surfaceID: 17,
             view: "mobile:p1",
             identity: TerminalSizingParticipant(
@@ -90,11 +90,11 @@ import Testing
 
     @MainActor
     private func attachedSession(
-        fixture: CloudManualMirrorSocketFixture,
+        fixture: TuiManualMirrorSocketFixture,
         reconnects: SharedSizingReconnectCounter,
         capabilities: [String]
-    ) async throws -> CloudTuiManualMirrorSession {
-        let session = CloudTuiManualMirrorSession(
+    ) async throws -> TuiManualMirrorSession {
+        let session = TuiManualMirrorSession(
             machineID: "machine",
             terminalID: Self.terminalID,
             remoteSurfaceID: 17,
@@ -115,11 +115,11 @@ import Testing
 
     @Test @MainActor
     func disconnectedByDetachDoesNotReconnect() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         let reconnects = SharedSizingReconnectCounter()
         let session = try await attachedSession(
-            fixture: fixture, reconnects: reconnects, capabilities: [CloudTuiManualIOCommand().sharedSizingCapability]
+            fixture: fixture, reconnects: reconnects, capabilities: [TuiManualIOCommand().sharedSizingCapability]
         )
         defer { session.stop() }
         #expect(session.sizingRelay.selfParticipantID == "c1")
@@ -138,11 +138,11 @@ import Testing
 
     @Test @MainActor
     func networkDetachStillReconnects() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         let reconnects = SharedSizingReconnectCounter()
         let session = try await attachedSession(
-            fixture: fixture, reconnects: reconnects, capabilities: [CloudTuiManualIOCommand().sharedSizingCapability]
+            fixture: fixture, reconnects: reconnects, capabilities: [TuiManualIOCommand().sharedSizingCapability]
         )
         defer { session.stop() }
 
@@ -156,11 +156,11 @@ import Testing
 
     @Test @MainActor
     func phoneDetachKeepsTheMirrorAttached() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         let reconnects = SharedSizingReconnectCounter()
         let session = try await attachedSession(
-            fixture: fixture, reconnects: reconnects, capabilities: [CloudTuiManualIOCommand().sharedSizingCapability]
+            fixture: fixture, reconnects: reconnects, capabilities: [TuiManualIOCommand().sharedSizingCapability]
         )
         defer { session.stop() }
         session.relayPhones([

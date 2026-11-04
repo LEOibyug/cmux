@@ -154,7 +154,7 @@ struct RemoteSessionSSHDestinationArgumentTests {
                 cloudNotificationClearSurfaceInvalid: ""
             ),
             strings: RemoteSessionStrings(
-                connectedVMNoProxyFormat: "%@",
+                connectedWithoutDaemonFormat: "%@",
                 suspendedDetailFormat: "%@",
                 reverseRelayUnavailableRetrying: "",
                 reverseRelayPortUnavailableRetrying: "",

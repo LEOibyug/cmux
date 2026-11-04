@@ -16,12 +16,8 @@ public enum PanelType: String, Codable, CaseIterable, Sendable {
     case project
     case extensionBrowser
     case workspaceTodo
-    case coderouterGuide
     case notifications
-    case cloudVMLoading
-    case mobilePairing
-    case accountSignIn
-    case cloudVPNSetup
+    case remoteLoading
     case chief
 
     public init(from decoder: Decoder) throws {
@@ -51,28 +47,8 @@ public enum PanelType: String, Codable, CaseIterable, Sendable {
             self = .workspaceTodo
             return
         }
-        if rawValue.lowercased() == Self.coderouterGuide.rawValue.lowercased() {
-            self = .coderouterGuide
-            return
-        }
         if rawValue.lowercased() == Self.notifications.rawValue.lowercased() {
             self = .notifications
-            return
-        }
-        if rawValue.lowercased() == Self.cloudVMLoading.rawValue.lowercased() {
-            self = .cloudVMLoading
-            return
-        }
-        if rawValue.lowercased() == Self.mobilePairing.rawValue.lowercased() {
-            self = .mobilePairing
-            return
-        }
-        if rawValue.lowercased() == Self.accountSignIn.rawValue.lowercased() {
-            self = .accountSignIn
-            return
-        }
-        if rawValue.lowercased() == Self.cloudVPNSetup.rawValue.lowercased() {
-            self = .cloudVPNSetup
             return
         }
         if rawValue.lowercased() == Self.chief.rawValue.lowercased() {

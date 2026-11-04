@@ -8,8 +8,6 @@ public struct TerminalSharingSnapshot: Hashable, Sendable {
     public var selfParticipantID: String?
     /// Set while this Mac view is detached and must not reconnect by itself.
     public var detachment: TerminalSharingDetachment?
-    /// Whether this is a Cloud terminal (cmux-tui host) rather than a local one.
-    public var isCloud: Bool
 
     /// Creates a snapshot.
     ///
@@ -17,17 +15,14 @@ public struct TerminalSharingSnapshot: Hashable, Sendable {
     ///   - state: the host's published state.
     ///   - selfParticipantID: this view's participant id.
     ///   - detachment: a detach this view must show.
-    ///   - isCloud: whether a cmux-tui daemon hosts the terminal.
     public init(
         state: TerminalSizingState,
         selfParticipantID: String?,
-        detachment: TerminalSharingDetachment? = nil,
-        isCloud: Bool
+        detachment: TerminalSharingDetachment? = nil
     ) {
         self.state = state
         self.selfParticipantID = selfParticipantID
         self.detachment = detachment
-        self.isCloud = isCloud
     }
 
     /// This view's row, when attached.

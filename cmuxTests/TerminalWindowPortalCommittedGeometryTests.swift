@@ -1,6 +1,5 @@
 import AppKit
 import CMUXAgentLaunch
-import CmuxMobileHost
 import CmuxTerminal
 import CmuxTerminalCore
 import GhosttyKit
@@ -145,8 +144,6 @@ struct TerminalWindowPortalCommittedGeometryTests {
         let service = AgentChatTranscriptService(
             registry: AgentChatSessionRegistry(hookStore: AgentChatHookSessionStore(homeDirectory: home)),
             resolver: AgentChatTranscriptResolver(homeDirectory: home, environment: [:]),
-            hasEventSubscribers: { false },
-            emitEventPayload: { _ in },
             // No transcript scan: the session is recognized in one hop.
             fallbackTranscriptPathResolver: { _, _ in nil }
         )

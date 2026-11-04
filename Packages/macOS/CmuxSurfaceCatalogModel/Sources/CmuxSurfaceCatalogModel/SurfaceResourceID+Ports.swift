@@ -72,7 +72,7 @@ extension CmuxTuiSnapshotParser {
         fromSocketListing text: String,
         privateAddress: String?
     ) -> [Int] {
-        CloudPortScanResult(socketListing: text)?.ports ?? []
+        TuiPortScanResult(socketListing: text)?.ports ?? []
     }
 }
 
@@ -93,8 +93,6 @@ extension SurfaceResourceID {
 }
 
 extension SurfaceResourceID {
-    /// The key every provider uses for a machine's one VNC display (T10 makes this a list).
-    public static let desktopDisplayKey = "display:1"
 
     /// The key for the browser that shows a forwarded HTTP port.
     public static func portKey(_ port: Int) -> String { "port:\(port)" }

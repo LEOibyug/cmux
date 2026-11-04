@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -33,20 +33,20 @@ struct CloudEqualCursorConflictRecoveryTests {
     }
 
     private func makeProvider() -> CmuxTuiSurfaceProvider {
-        let summary = VMSummary(id: "equal-cursor", provider: "freestyle", status: "running", image: "cmux-devbox", createdAt: 0, base: nil)
+        let host = TuiTestHost(destination: "equal-cursor.example.test")
         return CmuxTuiSurfaceProvider(
-            summary: summary,
-            links: CloudMachineLinkManager(clientURL: nil, hostThemeColors: { nil }),
+            summary: host.summary,
+            links: host.links(),
             catalog: catalog
         )
     }
 
-    private func state(_ provider: CmuxTuiSurfaceProvider, _ name: String, revision: Int = 3) throws -> CloudVMState {
+    private func state(_ provider: CmuxTuiSurfaceProvider, _ name: String, revision: Int = 3) throws -> TuiState {
         try #require(CmuxTuiSnapshotParser.state(fromSnapshot: snapshot(workspaceName: name, revision: revision), machine: provider.machine))
     }
 
     private func name(_ provider: CmuxTuiSurfaceProvider) -> String? {
-        provider.cloudState?.lookupIndex.workspace(id: "ws_main")?.name
+        provider.tuiState?.lookupIndex.workspace(id: "ws_main")?.name
     }
 
     @Test("The first full-refresh conflict keeps the graph and arms recovery; a second adopts the fresh snapshot")
@@ -116,7 +116,7 @@ struct CloudEqualCursorConflictRecoveryTests {
         #expect(provider.installSnapshotIfNewer(try state(provider, "Applied")))
         #expect(!provider.installSnapshotIfNewer(try state(provider, "Daemon"), requestVersion: 1))
         #expect(provider.equalCursorConflict != nil)
-        provider.suspendForFeatureFlag()
+        provider.retireTransport()
         #expect(provider.equalCursorConflict == nil)
     }
 

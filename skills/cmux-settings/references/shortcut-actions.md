@@ -1,6 +1,6 @@
 # Keyboard shortcut action ids
 
-Every action id in `web/data/cmux.schema.json`
+Every action id in `schemas/cmux.schema.json`
 (`shortcuts.bindings.propertyNames.enum`). `tests/test_cmux_settings_supported_paths.py`
 fails if this list and the schema disagree, so an id missing here is a bug in this file.
 
@@ -17,10 +17,8 @@ Values for `shortcuts.bindings.<action>`:
 - `shortcuts.bindings.newWindow`
 - `shortcuts.bindings.openFolder`
 - `shortcuts.bindings.openSettings`
-- `shortcuts.bindings.openTeamPicker`
 - `shortcuts.bindings.quit`
 - `shortcuts.bindings.reloadConfiguration`
-- `shortcuts.bindings.sendFeedback`
 - `shortcuts.bindings.showHideAllWindows`
 - `shortcuts.bindings.toggleFullScreen`
 
@@ -44,8 +42,6 @@ Values for `shortcuts.bindings.<action>`:
 - `shortcuts.bindings.markWorkspaceDone`
 - `shortcuts.bindings.moveWorkspaceDown`
 - `shortcuts.bindings.moveWorkspaceUp`
-- `shortcuts.bindings.newCloudMachine`
-- `shortcuts.bindings.newCloudWorkspace`
 - `shortcuts.bindings.newWorkspaceGroup`
 - `shortcuts.bindings.renameWorkspace`
 - `shortcuts.bindings.reopenClosedBrowserPanel`
@@ -121,7 +117,6 @@ Values for `shortcuts.bindings.<action>`:
 
 ## Command palette
 
-- `shortcuts.bindings.agentInbox`
 - `shortcuts.bindings.commandPalette`
 - `shortcuts.bindings.commandPaletteNext`
 - `shortcuts.bindings.commandPalettePrevious`
@@ -151,7 +146,6 @@ Values for `shortcuts.bindings.<action>`:
 - `shortcuts.bindings.switchRightSidebarToFeed`
 - `shortcuts.bindings.switchRightSidebarToFiles`
 - `shortcuts.bindings.switchRightSidebarToFind`
-- `shortcuts.bindings.switchRightSidebarToMachines`
 - `shortcuts.bindings.switchRightSidebarToSessions`
 - `shortcuts.bindings.toggleSidebar`
 

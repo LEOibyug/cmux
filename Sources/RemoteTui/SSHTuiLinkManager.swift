@@ -1,29 +1,28 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import Foundation
 import CmuxCore
 
 /// Owns one SSH carrier and shares it between native projections and control requests.
 actor SSHTuiLinkManager: RemoteTuiLinkManaging {
-    nonisolated let operations: CloudOperationRecorder? = nil
     /// The current connection is internal for app-host tests that verify an
     /// idle carrier adopts a replacement authentication agent.
     var connection: SSHTuiConnection
     private let clientURL: URL
-    private let paths: CloudTuiClientPaths
+    private let paths: TuiClientPaths
     private let isEnabled: @Sendable () -> Bool
     /// Read at each carrier start, so an Integrations toggle applies on the next connect.
     private let agentHookProviders: @Sendable () -> [String]
-    private var current: CloudMachineLink?
-    private var connecting: Task<CloudMachineLink.Connected, Error>?
+    private var current: RemoteMachineLink?
+    private var connecting: Task<RemoteMachineLink.Connected, Error>?
     private var checking: Task<Void, Error>?
-    private var browser: CloudBrowserProxyProcess?
-    private var browserStarting: Task<CloudBrowserProxyEndpoint, Error>?
+    private var browser: RemoteBrowserProxyProcess?
+    private var browserStarting: Task<RemoteBrowserProxyEndpoint, Error>?
     /// Browser forwards keyed by the loopback port they reach on the SSH host.
     private var loopbackForwards: [Int: LoopbackForwardProcess] = [:]
     private var loopbackForwardStarts: [Int: Task<UInt16, Error>] = [:]
 
-    init(connection: SSHTuiConnection, clientURL: URL, paths: CloudTuiClientPaths, isEnabled: @escaping @Sendable () -> Bool,
+    init(connection: SSHTuiConnection, clientURL: URL, paths: TuiClientPaths, isEnabled: @escaping @Sendable () -> Bool,
          agentHookProviders: @escaping @Sendable () -> [String] = { [] }) {
         self.connection = connection
         self.clientURL = clientURL
@@ -32,7 +31,7 @@ actor SSHTuiLinkManager: RemoteTuiLinkManaging {
         self.agentHookProviders = agentHookProviders
     }
 
-    func connected(machineID: String) async throws -> CloudMachineLink.Connected {
+    func connected(machineID: String) async throws -> RemoteMachineLink.Connected {
         try await connected(machineID: machineID, preflight: false)
     }
 
@@ -40,7 +39,7 @@ actor SSHTuiLinkManager: RemoteTuiLinkManaging {
     /// starts, so an explicit open reports OpenSSH's failure in seconds like
     /// `ssh`. Restores and reconnects skip it: the carrier's own retries wait
     /// for a host or an agent that comes back, with one login per link.
-    func connected(machineID: String, preflight: Bool, upgrade: Bool = false) async throws -> CloudMachineLink.Connected {
+    func connected(machineID: String, preflight: Bool) async throws -> RemoteMachineLink.Connected {
         guard machineID == connection.id else { throw CancellationError() }
         guard isEnabled() else { await disconnect(); throw CancellationError() }
         if let current, await current.isConnected, let ready = await current.connected { return ready }
@@ -66,15 +65,12 @@ actor SSHTuiLinkManager: RemoteTuiLinkManaging {
             if let failure { throw failure }
         }
         if let connecting { return try await connecting.value }
-        let link = CloudMachineLink(machineID: machineID, clientURL: clientURL, paths: paths)
+        let link = RemoteMachineLink(machineID: machineID, clientURL: clientURL, paths: paths)
         current = link
         var carrier = connection
         carrier.agentHookProviders = agentHookProviders()
         let attempt = Task { [carrier] in
-            try await link.connect(route: "ssh://" + connection.configuration.destination,
-                                   session: connection.session, carrier: true,
-                                   timeout: deadline - ContinuousClock.now, ssh: carrier,
-                                   sshUpgrade: upgrade)
+            try await link.connect(ssh: carrier, timeout: deadline - ContinuousClock.now)
         }
         connecting = attempt
         defer { if connecting == attempt { connecting = nil } }
@@ -117,11 +113,11 @@ actor SSHTuiLinkManager: RemoteTuiLinkManaging {
         connection = replacement
     }
 
-    func link(machineID: String) -> CloudMachineLink? {
+    func link(machineID: String) -> RemoteMachineLink? {
         machineID == connection.id ? current : nil
     }
 
-    func status(machineID: String) async -> CloudMachineLinkManager.LinkStatus? {
+    func status(machineID: String) async -> RemoteMachineLink.Status? {
         guard machineID == connection.id, let current else { return nil }
         let state = await current.state
         let error = await current.lastError
@@ -130,19 +126,17 @@ actor SSHTuiLinkManager: RemoteTuiLinkManaging {
 
     func privateAddresses(for machineID: String) -> [String] { ["127.0.0.1"] }
 
-    /// The SSH carrier always forwards over loopback, so metadata never moves its route.
-    func setPrivateAddresses(_ addresses: [String], for machineID: String) {}
 
-    func browserProxy(machineID: String, remoteNetwork: Bool = false) async throws -> CloudBrowserProxyEndpoint {
+    func browserProxy(machineID: String, remoteNetwork: Bool = false) async throws -> RemoteBrowserProxyEndpoint {
         guard machineID == connection.id else { throw CancellationError() }
         _ = try await connected(machineID: machineID)
         if let browser, let ready = await browser.readyEndpoint { return ready }
         if let browserStarting { return try await browserStarting.value }
-        let proxy = CloudBrowserProxyProcess(addresses: ["127.0.0.1", "localhost", "::1"])
+        let proxy = RemoteBrowserProxyProcess(addresses: ["127.0.0.1", "localhost", "::1"])
         browser = proxy
         let task = Task {
             try await proxy.start(client: clientURL, arguments: connection.browserArguments(stateDirectory: paths.stateDir.path),
-                                  environment: connection.sshProcessEnvironment, releaseHub: {})
+                                  environment: connection.sshProcessEnvironment)
         }
         browserStarting = task
         defer { if browserStarting == task { browserStarting = nil } }
@@ -200,9 +194,9 @@ actor SSHTuiLinkManager: RemoteTuiLinkManaging {
 
     /// Waits for the shared carrier without allowing one canceled route to
     /// cancel the connection used by other projections.
-    private func connectedCancellable(machineID: String) async throws -> CloudMachineLink.Connected {
+    private func connectedCancellable(machineID: String) async throws -> RemoteMachineLink.Connected {
         try Task.checkCancellation()
-        let result = CloudLinkFirstValue<Result<CloudMachineLink.Connected, any Error>>()
+        let result = RemoteLinkFirstValue<Result<RemoteMachineLink.Connected, any Error>>()
         let waiter = Task { [self] in
             do {
                 result.resolve(.success(try await connected(machineID: machineID)))
@@ -223,7 +217,7 @@ actor SSHTuiLinkManager: RemoteTuiLinkManaging {
 
     /// The carrier's own route and SSH options, reaching one loopback port.
     private func loopbackForwardArguments(port: Int) -> [String] {
-        var arguments = connection.arguments(stateDirectory: paths.stateDir.path, deviceName: CloudTuiClientPaths.deviceName())
+        var arguments = connection.arguments(stateDirectory: paths.stateDir.path, deviceName: TuiClientPaths.deviceName())
         arguments[1] = "forward"
         arguments[2] = "ssh://" + connection.configuration.destination
         arguments.removeAll { ["--headless", "--json"].contains($0) }
@@ -259,7 +253,7 @@ extension SSHTuiLinkManager {
     /// Mac that carries browser traffic to one loopback port on the SSH host.
     actor LoopbackForwardProcess {
         private var process: Process?
-        private var exit: CloudLinkFirstValue<Int32>?
+        private var exit: RemoteLinkFirstValue<Int32>?
         private var localPort: UInt16?
         private var stopped = false
         private var onExit: (@Sendable () -> Void)?
@@ -280,11 +274,11 @@ extension SSHTuiLinkManager {
             let child = Process()
             let output = Pipe()
             let errors = Pipe()
-            let ended = CloudLinkFirstValue<Int32>()
-            let ready = CloudLinkFirstValue<UInt16>()
+            let ended = RemoteLinkFirstValue<Int32>()
+            let ready = RemoteLinkFirstValue<UInt16>()
             child.executableURL = client
             child.arguments = arguments
-            child.environment = CloudBrowserProxyProcess.sanitizedEnvironment(environment ?? ProcessInfo.processInfo.environment)
+            child.environment = RemoteBrowserProxyProcess.sanitizedEnvironment(environment ?? ProcessInfo.processInfo.environment)
             child.standardInput = FileHandle.nullDevice
             child.standardOutput = output
             child.standardError = errors
@@ -300,7 +294,7 @@ extension SSHTuiLinkManager {
             process = child
             exit = ended
 
-            let lines = CloudLinkPipe.lines(from: output.fileHandleForReading)
+            let lines = RemoteLinkPipe.lines(from: output.fileHandleForReading)
             Task {
                 for await line in lines {
                     if let port = Self.listenerPort(fromURL: line) { ready.resolve(port) }
@@ -308,7 +302,7 @@ extension SSHTuiLinkManager {
                 ready.resolve(nil)
             }
             // Drain stderr so a reconnecting SSH child cannot block on its pipe.
-            let errorLines = CloudLinkPipe.lines(from: errors.fileHandleForReading)
+            let errorLines = RemoteLinkPipe.lines(from: errors.fileHandleForReading)
             Task { for await _ in errorLines {} }
             Task { [weak self] in
                 _ = await ended.result
@@ -320,14 +314,14 @@ extension SSHTuiLinkManager {
                     group.addTask { await ready.result }
                     group.addTask { [self] in
                         try await self.clock.sleep(for: .seconds(60))
-                        throw CloudMachineLink.LinkError.timedOut
+                        throw RemoteMachineLink.LinkError.timedOut
                     }
                     defer { group.cancelAll() }
                     return try await group.next() ?? nil
                 }
                 try Task.checkCancellation()
                 guard !stopped, child.isRunning, let port else {
-                    throw CloudMachineLink.LinkError.failureMessage(String(
+                    throw RemoteMachineLink.LinkError.failureMessage(String(
                         localized: "ssh.tui.browserForward.ended",
                         defaultValue: "The SSH port forward ended before it was ready. Reload to reconnect."
                     ))

@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -9,7 +9,7 @@ import Testing
 #endif
 
 @MainActor
-final class CloudPlacementTestProvider: SurfaceProvider, SurfacePlacementSyncing, SurfaceAgentNaming {
+final class TuiPlacementTestProvider: SurfaceProvider, SurfacePlacementSyncing, SurfaceAgentNaming {
     let machine: SurfaceMachineID
     var info: SurfaceMachineInfo
     var moved: [(tab: String, workspace: String)] = []
@@ -25,24 +25,24 @@ final class CloudPlacementTestProvider: SurfaceProvider, SurfacePlacementSyncing
     /// configures it, before the catalog operation that created the pane ends.
     var registerDuringMaterialization: (@MainActor (SurfaceProjection) -> Void)?
     var refreshCount = 0
-    var moveCursor: CloudVMCursor?
+    var moveCursor: TuiCursor?
     /// The daemon cursor a projection reply carries. The real reply always has one.
-    var projectCursor: CloudVMCursor?
+    var projectCursor: TuiCursor?
     var workspaceRenames: [String] = []
     var tabRenames: [String] = []
     /// Every materialization and the reservation the catalog handed it.
-    var adoptions: [(resource: SurfaceResourceID, reservation: CloudTerminalPaneReservation?)] = []
+    var adoptions: [(resource: SurfaceResourceID, reservation: TuiTerminalPaneReservation?)] = []
 
     init(machine: SurfaceMachineID) {
         self.machine = machine
-        info = SurfaceMachineInfo(id: machine, name: machine.rawValue, status: "running", image: nil, hasDesktop: true, memoryMb: nil, diskMb: nil, linkState: .connected, linkError: nil, cpuPercent: nil, memoryUsedMb: nil, diskUsedMb: nil)
+        info = SurfaceMachineInfo(id: machine, name: machine.rawValue, status: "running", image: nil, memoryMb: nil, diskMb: nil, linkState: .connected, linkError: nil, cpuPercent: nil, memoryUsedMb: nil, diskUsedMb: nil)
     }
 
     func refresh() async { refreshCount += 1 }
     func materialize(_ resource: SurfaceResource, at destination: SurfaceDestination, focus: Bool) async throws -> SurfaceProjection {
         try await materialize(resource, remoteView: nil, at: destination, focus: focus)
     }
-    func materialize(_ resource: SurfaceResource, remoteView: SurfaceRemoteView?, at destination: SurfaceDestination, focus: Bool, adopting reservation: CloudTerminalPaneReservation?) async throws -> SurfaceProjection {
+    func materialize(_ resource: SurfaceResource, remoteView: SurfaceRemoteView?, at destination: SurfaceDestination, focus: Bool, adopting reservation: TuiTerminalPaneReservation?) async throws -> SurfaceProjection {
         adoptions.append((resource.id, reservation))
         return try await materialize(resource, remoteView: remoteView, at: destination, focus: focus)
     }
@@ -66,7 +66,7 @@ final class CloudPlacementTestProvider: SurfaceProvider, SurfacePlacementSyncing
         tabRenames.append(name)
         renamedTabs.append((id, name))
     }
-    func renameAgentTab(context: CloudAgentNameContext, name: String) async throws {
+    func renameAgentTab(context: TuiAgentNameContext, name: String) async throws {
         try await renameRemoteTab(id: try #require(context.projection.remoteTabID), name: name)
     }
     func projectionDidEnd(_ projection: SurfaceProjection) {}

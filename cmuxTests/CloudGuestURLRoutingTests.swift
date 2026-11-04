@@ -10,10 +10,10 @@ import Testing
 
 @MainActor
 @Suite(.serialized)
-struct CloudGuestURLRoutingTests {
+struct TuiGuestURLRoutingTests {
     @Test func subscriptionMembershipRevisionIgnoresMetadataAndOtherMachines() async throws {
         let catalog = SurfaceCatalog()
-        let machine = SurfaceMachineID.cloud("vm-url-fixture")
+        let machine = SurfaceMachineID.ssh("06607c75ca83b2e8c7116086efcd21d65d3781ba1597045d39fd7666182db75e")
         let provider = try CloudCatalogQueryTestProvider(machine: machine, catalog: catalog)
         catalog.register(provider)
         await provider.refresh()
@@ -31,7 +31,7 @@ struct CloudGuestURLRoutingTests {
             catalog.replaceResources(resources, on: machine)
             catalog.updateMachine(info)
         }
-        catalog.record(SurfaceProjection(resource: SurfaceResourceID(machine: .cloud("other"), kind: .terminal, key: "term-other"),
+        catalog.record(SurfaceProjection(resource: SurfaceResourceID(machine: .ssh("d9298a10d1b0735837dc4bd85dac641b0f3cef27a47e5d53a54f2f3f5b2fcffa"), kind: .terminal, key: "term-other"),
                                          workspaceID: UUID(), panelID: UUID()))
         #expect(catalog.projectionVersions[machine] == revision)
         catalog.endProjections(panelID: projection.panelID, reason: .replaced)
@@ -44,7 +44,7 @@ struct CloudGuestURLRoutingTests {
         let manager = TabManager()
         defer { for workspace in manager.tabs { workspace.teardownAllPanels() } }
         let selected = try #require(manager.selectedWorkspace)
-        let owner = manager.addWorkspace(select: false, autoWelcomeIfNeeded: false, autoRefreshMetadata: false)
+        let owner = manager.addWorkspace(select: false, autoRefreshMetadata: false)
         let panel = try #require(owner.focusedPanelId)
         let selectedPanel = selected.focusedPanelId
         let sourcePane = owner.bonsplitController.focusedPaneId
@@ -74,7 +74,7 @@ struct CloudGuestURLRoutingTests {
         defaults.set(true, forKey: BrowserLinkOpenSettings.openTerminalLinksInCmuxBrowserKey)
         let workspace = UUID()
         let panel = UUID()
-        let container = CloudGuestURLTestContainer()
+        let container = TuiGuestURLTestContainer()
         var external: [URL] = []
         let coordinator = TerminalLinkOpenCoordinator(defaults: defaults, containerResolver: { workspaceID, panelID in
             #expect(workspaceID == workspace)
@@ -102,7 +102,7 @@ struct CloudGuestURLRoutingTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(false, forKey: BrowserAvailabilitySettings.disabledKey)
         defaults.set(true, forKey: BrowserLinkOpenSettings.openTerminalLinksInCmuxBrowserKey)
-        let container = CloudGuestURLTestContainer()
+        let container = TuiGuestURLTestContainer()
         container.accepts = false
         let coordinator = TerminalLinkOpenCoordinator(defaults: defaults, containerResolver: { _, _ in container })
         #expect(!coordinator.open(TerminalLinkOpenRequest(rawValue: "https://example.com", sourceWorkspaceId: UUID(),

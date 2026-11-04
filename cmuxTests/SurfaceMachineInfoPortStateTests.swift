@@ -10,15 +10,15 @@ import Testing
 
 @Suite("Surface machine port discovery Codable")
 struct SurfaceMachineInfoPortStateTests {
-    private let machineID = SurfaceMachineID.cloud("port-state-vm")
+    private let machineID = SurfaceMachineID.ssh("1521d6953b3f3bd5237868d057651b874c9b5c2cd6422d1cb439dbde786757cc")
 
-    private func machineInfo(state: CloudPortDiscoveryState = .notRequested) -> SurfaceMachineInfo {
+    private func machineInfo(state: TuiPortDiscoveryState = .notRequested) -> SurfaceMachineInfo {
         SurfaceMachineInfo(
             id: machineID,
             name: "Port state VM",
             status: "running",
             image: "cmux-devbox",
-            hasDesktop: false,
+            
             memoryMb: 4096,
             diskMb: 20480,
             linkState: .connected,
@@ -49,7 +49,7 @@ struct SurfaceMachineInfoPortStateTests {
 
     @Test("Port discovery states round trip through the catalog codec")
     func roundTripsPortDiscoveryStates() throws {
-        let states: [CloudPortDiscoveryState] = [
+        let states: [TuiPortDiscoveryState] = [
             .notRequested,
             .loading,
             .available,

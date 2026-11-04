@@ -1,5 +1,4 @@
 import AppKit
-import CMUXMobileCore
 import CmuxBrowser
 import Testing
 #if canImport(cmux_DEV)
@@ -21,7 +20,7 @@ struct BrowserCLIDialogTests {
             let response = try await request(accept ? "browser.dialog.accept" : "browser.dialog.dismiss", params)
             #expect(response["ok"] as? Bool == true)
             #expect(answers == [accept])
-            #expect(panel.mobileBrowserDialogBroker.currentDialog == nil)
+            #expect(panel.browserDialogBroker.currentDialog == nil)
             let duplicate = try await request("browser.dialog.accept", params)
             #expect(duplicate["ok"] as? Bool == false)
             #expect(answers == [accept])
@@ -35,7 +34,7 @@ struct BrowserCLIDialogTests {
             enqueue(panel, kind: .javaScriptAlert) { _, _ in completions += 1 }
             let response = try await request(accept ? "browser.dialog.accept" : "browser.dialog.dismiss", params)
             #expect(response["ok"] as? Bool == true)
-            panel.mobileBrowserDialogBroker.resolveAll()
+            panel.browserDialogBroker.resolveAll()
             #expect(completions == 1)
         }
     }
@@ -66,7 +65,7 @@ struct BrowserCLIDialogTests {
             #expect(answers == ["first:ok"])
             panel.tearDownWebViewBeforeReplacement(panel.webView, reason: "dialog-test")
             #expect(answers == ["first:ok", "second:cancel"])
-            #expect(panel.mobileBrowserDialogBroker.currentDialog == nil)
+            #expect(panel.browserDialogBroker.currentDialog == nil)
         }
     }
 
@@ -138,21 +137,21 @@ struct BrowserCLIDialogTests {
             var secondID = ""
             enqueue(panel, kind: .javaScriptConfirm) { button, _ in
                 answers.append("first:" + button)
-                let duplicate = panel.mobileBrowserDialogBroker.respond(MobileBrowserDialogRespondParameters(
+                let duplicate = panel.browserDialogBroker.respond(BrowserDialogRespondParameters(
                     panelID: panel.id.uuidString, dialogID: secondID, buttonID: "ok", text: nil
                 ))
                 #expect(!duplicate)
             }
             enqueue(panel, kind: .javaScriptConfirm) { button, _ in answers.append("second:" + button) }
             secondID = try #require(panel.pendingJavaScriptDialogs.last?.dialogID)
-            let unrelated = panel.beginInformationalMobileBrowserDialog(
+            let unrelated = panel.beginInformationalBrowserDialog(
                 kind: .fileUpload, title: nil, message: nil, host: nil, cancelLabel: "Cancel",
                 cancel: { answers.append("unrelated") }
             )
             panel.cancelPendingJavaScriptDialogs()
             #expect(answers == ["first:cancel", "second:cancel"])
-            #expect(panel.mobileBrowserDialogBroker.pendingDialogs.map(\.dialogID) == [unrelated.dialogID])
-            panel.mobileBrowserDialogBroker.resolveAll()
+            #expect(panel.browserDialogBroker.pendingDialogs.map(\.dialogID) == [unrelated.dialogID])
+            panel.browserDialogBroker.resolveAll()
             #expect(answers == ["first:cancel", "second:cancel", "unrelated"])
         }
     }
@@ -163,11 +162,11 @@ struct BrowserCLIDialogTests {
             enqueue(panel, kind: .javaScriptConfirm) { button, _ in answers.append(button) }
             panel.cancelPendingJavaScriptDialogs()
             #expect(answers == ["cancel"])
-            #expect(panel.mobileBrowserDialogBroker.currentDialog == nil)
+            #expect(panel.browserDialogBroker.currentDialog == nil)
             enqueue(panel, kind: .javaScriptConfirm) { button, _ in answers.append(button) }
             panel.handleWebContentProcessTermination(for: panel.webView)
             #expect(answers == ["cancel", "cancel"])
-            #expect(panel.mobileBrowserDialogBroker.currentDialog == nil)
+            #expect(panel.browserDialogBroker.currentDialog == nil)
         }
     }
 
@@ -229,20 +228,20 @@ struct BrowserCLIDialogTests {
 
     private func enqueue(
         _ panel: BrowserPanel,
-        kind: MobileBrowserDialogKind,
+        kind: BrowserDialogKind,
         response: @escaping @MainActor (String, String?) -> Void
     ) {
         let alert = NSAlert()
         alert.addButton(withTitle: "OK")
         if kind != .javaScriptAlert { alert.addButton(withTitle: "Cancel") }
-        panel.presentMobileBrowserDialog(
+        panel.presentNativeBrowserDialog(
             kind: kind, title: "Dialog", message: "test", host: nil,
             buttons: kind == .javaScriptAlert
-                ? [MobileBrowserDialogButton(id: "ok", label: "OK", role: .default)]
-                : [MobileBrowserDialogButton(id: "ok", label: "OK", role: .default),
-                   MobileBrowserDialogButton(id: "cancel", label: "Cancel", role: .cancel)],
+                ? [BrowserDialogButton(id: "ok", label: "OK", role: .default)]
+                : [BrowserDialogButton(id: "ok", label: "OK", role: .default),
+                   BrowserDialogButton(id: "cancel", label: "Cancel", role: .cancel)],
             textField: kind == .javaScriptPrompt
-                ? MobileBrowserDialogTextField(placeholder: nil, initial: "default", secure: false) : nil,
+                ? BrowserDialogTextField(placeholder: nil, initial: "default", secure: false) : nil,
             informational: false, alert: alert, response: response,
             macResponse: { ($0 == .alertFirstButtonReturn ? "ok" : "cancel", nil) },
             cancelButtonID: kind == .javaScriptAlert ? "ok" : "cancel"

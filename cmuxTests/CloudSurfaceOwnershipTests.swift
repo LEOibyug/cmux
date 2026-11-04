@@ -12,8 +12,8 @@ import Testing
 
 @MainActor
 @Suite("Cloud surface ownership", .serialized)
-struct CloudSurfaceOwnershipTests {
-    private let machine = SurfaceMachineID.cloud("ownership-b")
+struct TuiSurfaceOwnershipTests {
+    private let machine = SurfaceMachineID.ssh("108063c3caa6d2b286e6a061fb987595a25a9dffc5321bee2c5bc11136f01c1c")
 
     @Test("A retired destination fails closed before ownership policy lookup")
     func missingDestinationRejectsValidation() {
@@ -29,29 +29,29 @@ struct CloudSurfaceOwnershipTests {
 
     @Test("Saved display identities are checked before catalog mutation")
     func rejectsForeignCatalogRestore() throws {
-        let workspace = cloudWorkspace()
+        let workspace = tuiWorkspace()
         defer { workspace.teardownAllPanels() }
         let catalog = catalog(for: workspace)
         let panelID = try #require(workspace.focusedPanelId)
-        for owner in [SurfaceMachineID.cloud("ownership-a"), .local] {
+        for owner in [SurfaceMachineID.ssh("ce74825119c009cbd181f39dacaf6d336d1ff0570176dec059853976e4c5b056"), .local] {
             let record = SurfaceProjectionRecord(panelID: panelID,
                 resource: SurfaceResourceID(machine: owner, kind: .display, key: "display:1"))
             catalog.restore([record], workspaceID: workspace.id)
             #expect(catalog.projectionRecords(forWorkspace: workspace.id).isEmpty)
             #expect(catalog.machineOwningPanel(panelID) == nil)
-            #expect(workspace.cloudVMID == machine.rawValue)
+            #expect(workspace.remoteWorkspaceID == machine.rawValue)
         }
     }
 
     @Test("A delayed display materialization cannot commit after the destination changes owner",
           arguments: [false, true])
     func checksOwnerAfterMaterialization(reuseExisting: Bool) async throws {
-        let workspace = cloudWorkspace()
+        let workspace = tuiWorkspace()
         defer { workspace.teardownAllPanels() }
         let catalog = catalog(for: workspace)
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let provider = TuiPlacementTestProvider(machine: machine)
         provider.beforeMaterialization = {
-            workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "ownership-a", isBase: false)
+            workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: "ownership-a")
         }
         catalog.register(provider)
         let display = resource(machine, kind: .display)
@@ -62,33 +62,33 @@ struct CloudSurfaceOwnershipTests {
             Issue.record("A delayed projection committed into a differently owned workspace")
         } catch {}
         #expect(catalog.snapshot.projections.isEmpty)
-        #expect(workspace.cloudVMID == "ownership-a")
+        #expect(workspace.remoteWorkspaceID == "ownership-a")
     }
 
     @Test("An offline display retains provenance without materializing into a rebound workspace")
     func checksOwnerWhenPendingRestoreResolves() throws {
-        let workspace = cloudWorkspace()
+        let workspace = tuiWorkspace()
         defer { workspace.teardownAllPanels() }
         let catalog = catalog(for: workspace)
         let panelID = try #require(workspace.focusedPanelId)
         let display = resource(machine, kind: .display)
         catalog.restore([SurfaceProjectionRecord(panelID: panelID, resource: display.id)], workspaceID: workspace.id)
-        workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "ownership-a", isBase: false)
+        workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: "ownership-a")
         catalog.upsert(display)
         #expect(catalog.projection(forPanel: panelID) == nil)
         #expect(catalog.machineOwningPanel(panelID) == machine)
-        #expect(workspace.cloudVMID == "ownership-a")
+        #expect(workspace.remoteWorkspaceID == "ownership-a")
     }
 
     @Test("Cloud pane hover rejects foreign terminal/display resources and accepts browsers", arguments: SurfaceResourceKind.allCases)
     func rejectsForeignResourceHover(kind: SurfaceResourceKind) throws {
-        let workspace = cloudWorkspace()
+        let workspace = tuiWorkspace()
         defer { workspace.teardownAllPanels() }
         let transfer = PaneDragTransfer(
             tabId: UUID(), sourcePaneId: UUID(),
             sourceProcessId: Int32(ProcessInfo.processInfo.processIdentifier)
         )
-        for source in [SurfaceMachineID.local, .cloud("ownership-a")] {
+        for source in [SurfaceMachineID.local, .ssh("ce74825119c009cbd181f39dacaf6d336d1ff0570176dec059853976e4c5b056")] {
             let group = SurfaceResourceGroup(single: resource(source, kind: kind))
             #expect(workspace.canPerformPortalPaneDrop(transfer, source: .surfaceResources(group)) == (kind == .browser))
         }
@@ -98,13 +98,13 @@ struct CloudSurfaceOwnershipTests {
 
     @Test("Rejected resource drops do not dispatch or alter layout", arguments: [SurfaceResourceKind.terminal, .display])
     func rejectsForeignResourceDrop(kind: SurfaceResourceKind) throws {
-        let workspace = cloudWorkspace()
+        let workspace = tuiWorkspace()
         defer { workspace.teardownAllPanels() }
         let pane = try #require(workspace.bonsplitController.allPaneIds.first)
         let originalPanels = Set(workspace.panels.keys)
         let originalPanes = workspace.bonsplitController.allPaneIds
         let catalog = SurfaceCatalog()
-        for source in [SurfaceMachineID.local, .cloud("ownership-a")] {
+        for source in [SurfaceMachineID.local, .ssh("ce74825119c009cbd181f39dacaf6d336d1ff0570176dec059853976e4c5b056")] {
             let group = SurfaceResourceGroup(single: resource(source, kind: kind))
             #expect(!workspace.handleSurfaceResourceDrop(
                 group: group,
@@ -119,14 +119,14 @@ struct CloudSurfaceOwnershipTests {
 
     @Test("Catalog rejects ownership before materializing or focusing", arguments: [SurfaceResourceKind.terminal, .display])
     func catalogRejectsForeignResources(kind: SurfaceResourceKind) async throws {
-        let workspace = cloudWorkspace()
+        let workspace = tuiWorkspace()
         defer { workspace.teardownAllPanels() }
         let catalog = catalog(for: workspace)
         var materializations = 0
         var focuses = 0
         catalog.focusProjection = { _ in focuses += 1 }
-        for source in [SurfaceMachineID.local, .cloud("ownership-a")] {
-            let provider = CloudPlacementTestProvider(machine: source)
+        for source in [SurfaceMachineID.local, .ssh("ce74825119c009cbd181f39dacaf6d336d1ff0570176dec059853976e4c5b056")] {
+            let provider = TuiPlacementTestProvider(machine: source)
             provider.beforeMaterialization = { materializations += 1 }
             catalog.register(provider)
             let item = resource(source, kind: kind)
@@ -143,12 +143,12 @@ struct CloudSurfaceOwnershipTests {
 
     @Test("One foreign group member rejects the entire drop before any projection")
     func mixedGroupIsAtomic() async throws {
-        let workspace = cloudWorkspace()
+        let workspace = tuiWorkspace()
         defer { workspace.teardownAllPanels() }
         let catalog = catalog(for: workspace)
         var materializations = 0
         for source in [machine, .local] {
-            let provider = CloudPlacementTestProvider(machine: source)
+            let provider = TuiPlacementTestProvider(machine: source)
             provider.beforeMaterialization = { materializations += 1 }
             catalog.register(provider)
             catalog.upsert(resource(source, kind: .terminal))
@@ -170,11 +170,11 @@ struct CloudSurfaceOwnershipTests {
     @Test("Same-machine resources and local workspace projections retain their behavior", arguments: SurfaceResourceKind.allCases)
     func acceptedResources(kind: SurfaceResourceKind) async throws {
         for isCloud in [true, false] {
-            let workspace = isCloud ? cloudWorkspace() : Workspace()
+            let workspace = isCloud ? tuiWorkspace() : Workspace()
             defer { workspace.teardownAllPanels() }
             let catalog = catalog(for: workspace)
             let source: SurfaceMachineID = isCloud && kind != .browser ? machine : .local
-            let provider = CloudPlacementTestProvider(machine: source)
+            let provider = TuiPlacementTestProvider(machine: source)
             catalog.register(provider)
             let item = resource(source, kind: kind)
             catalog.upsert(item)
@@ -195,7 +195,7 @@ struct CloudSurfaceOwnershipTests {
             let source = fixture.workspace
             let destination = fixture.manager.addWorkspace(title: "same title", select: false)
             defer { destination.teardownAllPanels() }
-            destination.cloudVMBinding = WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false)
+            destination.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: machine.rawValue)
             let panel = try #require(source.focusedPanelId)
             let tab = try #require(source.surfaceIdFromPanelId(panel))
             let sourcePanels = Set(source.panels.keys)
@@ -212,15 +212,15 @@ struct CloudSurfaceOwnershipTests {
         }
     }
 
-    private func cloudWorkspace() -> Workspace {
+    private func tuiWorkspace() -> Workspace {
         let workspace = Workspace()
-        workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false)
+        workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: machine.rawValue)
         return workspace
     }
 
     private func catalog(for workspace: Workspace) -> SurfaceCatalog {
-        SurfaceCatalog(cloudWorkspaceRenameService: CloudWorkspaceRenameService(
-            environment: CloudWorkspaceRenameEnvironment(workspace: { id in
+        SurfaceCatalog(tuiWorkspaceRenameService: TuiWorkspaceRenameService(
+            environment: TuiWorkspaceRenameEnvironment(workspace: { id in
                 id == workspace.id ? workspace : nil
             })
         ))

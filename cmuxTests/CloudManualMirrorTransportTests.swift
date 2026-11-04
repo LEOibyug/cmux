@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import Darwin
 import Foundation
@@ -15,17 +15,17 @@ import Testing
 /// The fixture speaks the same JSON lines as a cmux-tui `attach-surface` stream;
 /// it never invokes the ratatui renderer or inspects source text.
 @Suite
-struct CloudManualMirrorTransportTests {
+struct TuiManualMirrorTransportTests {
     @Test("SSH hosts accept stale replay daemons while Cloud remains strict")
     func staleReplayPolicyIsScopedToCloudMachines() {
-        let stale = [CloudTuiManualIOCommand.viewAttachmentLeaseCapability]
-        #expect(!CloudTuiManualMirrorSession.shouldRejectStaleReplay(machineID: "ssh:fixture", capabilities: stale))
-        #expect(CloudTuiManualMirrorSession.shouldRejectStaleReplay(machineID: "vm_fixture", capabilities: stale))
+        let stale = [TuiManualIOCommand.viewAttachmentLeaseCapability]
+        #expect(!TuiManualMirrorSession.shouldRejectStaleReplay(machineID: "ssh:fixture", capabilities: stale))
+        #expect(TuiManualMirrorSession.shouldRejectStaleReplay(machineID: "vm_fixture", capabilities: stale))
     }
 
     @Test
     func closingFixtureIsIdempotent() throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         fixture.close()
         fixture.close()
 
@@ -50,12 +50,12 @@ struct CloudManualMirrorTransportTests {
         #expect(presentation.showsReconnectButton)
         #expect(presentation.copyableError.contains("operation=op trace=trace"))
     }
-    private let commands = CloudTuiManualIOCommand()
-    private let parser = CloudTuiLegacySnapshotParser()
+    private let commands = TuiManualIOCommand()
+    private let parser = TuiLegacySnapshotParser()
 
     @Test
     func rawAttachFramesDeliverOutputAndResizeReplay() throws {
-        let decoder = CloudTuiManualIOFrameDecoder()
+        let decoder = TuiManualIOFrameDecoder()
         let initial = try #require(decoder.decode(try Self.line([
             "event": "vt-state",
             "surface": 17,
@@ -84,7 +84,7 @@ struct CloudManualMirrorTransportTests {
 
     @Test
     func replayFramesCarryTheDaemonParsersPendingSequence() throws {
-        let decoder = CloudTuiManualIOFrameDecoder()
+        let decoder = TuiManualIOFrameDecoder()
         let pending = Data("\u{1B}[1;3".utf8)
         let snapshot = try #require(decoder.decode(try Self.line([
             "event": "vt-state", "surface": 17, "cols": 80, "rows": 24,
@@ -112,7 +112,7 @@ struct CloudManualMirrorTransportTests {
 
     @Test
     func attachFramesCarryTheSparseColorSidecarAsLocalOscBytes() throws {
-        let decoder = CloudTuiManualIOFrameDecoder()
+        let decoder = TuiManualIOFrameDecoder()
         let snapshot = try #require(decoder.decode(try Self.line([
             "event": "vt-state",
             "surface": 17,
@@ -135,7 +135,7 @@ struct CloudManualMirrorTransportTests {
         }
         #expect(surfaceID == 17)
         #expect(bytes == Data("screen".utf8))
-        let expected = CloudTuiRemoteColors(
+        let expected = TuiRemoteColors(
             foreground: "#eeeeee",
             cursor: "#ffee00",
             palette: [1: "#112233", 15: "#abcdef"]
@@ -163,9 +163,9 @@ struct CloudManualMirrorTransportTests {
         ])))
         #expect(changed == .colorsChanged(
             surfaceID: 17,
-            colors: CloudTuiRemoteColors(foreground: "#010203", palette: [4: "#445566"])
+            colors: TuiRemoteColors(foreground: "#010203", palette: [4: "#445566"])
         ))
-        #expect(CloudTuiRemoteColors(palette: [:]).isEmpty)
+        #expect(TuiRemoteColors(palette: [:]).isEmpty)
     }
 
     /// The sidecar is a full sparse replacement: an entry the remote PTY
@@ -173,14 +173,14 @@ struct CloudManualMirrorTransportTests {
     /// libghostty the matching reset or the stale remote color outlives it.
     @Test
     func sidecarDeltaResetsEntriesTheRemoteDropped() {
-        let first = CloudTuiRemoteColors(
+        let first = TuiRemoteColors(
             foreground: "#eeeeee",
             background: "#101010",
             cursor: "#ffee00",
             palette: [1: "#112233", 15: "#abcdef"]
         )
         // fg unchanged, bg reset, cursor changed; 1 changed, 15 reset, 9 added.
-        let second = CloudTuiRemoteColors(
+        let second = TuiRemoteColors(
             foreground: "#eeeeee",
             cursor: "#00ff00",
             palette: [1: "#445566", 9: "#777777"]
@@ -192,13 +192,13 @@ struct CloudManualMirrorTransportTests {
         )
         // An empty sidecar after an authored one resets everything it had set.
         #expect(
-            String(decoding: CloudTuiRemoteColors().oscDelta(from: second), as: UTF8.self)
+            String(decoding: TuiRemoteColors().oscDelta(from: second), as: UTF8.self)
                 == "\u{1B}]110\u{1B}\\\u{1B}]112\u{1B}\\\u{1B}]104;1\u{1B}\\\u{1B}]104;9\u{1B}\\"
         )
         // Nothing changed, nothing sent.
         #expect(second.oscDelta(from: second).isEmpty)
         // From nothing, the delta is the plain set.
-        #expect(second.oscDelta(from: CloudTuiRemoteColors()) == second.oscBytes)
+        #expect(second.oscDelta(from: TuiRemoteColors()) == second.oscBytes)
     }
 
     @Test
@@ -270,25 +270,25 @@ struct CloudManualMirrorTransportTests {
     @Test
     func leaseCapabilityWithoutAResponseTokenFailsClosed() {
         #expect(
-            CloudTuiManualMirrorSession.requiresLeaseToken(
+            TuiManualMirrorSession.requiresLeaseToken(
                 capabilities: ["view-attachment-lease-v1"],
                 lease: nil
             )
         )
         #expect(
-            CloudTuiManualMirrorSession.requiresLeaseToken(
+            TuiManualMirrorSession.requiresLeaseToken(
                 capabilities: ["view-attachment-lease-v1"],
                 lease: ""
             )
         )
         #expect(
-            !CloudTuiManualMirrorSession.requiresLeaseToken(
+            !TuiManualMirrorSession.requiresLeaseToken(
                 capabilities: ["view-attachment-lease-v1"],
                 lease: "lease-token"
             )
         )
         #expect(
-            !CloudTuiManualMirrorSession.requiresLeaseToken(
+            !TuiManualMirrorSession.requiresLeaseToken(
                 capabilities: [],
                 lease: nil
             )
@@ -307,7 +307,7 @@ struct CloudManualMirrorTransportTests {
                 "accepted": false,
             ],
         ])
-        let frame = try #require(CloudTuiManualIOFrameDecoder().decode(line))
+        let frame = try #require(TuiManualIOFrameDecoder().decode(line))
         guard case let .response(requestID, ok, lease, capabilities, outcome, accepted, error, _) = frame else {
             Issue.record("expected a response frame")
             return
@@ -322,18 +322,18 @@ struct CloudManualMirrorTransportTests {
     }
 
     @Test func nativeCreationCwdAvoidsAnExtraLoginShell() {
-        let request = CloudTuiRequests.runArguments(socketPath: "/unused", workspaceID: "ws_target", command: ["bash", "-l"], cwd: "/a directory/'quoted'", idempotencyKey: "one")
+        let request = TuiRequests.runArguments(socketPath: "/unused", workspaceID: "ws_target", command: ["bash", "-l"], cwd: "/a directory/'quoted'", idempotencyKey: "one")
         #expect(request.params["argv"] as? [String] == ["bash", "-l"])
         #expect(request.params["cwd"] as? String == "/a directory/'quoted'")
     }
 
     @Test func resourceRequestsPreserveExactCommandArgumentsAndSelectors() throws {
         let argv = ["bash", "--name", "--", "literal payload", "--expected-revision"]
-        let request = CloudTuiRequests.runArguments(socketPath: "/unused", workspaceID: "ws_target", command: argv, idempotencyKey: "stable-key")
+        let request = TuiRequests.runArguments(socketPath: "/unused", workspaceID: "ws_target", command: argv, idempotencyKey: "stable-key")
         let object = try #require(JSONSerialization.jsonObject(with: request.envelope(id: "request-1")) as? [String: Any])
         #expect(object["idempotency_key"] as? String == "stable-key")
         #expect(request.params["argv"] as? [String] == argv)
-        let split = CloudTuiRequests.paneCreate(paneID: "pane_absolute", direction: "left", command: [], revision: 42, key: "same", correlationKey: "intent")
+        let split = TuiRequests.paneCreate(paneID: "pane_absolute", direction: "left", command: [], revision: 42, key: "same", correlationKey: "intent")
         #expect(split.params["workspace"] == nil)
         #expect(split.params["direction"] as? String == "left")
         #expect(split.params["expected_revision"] as? String == "42")
@@ -342,7 +342,7 @@ struct CloudManualMirrorTransportTests {
 
     @Test
     func frameDecoderRejectsBooleanAndFractionalIdentifiers() throws {
-        let decoder = CloudTuiManualIOFrameDecoder()
+        let decoder = TuiManualIOFrameDecoder()
         let eventLines = [
             Data("{\"event\":\"output\",\"surface\":true,\"data\":\"Ynl0ZXM=\"}".utf8),
             Data("{\"event\":\"output\",\"surface\":1.0,\"data\":\"Ynl0ZXM=\"}".utf8),
@@ -405,9 +405,9 @@ struct CloudManualMirrorTransportTests {
 
     @Test
     func resizeSamplesAreLatestWinsAndResumeAfterGeometryClaim() throws {
-        var scheduler = CloudTuiManualIOResizeScheduler()
-        let first = try #require(CloudTuiManualIOGrid(columns: 99, rows: 35))
-        let final = try #require(CloudTuiManualIOGrid(columns: 160, rows: 52))
+        var scheduler = TuiManualIOResizeScheduler()
+        let first = try #require(TuiManualIOGrid(columns: 99, rows: 35))
+        let final = try #require(TuiManualIOGrid(columns: 160, rows: 52))
 
         #expect(scheduler.sample(first, canSend: true) == first)
         #expect(scheduler.sample(final, canSend: true) == nil)
@@ -422,9 +422,9 @@ struct CloudManualMirrorTransportTests {
 
     @Test
     func staleResizeAcknowledgementCannotRetireANewerGrid() throws {
-        var scheduler = CloudTuiManualIOResizeScheduler()
-        let old = try #require(CloudTuiManualIOGrid(columns: 99, rows: 35))
-        let current = try #require(CloudTuiManualIOGrid(columns: 160, rows: 52))
+        var scheduler = TuiManualIOResizeScheduler()
+        let old = try #require(TuiManualIOGrid(columns: 99, rows: 35))
+        let current = try #require(TuiManualIOGrid(columns: 160, rows: 52))
         #expect(scheduler.sample(old, canSend: true) == old)
         scheduler.resetForReconnect()
         #expect(scheduler.sample(current, canSend: true) == current)
@@ -478,7 +478,7 @@ struct CloudManualMirrorTransportTests {
     /// which left the tree — and so every cloud terminal's surface — unresolvable.
     @Test
     func legacyWorkspaceTreeIsRequestedOverTheRawCommandBridge() throws {
-        let arguments = CloudTuiCommandLine.legacyListWorkspacesArguments(socketPath: "/tmp/cmux.sock")
+        let arguments = TuiCommandLine.legacyListWorkspacesArguments(socketPath: "/tmp/cmux.sock")
         #expect(arguments.prefix(5).elementsEqual(["--socket", "/tmp/cmux.sock", "--json", "raw", "command"]))
         let requestIndex = try #require(arguments.firstIndex(of: "--request-json")) + 1
         let request = try #require(
@@ -501,39 +501,39 @@ struct CloudManualMirrorTransportTests {
         let rejection = """
         {"code":"raw.command_failed","details":{"error":"invalid_terminal_id","id":1,"ok":false},        "message":"invalid_terminal_id","retryable":false}
         """
-        let invalidID = CloudTuiDaemonAnswer(error: CloudMachineLink.LinkError.exited(status: 1, output: rejection))
+        let invalidID = TuiDaemonAnswer(error: RemoteMachineLink.LinkError.exited(status: 1, output: rejection))
         #expect(invalidID == .rejected("invalid_terminal_id"))
         #expect(invalidID.cannotServeTerminalID)
         #expect(!invalidID.isRetryable)
 
-        let notFound = CloudTuiDaemonAnswer(error: CloudMachineLink.LinkError.exited(
+        let notFound = TuiDaemonAnswer(error: RemoteMachineLink.LinkError.exited(
             status: 1,
             output: #"{"code":"raw.command_failed","details":{"error":"terminal_not_found","id":1,"ok":false},"message":"terminal_not_found","retryable":false}"#
         ))
         #expect(notFound.cannotServeTerminalID)
 
         // A daemon predating the resolver keeps its own signal.
-        let unsupported = CloudTuiDaemonAnswer(error: CloudMachineLink.LinkError.exited(
+        let unsupported = TuiDaemonAnswer(error: RemoteMachineLink.LinkError.exited(
             status: 1, output: #"{"code":"operation.unsupported"}"#
         ))
         #expect(unsupported.cannotServeTerminalID)
 
-        let timeout = CloudTuiDaemonAnswer(error: CloudMachineLink.LinkError.exited(
+        let timeout = TuiDaemonAnswer(error: RemoteMachineLink.LinkError.exited(
             status: 3, output: "transport timed out before raw response: Resource temporarily unavailable (os error 35)"
         ))
         #expect(timeout.isRetryable)
         #expect(!timeout.cannotServeTerminalID)
-        #expect(CloudTuiDaemonAnswer(error: CloudMachineLink.LinkError.timedOut).isRetryable)
+        #expect(TuiDaemonAnswer(error: RemoteMachineLink.LinkError.timedOut).isRetryable)
 
         // The structured form a current client prints for the same timeout.
-        let structuredTimeout = CloudTuiDaemonAnswer(error: CloudMachineLink.LinkError.exited(
+        let structuredTimeout = TuiDaemonAnswer(error: RemoteMachineLink.LinkError.exited(
             status: 3, output: #"{"code":"transport.timeout","message":"transport timed out before raw response","retryable":true}"#
         ))
         #expect(structuredTimeout.isRetryable)
 
         // An unrelated rejection is an authoritative answer about the request,
         // not about the terminal's existence.
-        let boom = CloudTuiDaemonAnswer(error: CloudMachineLink.LinkError.exited(
+        let boom = TuiDaemonAnswer(error: RemoteMachineLink.LinkError.exited(
             status: 1, output: #"{"code":"internal","message":"boom"}"#
         ))
         #expect(boom == .rejected("boom"))
@@ -568,7 +568,7 @@ struct CloudManualMirrorTransportTests {
     @Test
     func generationAwareResolverUsesThePrivateCommandShape() throws {
         let arguments = try #require(
-            CloudTuiCommandLine.resolveTerminalArguments(
+            TuiCommandLine.resolveTerminalArguments(
                 socketPath: "/tmp/cmux.sock",
                 terminalID: "term_0123456789abcdef0123456789abcdef"
             )
@@ -587,7 +587,7 @@ struct CloudManualMirrorTransportTests {
     @Test
     func identifyCommandUsesTheSameRawCommandBridge() throws {
         let arguments = try #require(
-            CloudTuiCommandLine.identifyArguments(socketPath: "/tmp/cmux.sock")
+            TuiCommandLine.identifyArguments(socketPath: "/tmp/cmux.sock")
         )
         let requestIndex = try #require(arguments.firstIndex(of: "--request-json")) + 1
         let request = try #require(
@@ -598,7 +598,7 @@ struct CloudManualMirrorTransportTests {
 
     @Test
     func identifyParserAcceptsOnlyIntegralProtocolNumbers() throws {
-        let parser = CloudTuiLegacySnapshotParser()
+        let parser = TuiLegacySnapshotParser()
         let response = try Self.line([
             "id": 1,
             "ok": true,
@@ -648,10 +648,10 @@ struct CloudManualMirrorTransportTests {
 
     @Test @MainActor
     func creationIdentityAttachesWithoutLookupAndPreservesEarlyInput() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         let terminal = "term_0123456789abcdef0123456789abcdef"
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine", terminalID: terminal, remoteSurfaceID: 0,
             creationAttachment: CloudCreationAttachment(generation: "g1", terminalID: terminal),
             onNeedsReconnect: {}
@@ -684,10 +684,10 @@ struct CloudManualMirrorTransportTests {
 
     @Test @MainActor
     func creationIdentityFallsBackForAnOlderDaemon() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         var resolutions = 0
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_test", remoteSurfaceID: 0,
             creationAttachment: CloudCreationAttachment(generation: "g1", terminalID: "term_test"),
             resolveLegacySurfaceID: { resolutions += 1; return 17 },
@@ -713,9 +713,9 @@ struct CloudManualMirrorTransportTests {
     /// daemon can answer the attach without a lease and the pane never attaches.
     @Test @MainActor
     func attachWaitsForClientInfoAcknowledgement() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine",
             terminalID: "term_0123456789abcdef0123456789abcdef",
             remoteSurfaceID: 17,
@@ -765,9 +765,9 @@ struct CloudManualMirrorTransportTests {
     /// byte attachment must follow that answer instead of being abandoned.
     @Test @MainActor
     func attachFollowsARejectedClientInfoOnOlderDaemons() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine",
             terminalID: "term_0123456789abcdef0123456789abcdef",
             remoteSurfaceID: 23,

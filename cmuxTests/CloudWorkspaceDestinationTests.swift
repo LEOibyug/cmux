@@ -17,7 +17,7 @@ struct CloudWorkspaceDestinationTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let manager = makeManager(defaults: defaults)
         let placeholder = manager.addWorkspace(autoWelcomeIfNeeded: false)
-        let created = manager.addWorkspace(select: false, autoWelcomeIfNeeded: false)
+        let created = manager.addWorkspace(select: false)
         manager.selectedTabId = placeholder.id
         let destination = CloudWorkspaceGroupDestination(
             tabManager: manager, groupId: nil, placement: .end,
@@ -37,8 +37,8 @@ struct CloudWorkspaceDestinationTests {
         let manager = makeManager(defaults: defaults)
         let groupID = try #require(manager.createWorkspaceGroup(name: "Cloud"))
         let anchor = try #require(manager.workspaceGroups.first { $0.id == groupID }?.liveAnchorWorkspaceId)
-        let unrelated = manager.addWorkspace(select: false, autoWelcomeIfNeeded: false)
-        let created = manager.addWorkspace(select: false, autoWelcomeIfNeeded: false)
+        let unrelated = manager.addWorkspace(select: false)
+        let created = manager.addWorkspace(select: false)
         let destination = CloudWorkspaceGroupDestination(
             tabManager: manager, groupId: groupID, placement: .end,
             referenceWorkspaceId: anchor, initialWorkspaceId: nil
@@ -81,12 +81,12 @@ struct CloudWorkspaceDestinationTests {
         let manager = makeManager(defaults: defaults)
         let groupID = try #require(manager.createWorkspaceGroup(name: "Cloud"))
         let anchor = try #require(manager.workspaceGroups.first { $0.id == groupID }?.liveAnchorWorkspaceId)
-        let created = manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
-        let other = manager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
+        let created = manager.addWorkspace(initialSurface: .remoteLoading, select: false)
+        let other = manager.addWorkspace(initialSurface: .remoteLoading, select: false)
         let presenter = DelayedNewMachineSheetPresenter(workspaceID: created.id)
         let controller = CloudWorkspaceOperationController(isAvailable: { true }, notificationCenter: NotificationCenter())
         let delegate = AppDelegate()
-        delegate.cloudWorkspaceOperationController = controller
+        delegate.tuiWorkspaceOperationController = controller
         delegate.newMachineSheetPresenter = presenter
         let destination = CloudWorkspaceGroupDestination(
             tabManager: manager, groupId: groupID, placement: .end,

@@ -10,8 +10,7 @@ extension Workspace {
         panelId: UUID
     ) -> Bool? {
         guard let panel = panels[panelId] as? SimulatorPanel else { return nil }
-        guard CmuxFeatureFlags.shared.isSimulatorEnabled,
-              panel.isFeatureReady,
+        guard panel.isFeatureReady,
               !urls.isEmpty else {
             return false
         }
@@ -48,7 +47,6 @@ extension Workspace {
         restoringSession: Bool = false
     ) -> SimulatorPanel? {
         guard !isRetiredFromOwningTabManager,
-              (CmuxFeatureFlags.shared.isSimulatorEnabled || restoringSession),
               !isRemoteTmuxMirror else { return nil }
         let shouldFocus = focus ?? (bonsplitController.focusedPaneId == paneId)
         let previousFocusedPanelId = focusedPanelId
@@ -116,7 +114,6 @@ extension Workspace {
         initialDividerPosition: CGFloat? = nil
     ) -> SimulatorPanel? {
         guard !isRetiredFromOwningTabManager,
-              CmuxFeatureFlags.shared.isSimulatorEnabled,
               !isRemoteTmuxMirror,
               let sourceTabId = surfaceIdFromPanelId(panelId),
               let sourcePaneId = bonsplitController.allPaneIds.first(where: { paneId in

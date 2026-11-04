@@ -46,16 +46,11 @@ public struct SettingCatalog: SettingCatalogSection {
     public let canvas = CanvasCatalogSection()
     /// Settings for the built-in plain-text file editor (the `fileEditor.*` keys).
     public let fileEditor = FileEditorCatalogSection()
-    /// Settings for Mobile pairing and sync.
-    public let mobile = MobileCatalogSection()
-    /// Discovery and privacy controls for My Devices.
-    public let devices = DevicesCatalogSection()
     public let betaFeatures = BetaFeaturesCatalogSection()
     /// Settings for custom (user/agent-authored) sidebars (the `customSidebars.*` keys).
     public let customSidebars = CustomSidebarsCatalogSection()
     public let shortcuts = KeyboardShortcutsCatalogSection()
     public let integrations = IntegrationsCatalogSection()
-    public let account = AccountCatalogSection()
     /// Appearance and scene options for Sleepy Mode.
     public let sleepyMode = SleepyModeCatalogSection()
 

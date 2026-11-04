@@ -987,25 +987,10 @@ pub enum MuxEvent {
     PairingResolved {
         request: u64,
     },
-    /// The daemon's machine-level model spend readout changed. `None` means
-    /// the readout is unavailable and frontends must hide it.
-    MachineUsageChanged(Option<MachineUsage>),
     /// Every workspace is gone.
     Empty,
 }
 
-/// Machine-level model spend for the machine hosting this daemon, as
-/// reported by coderouter for the trailing `period_days` window. Frontends
-/// show it as an informational readout beside the machine identity.
-#[derive(Debug, Clone, PartialEq)]
-pub struct MachineUsage {
-    pub vm_id: String,
-    pub period_days: u32,
-    pub total_tokens: u64,
-    pub api_equivalent_usd: f64,
-    /// Server-side timestamp of the snapshot, when known.
-    pub as_of: Option<String>,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TreeDeltaKind {
@@ -2630,7 +2615,6 @@ pub struct Mux {
     durable_terminal_defaults: AtomicBool,
     sidebar_plugin: Mutex<SidebarPluginRuntime>,
     journal_plugin: crate::journal_plugin::JournalPluginRuntime,
-    machine_usage: Mutex<Option<MachineUsage>>,
     agent_records: Mutex<HashMap<TerminalPublicId, TerminalAgentRecord>>,
     agent_hook_fences: Mutex<HashMap<TerminalPublicId, HookFence>>,
     agent_roster: Mutex<AgentRosterHost>,
@@ -3061,7 +3045,6 @@ impl Mux {
             durable_terminal_defaults: AtomicBool::new(has_terminal_defaults),
             sidebar_plugin: Mutex::new(SidebarPluginRuntime::default()),
             journal_plugin: crate::journal_plugin::JournalPluginRuntime::default(),
-            machine_usage: Mutex::new(None),
             agent_records: Mutex::new(agent_records),
             agent_hook_fences: Mutex::new(agent_hook_fences),
             agent_roster: Mutex::new(agent_roster),
@@ -12132,24 +12115,7 @@ impl Mux {
         options.browser_session_name = self.session.clone();
     }
 
-    /// The latest machine-level model spend readout, or `None` when the
-    /// daemon has no usable readout.
-    pub fn machine_usage(&self) -> Option<MachineUsage> {
-        self.machine_usage.lock().unwrap().clone()
-    }
 
-    /// Replace the machine-level spend readout. Subscribers are told only
-    /// when the readout actually changed, so a steady poll stays silent.
-    pub fn set_machine_usage(&self, usage: Option<MachineUsage>) {
-        {
-            let mut current = self.machine_usage.lock().unwrap();
-            if *current == usage {
-                return;
-            }
-            *current = usage.clone();
-        }
-        self.emit(MuxEvent::MachineUsageChanged(usage));
-    }
 
     pub fn configure_sidebar_plugin(&self, options: Option<SidebarPluginOptions>) {
         let old_surface = {

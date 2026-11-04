@@ -71,14 +71,6 @@ struct SidebarWorkspaceSnapshotFactory {
         let showsBranchDirectoryRows = detailVisibility.showsBranchDirectory && !settings.compactsAgentStatus
         let showsPullRequestRows = detailVisibility.showsPullRequests && !settings.compactsAgentStatus
         let orderedPanelIds = workspace.sidebarOrderedPanelIds()
-        let cloud = CloudWorkspaceSidebarPresentation(
-            workspace: workspace,
-            orderedPanelIDs: orderedPanelIds,
-            usesLastSegmentPath: settings.usesLastSegmentPath,
-            catalog: catalog
-        )
-        let hasCloudProjection = workspace.cloudVMID != nil
-            || workspace.cloudBindingState.projectedResources.values.contains { $0.machine.cloudMachineID != nil }
         let taskStatusInput = SidebarWorkspaceTaskStatusSnapshot.capture(workspace: workspace, orderedPanelIds: orderedPanelIds)
         let compactGitBranchSummaryText: String? = {
             guard showsBranchDirectoryRows,
@@ -93,7 +85,7 @@ struct SidebarWorkspaceSnapshotFactory {
                   settings.branchDirectory.branchLayout == .inline else {
                 return []
             }
-            let candidates = cloud?.directoryCandidates ?? (hasCloudProjection ? [] : compactDirectoryCandidatesList(orderedPanelIds: orderedPanelIds))
+            let candidates = compactDirectoryCandidatesList(orderedPanelIds: orderedPanelIds)
             return Self.droppingTitleEcho(candidates, title: workspace.title)
         }()
         let compactBranchDirectoryCandidates = compactBranchDirectoryCandidatesList(
@@ -105,8 +97,6 @@ struct SidebarWorkspaceSnapshotFactory {
                   settings.branchDirectory.branchLayout == .vertical else {
                 return []
             }
-            if let cloud { return [.init(branch: nil, directoryCandidates: cloud.directoryCandidates)] }
-            if hasCloudProjection { return [] }
             // A lone directory line that only repeats the title ("~" under "~") says nothing.
             let lines = verticalBranchDirectoryLines(orderedPanelIds: orderedPanelIds)
             if lines.count == 1, let line = lines.first, line.branch == nil,
@@ -155,7 +145,7 @@ struct SidebarWorkspaceSnapshotFactory {
                 // The directory toggle itself, like the branch and PR ones, so
                 // the tooltip keeps it under Hide All Details.
                 directory: settings.details.showBranchDirectory
-                    ? (cloud?.directoryCandidates ?? (hasCloudProjection ? [] : compactDirectoryCandidatesList(orderedPanelIds: orderedPanelIds))).first
+                    ? compactDirectoryCandidatesList(orderedPanelIds: orderedPanelIds).first
                     : nil,
                 orderedPanelIds: orderedPanelIds
             ))
@@ -170,13 +160,11 @@ struct SidebarWorkspaceSnapshotFactory {
             // (nil when the flag is off) is the fallback.
             customColorHex: workspace.customColor ?? originColorHex,
             hasManualCustomColor: workspace.customColor != nil,
-            cloudWorkspaceLabel: cloud?.isDeviceWorkspace == true ? nil : cloud?.machineLabel,
             remoteWorkspaceSidebarText: remoteWorkspaceSidebarText,
             remoteConnectionStatusText: remoteConnectionStatusText,
             remoteStateHelpText: remoteStateHelpText,
-            showsRemoteReconnectAffordance: !workspace.isManagedCloudVMWorkspace
-                && (workspace.remoteConnectionState == .suspended
-                    || workspace.remoteConnectionState == .disconnected),
+            showsRemoteReconnectAffordance: workspace.remoteConnectionState == .suspended
+                || workspace.remoteConnectionState == .disconnected,
             copyableSidebarSSHError: copyableSidebarSSHError,
             latestConversationMessage: workspace.latestConversationMessage,
             // `SidebarAgentUsageFormatter()` reads `Locale.current`, so it is
@@ -217,7 +205,6 @@ struct SidebarWorkspaceSnapshotFactory {
             checklistTotalCount: checklistProgress.totalCount,
             checklistFirstUncheckedText: checklistProgress.firstUncheckedText,
             taskStatusInput: taskStatusInput,
-            deviceWorkspaceLabel: cloud?.deviceLabel,
             compactStatusGlyph: compactStatusGlyph,
             hostTitleSuffix: hostTitleSuffix
         )

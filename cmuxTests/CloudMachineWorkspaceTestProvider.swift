@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -18,9 +18,9 @@ final class CloudMachineWorkspaceTestProvider: SurfaceProvider {
     var returnMismatchedPlacement = false
 
     init(id: String = UUID().uuidString) {
-        machine = .cloud(id)
+        machine = TuiTestHost(destination: "\(id).example.test").machine
         info = SurfaceMachineInfo(id: machine, name: "brave-sapphire-lobster", status: "running",
-            image: nil, hasDesktop: false, memoryMb: nil, diskMb: nil,
+            image: nil, memoryMb: nil, diskMb: nil,
             linkState: .connected, linkError: nil, cpuPercent: nil, memoryUsedMb: nil, diskUsedMb: nil)
     }
 
@@ -34,8 +34,8 @@ final class CloudMachineWorkspaceTestProvider: SurfaceProvider {
             "terminals": [["id": "term-first", "title": "terminal", "lifecycle": "running", "cwd": "/home/cmux"]],
             "browsers": [], "agents": []
         ], machine: machine))
-        catalog.replaceCloudState(graph, resources: CmuxTuiSnapshotParser.resources(from: graph), info: info)
-        catalog.reconcileCloudRemoteState(machine: machine, state: graph)
+        catalog.replaceTuiState(graph, resources: CmuxTuiSnapshotParser.resources(from: graph), info: info)
+        catalog.reconcileTuiRemoteState(machine: machine, state: graph)
     }
 
     func refresh() async {}
@@ -48,9 +48,9 @@ final class CloudMachineWorkspaceTestProvider: SurfaceProvider {
         materializations += 1
         try await beforeMaterialization?()
         try Task.checkCancellation()
-        let native = try SurfacePaneFactory.makeCloudManualMirrorPane(
+        let native = try SurfacePaneFactory.makeTuiManualMirrorPane(
             at: destination, focus: focus, onInput: { _ in }, onResize: { _ in },
-            onRuntimeReady: {}, onFocus: {}, attachment: CloudTerminalAttachmentStatus(machineID: machine.rawValue)
+            onRuntimeReady: {}, onFocus: {}, attachment: RemoteTerminalAttachmentStatus(machineID: machine.rawValue)
         )
         return SurfaceProjection(resource: resource.id, workspaceID: native.workspaceID,
             panelID: native.panelID,
@@ -60,7 +60,7 @@ final class CloudMachineWorkspaceTestProvider: SurfaceProvider {
 
     func createTerminal(command: [String]?, cwd: String?, name: String?, remoteWorkspaceID: String?) async throws -> SurfaceResource {
         Issue.record("Machine opening must preserve its seeded terminal")
-        throw CloudDiagnosticFailure.placement
+        throw TuiTransportError.placementMismatch
     }
 
     func projectionDidEnd(_ projection: SurfaceProjection) {}

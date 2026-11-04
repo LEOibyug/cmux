@@ -57,8 +57,6 @@ struct SidebarWorkspaceSnapshotBuilder {
         // check `hasManualCustomColor` instead.
         let customColorHex: String?
         let hasManualCustomColor: Bool
-        /// Stable Cloud identity, independent of connection status and detail visibility.
-        let cloudWorkspaceLabel: String?
         let remoteWorkspaceSidebarText: String?
         let remoteConnectionStatusText: String
         let remoteStateHelpText: String
@@ -80,8 +78,8 @@ struct SidebarWorkspaceSnapshotBuilder {
         let finderDirectoryPath: String?
         let mediaActivity: BrowserMediaActivity
         // Workspace todo status/checklist; taskStatus is nil when the
-        // workspace opted out of status display or the remote todo-controls
-        // flag is off. Manual status draws a compact row indicator, while
+        // workspace opted out of status display or the local todo controls
+        // are off. Manual status draws a compact row indicator, while
         // automatic status still only drives the done-row dim.
         let taskStatus: WorkspaceTaskStatus?
         let todoStatusMenuModel: SidebarWorkspaceCompactStatusMenuModel?
@@ -91,13 +89,10 @@ struct SidebarWorkspaceSnapshotBuilder {
         let checklistTotalCount: Int
         let checklistFirstUncheckedText: String?
         var taskStatusInput = SidebarWorkspaceTaskStatusSnapshot()
-        var deviceWorkspaceLabel: String? = nil
         /// The single leading status glyph when `sidebar.compactAgentStatus`
         /// is on (agent status entries then leave `metadataEntries`).
         var compactStatusGlyph: SidebarCompactStatusGlyph? = nil
 
-        var remoteWorkspaceBadgeLabel: String? { deviceWorkspaceLabel ?? cloudWorkspaceLabel }
-        var remoteWorkspaceBadgeSymbol: String { deviceWorkspaceLabel == nil ? "cloud" : "desktopcomputer" }
 
         /// Remote host named after the title when another workspace shares it (beta), else nil.
         var hostTitleSuffix: String? = nil
@@ -123,9 +118,7 @@ struct SidebarWorkspaceSnapshotBuilder {
                 Int64(index + 1),
                 Int64(workspaceCount)
             )
-            let cloudDirectory = cloudWorkspaceLabel == nil ? nil
-                : (compactDirectoryCandidates.first ?? branchDirectoryLines.first?.directory)
-            return [position, remoteWorkspaceBadgeLabel, cloudDirectory].compactMap { $0 }.joined(separator: ", ")
+            return position
         }
     }
 }

@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxCore
 import Foundation
 
@@ -24,8 +24,8 @@ extension Workspace {
         focus: Bool?, allowTextBoxFocusDefault: Bool
     ) -> TerminalPanel? {
         let catalog = SurfaceCatalog.shared
-        guard cloudPendingCreations[panelID] == nil,
-              let source = cloudTerminalSourcePlacement(forPanel: panelID), source.machine.isSSH,
+        guard tuiPendingCreations[panelID] == nil,
+              let source = tuiTerminalSourcePlacement(forPanel: panelID), source.machine.isSSH,
               let original = source.resource, original.kind == .terminal,
               terminalPanel(for: panelID) != nil, let remoteWorkspaceID = source.remoteWorkspaceID,
               let configuration = remoteConfiguration,
@@ -37,8 +37,8 @@ extension Workspace {
         let connection = SSHTuiConnection(configuration: configuration)
         let argv = trimmed.map(connection.commandArguments) ?? connection.shellCommand
         let attemptID = sshTuiConnectionAttemptID
-        let placement = CloudTerminalSourcePlacement(machine: source.machine, remoteWorkspaceID: remoteWorkspaceID)
-        let reservation = CloudTerminalPaneReservation(workspaceID: id, panelID: panelID,
+        let placement = TuiTerminalSourcePlacement(machine: source.machine, remoteWorkspaceID: remoteWorkspaceID)
+        let reservation = TuiTerminalPaneReservation(workspaceID: id, panelID: panelID,
             machine: source.machine, sourcePlacement: placement)
         let replacement = catalog.withProjectionEndReason(for: [panelID], reason: .replaced) {
             catalog.endProjections(panelID: panelID, reason: .replaced)
@@ -46,16 +46,16 @@ extension Workspace {
                 workingDirectory: nil, tmuxStartCommand: tmuxStartCommand, focus: focus,
                 allowTextBoxFocusDefault: allowTextBoxFocusDefault, nativeReservation: reservation)
         }
-        guard let replacement, cloudPendingCreations[panelID] === reservation else { return nil }
-        let requestID = cloudPaneCreationFailureStore.beginRequest()
-        let request = CloudTerminalCreationRequest(id: requestID, remoteWorkspaceID: remoteWorkspaceID)
+        guard let replacement, tuiPendingCreations[panelID] === reservation else { return nil }
+        let requestID = tuiPaneCreationFailureStore.beginRequest()
+        let request = TuiTerminalCreationRequest(id: requestID, remoteWorkspaceID: remoteWorkspaceID)
         var retiredOriginal = false
         var mutationToken: UUID?
-        runOptimisticCloudTerminalCreation(
+        runOptimisticTuiTerminalCreation(
             reservation: reservation, requestID: requestID,
             destination: .tab(workspaceID: id, paneID: paneID.id.uuidString, index: nil),
             create: { [weak self] in
-                guard let self, self.cloudPendingCreations[panelID] === reservation,
+                guard let self, self.tuiPendingCreations[panelID] === reservation,
                       self.sshTuiConnectionAttemptID == attemptID,
                       self.remoteConfiguration.map({ SSHTuiConnection(configuration: $0).id }) == connection.id,
                       catalog.provider(for: source.machine) === provider else { throw CancellationError() }
@@ -65,7 +65,7 @@ extension Workspace {
                     retiredOriginal = true
                 }
                 try Task.checkCancellation()
-                guard self.cloudPendingCreations[panelID] === reservation,
+                guard self.tuiPendingCreations[panelID] === reservation,
                       self.sshTuiConnectionAttemptID == attemptID,
                       self.remoteConfiguration.map({ SSHTuiConnection(configuration: $0).id }) == connection.id,
                       catalog.provider(for: source.machine) === provider else { throw CancellationError() }
@@ -74,13 +74,13 @@ extension Workspace {
             },
             onStart: {
                 if mutationToken == nil {
-                    mutationToken = catalog.cloudWorkspaceProjectionCoordinator.beginLocalMutation(on: source.machine)
+                    mutationToken = catalog.tuiWorkspaceProjectionCoordinator.beginLocalMutation(on: source.machine)
                 }
             },
             onFinish: {
                 if let token = mutationToken {
                     mutationToken = nil
-                    catalog.cloudWorkspaceProjectionCoordinator.endLocalMutation(token, on: source.machine, catalog: catalog)
+                    catalog.tuiWorkspaceProjectionCoordinator.endLocalMutation(token, on: source.machine, catalog: catalog)
                 }
             }
         )
@@ -92,7 +92,7 @@ extension Workspace {
     }
 
     /// Resolves both Cloud and SSH projections through their registered provider.
-    func tuiMirrorSession(for surfaceID: UUID) -> CloudTuiManualMirrorSession? {
+    func tuiMirrorSession(for surfaceID: UUID) -> TuiManualMirrorSession? {
         guard let projection = SurfaceCatalog.shared.projectionIncludingPendingRestore(forPanel: surfaceID),
               let provider = SurfaceCatalog.shared.provider(for: projection.resource.machine) as? CmuxTuiSurfaceProvider else { return nil }
         return provider.manualMirrorSessions[surfaceID]
@@ -108,6 +108,6 @@ extension WorkspaceRemoteConfiguration {
     /// terminal startup command are not dropped.
     var routesThroughSSHTui: Bool {
         transport == .ssh && terminalTransport == .ssh && !skipDaemonBootstrap &&
-            relayPort == nil && daemonWebSocketEndpoint == nil
+            relayPort == nil
     }
 }

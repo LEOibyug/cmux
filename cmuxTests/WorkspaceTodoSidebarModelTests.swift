@@ -111,7 +111,7 @@ struct WorkspaceTodoSidebarModelTests {
     // MARK: - Minimal todo visibility
 
     @Test
-    func workspaceTodoControlsGateDefaultsOffAndAllowsLocalOrRemoteOptIn() throws {
+    func workspaceTodoControlsGateDefaultsOffAndAllowsLocalOptIn() throws {
         let suiteName = "cmux.workspace.todo.controls.setting.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer {
@@ -121,16 +121,15 @@ struct WorkspaceTodoSidebarModelTests {
 
         #expect(key.defaultValue == false)
         #expect(!WorkspaceTodoFeature.localControlsOptIn(defaults: defaults))
-        #expect(!WorkspaceTodoFeature.isEnabled(defaults: defaults, remoteEnabled: false))
-        #expect(WorkspaceTodoFeature.isEnabled(defaults: defaults, remoteEnabled: true))
+        #expect(!WorkspaceTodoFeature.isEnabled(defaults: defaults))
 
         defaults.set(true, forKey: key.userDefaultsKey)
         #expect(WorkspaceTodoFeature.localControlsOptIn(defaults: defaults))
-        #expect(WorkspaceTodoFeature.isEnabled(defaults: defaults, remoteEnabled: false))
+        #expect(WorkspaceTodoFeature.isEnabled(defaults: defaults))
 
         defaults.set(false, forKey: key.userDefaultsKey)
         #expect(!WorkspaceTodoFeature.localControlsOptIn(defaults: defaults))
-        #expect(!WorkspaceTodoFeature.isEnabled(defaults: defaults, remoteEnabled: false))
+        #expect(!WorkspaceTodoFeature.isEnabled(defaults: defaults))
     }
 
     @Test

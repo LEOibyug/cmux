@@ -1,6 +1,5 @@
 import CmuxSurfaceCatalogModel
 import Foundation
-import struct CmuxSettings.AccountCatalogSection
 import Testing
 
 #if canImport(cmux_DEV)
@@ -11,7 +10,7 @@ import Testing
 
 extension WorkspaceCreateWorkingDirectoryTests {
     @MainActor
-    private final class CloudRoutingProvider: SurfaceProvider {
+    private final class SSHRoutingProvider: SurfaceProvider {
         let machine: SurfaceMachineID
         let info: SurfaceMachineInfo
         private(set) var createTerminalCallCount = 0
@@ -23,7 +22,6 @@ extension WorkspaceCreateWorkingDirectoryTests {
                 name: machine.rawValue,
                 status: "running",
                 image: nil,
-                hasDesktop: false,
                 memoryMb: nil,
                 diskMb: nil,
                 linkState: .connected,
@@ -86,30 +84,21 @@ extension WorkspaceCreateWorkingDirectoryTests {
         #expect(panel.surface.debugWaitAfterCommand() == false)
     }
 
-    @Test func focusedInitialInputDoesNotScheduleAutomaticWelcomeCommand() async throws {
+    @Test func focusedInitialInputSurvivesTerminalReadiness() async throws {
         _ = try #require(AppDelegate.shared)
         let controller = TerminalController.shared
         let previousManager = controller.activeTabManagerForCallerNotification()
-        let defaults = UserDefaults.standard
-        let welcomeShownKey = AccountCatalogSection().welcomeShown.userDefaultsKey
-        let previousWelcomeShown = defaults.object(forKey: welcomeShownKey)
         defer {
             controller.setActiveTabManager(previousManager)
-            if let previousWelcomeShown {
-                defaults.set(previousWelcomeShown, forKey: welcomeShownKey)
-            } else {
-                defaults.removeObject(forKey: welcomeShownKey)
-            }
         }
 
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let initialWorkspaceIDs = Set(manager.tabs.map(\.id))
         let initialInput = "printf 'requested command only\\n'\r"
         let readyNotifications = NotificationCenter.default.notifications(
             named: .terminalSurfaceDidBecomeReady
         )
         controller.setActiveTabManager(manager)
-        defaults.removeObject(forKey: welcomeShownKey)
 
         let response = try Self.v2SocketResponse(method: "workspace.create", params: [
             "initial_input": initialInput,
@@ -149,135 +138,8 @@ extension WorkspaceCreateWorkingDirectoryTests {
         )
 
         #expect(panel.surface.debugInitialInputForTesting() == initialInput)
-        #expect(defaults.object(forKey: welcomeShownKey) == nil)
     }
 
-    @Test func welcomeBannerUsesShellStartupOnlyWhenCmuxIntegrationLoads() {
-        for shell in ["/bin/zsh", "/bin/bash", "/opt/homebrew/bin/fish", "/opt/homebrew/bin/nu"] {
-            #expect(
-                WelcomeBannerDelivery.resolve(
-                    shellIntegrationEnabled: true,
-                    resolvedShell: shell,
-                    hasUserGhosttyCommand: false
-                ) == .shellStartup
-            )
-        }
-        #expect(
-            WelcomeBannerDelivery.resolve(
-                shellIntegrationEnabled: true,
-                resolvedShell: "/usr/local/bin/xonsh",
-                hasUserGhosttyCommand: false
-            ) == .typedCommand
-        )
-        #expect(
-            WelcomeBannerDelivery.resolve(
-                shellIntegrationEnabled: false,
-                resolvedShell: "/bin/zsh",
-                hasUserGhosttyCommand: false
-            ) == .typedCommand
-        )
-        #expect(
-            WelcomeBannerDelivery.resolve(
-                shellIntegrationEnabled: true,
-                resolvedShell: "/bin/zsh",
-                hasUserGhosttyCommand: true
-            ) == .typedCommand
-        )
-        #expect(
-            WelcomeBannerDelivery.resolve(
-                shellIntegrationEnabled: true,
-                resolvedShell: nil,
-                hasUserGhosttyCommand: false
-            ) == .typedCommand
-        )
-        #expect(WelcomeBannerDelivery.typedCommandText.hasPrefix(" "))
-    }
-
-    @Test func automaticWelcomeRidesShellStartupEnvironmentInsteadOfTypedInput() throws {
-        let defaults = UserDefaults.standard
-        let welcomeShownKey = AccountCatalogSection().welcomeShown.userDefaultsKey
-        let previousWelcomeShown = defaults.object(forKey: welcomeShownKey)
-        defer {
-            if let previousWelcomeShown {
-                defaults.set(previousWelcomeShown, forKey: welcomeShownKey)
-            } else {
-                defaults.removeObject(forKey: welcomeShownKey)
-            }
-        }
-
-        let manager = TabManager(autoWelcomeIfNeeded: false)
-        manager.welcomeBannerDeliveryResolver = { .shellStartup }
-        var typedWelcomeWorkspaces: [UUID] = []
-        manager.typedWelcomeSender = { typedWelcomeWorkspaces.append($0.id) }
-        defaults.removeObject(forKey: welcomeShownKey)
-        let created = try #require(manager.addWorkspaceIfActive(select: true))
-        let panel = try #require(created.panels.values.compactMap { $0 as? TerminalPanel }.first)
-
-        let tokenPath = try #require(
-            panel.surface.respawnInitialEnvironmentOverrides[WelcomeBannerDelivery.environmentKey]
-        )
-        defer { try? FileManager.default.removeItem(atPath: tokenPath) }
-        #expect(FileManager.default.fileExists(atPath: tokenPath))
-        #expect(panel.surface.debugInitialInputForTesting() == nil)
-        #expect(typedWelcomeWorkspaces.isEmpty)
-        #expect(defaults.bool(forKey: welcomeShownKey))
-
-        let second = try #require(manager.addWorkspaceIfActive(select: true))
-        let secondPanel = try #require(second.panels.values.compactMap { $0 as? TerminalPanel }.first)
-        #expect(secondPanel.surface.respawnInitialEnvironmentOverrides[WelcomeBannerDelivery.environmentKey] == nil)
-        #expect(typedWelcomeWorkspaces.isEmpty)
-    }
-
-    @Test func automaticWelcomeTypesFallbackWhenShellIntegrationIsUnavailable() throws {
-        let defaults = UserDefaults.standard
-        let welcomeShownKey = AccountCatalogSection().welcomeShown.userDefaultsKey
-        let previousWelcomeShown = defaults.object(forKey: welcomeShownKey)
-        defer {
-            if let previousWelcomeShown {
-                defaults.set(previousWelcomeShown, forKey: welcomeShownKey)
-            } else {
-                defaults.removeObject(forKey: welcomeShownKey)
-            }
-        }
-
-        let manager = TabManager(autoWelcomeIfNeeded: false)
-        manager.welcomeBannerDeliveryResolver = { .typedCommand }
-        var typedWelcomeWorkspaces: [UUID] = []
-        manager.typedWelcomeSender = { typedWelcomeWorkspaces.append($0.id) }
-        defaults.removeObject(forKey: welcomeShownKey)
-        let created = try #require(manager.addWorkspaceIfActive(select: true))
-        let panel = try #require(created.panels.values.compactMap { $0 as? TerminalPanel }.first)
-
-        #expect(typedWelcomeWorkspaces == [created.id])
-        #expect(panel.surface.respawnInitialEnvironmentOverrides[WelcomeBannerDelivery.environmentKey] == nil)
-        // The typed fallback marks the banner shown only once it is sent.
-        #expect(defaults.object(forKey: welcomeShownKey) == nil)
-
-        _ = try #require(manager.addWorkspaceIfActive(select: false))
-        #expect(typedWelcomeWorkspaces == [created.id])
-    }
-
-    @Test func welcomeShellStartupFallsBackToTypedWhenTokenCannotBeWritten() throws {
-        let blocker = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-welcome-token-blocker-\(UUID().uuidString)")
-        try Data().write(to: blocker)
-        defer { try? FileManager.default.removeItem(at: blocker) }
-
-        let blocked = WelcomeBannerDelivery.prepareLaunch(.shellStartup, tempDirectory: blocker)
-        #expect(blocked.delivery == .typedCommand)
-        #expect(blocked.environment.isEmpty)
-
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-welcome-token-test-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let first = WelcomeBannerDelivery.prepareLaunch(.shellStartup, tempDirectory: directory)
-        let second = WelcomeBannerDelivery.prepareLaunch(.shellStartup, tempDirectory: directory)
-        let firstPath = try #require(first.environment[WelcomeBannerDelivery.environmentKey])
-        let secondPath = try #require(second.environment[WelcomeBannerDelivery.environmentKey])
-        #expect(first.delivery == .shellStartup)
-        #expect(firstPath != secondPath)
-        #expect(FileManager.default.fileExists(atPath: firstPath))
-    }
 
     @Test(
         "terminal creation RPCs inject input into an interactive shell",
@@ -321,15 +183,15 @@ extension WorkspaceCreateWorkingDirectoryTests {
         #expect(panel.surface.debugWaitAfterCommand() == false)
     }
 
-    @Test func explicitInitialInputRejectsCloudProjectedSplit() throws {
+    @Test func explicitInitialInputRejectsSSHProjectedSplit() throws {
         let catalog = SurfaceCatalog.shared
-        let machine = SurfaceMachineID.cloud("test-cloud-\(UUID().uuidString)")
-        let provider = CloudRoutingProvider(machine: machine)
+        let machine = SurfaceMachineID.ssh("test-ssh-\(UUID().uuidString)")
+        let provider = SSHRoutingProvider(machine: machine)
         catalog.register(provider)
 
         // A loading panel is not registered as a local surface, so the synthetic
-        // cloud projection can be installed without replacing a real catalog entry.
-        let workspace = Workspace(initialSurface: .cloudVMLoading)
+        // SSH projection can be installed without replacing a real catalog entry.
+        let workspace = Workspace(initialSurface: .remoteLoading)
         let sourcePanelID = try #require(workspace.focusedPanelId)
         defer {
             workspace.teardownAllPanels()
@@ -337,7 +199,7 @@ extension WorkspaceCreateWorkingDirectoryTests {
         }
         let resource = SurfaceResource(
             id: SurfaceResourceID(machine: machine, kind: .terminal, key: "source"),
-            title: "cloud shell",
+            title: "SSH shell",
             detail: "/tmp",
             lifecycle: .running,
             agent: nil,
@@ -359,7 +221,7 @@ extension WorkspaceCreateWorkingDirectoryTests {
             )
         )
 
-        let input = "printf 'cloud split stays local\\n'\r"
+        let input = "printf 'SSH split stays local\\n'\r"
         let outcome = workspace.newTerminalSplitOutcome(
             from: sourcePanelID,
             orientation: .horizontal,
@@ -367,7 +229,7 @@ extension WorkspaceCreateWorkingDirectoryTests {
             initialInput: input
         )
         guard case .failed = outcome else {
-            Issue.record("Cloud-owned terminal creation must reject unsupported local startup input")
+            Issue.record("SSH-owned terminal creation must reject unsupported local startup input")
             return
         }
         #expect(provider.createTerminalCallCount == 0)

@@ -297,8 +297,7 @@ extension ContentView {
                     initialTerminalInput: launch.initialTerminalInput,
                     initialTerminalStartupRestoreAgent: launch.startupRestoreAgent,
                     initialTerminalEnvironment: launch.initialTerminalEnvironment,
-                    inheritWorkingDirectory: launch.terminalWorkingDirectory != nil,
-                    autoWelcomeIfNeeded: false
+                    inheritWorkingDirectory: launch.terminalWorkingDirectory != nil
                 ) else {
                     didFork = false
                     break

@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -11,14 +11,14 @@ extension SurfaceProvider {
         remoteView: SurfaceRemoteView?,
         at destination: SurfaceDestination,
         focus: Bool,
-        adopting reservation: CloudTerminalPaneReservation?,
-        loadingReservation: CloudMachineLoadingReservation? = nil
+        adopting reservation: TuiTerminalPaneReservation?,
+        loadingReservation: TuiMachineLoadingReservation? = nil
     ) async throws -> SurfaceProjection {
         if let reservation { try reservation.sourcePlacement.validate(created: resource) }
-        _ = try loadingReservation?.loadingPanel(at: destination, machineID: resource.machine.cloudMachineID)
+        _ = try loadingReservation?.loadingPanel(at: destination, machineID: resource.machine.tuiMachineID)
         // Task scope carries the immutable admission claim across provider awaits;
         // the native factory revalidates it immediately before adopting the pane.
-        var projection = try await CloudMachineLoadingReservation.withCurrent(loadingReservation) {
+        var projection = try await TuiMachineLoadingReservation.withCurrent(loadingReservation) {
             try await materialize(resource, remoteView: remoteView, at: destination, focus: focus, adopting: reservation)
         }
         let expectedWorkspace = reservation?.remoteWorkspaceID ?? remoteView?.workspace.id
@@ -33,7 +33,7 @@ extension SurfaceProvider {
         }
         guard projection.resource == resource.id,
               projection.workspaceID == destination.workspaceID,
-              reservation == nil || remoteView == nil || remoteView?.isCloudDisplayMembershipView == true
+              reservation == nil || remoteView == nil
                   || projection.remoteTabID == remoteView?.tabID,
               expectedWorkspace == nil || projection.remoteWorkspaceID == expectedWorkspace else {
             if let reservation, projection.panelID == reservation.panelID {
@@ -44,14 +44,14 @@ extension SurfaceProvider {
             } else if let loadingReservation, projection.panelID == loadingReservation.panelID {
                 projectionDidEnd(projection)
                 guard let workspace = Workspace.liveWorkspace(id: loadingReservation.workspaceID),
-                      workspace.restoreCloudMachineLoadingPanel(panelID: loadingReservation.panelID, machineID: loadingReservation.machineID) else {
+                      workspace.restoreTuiMachineLoadingPanel(panelID: loadingReservation.panelID, machineID: loadingReservation.machineID) else {
                     discardMaterialization(projection)
-                    throw CloudDiagnosticFailure.placement
+                    throw TuiTransportError.placementMismatch
                 }
             } else {
                 discardMaterialization(projection)
             }
-            throw CloudDiagnosticFailure.placement
+            throw TuiTransportError.placementMismatch
         }
         return projection
     }

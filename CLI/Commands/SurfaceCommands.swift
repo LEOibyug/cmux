@@ -142,7 +142,7 @@ struct DragSurfaceToSplitCommand: SharedLegacyFacadeCommand {
 }
 
 /// `surface` is a namespace, not a leaf: `runSurfaceCommand` dispatches `ls`,
-/// `open`, `new-terminal`, `new-display` into the surface catalog and `resume` into the restart
+/// `open`, `new-terminal` into the surface catalog and `resume` into the restart
 /// metadata commands, and rejects a bare `cmux surface`. Declaring it as a single
 /// unrecognized-argument sink meant `cmux surface <TAB>` offered nothing and the
 /// options below (which really belong to `resume set`) were offered everywhere.
@@ -151,7 +151,7 @@ struct DragSurfaceToSplitCommand: SharedLegacyFacadeCommand {
 /// `defaultSubcommand` absorbs anything that doesn't name a declared one, so an
 /// unknown verb still reaches the legacy parser's own diagnostic instead of
 /// ArgumentParser's "Unexpected argument". `ls` matches the read-only default
-/// `vm`, `auth`, and `remotes` already use.
+/// other read-only namespaces use.
 struct SurfaceCommand: SharedLegacyFacadeCommand {
     static let configuration = CommandConfiguration(
         commandName: "surface",
@@ -159,7 +159,6 @@ struct SurfaceCommand: SharedLegacyFacadeCommand {
             SurfaceListCommand.self,
             SurfaceOpenCommand.self,
             SurfaceNewTerminalCommand.self,
-            SurfaceNewDisplayCommand.self,
             SurfaceResumeGroupCommand.self,
             SurfaceSizeCommand.self,
             SurfaceParticipantsCommand.self,
@@ -176,7 +175,7 @@ struct SurfaceCommand: SharedLegacyFacadeCommand {
 
 struct SurfaceListCommand: SharedLegacyFacadeCommand {
     /// A machine id, or `local` for This Mac.
-    @Argument(completion: vmCompletion) var machine: String?
+    @Argument var machine: String?
     @Flag(name: .customLong("refresh")) var refresh = false
     @Argument(parsing: .allUnrecognized) var arguments: [String] = []
     static let configuration = CommandConfiguration(
@@ -219,7 +218,7 @@ struct SurfaceOpenCommand: SharedLegacyFacadeCommand {
 }
 
 struct SurfaceNewTerminalCommand: SharedLegacyFacadeCommand {
-    @Option(name: .customLong("machine"), completion: vmCompletion) var machine: String?
+    @Option(name: .customLong("machine")) var machine: String?
     @Option(name: .customLong("cwd"), completion: .directory) var cwd: String?
     @Option(name: .customLong("name")) var name: String?
     @Option(name: .customLong("remote-workspace")) var remoteWorkspace: String?
@@ -243,27 +242,6 @@ struct SurfaceNewTerminalCommand: SharedLegacyFacadeCommand {
     )
 }
 
-/// Creates a cloud VNC display and optionally projects it into a workspace.
-struct SurfaceNewDisplayCommand: SharedLegacyFacadeCommand {
-    @Flag(name: .customLong("json")) var json = false
-    @Option(name: .customLong("machine"), completion: vmCompletion) var machine: String?
-    @Option(name: .customLong("workspace"), completion: workspaceCompletion) var workspaceID: String?
-    /// Bare `--focus`, `--focus true|false` and `--no-focus` all parse
-    /// (`openFocusFlag`), so a bare `--focus` must not expect a value.
-    @Option(
-        name: .customLong("focus"),
-        defaultAsFlag: "true",
-        parsing: .next,
-        completion: .list(["true", "false"])
-    ) var focus: String?
-    @Flag(name: .customLong("no-focus")) var noFocus = false
-    @Flag(name: .customLong("no-open")) var noOpen = false
-    @Argument(parsing: .allUnrecognized) var arguments: [String] = []
-    static let configuration = CommandConfiguration(
-        commandName: "new-display",
-        helpNames: []
-    )
-}
 
 /// The shared terminal sizing verbs (`runSurfaceSizingCommand`). They take the
 /// same workspace/surface/window selector as `surface resume`.

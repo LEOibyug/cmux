@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Foundation
 
 /// Reduces an immutable owner capture. It performs no I/O and owns no mutable graph.
@@ -7,12 +7,12 @@ struct CurrentWorkReducer {
         let observedAt = input.observedAt.ISO8601Format()
         let catalog = input.export.catalog
         let projections = Dictionary(grouping: catalog.projections, by: \.resource)
-        let states = Dictionary(input.export.cloudStates.map { ($0.machine, $0) }, uniquingKeysWith: { first, _ in first })
+        let states = Dictionary(input.export.tuiStates.map { ($0.machine, $0) }, uniquingKeysWith: { first, _ in first })
         let selected = catalog.resources.sorted { $0.id.rawValue < $1.id.rawValue }.prefix(min(200, max(1, limit)))
         let items = selected.map { resource -> CurrentWorkSnapshot.Item in
             let local = resource.machine.isLocal
             let state = states[resource.machine]
-            let observation = input.export.cloudStateObservations[resource.machine]
+            let observation = input.export.tuiStateObservations[resource.machine]
             let fresh = CurrentWorkSnapshot.Freshness(
                 state: local ? "current" : observation?.freshness.rawValue ?? "unknown",
                 reason: local ? nil : observation?.reason ?? (observation == nil ? "no_cloud_observation" : nil),

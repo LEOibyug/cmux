@@ -1,4 +1,3 @@
-import CmuxCloud
 import AppKit
 import CmuxSettings
 import CmuxTerminalCore
@@ -36,7 +35,7 @@ final class RemoteTerminalFilePreviewCoordinator {
               let panel = workspace.terminalPanel(for: sourcePanelID) else { return false }
         tasks[sourcePanelID]?.task.cancel()
         let settings = FileRouteSettingsStore(defaults: defaults)
-        guard !ManagedFileTransferPolicy.isDisabled,
+        guard !ManagedFileTransferPolicy().isDisabled,
               settings.supportedFileRouteEnabled ||
                 (settings.markdownRouteEnabled && tokens.contains { FileRouteSettingsStore.isMarkdownPath($0.trimmingTrailingTerminalPunctuation()) }) else {
             return true
@@ -87,7 +86,7 @@ final class RemoteTerminalFilePreviewCoordinator {
                 }
                 try Task.checkCancellation()
                 guard let self, let workspace, let panel, let sourceSurface,
-                      !ManagedFileTransferPolicy.isDisabled,
+                      !ManagedFileTransferPolicy().isDisabled,
                       !workspace.isRetiredFromOwningTabManager,
                       workspace.remoteTerminalFilePreviewConfiguration(for: sourcePanelID) == configuration,
                       workspace.terminalPanel(for: sourcePanelID) === panel,

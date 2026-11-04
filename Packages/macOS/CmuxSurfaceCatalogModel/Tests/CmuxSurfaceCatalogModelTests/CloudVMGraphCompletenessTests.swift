@@ -3,8 +3,8 @@ import Testing
 @testable import CmuxSurfaceCatalogModel
 
 @Suite
-struct CloudVMGraphCompletenessTests {
-    private func state(detached: Bool = false, lifecycle: String = "running") throws -> CloudVMState {
+struct TuiGraphCompletenessTests {
+    private func state(detached: Bool = false, lifecycle: String = "running") throws -> TuiState {
         let names = ["a", "b"]
         let snapshot: [String: Any] = [
             "cursor": ["generation": "test", "revision": "1"],
@@ -22,13 +22,13 @@ struct CloudVMGraphCompletenessTests {
             },
             "browsers": [], "agents": []
         ]
-        return try #require(CmuxTuiSnapshotParser.state(fromSnapshot: snapshot, machine: .cloud("complete-graph")))
+        return try #require(CmuxTuiSnapshotParser.state(fromSnapshot: snapshot, machine: .ssh("complete-graph")))
     }
 
     @Test("Complete live placements admit reconciliation")
     func completeGraph() throws {
         let graph = try state()
-        let completeness = CloudVMGraphCompleteness(state: graph, resources: CmuxTuiSnapshotParser.resources(from: graph))
+        let completeness = TuiGraphCompleteness(state: graph, resources: CmuxTuiSnapshotParser.resources(from: graph))
         #expect(completeness.isComplete())
         #expect(completeness.isComplete(workspaceID: "a"))
         #expect(completeness.isComplete(workspaceID: "b"))
@@ -48,10 +48,10 @@ struct CloudVMGraphCompletenessTests {
         case "workspace": resources[index].remoteViews?[0].workspace.id = "a"
         case "screen": resources[index].remoteViews?[0].screenID = "screen_a"
         case "pane": resources[index].remoteViews?[0].paneID = "pane_a"
-        case "machine": resources[index].id = .init(machine: .cloud("other"), kind: .terminal, key: "term_b")
+        case "machine": resources[index].id = .init(machine: .ssh("other"), kind: .terminal, key: "term_b")
         default: Issue.record("Unexpected field")
         }
-        let completeness = CloudVMGraphCompleteness(state: graph, resources: resources)
+        let completeness = TuiGraphCompleteness(state: graph, resources: resources)
         #expect(!completeness.isComplete())
         #expect(completeness.isComplete(workspaceID: "a"))
         #expect(!completeness.isComplete(workspaceID: "b"))
@@ -62,7 +62,7 @@ struct CloudVMGraphCompletenessTests {
         let graph = try state(detached: true, lifecycle: lifecycle)
         #expect(graph.lookupIndex.tab(id: "tab_b") == nil)
         #expect(graph.lookupIndex.terminal(id: "term_b")?.tabIDs == ["tab_b"])
-        let completeness = CloudVMGraphCompleteness(state: graph, resources: CmuxTuiSnapshotParser.resources(from: graph))
+        let completeness = TuiGraphCompleteness(state: graph, resources: CmuxTuiSnapshotParser.resources(from: graph))
         #expect(completeness.isComplete())
         #expect(completeness.isComplete(workspaceID: "b"))
     }
@@ -74,12 +74,12 @@ struct CloudVMGraphCompletenessTests {
         tabs[1]["content_id"] = "term_a"
         snapshot["tabs"] = tabs
         snapshot["terminals"] = [["id": "term_a", "lifecycle": "running"]]
-        let graph = try #require(CmuxTuiSnapshotParser.state(fromSnapshot: snapshot, machine: .cloud("complete-graph")))
+        let graph = try #require(CmuxTuiSnapshotParser.state(fromSnapshot: snapshot, machine: .ssh("complete-graph")))
         var resources = CmuxTuiSnapshotParser.resources(from: graph)
         try #require(resources.count == 1)
-        #expect(CloudVMGraphCompleteness(state: graph, resources: resources).isComplete())
+        #expect(TuiGraphCompleteness(state: graph, resources: resources).isComplete())
         resources[0].remoteViews?.removeAll { $0.workspace.id == "b" }
-        let completeness = CloudVMGraphCompleteness(state: graph, resources: resources)
+        let completeness = TuiGraphCompleteness(state: graph, resources: resources)
         #expect(completeness.isComplete(workspaceID: "a"))
         #expect(!completeness.isComplete(workspaceID: "b"))
     }

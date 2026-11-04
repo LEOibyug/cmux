@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -19,7 +19,7 @@ extension CmuxTuiSurfaceProvider: SurfacePlacementSyncing {
 
     func moveRemoteTab(id: String, intoRemoteWorkspace remoteWorkspaceID: String) async throws -> SurfaceRemotePlacement {
         try await runPlacementMutation(intoRemoteWorkspace: remoteWorkspaceID, tabID: id) { socketPath, target, revision, key in
-            CloudTuiRequests.moveTabArguments(
+            TuiRequests.moveTabArguments(
                 socketPath: socketPath, tabID: id, target: target, expectedRevision: revision, idempotencyKey: key
             )
         }
@@ -35,7 +35,7 @@ extension CmuxTuiSurfaceProvider: SurfacePlacementSyncing {
 
     private func placeTerminal(_ id: SurfaceResourceID, intoRemoteWorkspace remoteWorkspaceID: String, intent: TerminalPlacementIntent) async throws -> SurfaceRemotePlacement {
         try await runPlacementMutation(intoRemoteWorkspace: remoteWorkspaceID, terminalID: id.key, intent: intent) { socketPath, target, revision, key in
-            CloudTuiRequests.projectTerminalArguments(
+            TuiRequests.projectTerminalArguments(
                 socketPath: socketPath, terminalID: id.key, target: target, expectedRevision: revision, idempotencyKey: key
             )
         }
@@ -43,17 +43,17 @@ extension CmuxTuiSurfaceProvider: SurfacePlacementSyncing {
 
     func closeRemoteTab(id: String, inRemoteWorkspace remoteWorkspaceID: String) async throws {
         let connected = try await links.connected(machineID: machineID)
-        guard let link = await links.link(machineID: machineID) else { throw ProviderError.machineAsleep(machineID) }
+        guard let link = await links.link(machineID: machineID) else { throw ProviderError.connectionUnavailable(machineID) }
         let key = "cmux-cloud-close-\(UUID().uuidString.lowercased())"
         var retried = false
         defer { scheduleRefresh() }
         while true {
-            let snapshot = try await link.run(arguments: CloudTuiRequests.snapshotArguments(socketPath: connected.socketPath))
+            let snapshot = try await link.run(arguments: TuiRequests.snapshotArguments(socketPath: connected.socketPath))
             guard let placement = await CmuxTuiSnapshotParser.tabPlacement(from: snapshot, tabID: id) else {
                 throw ProviderError.noWorkspaceOnMachine(machineID)
             }
             guard placement.workspaceID == remoteWorkspaceID else { return }
-            var arguments = CloudTuiRequests.closeTabArguments(socketPath: connected.socketPath, tabID: id)
+            var arguments = TuiRequests.closeTabArguments(socketPath: connected.socketPath, tabID: id)
             arguments.idempotencyKey = key
             arguments = arguments.adding(["expected_revision": placement.revision])
             do {
@@ -72,16 +72,16 @@ extension CmuxTuiSurfaceProvider: SurfacePlacementSyncing {
         tabID: String? = nil,
         terminalID: String? = nil,
         intent: TerminalPlacementIntent = .layoutEdit,
-        arguments: (_ socketPath: String, _ target: CloudTuiTerminalProjectionTarget, _ revision: String?, _ idempotencyKey: String) -> CloudTuiRequest
+        arguments: (_ socketPath: String, _ target: TuiTerminalProjectionTarget, _ revision: String?, _ idempotencyKey: String) -> TuiRequest
     ) async throws -> SurfaceRemotePlacement {
         let connected = try await links.connected(machineID: machineID)
-        guard let link = await links.link(machineID: machineID) else { throw ProviderError.machineAsleep(machineID) }
+        guard let link = await links.link(machineID: machineID) else { throw ProviderError.connectionUnavailable(machineID) }
         let key = "cmux-cloud-placement-\(UUID().uuidString.lowercased())"
         var retried = false
         defer { scheduleRefresh() }
         while true {
             try Task.checkCancellation()
-            let snapshot = try await link.run(arguments: CloudTuiRequests.snapshotArguments(socketPath: connected.socketPath))
+            let snapshot = try await link.run(arguments: TuiRequests.snapshotArguments(socketPath: connected.socketPath))
             guard let snapshotObject = try? JSONSerialization.jsonObject(with: snapshot) as? [String: Any],
                   CmuxTuiSnapshotParser.authoritativeGraphIsValid(snapshotObject) else {
                 throw ProviderError.invalidSnapshot(machineID)
@@ -102,7 +102,7 @@ extension CmuxTuiSurfaceProvider: SurfacePlacementSyncing {
                 if let placement = current.placement {
                     if let retained = intent.retainedPlacement(placement, requestedWorkspaceID: remoteWorkspaceID) { return retained }
                     existingTabID = placement.tabID
-                    command = CloudTuiRequests.moveTabArguments(
+                    command = TuiRequests.moveTabArguments(
                         socketPath: connected.socketPath, tabID: placement.tabID, target: destination.target,
                         expectedRevision: destination.revision, idempotencyKey: key
                     )

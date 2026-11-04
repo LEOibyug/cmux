@@ -289,13 +289,6 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
                     ),
                     action: actions.onEditConfig
                 )
-                Button(
-                    String(
-                        localized: "workspaceGroup.plus.contextMenu.openDocs",
-                        defaultValue: "Open Workspace Groups Docs"
-                    ),
-                    action: actions.onOpenDocs
-                )
             }
         }
         .padding(.vertical, 5)
@@ -428,13 +421,6 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
                     defaultValue: "Edit Group Config..."
                 ),
                 action: actions.onEditConfig
-            )
-            Button(
-                String(
-                    localized: "workspaceGroup.contextMenu.openDocs",
-                    defaultValue: "Open Workspace Groups Docs"
-                ),
-                action: actions.onOpenDocs
             )
             Divider()
             if !isPinned || memberCount > 0 {

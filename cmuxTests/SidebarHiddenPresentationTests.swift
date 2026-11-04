@@ -1,5 +1,4 @@
 import AppKit
-import CmuxUpdater
 import QuartzCore
 import SwiftUI
 import Testing
@@ -219,7 +218,7 @@ struct SidebarHiddenPresentationTests {
         #expect(arc.preferredFrameRateRange.maximum <= 60)
     }
 
-    /// Ensures a hidden sidebar rebuilds retained rows from current Cloud state.
+    /// Ensures a hidden sidebar rebuilds retained rows from current workspace state.
     @Test
     func visibilityToggleKeepsAppKitTableContainerMounted() async throws {
         _ = NSApplication.shared
@@ -233,45 +232,20 @@ struct SidebarHiddenPresentationTests {
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let cloudMarkerKey = RightSidebarBetaFeatureSettings.cloudMachinesEnabledKey
-        let previousCloudMarker = UserDefaults.standard.object(forKey: cloudMarkerKey)
-        defer {
-            if let previousCloudMarker {
-                UserDefaults.standard.set(previousCloudMarker, forKey: cloudMarkerKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: cloudMarkerKey)
-            }
-        }
-        // Keep the presentation fixture independent of other app-host tests
-        // that mutate this process-wide marker while exercising activation.
-        // Activation transitions are covered by CloudActivationCoordinatorTests;
-        // this test starts with Cloud rows available and only checks retention
-        // and reconciliation across a hidden/revealed sidebar.
-        UserDefaults.standard.set(true, forKey: cloudMarkerKey)
         defaults.set(
             CmuxExtensionSidebarSelection.defaultProviderId,
             forKey: CmuxExtensionSidebarSelection.defaultsKey
         )
 
-        let featureFlags = CmuxFeatureFlags(
-            defaults: defaults,
-            remoteFlagValueProvider: { _ in nil }
-        )
-        featureFlags.setOverride(true, for: CmuxFeatureFlags.appKitSidebarListFlag)
-
         let tabManager = TabManager(autoWelcomeIfNeeded: false)
         for _ in 0..<3 {
-            tabManager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
+            tabManager.addWorkspace(initialSurface: .remoteLoading, select: false, autoWelcomeIfNeeded: false)
         }
         let sidebarState = SidebarState()
         let notificationStore = TerminalNotificationStore.shared
         var revealRowInputProjections = 0
         var isMeasuringRevealInvalidations = false
-        let root = ContentView(
-            updateViewModel: UpdateStateModel(),
-            windowId: UUID(),
-            featureFlags: featureFlags
-        )
+        let root = ContentView(windowId: UUID())
             .environmentObject(tabManager)
             .environmentObject(notificationStore)
             .environmentObject(sidebarState)
@@ -308,22 +282,6 @@ struct SidebarHiddenPresentationTests {
         )
         #expect(initialContainers.count == 1)
         let initialContainer = try #require(initialContainers.first)
-        // Cloud activation is process-wide and another app-host fixture may
-        // finish its marker notification while this window is mounting. Wait
-        // for the workspace list to settle before recording the baseline so a
-        // delayed external transition cannot look like a hidden-table update.
-        var lastTabCount = tabManager.tabs.count
-        var stableTabCountRounds = 0
-        for _ in 0..<20 where stableTabCountRounds < 3 {
-            await drainMainRunLoop(for: window, iterations: 5)
-            let currentTabCount = tabManager.tabs.count
-            if currentTabCount == lastTabCount {
-                stableTabCountRounds += 1
-            } else {
-                lastTabCount = currentTabCount
-                stableTabCountRounds = 0
-            }
-        }
         let initialRowCount = initialContainer.tableView.numberOfRows
         #expect(initialRowCount > 0)
         let focusedWorkspace = try #require(tabManager.selectedWorkspace)
@@ -349,16 +307,13 @@ struct SidebarHiddenPresentationTests {
             "Hiding the sidebar must return keyboard focus to the selected main panel."
         )
         // Change hidden row membership without changing the panel whose focus this test tracks.
-        tabManager.addWorkspace(initialSurface: .cloudVMLoading, select: false, autoWelcomeIfNeeded: false)
+        tabManager.addWorkspace(initialSurface: .remoteLoading, select: false, autoWelcomeIfNeeded: false)
         await drainMainRunLoop(for: window)
         #expect(
             initialContainer.tableView.numberOfRows == initialRowCount,
             "The retained native table must not apply workspace updates while hidden."
         )
-        var cloudChangeIterator = focusedWorkspace.cloudBindingState.changes().makeAsyncIterator()
-        _ = await cloudChangeIterator.next()
-        focusedWorkspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "vivid-newt", isBase: true)
-        _ = await cloudChangeIterator.next()
+        focusedWorkspace.setCustomTitle("Hidden workspace update")
         // A doubled projection count means a SECOND sidebar body pass followed
         // the reveal. Record what landed inside the reveal window (the async
         // inputs the hidden phase queued: the workspace's directory channel,
@@ -414,29 +369,29 @@ struct SidebarHiddenPresentationTests {
             signals=[\(revealSignals.summary)]
             """
         )
-        var cloudRow: SidebarWorkspaceRowTableCellView?
+        var updatedRow: SidebarWorkspaceRowTableCellView?
         let deadline = Date(timeIntervalSinceNow: 1)
-        while cloudRow == nil, Date() < deadline {
-            cloudRow = descendants(
+        while updatedRow == nil, Date() < deadline {
+            updatedRow = descendants(
                 of: SidebarWorkspaceRowTableCellView.self,
                 in: initialContainer
-            ).first { $0.accessibilityLabel()?.contains("Cloud workspace on vivid-newt") == true }
-            if cloudRow == nil {
+            ).first { $0.accessibilityLabel()?.contains("Hidden workspace update") == true }
+            if updatedRow == nil {
                 await drainMainRunLoop(for: window, iterations: 1)
             }
         }
         #expect(
-            cloudRow != nil,
-            "Reopening must rebuild retained AppKit rows from the current Cloud identity after a hidden update."
+            updatedRow != nil,
+            "Reopening must rebuild retained AppKit rows from the current workspace title after a hidden update."
         )
-        focusedWorkspace.cloudVMBinding = nil
-        let removalDeadline = Date(timeIntervalSinceNow: 1)
-        while cloudRow?.accessibilityLabel()?.contains("Cloud workspace") == true, Date() < removalDeadline {
+        focusedWorkspace.setCustomTitle("Visible workspace update")
+        let updateDeadline = Date(timeIntervalSinceNow: 1)
+        while updatedRow?.accessibilityLabel()?.contains("Visible workspace update") != true, Date() < updateDeadline {
             await drainMainRunLoop(for: window, iterations: 1)
         }
         #expect(
-            cloudRow?.accessibilityLabel()?.contains("Cloud workspace") == false,
-            "The shared sidebar observation must also refresh a visible row when its Cloud binding is removed."
+            updatedRow?.accessibilityLabel()?.contains("Visible workspace update") == true,
+            "The shared sidebar observation must also refresh a visible row when its workspace title changes."
         )
 
         let contentView = try #require(window.contentView)
@@ -487,20 +442,17 @@ struct SidebarHiddenPresentationTests {
     func persistenceIsScopedToDefaultProvider() throws {
         #expect(
             ContentView.retainsDefaultAppKitSidebar(
-                appKitListEnabled: true,
                 effectiveProviderId: CmuxExtensionSidebarSelection.defaultProviderId
             )
         )
         #expect(
             !ContentView.retainsDefaultAppKitSidebar(
-                appKitListEnabled: true,
                 effectiveProviderId: CmuxExtensionSidebarSelection.hostedExtensionsProviderId
             )
         )
         let bundledProviderId = try #require(CmuxExtensionSidebarSelection.providers.first?.descriptor.id)
         #expect(
             !ContentView.retainsDefaultAppKitSidebar(
-                appKitListEnabled: true,
                 effectiveProviderId: bundledProviderId
             )
         )
@@ -514,17 +466,10 @@ struct SidebarHiddenPresentationTests {
         CmuxExtensionSidebarSelection.withCustomSidebarsDirectoryForTesting(customSidebarsDirectory) {
             #expect(
                 !ContentView.retainsDefaultAppKitSidebar(
-                    appKitListEnabled: true,
                     effectiveProviderId: customProviderId
                 )
             )
         }
-        #expect(
-            !ContentView.retainsDefaultAppKitSidebar(
-                appKitListEnabled: false,
-                effectiveProviderId: CmuxExtensionSidebarSelection.defaultProviderId
-            )
-        )
     }
 
     private func descendants<View: NSView>(of type: View.Type, in root: NSView?) -> [View] {

@@ -5,9 +5,6 @@ import CmuxTerminal
 /// App boundary for privacy-safe snapshots; it never reads terminal contents.
 @MainActor
 struct TerminalGeometryDiagnostics {
-    let log: DiagnosticLog
-
-    init(log: DiagnosticLog = MobileHostDiagnostics.log) { self.log = log }
 
     func context(
         workspaceID: UUID?,
@@ -28,15 +25,6 @@ struct TerminalGeometryDiagnostics {
         )
     }
 
-    func begin(
-        _ phase: TerminalWorkDiagnostic.Phase,
-        workspaceID: UUID?,
-        transition: TerminalWorkContext.Transition = .unknown
-    ) -> TerminalWorkInterval {
-        log.beginTerminalWork(
-            phase, context: context(workspaceID: workspaceID, transition: transition)
-        )
-    }
 
     /// Only an active native window or owned divider drag establishes resize.
     func resizeTransition(in window: NSWindow?) -> TerminalWorkContext.Transition {
@@ -50,13 +38,6 @@ struct TerminalGeometryDiagnostics {
         reason: String,
         transition: TerminalWorkContext.Transition
     ) {
-        let work = begin(
-            .rendererRefresh,
-            workspaceID: view.surfaceView.terminalSurface?.tabId,
-            transition: transition
-        )
-        defer { work.end() }
-        // Retain the existing realization boundary while measuring its cost.
         view.layoutSubtreeIfNeeded()
         view.surfaceView.layoutSubtreeIfNeeded()
         view.displayIfNeeded()

@@ -21,7 +21,7 @@ import Testing
         var engine = TerminalSizingEngine(initialSize: TerminalGridSize(cols: 80, rows: 24), policy: policy)
         for participant in participants { _ = engine.attach(participant) }
         if let active { _ = engine.noteActivity(active) }
-        let snapshot = TerminalSharingSnapshot(state: engine.state, selfParticipantID: Self.me.id, isCloud: false)
+        let snapshot = TerminalSharingSnapshot(state: engine.state, selfParticipantID: Self.me.id)
         return TerminalSharingPresentation(snapshot: snapshot, strings: .english)
     }
 

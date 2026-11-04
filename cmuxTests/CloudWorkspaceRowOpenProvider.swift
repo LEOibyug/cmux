@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -13,8 +13,8 @@ import Foundation
 final class CloudWorkspaceRowOpenProvider: SurfaceProvider {
     let machine: SurfaceMachineID
     let info: SurfaceMachineInfo
-    var gate: CloudLinkFirstValue<Bool>?
-    let started = CloudLinkFirstValue<Bool>()
+    var gate: RemoteLinkFirstValue<Bool>?
+    let started = RemoteLinkFirstValue<Bool>()
     var materializations = 0
     var failAt: Int?
     var remoteCloses = 0
@@ -22,13 +22,13 @@ final class CloudWorkspaceRowOpenProvider: SurfaceProvider {
     init(machine: SurfaceMachineID) {
         self.machine = machine
         info = SurfaceMachineInfo(id: machine, name: "Fixture", status: "running", image: nil,
-            hasDesktop: false, memoryMb: nil, diskMb: nil, linkState: .connected, linkError: nil,
+            memoryMb: nil, diskMb: nil, linkState: .connected, linkError: nil,
             cpuPercent: nil, memoryUsedMb: nil, diskUsedMb: nil)
     }
 
     func refresh() async {}
     func createTerminal(command: [String]?, cwd: String?, name: String?, remoteWorkspaceID: String?) async throws -> SurfaceResource {
-        throw CloudDiagnosticFailure.conflict
+        throw TuiTransportError.placementMismatch
     }
     func closeRemoteWorkspace(id: String) async throws { remoteCloses += 1 }
     func closeTerminal(_ id: SurfaceResourceID) async throws { remoteCloses += 1 }
@@ -37,16 +37,16 @@ final class CloudWorkspaceRowOpenProvider: SurfaceProvider {
         try await materialize(resource, remoteView: nil, at: destination, focus: focus, adopting: nil)
     }
     func materialize(_ resource: SurfaceResource, remoteView: SurfaceRemoteView?, at destination: SurfaceDestination,
-                     focus: Bool, adopting reservation: CloudTerminalPaneReservation?) async throws -> SurfaceProjection {
+                     focus: Bool, adopting reservation: TuiTerminalPaneReservation?) async throws -> SurfaceProjection {
         materializations += 1
         started.resolve(true)
         if let gate { _ = await gate.result }
-        if materializations == failAt { throw CloudDiagnosticFailure.conflict }
+        if materializations == failAt { throw TuiTransportError.placementMismatch }
         let pane: (workspaceID: UUID, panelID: UUID)
         if let reservation {
             pane = (reservation.workspaceID, reservation.panelID)
         } else if resource.kind == .terminal {
-            let created = try SurfacePaneFactory.makeCloudManualMirrorPane(at: destination, focus: focus, onInput: { _ in },
+            let created = try SurfacePaneFactory.makeTuiManualMirrorPane(at: destination, focus: focus, onInput: { _ in },
                 keyNameResolver: nil, onResize: { _ in }, onRuntimeReady: {}, onFocus: {})
             pane = (created.workspaceID, created.panelID)
         } else {

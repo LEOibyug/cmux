@@ -54,7 +54,7 @@ public struct BrowserURLResolver: Sendable {
 
         let lower = trimmed.lowercased()
         let bareHost = bareHostCandidate(lower)
-        if BrowserAppWebOrigin.isLoopbackHost(bareHost) {
+        if Self.isLoopbackHost(bareHost) {
             return schemeLessURL(scheme: "http", authorityText: trimmed)
         }
 
@@ -72,6 +72,20 @@ public struct BrowserURLResolver: Sendable {
             return schemeLessURL(scheme: "https", authorityText: trimmed)
         }
         return nil
+    }
+    /// Recognizes local development hosts without accepting dotted-host lookalikes.
+    static func isLoopbackHost(_ candidate: String) -> Bool {
+        let host = candidate.lowercased()
+        if host == "localhost" || host == "::1" {
+            return true
+        }
+        if host != ".localhost", host.hasSuffix(".localhost") {
+            return true
+        }
+        let octets = host.split(separator: ".", omittingEmptySubsequences: false)
+        return octets.count == 4
+            && octets.allSatisfy { UInt8($0) != nil }
+            && octets[0] == "127"
     }
 
     /// Returns a URL for an explicit scheme already present in the input.

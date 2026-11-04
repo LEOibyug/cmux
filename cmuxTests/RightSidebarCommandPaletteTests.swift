@@ -90,9 +90,6 @@ final class RightSidebarCommandPaletteTests: XCTestCase {
             let defaults = UserDefaults.standard
             defaults.removeObject(forKey: RightSidebarBetaFeatureSettings.feedEnabledKey)
             defaults.removeObject(forKey: "rightSidebar.beta.dock.enabled")
-            // Cloud Machines defaults on in dev builds (d6584c07e0); pin the toggle off so
-            // the default-mode contract below is the same on every build.
-            defaults.set(false, forKey: RightSidebarBetaFeatureSettings.cloudMachinesEnabledKey)
             let contributions = ContentView.commandPaletteRightSidebarModeCommandContributions()
             let contributionsByID = Dictionary(uniqueKeysWithValues: contributions.map { ($0.commandId, $0) })
             let context = CommandPaletteContextSnapshot()
@@ -116,14 +113,10 @@ final class RightSidebarCommandPaletteTests: XCTestCase {
                 XCTAssertTrue(contribution.enablement(context))
             }
 
-            // Files/Find/Vault, the graduated Dock, and the Cloud tab are
-            // discoverable before the local activation marker is set.
-            let machinesAvailable = RightSidebarMode.machines.isAvailable()
-            XCTAssertTrue(machinesAvailable)
-            XCTAssertEqual(contributions.count, 5)
+            // Files, Find, Vault, and Dock are available without beta opt-ins.
+            XCTAssertEqual(contributions.count, 4)
             XCTAssertNil(contributionsByID[ContentView.commandPaletteRightSidebarModeCommandID(.feed)])
             XCTAssertNotNil(contributionsByID[ContentView.commandPaletteRightSidebarModeCommandID(.dock)])
-            XCTAssertNotNil(contributionsByID[ContentView.commandPaletteRightSidebarModeCommandID(.machines)])
         }
     }
 
@@ -132,7 +125,6 @@ final class RightSidebarCommandPaletteTests: XCTestCase {
         withSavedBetaFeatureDefaults {
             let defaults = UserDefaults.standard
             defaults.set(true, forKey: RightSidebarBetaFeatureSettings.feedEnabledKey)
-            defaults.set(true, forKey: RightSidebarBetaFeatureSettings.cloudMachinesEnabledKey)
 
             for mode in RightSidebarMode.allCases {
                 XCTAssertEqual(
@@ -286,11 +278,9 @@ final class RightSidebarCommandPaletteTests: XCTestCase {
         let defaults = UserDefaults.standard
         let previousFeed = defaults.object(forKey: RightSidebarBetaFeatureSettings.feedEnabledKey)
         let previousLegacyDockBeta = defaults.object(forKey: "rightSidebar.beta.dock.enabled")
-        let previousCloudMachines = defaults.object(forKey: RightSidebarBetaFeatureSettings.cloudMachinesEnabledKey)
         defer {
             restore(previousFeed, forKey: RightSidebarBetaFeatureSettings.feedEnabledKey)
             restore(previousLegacyDockBeta, forKey: "rightSidebar.beta.dock.enabled")
-            restore(previousCloudMachines, forKey: RightSidebarBetaFeatureSettings.cloudMachinesEnabledKey)
         }
         try body()
     }

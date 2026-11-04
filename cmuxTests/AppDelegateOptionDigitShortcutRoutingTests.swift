@@ -486,12 +486,6 @@ struct AppDelegateOptionDigitShortcutRoutingTests {
             defer { closeWindow(withId: windowId) }
 
             let testWindow = try #require(self.window(withId: windowId))
-            // Cmd+Y (New Cloud Workspace) and Cmd+Shift+Y (New Cloud Machine) are
-            // Cloud defaults that swapped strokes in 9c2ba78be4; this test isolates
-            // modifier matching for focus history rather than shortcut conflict
-            // priority, so clear both regardless of which one owns the shifted key.
-            KeyboardShortcutSettings.clearShortcut(for: .newCloudWorkspace)
-            KeyboardShortcutSettings.clearShortcut(for: .newCloudMachine)
             let candidates: [(KeyboardShortcutSettings.Action, StoredShortcut, NSEvent.ModifierFlags, String, String, UInt16)] = [
                 (
                     .focusHistoryBack,

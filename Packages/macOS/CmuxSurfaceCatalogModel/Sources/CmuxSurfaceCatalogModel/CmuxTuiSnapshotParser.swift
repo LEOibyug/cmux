@@ -16,7 +16,7 @@ import Foundation
 /// `agents[{id?,terminal_id,state,source}]`.
 /// A tab's `name` is the user-set label (`tab.rename`, persisted in the daemon's
 /// registry); the terminal's `title` is PTY-derived. A named view wins over the title.
-public struct CloudVMStateDeltaImpact: Hashable, Sendable {
+public struct TuiStateDeltaImpact: Hashable, Sendable {
     /// Resource identities whose derived rows can be rebuilt without touching unrelated rows.
     public var resourceIDs: Set<SurfaceResourceID> = []
     /// Relationship changes can move many resources at once. These use the authoritative full
@@ -28,11 +28,11 @@ public struct CloudVMStateDeltaImpact: Hashable, Sendable {
         self.requiresFullResourceRebuild = requiresFullResourceRebuild
     }
 }
-public struct CloudVMStateDeltaApplication: Sendable {
-    public let state: CloudVMState
-    public let impact: CloudVMStateDeltaImpact
+public struct TuiStateDeltaApplication: Sendable {
+    public let state: TuiState
+    public let impact: TuiStateDeltaImpact
 
-    public init(state: CloudVMState, impact: CloudVMStateDeltaImpact) {
+    public init(state: TuiState, impact: TuiStateDeltaImpact) {
         self.state = state
         self.impact = impact
     }
@@ -45,7 +45,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
     /// the focused workspace, focused screen, and focused pane in that order, using explicit
     /// row indexes when available and a legacy daemon-order fallback otherwise. A new tab is
     /// appended to the chosen pane.
-    public static func terminalProjectionTarget(from snapshot: [String: Any]) -> CloudTuiTerminalProjectionTarget? {
+    public static func terminalProjectionTarget(from snapshot: [String: Any]) -> TuiTerminalProjectionTarget? {
         guard requiredGraphCollectionsArePresent(in: snapshot) else { return nil }
         let workspaces = snapshot["workspaces"] as? [[String: Any]] ?? []
         let screens = snapshot["screens"] as? [[String: Any]] ?? []
@@ -74,7 +74,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
                 }, focusedFirst: true)
                 for paneEntry in screenPanes {
                     guard let paneID = paneEntry.element["id"] as? String, !paneID.isEmpty else { continue }
-                    return CloudTuiTerminalProjectionTarget(
+                    return TuiTerminalProjectionTarget(
                         workspaceID: workspaceID,
                         screenID: screenID,
                         paneID: paneID,
@@ -116,30 +116,30 @@ public struct CmuxTuiSnapshotParser: Sendable {
     /// A missing or explicit-null cursor is a legacy snapshot-only state. A
     /// present cursor must be valid, because accepting a malformed ordering token
     /// would make later deltas target the wrong graph.
-    public static func state(fromSnapshot snapshot: [String: Any], machine: SurfaceMachineID) -> CloudVMState? {
-        let cursor: CloudVMCursor?
+    public static func state(fromSnapshot snapshot: [String: Any], machine: SurfaceMachineID) -> TuiState? {
+        let cursor: TuiCursor?
         if let rawCursor = snapshot["cursor"], !(rawCursor is NSNull) {
-            guard let parsed = CloudVMCursor(snapshot: snapshot) else { return nil }
+            guard let parsed = TuiCursor(snapshot: snapshot) else { return nil }
             cursor = parsed
         } else {
             cursor = nil
         }
         guard authoritativeGraphIsValid(snapshot) else { return nil }
-        let document = CloudVMStateDocument(snapshot: snapshot)
+        let document = TuiStateDocument(snapshot: snapshot)
         guard let rawSnapshot = document.data() else { return nil }
 
-        let workspaces = ((snapshot["workspaces"] as? [[String: Any]]) ?? []).enumerated().compactMap { index, raw -> CloudVMWorkspaceState? in
+        let workspaces = ((snapshot["workspaces"] as? [[String: Any]]) ?? []).enumerated().compactMap { index, raw -> TuiWorkspaceState? in
             guard let id = nonEmptyString(raw["id"]) else { return nil }
-            return CloudVMWorkspaceState(
+            return TuiWorkspaceState(
                 id: id,
                 name: nonEmptyString(raw["name"]) ?? id,
                 index: integer(raw["index"]) ?? index,
                 focused: raw["focused"] as? Bool ?? false
             )
         }
-        let screens = ((snapshot["screens"] as? [[String: Any]]) ?? []).enumerated().compactMap { index, raw -> CloudVMScreenState? in
+        let screens = ((snapshot["screens"] as? [[String: Any]]) ?? []).enumerated().compactMap { index, raw -> TuiScreenState? in
             guard let id = nonEmptyString(raw["id"]), let workspaceID = nonEmptyString(raw["workspace_id"]) else { return nil }
-            return CloudVMScreenState(
+            return TuiScreenState(
                 id: id,
                 workspaceID: workspaceID,
                 name: nonEmptyString(raw["name"]),
@@ -148,7 +148,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
                 layout: raw["layout"].flatMap(canonicalJSONData)
             )
         }
-        let tabs = ((snapshot["tabs"] as? [[String: Any]]) ?? []).enumerated().compactMap { index, raw -> CloudVMTabState? in
+        let tabs = ((snapshot["tabs"] as? [[String: Any]]) ?? []).enumerated().compactMap { index, raw -> TuiTabState? in
             tabState(from: raw, fallbackIndex: index)
         }
         // The public daemon schema puts the relationship on `tabs[].pane_id`.
@@ -163,9 +163,9 @@ public struct CmuxTuiSnapshotParser: Sendable {
                 tabIDsByTerminal[tab.contentID, default: []].append(tab.id)
             }
         }
-        let panes = ((snapshot["panes"] as? [[String: Any]]) ?? []).compactMap { raw -> CloudVMPaneState? in
+        let panes = ((snapshot["panes"] as? [[String: Any]]) ?? []).compactMap { raw -> TuiPaneState? in
             guard let id = nonEmptyString(raw["id"]), let screenID = nonEmptyString(raw["screen_id"]) else { return nil }
-            return CloudVMPaneState(
+            return TuiPaneState(
                 id: id,
                 screenID: screenID,
                 name: nonEmptyString(raw["name"]),
@@ -174,7 +174,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
                 tabIDs: tabIDsByPane[id] ?? []
             )
         }
-        let terminals = ((snapshot["terminals"] as? [[String: Any]]) ?? []).compactMap { raw -> CloudVMTerminalState? in
+        let terminals = ((snapshot["terminals"] as? [[String: Any]]) ?? []).compactMap { raw -> TuiTerminalState? in
             guard let id = nonEmptyString(raw["id"]) else { return nil }
             let declaredTabIDs = uniquePreservingOrder((raw["tab_ids"] as? [String]) ?? [])
                 + (nonEmptyString(raw["tab_id"]).map { [$0] } ?? [])
@@ -182,7 +182,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
             // declared ids after it for old daemons that omit a tab row while a
             // terminal is detached or exiting.
             let tabIDs = uniquePreservingOrder((tabIDsByTerminal[id] ?? []) + declaredTabIDs)
-            return CloudVMTerminalState(
+            return TuiTerminalState(
                 id: id,
                 tabIDs: tabIDs,
                 title: (raw["title"] as? String) ?? "",
@@ -193,9 +193,9 @@ public struct CmuxTuiSnapshotParser: Sendable {
                 running: raw["running"] as? Bool
             )
         }
-        let browsers = ((snapshot["browsers"] as? [[String: Any]]) ?? []).compactMap { raw -> CloudVMBrowserState? in
+        let browsers = ((snapshot["browsers"] as? [[String: Any]]) ?? []).compactMap { raw -> TuiBrowserState? in
             guard let id = nonEmptyString(raw["id"]), let tabID = nonEmptyString(raw["tab_id"]) else { return nil }
-            return CloudVMBrowserState(
+            return TuiBrowserState(
                 id: id,
                 tabID: tabID,
                 url: (raw["url"] as? String) ?? "",
@@ -203,9 +203,9 @@ public struct CmuxTuiSnapshotParser: Sendable {
                 status: (raw["status"] as? String) ?? ""
             )
         }
-        let agents = ((snapshot["agents"] as? [[String: Any]]) ?? []).compactMap { raw -> CloudVMAgentState? in
+        let agents = ((snapshot["agents"] as? [[String: Any]]) ?? []).compactMap { raw -> TuiAgentState? in
             guard let terminalID = nonEmptyString(raw["terminal_id"]), let state = nonEmptyString(raw["state"]) else { return nil }
-            return CloudVMAgentState(
+            return TuiAgentState(
                 id: nonEmptyString(raw["id"]),
                 terminalID: terminalID,
                 state: state,
@@ -218,7 +218,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
             )
         }
 
-        return CloudVMState(
+        return TuiState(
             machine: machine,
             cursor: cursor,
             rawSnapshot: rawSnapshot,
@@ -464,9 +464,9 @@ public struct CmuxTuiSnapshotParser: Sendable {
     /// authoritative; terminal-row references are a compatibility fallback
     /// for older snapshots that omit one or more tab rows.
     private static func terminalTabs(
-        _ terminal: CloudVMTerminalState,
-        index: CloudVMStateIndex
-    ) -> [CloudVMTabState] {
+        _ terminal: TuiTerminalState,
+        index: TuiStateIndex
+    ) -> [TuiTabState] {
         var result = index.tabs(contentKind: "terminal", contentID: terminal.id)
         var seen = Set(result.map(\.id))
         for tabID in terminal.tabIDs where !seen.contains(tabID) {
@@ -481,7 +481,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
 
     /// Re-derives the compatibility resources from the exact state bytes. No
     /// resource mutation path is allowed to maintain a second remote graph.
-    public static func resources(from state: CloudVMState) -> [SurfaceResource] {
+    public static func resources(from state: TuiState) -> [SurfaceResource] {
         guard let snapshot = state.snapshotObject() else { return [] }
         return resources(fromSnapshot: snapshot, machine: state.machine)
     }
@@ -491,7 +491,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
     /// allocated, sorted, or compared. The provider uses this for row-local deltas and reserves
     /// the complete path for topology changes.
     public static func resources(
-        from state: CloudVMState,
+        from state: TuiState,
         matching resourceIDs: Set<SurfaceResourceID>
     ) -> [SurfaceResource] {
         guard !resourceIDs.isEmpty else { return [] }
@@ -500,7 +500,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
         // at a full snapshot boundary, and applyingTypedDelta checked the changed
         // relationship neighborhood, so materializing the document here would repeat
         // the full-document validation on every title or agent update.
-        func workspace(for tab: CloudVMTabState) -> SurfaceRemoteWorkspace? {
+        func workspace(for tab: TuiTabState) -> SurfaceRemoteWorkspace? {
             guard let pane = state.lookupIndex.pane(id: tab.paneID),
                   let screen = state.lookupIndex.screen(id: pane.screenID),
                   let workspace = state.lookupIndex.workspace(id: screen.workspaceID)
@@ -515,14 +515,14 @@ public struct CmuxTuiSnapshotParser: Sendable {
 
         // One layout-order read per screen for this delta, not one per row.
         var paneOrderByScreen: [String: [String: Int]] = [:]
-        func paneIndex(on screen: CloudVMScreenState, paneID: String) -> Int? {
+        func paneIndex(on screen: TuiScreenState, paneID: String) -> Int? {
             if let order = paneOrderByScreen[screen.id] { return order[paneID] }
             let order = layoutPaneOrder(fromLayoutData: screen.layout)
             paneOrderByScreen[screen.id] = order
             return order[paneID]
         }
 
-        func view(for tab: CloudVMTabState) -> SurfaceRemoteView? {
+        func view(for tab: TuiTabState) -> SurfaceRemoteView? {
             guard let workspace = workspace(for: tab) else { return nil }
             let screen = state.lookupIndex.pane(id: tab.paneID).flatMap {
                 state.lookupIndex.screen(id: $0.screenID)
@@ -587,17 +587,6 @@ public struct CmuxTuiSnapshotParser: Sendable {
                 )
                 resource.remoteViews = remoteView.map { [$0] } ?? []
                 resources.append(resource)
-            case .display:
-                var views: [SurfaceRemoteView] = []
-                for tab in state.lookupIndex.tabs(contentKind: "display", contentID: resourceID.key)
-                    + state.lookupIndex.tabs(contentKind: "screen", contentID: resourceID.key) {
-                    if let remoteView = view(for: tab) { views.append(remoteView) }
-                }
-                guard !views.isEmpty else { continue }
-                var resource = display(machine: state.machine, key: resourceID.key)
-                resource.remoteViews = views
-                resource.remoteWorkspace = views.first?.workspace
-                resources.append(resource)
             }
         }
         return resources.sorted(by: resourceComesBefore)
@@ -610,16 +599,16 @@ public struct CmuxTuiSnapshotParser: Sendable {
     /// unknown resource kinds refuse the batch so the caller can fetch a snapshot.
     public static func applying(
         deltaPayload: Data,
-        cursor: CloudVMCursor,
-        to state: CloudVMState
-    ) -> CloudVMState? {
+        cursor: TuiCursor,
+        to state: TuiState
+    ) -> TuiState? {
         applyingWithImpact(deltaPayload: deltaPayload, cursor: cursor, to: state)?.state
     }
 
     /// Debug-only breadcrumb for a rejected delta. Every rejection is a
     /// synchronization barrier that costs one snapshot, so the reason must be
     /// visible in the debug log instead of inferred from recovery cadence.
-    private static func rejectDelta(_ reason: String) -> CloudVMStateDeltaApplication? {
+    private static func rejectDelta(_ reason: String) -> TuiStateDeltaApplication? {
         #if DEBUG
         CMUXDebugLog.logDebugEvent("cloud.state.deltaRejectReason reason=\(reason)")
         #endif
@@ -628,9 +617,9 @@ public struct CmuxTuiSnapshotParser: Sendable {
 
     public static func applyingWithImpact(
         deltaPayload: Data,
-        cursor: CloudVMCursor,
-        to state: CloudVMState
-    ) -> CloudVMStateDeltaApplication? {
+        cursor: TuiCursor,
+        to state: TuiState
+    ) -> TuiStateDeltaApplication? {
         guard let currentCursor = state.cursor else { return rejectDelta("noCurrentCursor") }
         guard let delta = try? JSONSerialization.jsonObject(with: deltaPayload) as? [String: Any]
         else { return rejectDelta("payloadNotObject") }
@@ -734,7 +723,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
                   document: document
               )
         else { return rejectDelta("applyingWithImpact#11") }
-        return CloudVMStateDeltaApplication(
+        return TuiStateDeltaApplication(
             state: next,
             impact: deltaImpact(changes, previous: state, next: next)
         )
@@ -745,7 +734,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
     /// remains the authority. Typed rows are changed only for entities named by
     /// this batch; relationship checks then cover those rows and their immediate
     /// edges.
-    private static func rejectTyped(_ reason: String) -> CloudVMState? {
+    private static func rejectTyped(_ reason: String) -> TuiState? {
         #if DEBUG
         CMUXDebugLog.logDebugEvent("cloud.state.deltaRejectReason reason=\(reason)")
         #endif
@@ -754,10 +743,10 @@ public struct CmuxTuiSnapshotParser: Sendable {
 
     private static func applyingTypedDelta(
         _ changes: [[String: Any]],
-        to state: CloudVMState,
-        cursor: CloudVMCursor,
-        document: CloudVMStateDocument
-    ) -> CloudVMState? {
+        to state: TuiState,
+        cursor: TuiCursor,
+        document: TuiStateDocument
+    ) -> TuiState? {
         var next = state
         next.cursor = cursor
         next.document = document
@@ -941,9 +930,9 @@ public struct CmuxTuiSnapshotParser: Sendable {
         return nonEmptyString(change["id"])
     }
 
-    private static func workspaceState(from value: [String: Any], fallbackIndex: Int) -> CloudVMWorkspaceState? {
+    private static func workspaceState(from value: [String: Any], fallbackIndex: Int) -> TuiWorkspaceState? {
         guard let id = nonEmptyString(value["id"]) else { return nil }
-        return CloudVMWorkspaceState(
+        return TuiWorkspaceState(
             id: id,
             name: nonEmptyString(value["name"]) ?? id,
             index: integer(value["index"]) ?? fallbackIndex,
@@ -951,11 +940,11 @@ public struct CmuxTuiSnapshotParser: Sendable {
         )
     }
 
-    private static func screenState(from value: [String: Any], fallbackIndex: Int) -> CloudVMScreenState? {
+    private static func screenState(from value: [String: Any], fallbackIndex: Int) -> TuiScreenState? {
         guard let id = nonEmptyString(value["id"]),
               let workspaceID = nonEmptyString(value["workspace_id"])
         else { return nil }
-        return CloudVMScreenState(
+        return TuiScreenState(
             id: id,
             workspaceID: workspaceID,
             name: nonEmptyString(value["name"]),
@@ -965,11 +954,11 @@ public struct CmuxTuiSnapshotParser: Sendable {
         )
     }
 
-    private static func paneState(from value: [String: Any], fallbackTabIDs: [String]) -> CloudVMPaneState? {
+    private static func paneState(from value: [String: Any], fallbackTabIDs: [String]) -> TuiPaneState? {
         guard let id = nonEmptyString(value["id"]),
               let screenID = nonEmptyString(value["screen_id"])
         else { return nil }
-        return CloudVMPaneState(
+        return TuiPaneState(
             id: id,
             screenID: screenID,
             name: nonEmptyString(value["name"]),
@@ -979,13 +968,13 @@ public struct CmuxTuiSnapshotParser: Sendable {
         )
     }
 
-    private static func tabState(from value: [String: Any], fallbackIndex: Int) -> CloudVMTabState? {
+    private static func tabState(from value: [String: Any], fallbackIndex: Int) -> TuiTabState? {
         guard let id = nonEmptyString(value["id"]),
               let paneID = nonEmptyString(value["pane_id"]),
               let contentKind = nonEmptyString(value["content_kind"]),
               let contentID = nonEmptyString(value["content_id"])
         else { return nil }
-        return CloudVMTabState(
+        return TuiTabState(
             id: id,
             paneID: paneID,
             name: nonEmptyString(value["name"]),
@@ -993,12 +982,13 @@ public struct CmuxTuiSnapshotParser: Sendable {
             focused: value["focused"] as? Bool ?? false,
             contentKind: contentKind,
             contentID: contentID,
-            nameAuthority: CloudTabNameAuthority(snapshot: value)
+            nameAuthority: TuiTabNameAuthority(snapshot: value)
         )
     }
 
-    private static func terminalState(from value: [String: Any]) -> CloudVMTerminalState? {
+    private static func terminalState(from value: [String: Any]) -> TuiTerminalState? {
         guard let id = nonEmptyString(value["id"]) else { return nil }
+
         var tabIDs: [String] = []
         if let rawTabIDs = value["tab_ids"], !(rawTabIDs is NSNull) {
             guard let decodedTabIDs = rawTabIDs as? [String],
@@ -1010,7 +1000,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
             guard let tabID = nonEmptyString(rawTabID) else { return nil }
             if tabIDs.isEmpty { tabIDs = [tabID] }
         }
-        return CloudVMTerminalState(
+        return TuiTerminalState(
             id: id,
             tabIDs: tabIDs,
             title: (value["title"] as? String) ?? "",
@@ -1022,11 +1012,11 @@ public struct CmuxTuiSnapshotParser: Sendable {
         )
     }
 
-    private static func browserState(from value: [String: Any]) -> CloudVMBrowserState? {
+    private static func browserState(from value: [String: Any]) -> TuiBrowserState? {
         guard let id = nonEmptyString(value["id"]),
               let tabID = nonEmptyString(value["tab_id"])
         else { return nil }
-        return CloudVMBrowserState(
+        return TuiBrowserState(
             id: id,
             tabID: tabID,
             url: (value["url"] as? String) ?? "",
@@ -1035,11 +1025,11 @@ public struct CmuxTuiSnapshotParser: Sendable {
         )
     }
 
-    private static func agentState(from value: [String: Any]) -> CloudVMAgentState? {
+    private static func agentState(from value: [String: Any]) -> TuiAgentState? {
         guard let terminalID = nonEmptyString(value["terminal_id"]),
               let state = nonEmptyString(value["state"])
         else { return nil }
-        return CloudVMAgentState(
+        return TuiAgentState(
             id: nonEmptyString(value["id"]),
             terminalID: terminalID,
             state: state,
@@ -1074,7 +1064,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
         value: [String: Any],
         change: [String: Any],
         resolvedID: String,
-        to state: inout CloudVMState
+        to state: inout TuiState
     ) -> Bool {
         guard var decoded = agentState(from: value),
               let terminalID = nonEmptyString(value["terminal_id"])
@@ -1099,7 +1089,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
         return true
     }
 
-    private static func applyAgentDelete(change: [String: Any], resolvedID: String, to state: inout CloudVMState) -> Bool {
+    private static func applyAgentDelete(change: [String: Any], resolvedID: String, to state: inout TuiState) -> Bool {
         let explicitID = nonEmptyString(change["id"]) ?? (change["value"] as? [String: Any]).flatMap { nonEmptyString($0["id"]) } ?? resolvedID
         let terminalID = nonEmptyString(change["terminal_id"])
             ?? (change["value"] as? [String: Any]).flatMap { nonEmptyString($0["terminal_id"]) }
@@ -1144,8 +1134,8 @@ public struct CmuxTuiSnapshotParser: Sendable {
     /// become invalid without being named by this batch.
     private static func deltaRelationshipsAreConsistent(
         _ changes: [[String: Any]],
-        previous: CloudVMState,
-        next: CloudVMState
+        previous: TuiState,
+        next: TuiState
     ) -> Bool {
         var affectedTerminalIDs = Set<String>()
         var affectedBrowserIDs = Set<String>()
@@ -1227,10 +1217,10 @@ public struct CmuxTuiSnapshotParser: Sendable {
 
     private static func deltaImpact(
         _ changes: [[String: Any]],
-        previous: CloudVMState,
-        next: CloudVMState
-    ) -> CloudVMStateDeltaImpact {
-        var impact = CloudVMStateDeltaImpact()
+        previous: TuiState,
+        next: TuiState
+    ) -> TuiStateDeltaImpact {
+        var impact = TuiStateDeltaImpact()
         for change in changes {
             guard let resource = nonEmptyString(change["resource"]) else {
                 impact.requiresFullResourceRebuild = true
@@ -1302,7 +1292,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
                 // ordering of many resources, so a complete rebuild is the safe boundary.
                 impact.requiresFullResourceRebuild = true
             default:
-                // Opaque entities are retained in CloudVMState but do not produce surface rows.
+                // Opaque entities are retained in TuiState but do not produce surface rows.
                 break
             }
         }
@@ -1315,21 +1305,21 @@ public struct CmuxTuiSnapshotParser: Sendable {
     /// barrier rather than a partially applied event.
     private static func deltaEnvelopeMatches(
         _ delta: [String: Any],
-        cursor: CloudVMCursor,
+        cursor: TuiCursor,
         previousRevision: UInt64
     ) -> Bool {
         if let kind = delta["kind"] as? String, kind != "delta" { return false }
         if delta["kind"] != nil, delta["kind"] as? String == nil { return false }
         if let rawCursor = delta["cursor"] {
             guard let object = rawCursor as? [String: Any],
-                  CloudVMCursor(wire: object) == cursor else { return false }
+                  TuiCursor(wire: object) == cursor else { return false }
         }
         if let rawPrevious = delta["previous_revision"],
-           CloudWireNumber.unsigned(rawPrevious) != previousRevision {
+           TuiWireNumber.unsigned(rawPrevious) != previousRevision {
             return false
         }
         if let rawRevision = delta["revision"],
-           CloudWireNumber.unsigned(rawRevision) != cursor.revision {
+           TuiWireNumber.unsigned(rawRevision) != cursor.revision {
             return false
         }
         return true
@@ -1346,7 +1336,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
                 sawMissing = true
                 continue
             }
-            guard let sequence = CloudWireNumber.unsigned(raw), sequence == UInt64(index) else {
+            guard let sequence = TuiWireNumber.unsigned(raw), sequence == UInt64(index) else {
                 return false
             }
             sawSequence = true
@@ -1363,7 +1353,6 @@ public struct CmuxTuiSnapshotParser: Sendable {
         switch contentKind {
         case "terminal": return SurfaceResourceID(machine: machine, kind: .terminal, key: contentID)
         case "browser": return SurfaceResourceID(machine: machine, kind: .browser, key: contentID)
-        case "display", "screen": return SurfaceResourceID(machine: machine, kind: .display, key: contentID)
         default: return nil
         }
     }
@@ -1383,7 +1372,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
 #endif
     public nonisolated static func terminalProjectionTarget(
         from data: Data
-    ) async -> (target: CloudTuiTerminalProjectionTarget, revision: String?)? {
+    ) async -> (target: TuiTerminalProjectionTarget, revision: String?)? {
         guard let snapshot = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let target = terminalProjectionTarget(from: snapshot) else {
             return nil
@@ -1564,41 +1553,6 @@ public struct CmuxTuiSnapshotParser: Sendable {
             browser.remoteViews = views
             resources.append(browser)
         }
-        // A display tab (`content_kind: "display"`, `content_id: "display:1"`) is a pointer
-        // to the machine's screen: the same display resource the pool lists, with one view
-        // per workspace tab that holds it — so a workspace remembers its desktop the way
-        // it remembers its terminals and browsers.
-        var displayViews: [String: [SurfaceRemoteView]] = [:]
-        var displayOrder: [String] = []
-        for tab in orderedTabsRaw {
-            guard ["display", "screen"].contains(tab["content_kind"] as? String),
-                  let contentID = tab["content_id"] as? String, !contentID.isEmpty,
-                  let tabID = tab["id"] as? String,
-                  let paneID = paneOfTab[tabID],
-                  let screenID = screenOfPane[paneID],
-                  let workspaceID = workspaceOfScreen[screenID],
-                  let workspace = workspaceByID[workspaceID] else { continue }
-            if displayViews[contentID] == nil { displayOrder.append(contentID) }
-            displayViews[contentID, default: []].append(SurfaceRemoteView(
-                tabID: tabID,
-                workspace: workspace,
-                screenID: screenID,
-                paneID: paneID,
-                name: nameOfTab[tabID],
-                index: indexOfTab[tabID],
-                focused: focusedOfTab[tabID],
-                screenIndex: indexOfScreen[screenID],
-                paneIndex: paneOrderOfPane[paneID]
-            ))
-        }
-        for contentID in displayOrder {
-            let resourceID = SurfaceResourceID(machine: machine, kind: .display, key: contentID)
-            if let resourceIDs, !resourceIDs.contains(resourceID) { continue }
-            var display = Self.display(machine: machine, key: contentID)
-            display.remoteViews = displayViews[contentID]
-            display.remoteWorkspace = displayViews[contentID]?.first?.workspace
-            resources.append(display)
-        }
         // Workspace order first; zero-view resources (the pool) trail. Every
         // tie has an explicit key. Returning false for equal workspace indexes
         // would make sorting depend on dictionary/JSON arrival order.
@@ -1634,13 +1588,6 @@ public struct CmuxTuiSnapshotParser: Sendable {
             guard let id = raw["id"] as? String, !id.isEmpty else { continue }
             let tabIDs = ((raw["tab_ids"] as? [String]) ?? []) + [(raw["tab_id"] as? String) ?? ""]
             if let tab = tabIDs.first(where: { !$0.isEmpty }) { result[id] = result[id] ?? tab }
-        }
-        // A display pointer has no process to end: closing it means closing its tab.
-        for tab in (snapshot["tabs"] as? [[String: Any]]) ?? [] {
-            guard ["display", "screen"].contains(tab["content_kind"] as? String),
-                  let contentID = tab["content_id"] as? String, !contentID.isEmpty,
-                  let tabID = tab["id"] as? String, !tabID.isEmpty, result[contentID] == nil else { continue }
-            result[contentID] = tabID
         }
         return result
     }
@@ -1707,7 +1654,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
     }
 
     public struct CreatedTerminalPath: Equatable, Sendable {
-        public var attachment: CloudCreationAttachment? = nil
+        public var attachment: TuiCreationAttachment? = nil
         public let terminalID: String
         public let workspaceID: String?
         public let screenID: String?
@@ -1716,16 +1663,16 @@ public struct CmuxTuiSnapshotParser: Sendable {
         /// The daemon commit position for this creation. A mutation result is
         /// also a read-your-write receipt, so a lagging snapshot can be
         /// recognized without guessing how long the event feed needs.
-        public let cursor: CloudVMCursor?
+        public let cursor: TuiCursor?
 
         public init(
-            attachment: CloudCreationAttachment? = nil,
+            attachment: TuiCreationAttachment? = nil,
             terminalID: String,
             workspaceID: String?,
             screenID: String?,
             paneID: String?,
             tabID: String?,
-            cursor: CloudVMCursor?
+            cursor: TuiCursor?
         ) {
             self.attachment = attachment
             self.terminalID = terminalID
@@ -1743,7 +1690,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
         public let screenID: String
         public let paneID: String
         public let tabID: String
-        public let cursor: CloudVMCursor?
+        public let cursor: TuiCursor?
 
         public init(
             browserID: String,
@@ -1751,7 +1698,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
             screenID: String,
             paneID: String,
             tabID: String,
-            cursor: CloudVMCursor?
+            cursor: TuiCursor?
         ) {
             self.browserID = browserID
             self.workspaceID = workspaceID
@@ -1773,7 +1720,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
         }
         let cursor = mutationCursor(fromResult: result)
         let attachment = cursor.map {
-            CloudCreationAttachment(generation: $0.generation, terminalID: terminalID)
+            TuiCreationAttachment(generation: $0.generation, terminalID: terminalID)
         }
         return CreatedTerminalPath(
             attachment: attachment,
@@ -1815,7 +1762,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
     public static func mutationCursor(
         fromResult result: [String: Any],
         fallbackGeneration: String? = nil
-    ) -> CloudVMCursor? {
+    ) -> TuiCursor? {
         var candidates: [[String: Any]] = [result]
         if let nested = result["result"] as? [String: Any] { candidates.append(nested) }
         if let nested = result["value"] as? [String: Any] { candidates.append(nested) }
@@ -1824,17 +1771,17 @@ public struct CmuxTuiSnapshotParser: Sendable {
         }
         for candidate in candidates {
             if let cursor = candidate["cursor"] as? [String: Any],
-               let parsed = CloudVMCursor(wire: cursor) {
+               let parsed = TuiCursor(wire: cursor) {
                 return parsed
             }
-            guard let revision = CloudWireNumber.unsigned(candidate["revision"]),
+            guard let revision = TuiWireNumber.unsigned(candidate["revision"]),
                   let generation = (candidate["generation"] as? String)
                     .map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) })
                     .flatMap({ $0.isEmpty ? nil : $0 })
                     ?? fallbackGeneration else {
                 continue
             }
-            return CloudVMCursor(generation: generation, revision: revision)
+            return TuiCursor(generation: generation, revision: revision)
         }
         return nil
     }
@@ -1865,51 +1812,8 @@ public struct CmuxTuiSnapshotParser: Sendable {
         Set(listeningPortBindings(fromSocketListing: text).map(\.port)).sorted()
     }
 
-    /// Listeners that are never web previews, so the Ports scan does not
-    /// publish them: SSH (22), the cmux-tui daemon (1337), the VNC server
-    /// (5901) and its noVNC front end (6901, the Desktop surface), and the
-    /// image's internal 8080 listener.
-    /// Guest display slots use these private RFB/noVNC ports; they are owned by
-    /// the display catalog and must never become generic forwarded-port rows.
+    /// Non-HTTP transport listeners excluded from generic web previews.
     public static let internalPorts: Set<Int> = [22, 1337, 8080]
-    public static let displayPorts: Set<Int> = Set(Array(5901...5916) + Array(6901...6916))
-
-    public static let desktopPort = 6901
-
-    /// Fallback for callers that only hold an image id. Prefer
-    /// ``VMSummary/resolvedKind``, which honors the backend's explicit `kind`.
-    /// Only VNC markers count: see ``VMMachineKind/inferred(fromImage:)``.
-    public static func machineHasDesktop(image: String) -> Bool {
-        VMMachineKind.inferred(fromImage: image).hasDesktop
-    }
-
-    /// "Display N" for a guest display key, the same title guest discovery
-    /// gives it, so a pane opened before discovery is not first titled
-    /// "Desktop" and renamed seconds later. Other keys keep "Desktop".
-    public static func displayTitle(key: String) -> String {
-        guard key.hasPrefix("display:"), let number = Int(key.dropFirst("display:".count)) else { return "Desktop" }
-        let format = String(localized: "cloud.display.numberedTitle", defaultValue: "Display %d")
-        return format.replacingOccurrences(of: "%d", with: String(number))
-    }
-
-    /// The VNC display of a desktop machine (`display:1`; the key is the daemon's content id
-    /// once a workspace points at it).
-    public static func display(
-        machine: SurfaceMachineID,
-        key: String = "display:1",
-        directURL: String? = nil
-    ) -> SurfaceResource {
-        SurfaceResource(
-            id: SurfaceResourceID(machine: machine, kind: .display, key: key),
-            title: displayTitle(key: key),
-            detail: "noVNC",
-            lifecycle: .running,
-            agent: nil,
-            remoteWorkspace: nil,
-            port: key == SurfaceResourceID.desktopDisplayKey ? desktopPort : nil,
-            url: directURL
-        )
-    }
 
     /// A forwarded port, shown as a browser resource. `directURL`, when
     /// given, is where opening it actually navigates — the machine's private
@@ -1944,7 +1848,7 @@ public struct CmuxTuiSnapshotParser: Sendable {
     }
 
     private static func integer(_ raw: Any?) -> Int? {
-        CloudWireNumber.signed(raw)
+        TuiWireNumber.signed(raw)
     }
 
     private static func canonicalJSONData(_ object: Any) -> Data? {

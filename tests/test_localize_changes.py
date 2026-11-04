@@ -95,13 +95,13 @@ class LocalizeChangesTests(unittest.TestCase):
     def test_partial_array_translation_keeps_stale_element_visible(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "web/messages").mkdir(parents=True)
-            (root / "web/messages/en.json").write_text(json.dumps({"items": ["New first", "New second"]}))
-            (root / "web/messages/ja.json").write_text(json.dumps({"items": ["新しい一", "古い二"]}))
-            previous = {"web/messages/en.json": {"items": ["Old first", "Old second"]},
-                        "web/messages/ja.json": {"items": ["古い一", "古い二"]}}
+            (root / "agent-chat/messages").mkdir(parents=True)
+            (root / "agent-chat/messages/en.json").write_text(json.dumps({"items": ["New first", "New second"]}))
+            (root / "agent-chat/messages/ja.json").write_text(json.dumps({"items": ["新しい一", "古い二"]}))
+            previous = {"agent-chat/messages/en.json": {"items": ["Old first", "Old second"]},
+                        "agent-chat/messages/ja.json": {"items": ["古い一", "古い二"]}}
             with patch.object(MODULE, "base_json", side_effect=lambda root, base, path: previous[path]):
-                rows, attention, _ = MODULE.web_work(root, "base", ["web/messages/en.json"], ("en", "ja"))
+                rows, attention, _ = MODULE.web_work(root, "base", ["agent-chat/messages/en.json"], ("en", "ja"))
             self.assertEqual(len(rows), 1)
             self.assertIn("unchanged", rows[0]["issues"][0])
             self.assertEqual(attention, [])
@@ -109,9 +109,9 @@ class LocalizeChangesTests(unittest.TestCase):
     def test_discovers_locales_from_authoritative_sources(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            routing = root / "web/i18n/routing.ts"
+            routing = root / "agent-chat/harness-messages.ts"
             routing.parent.mkdir(parents=True)
-            routing.write_text('export const locales = ["en", "ja", "fr", "pt-BR"] as const;\n', encoding="utf-8")
+            routing.write_text("".join(f'import locale{index} from "./messages/{locale}.json";\n' for index, locale in enumerate(("en", "ja", "fr", "pt-BR"))), encoding="utf-8")
             self.assertEqual(MODULE.discover_web_locales(root), ("en", "ja", "fr", "pt-BR"))
             self.assertEqual(MODULE.macos_locales(), tuple(CATALOG.LOCALES))
 
@@ -222,21 +222,21 @@ class LocalizeChangesTests(unittest.TestCase):
     def test_web_changed_english_reports_missing_and_stale_locale_work(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "web/messages").mkdir(parents=True)
-            (root / "web/messages/en.json").write_text(json.dumps({"home": {"title": "New title"}}), encoding="utf-8")
-            (root / "web/messages/ja.json").write_text(json.dumps({"home": {"title": "新しいタイトル"}}), encoding="utf-8")
-            (root / "web/messages/fr.json").write_text(json.dumps({"home": {"title": "Ancien titre"}}), encoding="utf-8")
+            (root / "agent-chat/messages").mkdir(parents=True)
+            (root / "agent-chat/messages/en.json").write_text(json.dumps({"home": {"title": "New title"}}), encoding="utf-8")
+            (root / "agent-chat/messages/ja.json").write_text(json.dumps({"home": {"title": "新しいタイトル"}}), encoding="utf-8")
+            (root / "agent-chat/messages/fr.json").write_text(json.dumps({"home": {"title": "Ancien titre"}}), encoding="utf-8")
             old = {
-                "web/messages/en.json": json.dumps({"home": {"title": "Old title"}}),
-                "web/messages/ja.json": json.dumps({"home": {"title": "古いタイトル"}}),
-                "web/messages/fr.json": json.dumps({"home": {"title": "Ancien titre"}}),
+                "agent-chat/messages/en.json": json.dumps({"home": {"title": "Old title"}}),
+                "agent-chat/messages/ja.json": json.dumps({"home": {"title": "古いタイトル"}}),
+                "agent-chat/messages/fr.json": json.dumps({"home": {"title": "Ancien titre"}}),
             }
             with patch.object(MODULE, "base_text", side_effect=lambda _root, _base, path: old.get(path, "")):
                 rows, attention, changed = MODULE.web_work(
-                    root, "base", ["web/messages/en.json"], ("en", "ja", "fr", "pt-BR")
+                    root, "base", ["agent-chat/messages/en.json"], ("en", "ja", "fr", "pt-BR")
                 )
             self.assertEqual(changed, 1)
-            self.assertIn("web/messages/pt-BR.json: missing catalog declared by web/i18n/routing.ts", attention)
+            self.assertIn("agent-chat/messages/pt-BR.json: missing catalog declared by agent-chat/harness-messages.ts", attention)
             self.assertEqual([(row["locale"], row["key"]) for row in rows], [("fr", "home.title")])
             self.assertIn("unchanged", rows[0]["issues"][0])
 
@@ -273,17 +273,17 @@ class LocalizeChangesTests(unittest.TestCase):
 
     def test_web_parity_for_locale_routing_and_english_deletions(self):
         cases = [
-            (["web/messages/ja.json"], {"title": "Title"}, {}, "title"),
-            (["web/messages/ja.json"], {"title": "Title"}, {"renamed": "題名"}, "renamed"),
-            (["web/i18n/routing.ts"], {"title": "Title"}, {}, "title"),
-            (["web/messages/en.json"], {}, {"title": "題名"}, "title"),
+            (["agent-chat/messages/ja.json"], {"title": "Title"}, {}, "title"),
+            (["agent-chat/messages/ja.json"], {"title": "Title"}, {"renamed": "題名"}, "renamed"),
+            (["agent-chat/harness-messages.ts"], {"title": "Title"}, {}, "title"),
+            (["agent-chat/messages/en.json"], {}, {"title": "題名"}, "title"),
         ]
         for paths, english, japanese, key in cases:
             with self.subTest(paths=paths, english=english, japanese=japanese), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
-                (root / "web/messages").mkdir(parents=True)
+                (root / "agent-chat/messages").mkdir(parents=True)
                 for locale, data in [("en", english), ("ja", japanese)]:
-                    (root / f"web/messages/{locale}.json").write_text(json.dumps(data))
+                    (root / f"agent-chat/messages/{locale}.json").write_text(json.dumps(data))
                 with patch.object(MODULE, "base_json", return_value={"title": "Title"}):
                     rows, attention, changed = MODULE.web_work(root, "base", paths, ("en", "ja"))
                 self.assertTrue(any(row["key"] == key for row in rows) or any(key in item for item in attention))
@@ -517,26 +517,26 @@ class LocalizeChangesTests(unittest.TestCase):
         for japanese, previous_english, issue in cases:
             with self.subTest(issue=issue), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
-                (root / "web/messages").mkdir(parents=True)
-                (root / "web/messages/en.json").write_text(json.dumps(english), encoding="utf-8")
-                (root / "web/messages/ja.json").write_text(json.dumps(japanese, ensure_ascii=False), encoding="utf-8")
+                (root / "agent-chat/messages").mkdir(parents=True)
+                (root / "agent-chat/messages/en.json").write_text(json.dumps(english), encoding="utf-8")
+                (root / "agent-chat/messages/ja.json").write_text(json.dumps(japanese, ensure_ascii=False), encoding="utf-8")
                 old = {
-                    "web/messages/en.json": json.dumps(previous_english),
-                    "web/messages/ja.json": json.dumps({"title": "題名", "jobs": {"items": ["古い"]}}, ensure_ascii=False),
+                    "agent-chat/messages/en.json": json.dumps(previous_english),
+                    "agent-chat/messages/ja.json": json.dumps({"title": "題名", "jobs": {"items": ["古い"]}}, ensure_ascii=False),
                 }
                 with patch.object(MODULE, "base_text", side_effect=lambda _root, _base, path: old.get(path, "")):
-                    rows, attention, _ = MODULE.web_work(root, "base", ["web/messages/ja.json"], ("en", "ja"))
+                    rows, attention, _ = MODULE.web_work(root, "base", ["agent-chat/messages/ja.json"], ("en", "ja"))
                 self.assertEqual(attention, [])
                 self.assertEqual([(row["key"], row["source"]) for row in rows], [("jobs.items", english["jobs"]["items"])])
                 self.assertIn(issue, rows[0]["issues"][0])
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "web/messages").mkdir(parents=True)
-            (root / "web/messages/en.json").write_text(json.dumps({"title": "Title"}), encoding="utf-8")
-            (root / "web/messages/ja.json").write_text(json.dumps({"title": "題名", "items": ["余分"]}, ensure_ascii=False), encoding="utf-8")
+            (root / "agent-chat/messages").mkdir(parents=True)
+            (root / "agent-chat/messages/en.json").write_text(json.dumps({"title": "Title"}), encoding="utf-8")
+            (root / "agent-chat/messages/ja.json").write_text(json.dumps({"title": "題名", "items": ["余分"]}, ensure_ascii=False), encoding="utf-8")
             with patch.object(MODULE, "base_text", return_value=""):
-                _, attention, _ = MODULE.web_work(root, "base", ["web/messages/ja.json"], ("en", "ja"))
+                _, attention, _ = MODULE.web_work(root, "base", ["agent-chat/messages/ja.json"], ("en", "ja"))
             self.assertTrue(any("extra message key 'items'" in item for item in attention))
 
     def test_confirmed_unchanged_translation_is_not_marked_stale_again(self):
@@ -547,8 +547,8 @@ class LocalizeChangesTests(unittest.TestCase):
             path = write_catalog(root, {"open": {"localizations": localizations}})
             old = path.read_text(encoding="utf-8")
             write_catalog(root, {"open": {"localizations": {**localizations, "en": unit("Open")}}})
-            (root / "web/messages").mkdir(parents=True)
-            (root / "web/messages/en.json").write_text("{}", encoding="utf-8")
+            (root / "agent-chat/messages").mkdir(parents=True)
+            (root / "agent-chat/messages/en.json").write_text("{}", encoding="utf-8")
             work = root / "work.json"
             patches = [
                 patch.object(MODULE, "resolve_root", return_value=root),

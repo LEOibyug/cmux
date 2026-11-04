@@ -10,10 +10,6 @@ public struct SurfaceCatalogSnapshot: Hashable, Codable, Sendable {
     public var resources: [SurfaceResource]
     public var projections: [SurfaceProjection]
     public var staleMachineIDs: Set<SurfaceMachineID> = []
-    public var displayCreationMachines: Set<SurfaceMachineID>? = nil
-    /// Machines with a guest display creation in flight, shown optimistically.
-    public var pendingDisplayCreations: Set<SurfaceMachineID>? = nil
-    public var cloudDisplayMemberships: [CloudVMDisplayMembership] = []
 
     public static let empty = SurfaceCatalogSnapshot(machines: [], resources: [], projections: [])
 
@@ -36,10 +32,7 @@ public struct SurfaceCatalogSnapshot: Hashable, Codable, Sendable {
         machines: [SurfaceMachineInfo],
         resources: [SurfaceResource],
         projections: [SurfaceProjection],
-        staleMachineIDs: Set<SurfaceMachineID> = [],
-        displayCreationMachines: Set<SurfaceMachineID>? = nil,
-        pendingDisplayCreations: Set<SurfaceMachineID>? = nil,
-        cloudDisplayMemberships: [CloudVMDisplayMembership] = []
+        staleMachineIDs: Set<SurfaceMachineID> = []
     ) {
         self.pendingWorkspaceCreations = pendingWorkspaceCreations
         self.pendingWorkspaceDeletions = pendingWorkspaceDeletions
@@ -47,15 +40,12 @@ public struct SurfaceCatalogSnapshot: Hashable, Codable, Sendable {
         self.resources = resources
         self.projections = projections
         self.staleMachineIDs = staleMachineIDs
-        self.displayCreationMachines = displayCreationMachines
-        self.pendingDisplayCreations = pendingDisplayCreations
-        self.cloudDisplayMemberships = cloudDisplayMemberships
     }
 }
 
 extension SurfaceCatalogSnapshot {
     private enum CodingKeys: String, CodingKey {
-        case pendingWorkspaceCreations, pendingWorkspaceDeletions, machines, resources, projections, staleMachineIDs, displayCreationMachines, pendingDisplayCreations, cloudDisplayMemberships
+        case pendingWorkspaceCreations, pendingWorkspaceDeletions, machines, resources, projections, staleMachineIDs
     }
 
     public init(from decoder: Decoder) throws {
@@ -66,8 +56,5 @@ extension SurfaceCatalogSnapshot {
         resources = try values.decode([SurfaceResource].self, forKey: .resources)
         projections = try values.decode([SurfaceProjection].self, forKey: .projections)
         staleMachineIDs = try values.decodeIfPresent(Set<SurfaceMachineID>.self, forKey: .staleMachineIDs) ?? []
-        displayCreationMachines = try values.decodeIfPresent(Set<SurfaceMachineID>.self, forKey: .displayCreationMachines)
-        pendingDisplayCreations = try values.decodeIfPresent(Set<SurfaceMachineID>.self, forKey: .pendingDisplayCreations)
-        cloudDisplayMemberships = try values.decodeIfPresent([CloudVMDisplayMembership].self, forKey: .cloudDisplayMemberships) ?? []
     }
 }

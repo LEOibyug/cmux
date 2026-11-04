@@ -6,26 +6,26 @@ import CmuxWorkspaces
 extension Workspace {
     /// Only a machine-bound loading card in this destination can be adopted.
     /// Ordinary terminal panes, including a user's first command, are never placeholders.
-    func cloudMachineLoadingPanel(at destination: SurfaceDestination, machineID: String?) -> CloudVMLoadingPanel? {
+    func tuiMachineLoadingPanel(at destination: SurfaceDestination, machineID: String?) -> RemoteLoadingPanel? {
         guard case .workspace(let workspaceID, _) = destination,
               workspaceID == id, let machineID,
-              cloudVMBinding?.vmID == machineID else { return nil }
-        let candidates = panels.values.compactMap { $0 as? CloudVMLoadingPanel }
+              remoteWorkspaceBinding?.machineID == machineID else { return nil }
+        let candidates = panels.values.compactMap { $0 as? RemoteLoadingPanel }
         return candidates.count == 1 ? candidates[0] : nil
     }
 
     /// Replaces a creating card with its attached terminal in the same native tab.
     /// There is no local shell, close event, or layout/focus change between them.
-    func adoptCloudMachineLoadingPanel(
-        _ loading: CloudVMLoadingPanel,
+    func adoptTuiMachineLoadingPanel(
+        _ loading: RemoteLoadingPanel,
         terminal: TerminalPanel,
         focus: Bool
     ) throws {
         guard !isRetiredFromOwningTabManager,
               panels[loading.id] === loading,
               terminal.id == loading.id,
-              let machineID = cloudVMBinding?.vmID,
-              terminal.cloudAttachment?.machineID == machineID,
+              let machineID = remoteWorkspaceBinding?.machineID,
+              terminal.remoteAttachment?.machineID == machineID,
               let tab = surfaceIdFromPanelId(loading.id),
               let pane = paneId(forPanelId: loading.id) else {
             terminal.close()
@@ -33,7 +33,7 @@ extension Workspace {
         }
         terminal.adoptStableSurfaceId(loading.stableSurfaceId)
         panels[loading.id] = terminal
-        let title = String(localized: "cloudTree.terminal.untitled", defaultValue: "terminal")
+        let title = String(localized: "tuiTree.terminal.untitled", defaultValue: "terminal")
         panelTitles[loading.id] = title
         bonsplitController.updateTab(
             tab, title: title, icon: .some(terminal.displayIcon),
@@ -56,21 +56,21 @@ extension Workspace {
     /// receipt fails final placement validation. The pane remains retryable and
     /// keeps its durable surface identity.
     @discardableResult
-    func restoreCloudMachineLoadingPanel(panelID: UUID, machineID: String) -> Bool {
+    func restoreTuiMachineLoadingPanel(panelID: UUID, machineID: String) -> Bool {
         guard let terminal = panels[panelID] as? TerminalPanel,
-              cloudVMBinding?.vmID == machineID,
-              terminal.cloudAttachment?.machineID == machineID,
+              remoteWorkspaceBinding?.machineID == machineID,
+              terminal.remoteAttachment?.machineID == machineID,
               let tab = surfaceIdFromPanelId(panelID) else { return false }
-        let loading = CloudVMLoadingPanel(id: panelID, workspaceId: id)
+        let loading = RemoteLoadingPanel(id: panelID, workspaceId: id)
         loading.adoptStableSurfaceId(terminal.stableSurfaceId)
-        loading.showFailure(String(localized: "panel.cloudVM.loading.failed.generic", defaultValue: "Cloud VM could not be opened."))
+        loading.showFailure(String(localized: "panel.remoteWorkspace.loading.failed.generic", defaultValue: "The SSH workspace could not be opened."))
         terminal.close()
         panels[panelID] = loading
         panelTitles[panelID] = loading.displayTitle
         bonsplitController.updateTab(
             tab, title: loading.displayTitle, icon: .some(loading.displayIcon),
             iconImageData: .some(nil), iconAsset: .some(nil),
-            kind: .some(SurfaceKind.cloudVMLoading.rawValue),
+            kind: .some(SurfaceKind.remoteLoading.rawValue),
             hasCustomTitle: false, isDirty: false,
             showsNotificationBadge: false, isLoading: true, isPinned: false
         )
@@ -80,9 +80,9 @@ extension Workspace {
     /// Removes a still-pending card after an existing terminal projection wins
     /// the reuse race, without touching that projection or user content.
     @discardableResult
-    func discardCloudMachineLoadingPanel(panelID: UUID, machineID: String) -> Bool {
-        guard cloudVMBinding?.vmID == machineID,
-              panels[panelID] is CloudVMLoadingPanel else { return false }
+    func discardTuiMachineLoadingPanel(panelID: UUID, machineID: String) -> Bool {
+        guard remoteWorkspaceBinding?.machineID == machineID,
+              panels[panelID] is RemoteLoadingPanel else { return false }
         withClosedPanelHistorySuppressed {
             _ = closePanel(panelID, force: true)
         }

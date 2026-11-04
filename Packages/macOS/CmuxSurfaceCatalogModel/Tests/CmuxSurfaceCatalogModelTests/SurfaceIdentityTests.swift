@@ -4,10 +4,22 @@ import Testing
 
 @Suite struct SurfaceIdentityTests {
     @Test func machineIDRoundTripsThroughItsWireForm() {
+        let digest = String(repeating: "a", count: 64)
+        let machine = SurfaceMachineID.ssh(digest)
         #expect(SurfaceMachineID(rawValue: "local") == .local)
-        #expect(SurfaceMachineID(rawValue: "vm-1") == .cloud("vm-1"))
-        #expect(SurfaceMachineID.cloud("vm-1").rawValue == "vm-1")
+        #expect(SurfaceMachineID(rawValue: "ssh:\(digest)") == machine)
+        #expect(machine.rawValue == "ssh:\(digest)")
+        #expect(machine.tuiMachineID == machine.rawValue)
         #expect(SurfaceMachineID.local.isLocal)
-        #expect(SurfaceMachineID.cloud("vm-1").cloudMachineID == "vm-1")
+    }
+
+    @Test(arguments: ["vm-1", "device:mac@default", "cloud:machine", "ssh:", ""])
+    func removedMachineIdentitiesAreRejected(raw: String) {
+        #expect(SurfaceMachineID(rawValue: raw) == nil)
+    }
+
+    @Test(arguments: ["display", "screen", "device"])
+    func removedResourceKindsAreRejected(wire: String) {
+        #expect(SurfaceResourceKind(wire: wire) == nil)
     }
 }

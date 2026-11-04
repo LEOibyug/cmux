@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -35,15 +35,15 @@ extension TerminalController {
                 let provider = try coordinator.provider(connection: SSHTuiConnection(configuration: configuration))
                 if all, !listedMachines.insert(provider.machine).inserted { continue }
                 guard await provider.refreshCurrentGraphResolvingEqualCursorConflict() else {
-                    throw CloudMachineLink.LinkError.failureMessage(provider.info.linkFailureMessage)
+                    throw RemoteMachineLink.LinkError.failureMessage(provider.info.linkFailureMessage)
                 }
-                let remoteWorkspace = workspace.cloudVMBinding?.remoteWorkspaceID
+                let remoteWorkspace = workspace.remoteWorkspaceBinding?.remoteWorkspaceID
                 for resource in catalog.authoritativeSnapshot.resources(on: provider.machine) where resource.kind == .terminal {
                     guard all || resource.isDetachedTerminal || remoteWorkspace.map({ id in resource.remoteWorkspaces.contains { $0.id == id } }) == true
                             || catalog.projections(of: resource.id).contains(where: { $0.workspaceID == workspace.id }) else { continue }
                     let owner = all ? workspaces.first(where: { candidate in
-                        guard candidate.cloudVMBinding?.vmID == provider.machine.rawValue,
-                              let remote = candidate.cloudVMBinding?.remoteWorkspaceID else { return false }
+                        guard candidate.remoteWorkspaceBinding?.machineID == provider.machine.rawValue,
+                              let remote = candidate.remoteWorkspaceBinding?.remoteWorkspaceID else { return false }
                         return resource.remoteWorkspaces.contains { $0.id == remote }
                     }) ?? workspace : workspace
                     sessions.append([
@@ -55,7 +55,7 @@ extension TerminalController {
                     ])
                 }
             } catch {
-                errors.append(["workspace_id": workspace.id.uuidString, "error": CloudMachineLink.errorText(error)])
+                errors.append(["workspace_id": workspace.id.uuidString, "error": RemoteMachineLink.errorText(error)])
             }
         }
         return .ok(["backend": "cmux-tui", "all_workspaces": all, "workspace_count": workspaces.count,
@@ -68,7 +68,7 @@ extension TerminalController {
         guard case .ok(let legacyRaw) = legacy else { return legacy }
         guard let tuiPayload = tuiRaw as? [String: Any],
               let legacyPayload = legacyRaw as? [String: Any] else {
-            return .err(code: "internal_error", message: CloudDiagnosticFailure.response.localizedDescription, data: nil)
+            return .err(code: "internal_error", message: TuiTransportError.invalidResponse.localizedDescription, data: nil)
         }
         // Typed locals keep this literal cheap for the type checker; the inline
         // `as? ?? +` form timed out on slower CI runners.
@@ -113,7 +113,7 @@ extension TerminalController {
             try await provider.closeTerminal(resource)
             return .ok(["session_id": sessionID, "closed": true, "backend": "cmux-tui"])
         } catch {
-            return .err(code: "remote_pty_error", message: CloudMachineLink.errorText(error), data: nil)
+            return .err(code: "remote_pty_error", message: RemoteMachineLink.errorText(error), data: nil)
         }
     }
 }

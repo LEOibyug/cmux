@@ -1,4 +1,3 @@
-import CmuxCloud
 import AppKit
 import Foundation
 
@@ -74,17 +73,14 @@ extension AppDelegate {
 
     func makeNewWorkspaceContextMenu(
         context: MainWindowContext,
-        cmuxConfigStore: CmuxConfigStore,
-        isAuthenticated: Bool? = nil
+        cmuxConfigStore: CmuxConfigStore
     ) -> NSMenu? {
-        let isAuthenticated = isAuthenticated ?? (AppDelegate.shared?.auth?.accountFlow.isAuthenticated == true)
         let model = NewWorkspaceMenuModel.build(
             newWorkspaceContextMenuItems: cmuxConfigStore.newWorkspaceContextMenuItems.filter { item in
                 guard case .action(let menuAction) = item,
                       case .builtIn(let builtIn) = menuAction.action.action else { return true }
-                return Self.isBuiltInActionAvailableInNewWorkspaceMenu(builtIn, isAuthenticated: isAuthenticated)
+                return Self.isBuiltInActionAvailableInNewWorkspaceMenu(builtIn)
             },
-            agentChatAction: resolvedBuiltInNewAgentChatAction(cmuxConfigStore: cmuxConfigStore),
             templateNames: savedLayoutNames(),
             loadedActions: cmuxConfigStore.loadedActions,
             newWorkspaceActionID: cmuxConfigStore.newWorkspaceActionID,
@@ -100,24 +96,15 @@ extension AppDelegate {
         )
     }
 
-    /// Feature gates for built-in plus-menu rows, evaluated when the menu
-    /// opens (not at config load) so flag and setting flips apply at once.
-    /// Mirrors the command palette's gates for the same actions.
+    /// Availability for built-in plus-menu rows, evaluated when the menu opens
+    /// so local browser setting changes apply without a config reload.
     static func isBuiltInActionAvailableInNewWorkspaceMenu(
-        _ action: CmuxSurfaceTabBarBuiltInAction,
-        isAuthenticated: Bool? = nil
+        _ action: CmuxSurfaceTabBarBuiltInAction
     ) -> Bool {
         switch action {
-        case .newCloudWorkspace, .newCloudMachine, .cloudVM:
-            return CloudMachinesFeature.isEnabled
-                && (isAuthenticated ?? (AppDelegate.shared?.auth?.accountFlow.isAuthenticated == true))
-        case .newBrowser, .newAgentChat:
+        case .newBrowser:
             return BrowserAvailabilitySettings.isEnabled()
-        case .newSimulator:
-            return CmuxFeatureFlags.shared.isSimulatorEnabled
-        case .mobileConnect:
-            return !MobileRemoteControlPolicy.isDisabled
-        case .newWorkspace, .newTerminal, .splitRight, .splitDown,
+        case .newWorkspace, .newTerminal, .newSimulator, .splitRight, .splitDown,
              .copyWorkingDirectory, .copyProjectRoot, .copyScreen:
             return true
         }
@@ -125,40 +112,6 @@ extension AppDelegate {
 
     private func savedLayoutNames() -> [String] {
         ((try? SavedLayoutStore().list()) ?? []).map(\.name)
-    }
-
-    private func resolvedBuiltInNewAgentChatAction(
-        cmuxConfigStore: CmuxConfigStore
-    ) -> CmuxResolvedConfigAction? {
-        // Agent chat opens a browser surface; hide it when browser surfaces
-        // are disabled, matching the command palette's browserDisabled gate.
-        guard CmuxFeatureFlags.shared.isAgentChatUIEnabled else { return nil }
-        guard BrowserAvailabilitySettings.isEnabled() else { return nil }
-        let actionID = CmuxSurfaceTabBarBuiltInAction.newAgentChat.configID
-        let action = cmuxConfigStore.resolvedAction(id: actionID)
-            ?? .builtIn(.newAgentChat)
-        guard shouldAppendBuiltInNewAgentChatMenuItem(
-            action,
-            actionID: actionID,
-            cmuxConfigStore: cmuxConfigStore
-        ) else {
-            return nil
-        }
-        return action
-    }
-
-    private func shouldAppendBuiltInNewAgentChatMenuItem(
-        _ action: CmuxResolvedConfigAction,
-        actionID: String,
-        cmuxConfigStore: CmuxConfigStore
-    ) -> Bool {
-        if action.newWorkspaceMenu == false { return false }
-        let configuredActionIDs = Set(cmuxConfigStore.newWorkspaceContextMenuItems.compactMap { item -> String? in
-            guard case .action(let menuAction) = item else { return nil }
-            return menuAction.action.id
-        })
-        if configuredActionIDs.contains(actionID) { return false }
-        return true
     }
 
     @objc func performNewWorkspaceContextMenuItem(_ sender: NSMenuItem) {

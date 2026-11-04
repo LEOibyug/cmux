@@ -11,12 +11,12 @@ import Testing
 
 @MainActor
 @Suite("Cloud workspace deletion ledger", .serialized)
-struct CloudWorkspaceDeletionLedgerTests {
-    private let machine = SurfaceMachineID.cloud("gcp-machine")
+struct TuiWorkspaceDeletionLedgerTests {
+    private let machine = SurfaceMachineID.ssh("08571d5546907c4a561c304bcb1b81b6167c44d0161b2831267d764ce38ec7d6")
 
     @Test("begin hides immediately and success survives a stale refresh")
     func successTombstoneSurvivesStaleRefresh() throws {
-        let ledger = CloudWorkspaceDeletionLedger()
+        let ledger = TuiWorkspaceDeletionLedger()
         let token = ledger.begin(machine: machine, workspaceID: "workspace-7")
         #expect(token != nil)
         #expect(ledger.hides(machine: machine, workspaceID: "workspace-7"))
@@ -37,7 +37,7 @@ struct CloudWorkspaceDeletionLedgerTests {
 
     @Test("failure restores the row and ignores stale request completions")
     func failureRollsBackAndRepeatedDeleteIsIgnored() throws {
-        let ledger = CloudWorkspaceDeletionLedger()
+        let ledger = TuiWorkspaceDeletionLedger()
         let token = try #require(ledger.begin(machine: machine, workspaceID: "workspace-8"))
         #expect(ledger.begin(machine: machine, workspaceID: "workspace-8") == nil)
         #expect(ledger.fail(machine: machine, workspaceID: "workspace-8", token: UUID()) == false)
@@ -48,7 +48,7 @@ struct CloudWorkspaceDeletionLedgerTests {
 
     @Test("independent workspaces can be deleted concurrently")
     func concurrentDeletesHaveIndependentIdentity() throws {
-        let ledger = CloudWorkspaceDeletionLedger()
+        let ledger = TuiWorkspaceDeletionLedger()
         let first = try #require(ledger.begin(machine: machine, workspaceID: "workspace-4"))
         let second = try #require(ledger.begin(machine: machine, workspaceID: "workspace-9"))
         #expect(first != second)
@@ -61,7 +61,7 @@ struct CloudWorkspaceDeletionLedgerTests {
     }
     @Test("A different generation cannot itself resurrect a deleted workspace")
     func generationChangeRequiresAbsenceBeforeReuse() throws {
-        let ledger = CloudWorkspaceDeletionLedger()
+        let ledger = TuiWorkspaceDeletionLedger()
         let token = try #require(ledger.begin(machine: machine, workspaceID: "old"))
         #expect(ledger.succeed(machine: machine, workspaceID: "old", token: token))
         ledger.reconcile(try graph([], revision: 4))
@@ -72,7 +72,7 @@ struct CloudWorkspaceDeletionLedgerTests {
         #expect(!ledger.hides(machine: machine, workspaceID: "old"))
     }
 
-    private func graph(_ ids: [String], revision: Int, generation: String = "delete") throws -> CloudVMState {
+    private func graph(_ ids: [String], revision: Int, generation: String = "delete") throws -> TuiState {
         try #require(CmuxTuiSnapshotParser.state(fromSnapshot: [
             "cursor": ["generation": generation, "revision": String(revision)],
             "workspaces": ids.map { ["id": $0, "name": $0] },

@@ -1277,16 +1277,16 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
     var lastObservedFileState: FilePreviewFileState?
     var isClosed = false
     weak var textView: NSTextView? {
-        didSet { if cloudPreviewLease != nil { textView?.isEditable = false } }
+        didSet { if remotePreviewLease != nil { textView?.isEditable = false } }
     }
-    var cloudPreviewRemotePath: String?
-    var cloudPreviewProviderIdentity: String?
+    var remotePreviewPath: String?
+    var remotePreviewProviderIdentity: String?
     var remotePreviewRefresh: (@MainActor () -> Void)?
-    var cloudPreviewLease: CloudFilePreviewLease? {
+    var remotePreviewLease: RemoteFilePreviewLease? {
         didSet {
-            cloudPreviewRemotePath = cloudPreviewLease?.remotePath
-            cloudPreviewProviderIdentity = cloudPreviewLease?.remoteIdentity
-            if cloudPreviewLease != nil { textView?.isEditable = false }
+            remotePreviewPath = remotePreviewLease?.remotePath
+            remotePreviewProviderIdentity = remotePreviewLease?.remoteIdentity
+            if remotePreviewLease != nil { textView?.isEditable = false }
         }
     }
     let focusCoordinator: FilePreviewFocusCoordinator
@@ -1359,9 +1359,9 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
     }
 
     func close() {
-        cloudPreviewLease = nil
+        remotePreviewLease = nil
         remotePreviewRefresh = nil
-        cloudPreviewProviderIdentity = nil
+        remotePreviewProviderIdentity = nil
         isClosed = true
         unbindTabMetadata()
         stopWatchingForFileChanges()
@@ -1417,7 +1417,7 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
     }
 
     func handleDroppedFileURLsAsText(_ urls: [URL]) -> Bool {
-        guard cloudPreviewLease == nil, previewMode == .text, let textView else { return false }
+        guard remotePreviewLease == nil, previewMode == .text, let textView else { return false }
         let text = TerminalImageTransferPlanner.insertedText(forFileURLs: urls)
         guard !text.isEmpty else { return false }
         textView.window?.makeFirstResponder(textView)
@@ -1502,7 +1502,7 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
     }
 
     func updateTextContent(_ nextContent: String) {
-        guard cloudPreviewLease == nil else { return }
+        guard remotePreviewLease == nil else { return }
         guard replaceTextContentIfChanged(nextContent) else { return }
         setTabMetadataDirtyState(nextContent != originalTextContent)
     }
@@ -1639,7 +1639,7 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
 
     @discardableResult
     func saveTextContent() -> Task<Void, Never>? {
-        guard cloudPreviewLease == nil else { return nil }
+        guard remotePreviewLease == nil else { return nil }
         guard previewMode == .text else { return nil }
         guard !isSaving else { return nil }
         let currentContent = textView?.string ?? textContent

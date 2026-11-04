@@ -35,8 +35,7 @@ SWIFT_DEFAULT = re.compile(
 SWIFT_COMMENT = re.compile(
     r'comment\s*:\s*(?P<comment>' + MULTILINE + r'|"(?:\\.|[^"\\])*")'
 )
-WEB_LOCALES = re.compile(r"export\s+const\s+locales\s*=\s*\[(?P<body>[\s\S]*?)\]\s*as\s+const")
-QUOTED = re.compile(r'"((?:\\.|[^"\\])*)"|\'((?:\\.|[^\'\\])*)\'')
+WEB_LOCALES = re.compile(r'from\s+"\./messages/([^"/]+)\.json"')
 INTEGER_FORMAT = re.compile(r"%(?:\d+\$)?(?:hh|ll|[hlLqjzt])?[diouxX]")
 
 
@@ -303,13 +302,10 @@ def changed_swift_messages(root: Path, base: str, paths: Iterable[str]) -> tuple
 
 
 def discover_web_locales(root: Path) -> tuple[str, ...]:
-    routing = (root / "web/i18n/routing.ts").read_text(encoding="utf-8")
-    match = WEB_LOCALES.search(routing)
-    if not match:
-        raise ValueError("cannot parse web/i18n/routing.ts locale list")
-    locales = tuple(left or right for left, right in QUOTED.findall(match.group("body")))
+    routing = (root / "agent-chat/harness-messages.ts").read_text(encoding="utf-8")
+    locales = tuple(WEB_LOCALES.findall(routing))
     if not locales or len(locales) != len(set(locales)):
-        raise ValueError("web/i18n/routing.ts contains no locales or duplicate locales")
+        raise ValueError("agent-chat/harness-messages.ts contains no locales or duplicate locales")
     return locales
 
 
@@ -715,12 +711,12 @@ def base_json(root: Path, base: str, path: str) -> dict:
 
 
 def web_work(root: Path, base: str, paths: Iterable[str], locales: tuple[str, ...]) -> tuple[list[dict], list[str], int]:
-    english_path = "web/messages/en.json"
-    relevant = any(path == "web/i18n/routing.ts" or
-                   (path.startswith("web/messages/") and path.endswith(".json")) for path in paths)
+    english_path = "agent-chat/messages/en.json"
+    relevant = any(path == "agent-chat/harness-messages.ts" or
+                   (path.startswith("agent-chat/messages/") and path.endswith(".json")) for path in paths)
     if not relevant:
-        missing = [locale for locale in locales if not (root / f"web/messages/{locale}.json").is_file()]
-        return [], [f"web/messages/{locale}.json: missing catalog declared by web/i18n/routing.ts" for locale in missing], 0
+        missing = [locale for locale in locales if not (root / f"agent-chat/messages/{locale}.json").is_file()]
+        return [], [f"agent-chat/messages/{locale}.json: missing catalog declared by agent-chat/harness-messages.ts" for locale in missing], 0
     current_en = flatten_messages(json_at(root, english_path))
     previous_en = flatten_messages(base_json(root, base, english_path))
     changed = {key: value for key, value in current_en.items() if previous_en.get(key) != value}
@@ -728,16 +724,16 @@ def web_work(root: Path, base: str, paths: Iterable[str], locales: tuple[str, ..
     rows: list[dict] = []
     attention: list[str] = []
     for locale in locales:
-        message_path = root / f"web/messages/{locale}.json"
+        message_path = root / f"agent-chat/messages/{locale}.json"
         if not message_path.is_file():
-            attention.append(f"{message_path.relative_to(root)}: missing catalog declared by web/i18n/routing.ts")
+            attention.append(f"{message_path.relative_to(root)}: missing catalog declared by agent-chat/harness-messages.ts")
             continue
         if locale == "en":
             continue
         localized = flatten_messages(json.loads(message_path.read_text(encoding="utf-8")))
-        previous_localized = flatten_messages(base_json(root, base, f"web/messages/{locale}.json"))
+        previous_localized = flatten_messages(base_json(root, base, f"agent-chat/messages/{locale}.json"))
         for key in sorted(localized.keys() - current_en.keys()):
-            attention.append(f"web/messages/{locale}.json: extra message key {key!r}; remove it to match English")
+            attention.append(f"agent-chat/messages/{locale}.json: extra message key {key!r}; remove it to match English")
         required = changed.keys() | (current_en.keys() - localized.keys())
         for key in sorted(required):
             source = current_en[key]
@@ -762,7 +758,7 @@ def web_work(root: Path, base: str, paths: Iterable[str], locales: tuple[str, ..
                         if stale:
                             issues.append(f"translation array elements {stale} were unchanged after the English source changed; review them")
             if issues:
-                row = {"catalog": f"web/messages/{locale}.json", "key": key, "source": source, "locale": locale, "issues": issues}
+                row = {"catalog": f"agent-chat/messages/{locale}.json", "key": key, "source": source, "locale": locale, "issues": issues}
                 if value is not None:
                     row["currentValue"] = value
                 rows.append(row)

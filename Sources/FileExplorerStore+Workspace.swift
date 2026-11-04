@@ -1,7 +1,7 @@
 import Foundation
 
 extension FileExplorerStore {
-    /// Shared by the right sidebar and tool panes; owns Cloud observation and retry.
+    /// Shared by the right sidebar and tool panes; owns workspace-root observation.
     func syncWorkspaceRoot(from workspace: Workspace) {
         if workspaceRootObservation?.workspace !== workspace {
             workspaceRootObservation?.stop()
@@ -18,9 +18,5 @@ extension FileExplorerStore {
             observation.refresh(force: true)
         }
         if !rootPath.isEmpty { reload() }
-        if let target = (provider as? CloudVMFileExplorerProvider)?.target, !target.isCurrent() {
-            setRootStatusMessage(String(localized: "fileExplorer.status.cloudDisconnected",
-                defaultValue: "Cloud machine is not connected"))
-        }
     }
 }

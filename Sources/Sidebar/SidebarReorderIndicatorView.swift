@@ -1,7 +1,7 @@
 import AppKit
 import CmuxFoundation
 
-/// The insertion line shared by local workspace rows and the Cloud outline.
+/// The insertion line for local workspace rows.
 @MainActor
 final class SidebarReorderIndicatorView: NSView {
     nonisolated static let thickness: CGFloat = 2

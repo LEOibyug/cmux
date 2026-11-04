@@ -218,6 +218,6 @@ extension CMUXCLI {
     }
 
     func simulatorTerminalText(_ value: String) -> String {
-        Self.sanitizeForTerminal(value)
+        CLITerminalText.printable(value)
     }
 }

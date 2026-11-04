@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import Foundation
 
 #if canImport(cmux_DEV)
@@ -10,20 +10,20 @@ import Foundation
 
 /// Uses the real persistent connection and records cancellation at its RPC boundary.
 /// The lock protects only counters reached synchronously by task cancellation callbacks.
-final class CloudTerminalMutationSocketRunner: CloudTuiCommandRunning, @unchecked Sendable {
-    private let channel: CloudTuiPersistentResourceConnection
+final class TuiTerminalMutationSocketRunner: TuiCommandRunning, @unchecked Sendable {
+    private let channel: TuiPersistentResourceConnection
     private let lock = NSLock()
     private var cancellations = 0
     private var operations: [String] = []
 
-    init(channel: CloudTuiPersistentResourceConnection) {
+    init(channel: TuiPersistentResourceConnection) {
         self.channel = channel
     }
 
     var cancellationCount: Int { lock.withLock { cancellations } }
     var commands: [String] { lock.withLock { operations } }
 
-    func runTuiCommand(arguments: CloudTuiRequest, deadline: Duration) async throws -> Data {
+    func runTuiCommand(arguments: TuiRequest, deadline: Duration) async throws -> Data {
         lock.withLock { operations.append(arguments.operation) }
         return try await withTaskCancellationHandler {
             try await channel.request(arguments, timeout: deadline)

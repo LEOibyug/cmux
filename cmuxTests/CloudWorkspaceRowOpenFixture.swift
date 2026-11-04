@@ -1,5 +1,5 @@
 import AppKit
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -12,38 +12,14 @@ import Testing
 
 @MainActor
 final class CloudWorkspaceRowOpenFixture {
-    let base: CloudWorkspaceCreationSidebarFixture
+    let base: TuiWorkspaceCreationSidebarFixture
     let provider: CloudWorkspaceRowOpenProvider
-    let operations = CloudWorkspaceOperationController(isAvailable: { true })
+    typealias OpenResult = (workspaceID: UUID, projections: [SurfaceProjection])
+    private var opening: Task<OpenResult, Error>?
     let remote = SurfaceRemoteWorkspace(id: "ws-open", name: "Existing", index: 0, focused: true)
-    var failures: [String] = []
-    lazy var panelModel = MachinesPanelViewModel(
-        createCoordinator: MachineCreateCoordinator(notifier: { _ in }),
-        isCloudEnabled: { true },
-        catalogProvider: { [unowned self] in base.catalog.snapshot },
-        localWorkspacesProvider: { [] }
-    )
-    let defaults: UserDefaults
-    let defaultsName = "cloud-row-open-\(UUID())"
-    lazy var coordinator = CloudTreeOutlineView.Coordinator(
-        machineActions: MachineRowActions(openShell: { _ in }, openDesktop: { _ in }, runCommand: { _, _ in },
-            confirmDelete: { _ in }, promptRename: { _ in }, resizeDisk: { _, _ in }, promptUpgrade: {}),
-        nodeActions: CloudTreeNodeActions.bound(
-            navigationHost: AppDelegate.makeCloudTerminalNavigationHost(),
-            catalog: { [unowned self] in base.catalog },
-            selectedWorkspaceID: { [unowned self] in base.manager.selectedTabId },
-            selectLocalWorkspace: { [unowned self] in base.manager.selectedTabId = $0 },
-            onDidMutate: { [weak self] in self?.panelModel.endOperation() },
-            onFailure: { [unowned self] in failures.append($0) }, refresh: {}, operationController: operations,
-            workspaceCreationHost: { [unowned self] in CloudWorkspaceCreationHost(manager: base.manager) }
-        ),
-        expansionStore: CloudTreeExpansionStore(defaults: defaults), tabDragTransferRegistry: { nil }
-    )
-    lazy var container = CloudTreeContainerView(coordinator: coordinator)
 
     init() throws {
-        defaults = try #require(UserDefaults(suiteName: defaultsName))
-        base = try CloudWorkspaceCreationSidebarFixture()
+        base = try TuiWorkspaceCreationSidebarFixture()
         base.manager.window = nil
         base.catalog.unregister(machine: base.provider.machine)
         provider = CloudWorkspaceRowOpenProvider(machine: base.provider.machine)
@@ -69,34 +45,33 @@ final class CloudWorkspaceRowOpenFixture {
         let state = try #require(CmuxTuiSnapshotParser.state(fromSnapshot: document, machine: provider.machine))
         var info = provider.info
         info.remoteWorkspaces = includeWorkspace ? [remote] : []
-        base.catalog.replaceCloudState(state, resources: CmuxTuiSnapshotParser.resources(from: state), info: info)
-        base.catalog.reconcileCloudRemoteState(machine: provider.machine, state: state)
+        base.catalog.replaceTuiState(state, resources: CmuxTuiSnapshotParser.resources(from: state), info: info)
+        base.catalog.reconcileTuiRemoteState(machine: provider.machine, state: state)
     }
 
-    func row() throws -> CloudTreeNode {
-        try #require(base.workspaceRows().first)
+    func group() throws -> SurfaceResourceGroup {
+        try base.catalog.remoteWorkspaceGroup(machine: provider.machine, workspaceID: remote.id)
     }
 
-    func activate(keyboard: Bool = false) throws {
-        _ = container
-        let row = try row()
-        coordinator.apply(nodes: [row])
-        let outline = try #require(coordinator.outlineView)
-        outline.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
-        if keyboard {
-            let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
-                timestamp: 0, windowNumber: 0, context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
-                isARepeat: false, keyCode: 36))
-            outline.keyDown(with: event)
-        } else {
-            coordinator.open(row)
+    func activate(group: SurfaceResourceGroup? = nil) throws {
+        let captured = try group ?? self.group()
+        opening = Task { @MainActor [base, provider, remote] in
+            try await base.catalog.tuiWorkspaceCreationCoordinator.openExistingWorkspace(
+                provider: provider, workspace: remote, group: captured,
+                focus: true, host: TuiWorkspaceCreationHost(manager: base.manager)
+            )
         }
+    }
+
+    func waitForOpen() async throws {
+        let task = try #require(opening)
+        _ = try await task.value
     }
 
     func close() {
         provider.gate?.resolve(true)
-        operations.cancelAll()
+        opening?.cancel()
+        base.catalog.tuiWorkspaceCreationCoordinator.cancelAll()
         base.close()
-        defaults.removePersistentDomain(forName: defaultsName)
     }
 }

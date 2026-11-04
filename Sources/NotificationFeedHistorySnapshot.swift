@@ -17,4 +17,5 @@ struct NotificationFeedHistorySnapshot: Codable, Equatable, Sendable {
         self.revision = revision
         self.notifications = notifications
     }
+
 }

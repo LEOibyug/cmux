@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import Darwin
 import Foundation
 import Testing
@@ -11,7 +11,7 @@ import Testing
 @testable import CloudCommandFixture
 #endif
 
-@Suite struct CloudTuiManualIOConnectionTests {
+@Suite struct TuiManualIOConnectionTests {
     @Test func sustainedQueuedWritesPreserveOrder() async throws {
         try await Self.withConnection { connection, peer in
             // Keep the burst below the 256 KiB protocol bound while exceeding
@@ -151,9 +151,9 @@ import Testing
 
     @Test func persistentRequestsShareOneSocketAndMatchOutOfOrderResponses() async throws {
         try await Self.withResourceConnection { channel, peer in
-            async let one = channel.request(CloudTuiRequest("session.ping"))
-            async let two = channel.request(CloudTuiRequest("machine-listening-tcp", raw: true))
-            async let three = channel.request(CloudTuiRequest("session.snapshot"))
+            async let one = channel.request(TuiRequest("session.ping"))
+            async let two = channel.request(TuiRequest("machine-listening-tcp", raw: true))
+            async let three = channel.request(TuiRequest("session.snapshot"))
             let replies: [Data] = try await Self.blocking {
                 var responses: [Data] = []
                 for _ in 0..<3 {
@@ -175,7 +175,7 @@ import Testing
 
     @Test func persistentCancellationRetiresOnlyOneRequestAndIgnoresItsLateReply() async throws {
         try await Self.withResourceConnection { channel, peer in
-            let canceled = Task { try await channel.request(CloudTuiRequest("terminal.wait", ["terminal": "term_test", "pattern": "x"])) }
+            let canceled = Task { try await channel.request(TuiRequest("terminal.wait", ["terminal": "term_test", "pattern": "x"])) }
             let waiting = try await Self.blocking { try Self.readLine(peer) }
             canceled.cancel()
             await #expect(throws: CancellationError.self) { try await canceled.value }
@@ -186,7 +186,7 @@ import Testing
             #expect((cancel["params"] as? [String: Any])?["request_id"] as? String == original["id"] as? String)
             try Self.write(peer, Self.response(original, result: ["late": true]))
             try Self.write(peer, Self.response(cancel, result: ["canceled": true]))
-            async let next = channel.request(CloudTuiRequest("session.ping"))
+            async let next = channel.request(TuiRequest("session.ping"))
             try await Self.blocking {
                 let request = try Self.object(Self.readLine(peer))
                 try Self.write(peer, Self.response(request, result: ["alive": true]))
@@ -198,7 +198,7 @@ import Testing
 
     @Test func persistentUntrackedRequestSharesTheAuthenticatedSocket() async throws {
         try await Self.withResourceConnection { channel, peer in
-            let request = CloudTuiRequest(
+            let request = TuiRequest(
                 "terminal.input.write",
                 ["terminal": "term_early", "bytes_base64": Data("ls".utf8).base64EncodedString()],
                 mutation: true
@@ -216,11 +216,11 @@ import Testing
     @Test func persistentDeadlineCompletesWithoutAReplyOrClosingSiblings() async throws {
         let clock = CloudCommandDeadlineClock()
         try await Self.withResourceConnection(clock: clock) { channel, peer in
-            let expired = Task { try await channel.request(CloudTuiRequest("session.ping"), timeout: .milliseconds(100)) }
+            let expired = Task { try await channel.request(TuiRequest("session.ping"), timeout: .milliseconds(100)) }
             _ = try await Self.blocking { try Self.readLine(peer) }
             await clock.waitUntilSleeping()
             clock.advance(by: .milliseconds(100))
-            await #expect(throws: CloudMachineLink.LinkError.self) { try await expired.value }
+            await #expect(throws: RemoteMachineLink.LinkError.self) { try await expired.value }
             let cancellationBytes = try await Self.blocking { try Self.readLine(peer) }
             let cancellation = try Self.object(cancellationBytes)
             #expect(cancellation["operation"] as? String == "request.cancel")
@@ -238,7 +238,7 @@ import Testing
             try Self.write(peer, Self.response(openingRequest, result: ["stream_id": streamID]))
             let opened = try await opening
             var iterator = opened.stream.makeAsyncIterator()
-            async let ping = channel.request(CloudTuiRequest("session.ping"))
+            async let ping = channel.request(TuiRequest("session.ping"))
             try await Self.blocking {
                 let request = try Self.object(Self.readLine(peer))
                 let event: [String: Any] = ["protocol": "cmux.protocol/2", "type": "stream_item", "stream_id": streamID, "sequence": "0", "item": ["kind": "fixture"]]
@@ -260,13 +260,13 @@ import Testing
 
     @Test func persistentEOFResolvesEveryPendingRequestAndRejectsFurtherWork() async throws {
         try await Self.withResourceConnection { channel, peer in
-            let first = Task { try await channel.request(CloudTuiRequest("session.ping")) }
-            let second = Task { try await channel.request(CloudTuiRequest("session.snapshot")) }
+            let first = Task { try await channel.request(TuiRequest("session.ping")) }
+            let second = Task { try await channel.request(TuiRequest("session.snapshot")) }
             try await Self.blocking { _ = try Self.readLine(peer); _ = try Self.readLine(peer) }
             shutdown(peer, SHUT_RDWR)
-            await #expect(throws: CloudMachineLink.LinkError.self) { try await first.value }
-            await #expect(throws: CloudMachineLink.LinkError.self) { try await second.value }
-            await #expect(throws: CloudMachineLink.LinkError.self) { try await channel.request(CloudTuiRequest("session.ping")) }
+            await #expect(throws: RemoteMachineLink.LinkError.self) { try await first.value }
+            await #expect(throws: RemoteMachineLink.LinkError.self) { try await second.value }
+            await #expect(throws: RemoteMachineLink.LinkError.self) { try await channel.request(TuiRequest("session.ping")) }
         }
     }
 
@@ -274,8 +274,8 @@ import Testing
         try await Self.withResourceConnection { channel, peer in
             let bytes = Data("--name secret\n\0payload".utf8)
             // Immutable so the `async let` capture is Sendable-clean under Swift 6 diagnostics.
-            let write: CloudTuiRequest = {
-                var request = CloudTuiRequests.writeBytes(terminalID: "term_test", data: bytes)
+            let write: TuiRequest = {
+                var request = TuiRequests.writeBytes(terminalID: "term_test", data: bytes)
                 request.idempotencyKey = "same-logical-input"
                 return request
             }()
@@ -303,7 +303,7 @@ import Testing
 
     static func withResourceConnection(
         clock: any Clock<Duration> = ContinuousClock(),
-        _ body: (CloudTuiPersistentResourceConnection, Int32) async throws -> Void
+        _ body: (TuiPersistentResourceConnection, Int32) async throws -> Void
     ) async throws {
         // Reuse the socket fixture but create a single resource consumer on its
         // own accepted descriptor. No cmux-tui executable is involved.
@@ -317,7 +317,7 @@ import Testing
         withUnsafeMutableBytes(of: &address.sun_path) { target in bytes.withUnsafeBytes { target.copyBytes(from: $0) } }
         let bound = withUnsafePointer(to: &address) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { Darwin.bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) } }
         guard bound == 0, listen(listener, 2) == 0 else { throw socketError() }
-        let channel = CloudTuiPersistentResourceConnection(socketPath: path, clock: clock)
+        let channel = TuiPersistentResourceConnection(socketPath: path, clock: clock)
         try await channel.start()
         let peer = accept(listener, nil, nil)
         guard peer >= 0 else { await channel.close(); throw socketError() }
@@ -335,7 +335,7 @@ import Testing
     }
 
     private static func withConnection(
-        _ body: (CloudTuiManualIOConnection, Int32) async throws -> Void
+        _ body: (TuiManualIOConnection, Int32) async throws -> Void
     ) async throws {
         let path = "/tmp/cmux-io-\(UUID().uuidString.prefix(12)).sock"
         let listener = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -353,7 +353,7 @@ import Testing
             }
         }
         guard bound == 0, listen(listener, 1) == 0 else { throw socketError() }
-        let connection = CloudTuiManualIOConnection(socketPath: path)
+        let connection = TuiManualIOConnection(socketPath: path)
         defer { connection.close() }
         try await connection.start()
         let peer = accept(listener, nil, nil)

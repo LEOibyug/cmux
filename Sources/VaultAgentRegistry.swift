@@ -4,9 +4,23 @@ import OSLog
 
 struct CmuxVaultConfigDefinition: Codable, Hashable, Sendable {
     var agents: [CmuxVaultAgentRegistration]
+    var enabledAgents: [String]?
 
-    init(agents: [CmuxVaultAgentRegistration] = []) {
+    private enum CodingKeys: String, CodingKey {
+        case agents, enabledAgents
+    }
+
+    init(agents: [CmuxVaultAgentRegistration] = [], enabledAgents: [String]? = nil) {
         self.agents = agents
+        self.enabledAgents = enabledAgents
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.agents = try container.decodeIfPresent([CmuxVaultAgentRegistration].self, forKey: .agents) ?? []
+        self.enabledAgents = container.contains(.enabledAgents)
+            ? try container.decode([String].self, forKey: .enabledAgents)
+            : nil
     }
 }
 
@@ -460,8 +474,25 @@ struct CmuxVaultAgentRegistry: Sendable {
     private static let logger = Logger(subsystem: "ai.manaflow.cmux", category: "VaultAgentRegistry")
 
     var registrations: [CmuxVaultAgentRegistration]
+    var enabledAgentIDs: Set<String>?
+    private let historyConfigurationGeneration: CmuxVaultHistoryConfigurationGeneration?
+    private let historyConfigurationLoadWasConsistent: Bool
 
-    init(registrations: [CmuxVaultAgentRegistration]) {
+    init(registrations: [CmuxVaultAgentRegistration], enabledAgentIDs: Set<String>? = nil) {
+        self.init(
+            registrations: registrations,
+            enabledAgentIDs: enabledAgentIDs,
+            historyConfigurationGeneration: nil,
+            historyConfigurationLoadWasConsistent: true
+        )
+    }
+
+    private init(
+        registrations: [CmuxVaultAgentRegistration],
+        enabledAgentIDs: Set<String>?,
+        historyConfigurationGeneration: CmuxVaultHistoryConfigurationGeneration?,
+        historyConfigurationLoadWasConsistent: Bool
+    ) {
         var ordered: [CmuxVaultAgentRegistration] = []
         var indexesByID: [String: Int] = [:]
         for registration in registrations {
@@ -473,6 +504,18 @@ struct CmuxVaultAgentRegistry: Sendable {
             }
         }
         self.registrations = ordered
+        self.enabledAgentIDs = enabledAgentIDs
+        self.historyConfigurationGeneration = historyConfigurationGeneration
+        self.historyConfigurationLoadWasConsistent = historyConfigurationLoadWasConsistent
+    }
+
+    /// Whether the loaded global history policy still belongs to the same config generation.
+    var historyConfigurationIsCurrent: Bool {
+        historyConfigurationLoadWasConsistent && (historyConfigurationGeneration?.isCurrent ?? true)
+    }
+
+    func isHistoryEnabled(for agentID: String) -> Bool {
+        enabledAgentIDs?.contains(agentID) ?? true
     }
 
     func registration(id: String) -> CmuxVaultAgentRegistration? {
@@ -491,7 +534,12 @@ struct CmuxVaultAgentRegistry: Sendable {
               !agents.isEmpty else {
             return self
         }
-        return CmuxVaultAgentRegistry(registrations: registrations + agents)
+        return CmuxVaultAgentRegistry(
+            registrations: registrations + agents,
+            enabledAgentIDs: enabledAgentIDs,
+            historyConfigurationGeneration: historyConfigurationGeneration,
+            historyConfigurationLoadWasConsistent: historyConfigurationLoadWasConsistent
+        )
     }
 
     static func load(
@@ -511,11 +559,30 @@ struct CmuxVaultAgentRegistry: Sendable {
             CmuxVaultAgentRegistration.builtInMuse,
             CmuxVaultAgentRegistration.builtInHermes,
         ]
+        let globalPath = ((homeDirectory as NSString).standardizingPath as NSString)
+            .appendingPathComponent(".config/cmux/cmux.json")
+        let generationBeforeDecode = CmuxVaultHistoryConfigurationGeneration.capture(path: globalPath)
+        // Only a genuinely absent global config preserves the default-all policy.
+        var enabledAgentIDs: Set<String>? = generationBeforeDecode.isMissing ? nil : []
         for path in configPaths(homeDirectory: homeDirectory, workingDirectory: workingDirectory, environment: environment, fileManager: fileManager) {
             guard let config = decodeConfig(at: path, fileManager: fileManager) else { continue }
             registrations.append(contentsOf: config.vault?.agents ?? [])
+            if path == globalPath {
+                enabledAgentIDs = config.vault?.enabledAgents.map { Set($0) }
+            }
         }
-        return CmuxVaultAgentRegistry(registrations: registrations)
+        let generationAfterDecode = CmuxVaultHistoryConfigurationGeneration.capture(path: globalPath)
+        let configurationWasConsistent = generationBeforeDecode.isInspectable
+            && generationBeforeDecode == generationAfterDecode
+        if !configurationWasConsistent {
+            enabledAgentIDs = []
+        }
+        return CmuxVaultAgentRegistry(
+            registrations: registrations,
+            enabledAgentIDs: enabledAgentIDs,
+            historyConfigurationGeneration: generationBeforeDecode,
+            historyConfigurationLoadWasConsistent: configurationWasConsistent
+        )
     }
 
     private static func configPaths(

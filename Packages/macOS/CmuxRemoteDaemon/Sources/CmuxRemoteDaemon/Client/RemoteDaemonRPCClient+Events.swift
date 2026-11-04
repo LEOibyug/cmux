@@ -39,96 +39,9 @@ extension RemoteDaemonRPCClient {
         }
     }
 
-    func receiveNextWebSocketMessageLocked() {
-        guard let connection = webSocketConnection else { return }
-        connection.receiveMessage { [weak self] data, opcode, isComplete, error in
-            guard let self else { return }
-            self.stateQueue.async {
-                if let error {
-                    if connection.isClosed || self.isClosed {
-                        self.handleWebSocketTermination("daemon websocket closed")
-                    } else {
-                        self.handleWebSocketTermination("daemon websocket failed: \(error.localizedDescription)")
-                    }
-                    return
-                }
-                if isComplete, data == nil, opcode == nil {
-                    self.handleWebSocketTermination("daemon websocket closed")
-                    return
-                }
-                switch opcode {
-                case .text:
-                    self.consumeJSONPayload(data ?? Data())
-                case .binary:
-                    self.consumeJSONPayload(data ?? Data())
-                case .close:
-                    self.handleWebSocketTermination("daemon websocket closed")
-                    return
-                default:
-                    break
-                }
-                if !self.isClosed {
-                    self.receiveNextWebSocketMessageLocked()
-                }
-            }
-        }
-    }
 
-    func startWebSocketKeepaliveLocked() {
-        webSocketKeepaliveTimer?.cancel()
-        webSocketKeepaliveTimeoutWorkItem?.cancel()
-        webSocketKeepaliveTimeoutWorkItem = nil
-        webSocketKeepaliveInFlight = false
-        let timer = DispatchSource.makeTimerSource(queue: stateQueue)
-        timer.schedule(
-            deadline: .now() + Self.webSocketKeepaliveInterval,
-            repeating: Self.webSocketKeepaliveInterval
-        )
-        timer.setEventHandler { [weak self] in
-            self?.sendWebSocketKeepaliveLocked()
-        }
-        webSocketKeepaliveTimer = timer
-        timer.resume()
-    }
 
-    func stopWebSocketKeepaliveLocked() {
-        webSocketKeepaliveTimer?.cancel()
-        webSocketKeepaliveTimer = nil
-        webSocketKeepaliveTimeoutWorkItem?.cancel()
-        webSocketKeepaliveTimeoutWorkItem = nil
-        webSocketKeepaliveInFlight = false
-    }
 
-    func sendWebSocketKeepaliveLocked() {
-        guard !isClosed, let connection = webSocketConnection else {
-            stopWebSocketKeepaliveLocked()
-            return
-        }
-        if webSocketKeepaliveInFlight {
-            return
-        }
-
-        webSocketKeepaliveInFlight = true
-        let timeoutWorkItem = DispatchWorkItem { [weak self] in
-            guard let self, !self.isClosed, self.webSocketKeepaliveInFlight else { return }
-            self.handleWebSocketTermination("daemon websocket keepalive timed out")
-        }
-        webSocketKeepaliveTimeoutWorkItem?.cancel()
-        webSocketKeepaliveTimeoutWorkItem = timeoutWorkItem
-        stateQueue.asyncAfter(deadline: .now() + Self.webSocketKeepaliveInterval, execute: timeoutWorkItem)
-        connection.sendPing { [weak self] error in
-            guard let self else { return }
-            self.stateQueue.async {
-                guard !self.isClosed else { return }
-                self.webSocketKeepaliveTimeoutWorkItem?.cancel()
-                self.webSocketKeepaliveTimeoutWorkItem = nil
-                self.webSocketKeepaliveInFlight = false
-                if let error {
-                    self.handleWebSocketTermination("daemon websocket keepalive failed: \(error.localizedDescription)")
-                }
-            }
-        }
-    }
 
     func consumeJSONPayload(_ data: Data) {
         guard let payload = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
@@ -323,9 +236,6 @@ extension RemoteDaemonRPCClient {
         }()
         let detail = Self.bestErrorLine(stderr: stderrBuffer) ?? "daemon transport exited with status \(process.terminationStatus)"
 
-        if self.process === process {
-            removeForwardSocketDirectoryLocked()
-        }
         isClosed = true
         self.process = nil
         stdinPipe = nil
@@ -344,21 +254,6 @@ extension RemoteDaemonRPCClient {
         onUnexpectedTermination(detail)
     }
 
-    func handleWebSocketTermination(_ detail: String) {
-        let shouldNotify = !isClosed && shouldReportTermination
-        let capturedConnection = webSocketConnection
-
-        isClosed = true
-        stopWebSocketKeepaliveLocked()
-        webSocketConnection = nil
-        streamSubscriptions.removeAll(keepingCapacity: false)
-        failPTYSubscriptionsLocked(detail)
-        signalPendingFailureLocked(detail)
-        capturedConnection?.cancel()
-
-        guard shouldNotify else { return }
-        onUnexpectedTermination(detail)
-    }
 
     static func responseID(in payload: [String: Any]) -> Int? {
         if let intValue = payload["id"] as? Int {

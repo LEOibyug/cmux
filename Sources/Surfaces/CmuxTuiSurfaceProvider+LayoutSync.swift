@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -13,14 +13,14 @@ extension CmuxTuiSurfaceProvider: SurfaceWorkspaceLayoutSyncing {
     /// link yields instead of holding every bound workspace.
     static let layoutSyncDeadline: Duration = .seconds(20)
 
-    func syncWorkspaceLayout(_ desired: CloudLayoutSyncTree, remoteWorkspaceID: String) async throws -> CloudLayoutSyncStep {
+    func syncWorkspaceLayout(_ desired: TuiLayoutSyncTree, remoteWorkspaceID: String) async throws -> TuiLayoutSyncStep {
         let connected = try await links.connected(machineID: machineID)
-        guard let link = await links.link(machineID: machineID) else { throw ProviderError.machineAsleep(machineID) }
+        guard let link = await links.link(machineID: machineID) else { throw ProviderError.connectionUnavailable(machineID) }
         let deadline = ContinuousClock.now.advanced(by: Self.layoutSyncDeadline)
         // Scratch terminals only hold a new pane open; none may outlive this sync.
         var scratch: [String: String] = [:]
         var mutated = false
-        var outcome: CloudLayoutSyncStep = .notReady("the machine did not converge")
+        var outcome: TuiLayoutSyncStep = .notReady("the machine did not converge")
         do {
             steps: for _ in 0..<Self.layoutSyncStepLimit {
                 try Task.checkCancellation()
@@ -28,39 +28,39 @@ extension CmuxTuiSurfaceProvider: SurfaceWorkspaceLayoutSyncing {
                     outcome = .notReady("the machine did not accept the layout in time")
                     break
                 }
-                let data = try await link.run(arguments: CloudTuiRequests.snapshotArguments(socketPath: connected.socketPath))
+                let data = try await link.run(arguments: TuiRequests.snapshotArguments(socketPath: connected.socketPath))
                 guard let snapshot = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                       CmuxTuiSnapshotParser.authoritativeGraphIsValid(snapshot) else {
                     throw ProviderError.invalidSnapshot(machineID)
                 }
                 let revision = CmuxTuiSnapshotParser.resourceRevision(from: snapshot)
-                let step = CloudLayoutSyncPlanner(
+                let step = TuiLayoutSyncPlanner(
                     snapshot: snapshot, workspaceID: remoteWorkspaceID, desired: desired, scratchTabIDs: Set(scratch.keys)
                 ).step
-                let request: CloudTuiRequest
+                let request: TuiRequest
                 switch step {
                 case .done, .notReady, .unsupported:
                     outcome = step
                     break steps
                 case .moveTab(let tabID, let target):
-                    request = CloudTuiRequests.moveTabArguments(
+                    request = TuiRequests.moveTabArguments(
                         socketPath: connected.socketPath, tabID: tabID, target: target, expectedRevision: revision
                     )
                 case .splitPane(let paneID):
-                    request = CloudTuiRequests.paneCreate(
+                    request = TuiRequests.paneCreate(
                         paneID: paneID, direction: SurfaceSplitDirection.right.rawValue, command: [],
                         revision: revision.flatMap { UInt64($0) },
                         key: "cmux-cloud-layout-\(UUID().uuidString.lowercased())", correlationKey: nil
                     )
                 case .closeScratch(let tabID, let terminalID):
                     scratch[tabID] = nil
-                    request = CloudTuiRequests.closeTerminalArguments(socketPath: connected.socketPath, terminalID: terminalID)
+                    request = TuiRequests.closeTerminalArguments(socketPath: connected.socketPath, terminalID: terminalID)
                 case .applyLayout(let document):
                     guard let object = try JSONSerialization.jsonObject(with: document) as? [String: Any] else {
                         outcome = .unsupported("the layout document could not be decoded")
                         break steps
                     }
-                    request = CloudTuiRequests.applyWorkspaceLayoutArguments(
+                    request = TuiRequests.applyWorkspaceLayoutArguments(
                         workspaceID: remoteWorkspaceID, document: object, expectedRevision: revision
                     )
                 }
@@ -92,7 +92,7 @@ extension CmuxTuiSurfaceProvider: SurfaceWorkspaceLayoutSyncing {
     /// Runs a split and returns its scratch terminal. A lost response is replayed with
     /// the same idempotency key, so a committed split always reports its terminal and
     /// can be closed rather than surfacing later as an unexplained shell.
-    private func runSplit(_ request: CloudTuiRequest, paneID: String, link: CloudMachineLink) async throws -> (tabID: String, terminalID: String) {
+    private func runSplit(_ request: TuiRequest, paneID: String, link: RemoteMachineLink) async throws -> (tabID: String, terminalID: String) {
         var lastError: Error = ProviderError.terminalNotCreated(paneID)
         for _ in 0..<3 {
             do {
@@ -113,11 +113,11 @@ extension CmuxTuiSurfaceProvider: SurfaceWorkspaceLayoutSyncing {
 
     /// Closes scratch terminals even when the sync was cancelled: an unstructured task
     /// does not inherit cancellation, and a leaked shell would become a real tab.
-    private static func closeScratchTerminals(_ terminals: [String], link: CloudMachineLink, socketPath: String) async {
+    private static func closeScratchTerminals(_ terminals: [String], link: RemoteMachineLink, socketPath: String) async {
         guard !terminals.isEmpty else { return }
         await Task {
             for terminalID in terminals {
-                _ = try? await link.run(arguments: CloudTuiRequests.closeTerminalArguments(socketPath: socketPath, terminalID: terminalID))
+                _ = try? await link.run(arguments: TuiRequests.closeTerminalArguments(socketPath: socketPath, terminalID: terminalID))
             }
         }.value
     }

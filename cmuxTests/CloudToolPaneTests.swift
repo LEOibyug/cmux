@@ -43,7 +43,7 @@ struct CloudToolPaneTests {
             #expect(Set(workspace.panels.keys).subtracting(originalPanels) == [cloud.id])
             let snapshot = workspace.sessionSnapshot(includeScrollback: false)
             #expect(snapshot.panels.first { $0.id == cloud.id }?.rightSidebarTool?.mode == .machines)
-            let restored = TabManager(autoWelcomeIfNeeded: false)
+            let restored = TabManager()
             defer { restored.tabs.forEach { $0.teardownAllPanels() } }
             restored.restoreSessionSnapshot(fixture.manager.sessionSnapshot(includeScrollback: false))
             #expect(restored.tabs.flatMap { $0.panels.values }.compactMap { $0 as? RightSidebarToolPanel }

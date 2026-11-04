@@ -21,8 +21,7 @@ enum CmuxSocketEventMapper {
         // classification on the same canonical value so a whitespace-wrapped
         // handoff can never enter a normal event path.
         let method = rawMethod.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard method != "events.stream",
-              method != "coderouter.handoff.complete" else {
+        guard method != "events.stream" else {
             return true
         }
         guard let mapping = domainEventMapping(forV2Method: method) else {

@@ -1,6 +1,6 @@
-import CmuxCloud
+import CmuxRemoteSession
 import AppKit
-import CmuxCloudTui
+import CmuxTui
 import Foundation
 import Testing
 
@@ -15,12 +15,12 @@ import Testing
 /// The pane shows no progress card at all; only Reconnect, once recovery has
 /// kept failing.
 @Suite("Cloud terminal connection presentation")
-struct CloudTerminalConnectionPresentationPolicyTests {
-    private typealias Policy = CloudTerminalConnectionPresentationPolicy
+struct RemoteTerminalConnectionPresentationPolicyTests {
+    private typealias Policy = RemoteTerminalConnectionPresentationPolicy
 
     @Test
     func workingAttachmentsShowNothingWhateverTheStage() {
-        for phase in [CloudTuiManualMirrorPhase.connecting, .attached] {
+        for phase in [TuiManualMirrorPhase.connecting, .attached] {
             for stage in [Policy.Stage.silent, .failure] {
                 let input = Policy.Input(phase: phase, replayReceived: false, automaticRecovery: true, stage: stage)
                 #expect(Policy.outcome(for: input) == .none, "\(phase) at \(stage)")
@@ -42,7 +42,7 @@ struct CloudTerminalConnectionPresentationPolicyTests {
 
     @Test
     func idleAndStoppedShowNothing() {
-        for phase in [CloudTuiManualMirrorPhase.idle, .stopped] {
+        for phase in [TuiManualMirrorPhase.idle, .stopped] {
             let input = Policy.Input(phase: phase, replayReceived: false, automaticRecovery: false, stage: .failure)
             #expect(Policy.outcome(for: input) == .none)
         }
@@ -60,9 +60,9 @@ struct CloudTerminalConnectionPresentationPolicyTests {
     /// on the pane, not even for one frame, at any point of the handshake.
     @Test @MainActor
     func firstAttachNeverShowsACard() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_fresh", remoteSurfaceID: 17,
             presentationPolicy: Policy(failureGrace: .seconds(4)),
             onNeedsReconnect: {}
@@ -71,7 +71,7 @@ struct CloudTerminalConnectionPresentationPolicyTests {
         let frame = NSRect(x: 0, y: 0, width: 480, height: 320)
         let hosted = GhosttySurfaceScrollView(surfaceView: GhosttyNSView(frame: frame))
         let anchor = GhosttyTerminalView.HostContainerView(frame: frame)
-        let owner = hosted.cloudTerminalOverlay
+        let owner = hosted.tuiTerminalOverlay
         owner.session = session
         owner.updateAnchor(anchor, visible: true, ownershipGeneration: 1)
         func synchronize() {
@@ -103,7 +103,7 @@ struct CloudTerminalConnectionPresentationPolicyTests {
     @Test @MainActor
     func transientDisconnectRepairedInsideTheGraceShowsNothing() async throws {
         var recoveries = 0
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_bounce", remoteSurfaceID: 17,
             presentationPolicy: Policy(failureGrace: .seconds(4)),
             onNeedsReconnect: { recoveries += 1 }
@@ -111,7 +111,7 @@ struct CloudTerminalConnectionPresentationPolicyTests {
         defer { session.stop() }
         var presentations: [CloudTerminalReconnectOverlayPolicy.Presentation?] = []
         for cycle in 0..<3 {
-            let fixture = try CloudManualMirrorSocketFixture()
+            let fixture = try TuiManualMirrorSocketFixture()
             defer { fixture.close() }
             // The provider resolved a new numeric surface: the session fences the
             // old stream (disconnected) and immediately reconnects (connecting).
@@ -139,7 +139,7 @@ struct CloudTerminalConnectionPresentationPolicyTests {
     /// and a usable attachment clears it at once.
     @Test @MainActor
     func persistentFailureOffersReconnectAndAUsableAttachmentClearsIt() async throws {
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_stuck", remoteSurfaceID: 17,
             presentationPolicy: Policy(failureGrace: .milliseconds(80)),
             onNeedsReconnect: {}
@@ -150,7 +150,7 @@ struct CloudTerminalConnectionPresentationPolicyTests {
         try await Self.waitUntil { session.connectionPresentation?.showsReconnectButton == true }
         #expect(session.connectionPresentation?.showsProgress == false)
 
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         session.reconnect(socketPath: fixture.socketPath)
         // The attempt that follows an exhausted grace shows nothing while it runs.
@@ -165,7 +165,7 @@ struct CloudTerminalConnectionPresentationPolicyTests {
     }
 
     @MainActor
-    private static func completeHandshake(_ fixture: CloudManualMirrorSocketFixture, surface: UInt64) async throws {
+    private static func completeHandshake(_ fixture: TuiManualMirrorSocketFixture, surface: UInt64) async throws {
         let identify = try #require(await fixture.nextCommand(timeout: .seconds(5)))
         #expect(identify.cmd == "identify")
         fixture.send(["id": identify.id, "ok": true, "data": ["protocol": 12]])

@@ -411,8 +411,10 @@ extension DockSplitStore {
                     forwardHistoryURLStrings: history.forwardHistoryURLStrings,
                     transparentBackground: browser.sessionSnapshotTransparentBackground,
                     diffViewerToken: diffViewer?.token,
-                    diffViewerRequestPath: diffViewer?.requestPath, cloudResource: browser.cloudResourceForSession, interactionState: browser.persistableInteractionStateForSessionSnapshot(), keepsPageActive: browser.keepsPageActiveForSessionSnapshot,
-                    cloudTeamID: browser.cloudTeamIDForSession
+                    diffViewerRequestPath: diffViewer?.requestPath,
+                    remoteResource: browser.remoteResourceForSession,
+                    interactionState: browser.persistableInteractionStateForSessionSnapshot(),
+                    keepsPageActive: browser.keepsPageActiveForSessionSnapshot
                 )
             } else if let deferred = panel as? DeferredBrowserPanel {
                 browserSnapshot = deferred.sessionPanelSnapshot.browser
@@ -423,8 +425,8 @@ extension DockSplitStore {
             chiefSnapshot = nil
         case .filePreview:
             guard let filePreview = panel as? FilePreviewPanel,
-                  filePreview.cloudPreviewLease == nil,
-                  filePreview.cloudPreviewRemotePath == nil else { return nil }
+                  filePreview.remotePreviewLease == nil,
+                  filePreview.remotePreviewPath == nil else { return nil }
             terminalSnapshot = nil
             browserSnapshot = nil
             filePreviewSnapshot = SessionFilePreviewPanelSnapshot(

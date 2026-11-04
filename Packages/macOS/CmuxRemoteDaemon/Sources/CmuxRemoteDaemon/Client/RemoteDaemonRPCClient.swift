@@ -39,10 +39,6 @@ public final class RemoteDaemonRPCClient: @unchecked Sendable {
     // writes; the registry is itself Sendable.
 
     static let maxStdoutBufferBytes = 256 * 1024
-    static let bakedVMDaemonSocketPath = "/run/cmuxd-remote.sock"
-    static let socketForwardStartupGracePeriod: TimeInterval = 0.75
-    static let socketForwardConnectTimeout: TimeInterval = 5.0
-    static let webSocketKeepaliveInterval: TimeInterval = 5.0
     static let ptyAttachCancellationWriteTimeout: TimeInterval = 1.0
     /// Wire capability required for push-based proxy streaming
     /// (`proxy.stream.push`; value is test-pinned, do not change).
@@ -129,11 +125,6 @@ public final class RemoteDaemonRPCClient: @unchecked Sendable {
     var stdinHandle: FileHandle?
     var stdoutHandle: FileHandle?
     var stderrHandle: FileHandle?
-    var forwardSocketDirectory: RemoteDaemonForwardSocketDirectory?
-    var webSocketConnection: RemoteDaemonWebSocketConnection?
-    var webSocketKeepaliveTimer: (any DispatchSourceTimer)?
-    var webSocketKeepaliveTimeoutWorkItem: DispatchWorkItem?
-    var webSocketKeepaliveInFlight = false
     var transportKeepaliveTimer: (any DispatchSourceTimer)?
     var transportKeepaliveTimeoutWorkItem: DispatchWorkItem?
     var transportKeepaliveInFlight = false
@@ -184,15 +175,8 @@ public final class RemoteDaemonRPCClient: @unchecked Sendable {
     public func start() throws {
         pendingCalls.reset()
 
-        if configuration.daemonWebSocketEndpoint != nil {
-            try startViaWebSocket()
-        } else if Self.usesSocketForwardTransport(configuration: configuration) {
-            try startViaBakedVMSocketForward()
-            markTransportOpen()
-        } else {
-            try startViaSSHExec()
-            markTransportOpen()
-        }
+        try startViaSSHExec()
+        markTransportOpen()
 
         do {
             let hello = try call(method: "hello", params: [:], timeout: 8.0)
@@ -210,9 +194,7 @@ public final class RemoteDaemonRPCClient: @unchecked Sendable {
                     NSLocalizedDescriptionKey: strings.missingRequiredCapabilitiesMessage(missingCapabilities),
                 ])
             }
-            if configuration.transport != .websocket {
-                startTransportKeepalive()
-            }
+            startTransportKeepalive()
         } catch {
             stop(suppressTerminationCallback: true)
             throw error
@@ -278,13 +260,12 @@ public final class RemoteDaemonRPCClient: @unchecked Sendable {
     }
 
     func stop(suppressTerminationCallback: Bool) {
-        let captured: (Process?, FileHandle?, FileHandle?, FileHandle?, RemoteDaemonWebSocketConnection?, Bool, String) = stateQueue.sync {
+        let captured: (Process?, FileHandle?, FileHandle?, FileHandle?, Bool, String) = stateQueue.sync {
             let detail = Self.bestErrorLine(stderr: stderrBuffer) ?? "daemon transport stopped"
             let shouldNotify = !suppressTerminationCallback && !isClosed
             shouldReportTermination = !suppressTerminationCallback
-            removeForwardSocketDirectoryLocked()
             if isClosed {
-                return (nil, nil, nil, nil, nil, false, detail)
+                return (nil, nil, nil, nil, false, detail)
             }
 
             isClosed = true
@@ -293,9 +274,7 @@ public final class RemoteDaemonRPCClient: @unchecked Sendable {
             let capturedStdin = stdinHandle
             let capturedStdout = stdoutHandle
             let capturedStderr = stderrHandle
-            let capturedWebSocketConnection = webSocketConnection
 
-            stopWebSocketKeepaliveLocked()
             stopTransportKeepaliveLocked()
             process = nil
             stdinPipe = nil
@@ -304,7 +283,6 @@ public final class RemoteDaemonRPCClient: @unchecked Sendable {
             stdinHandle = nil
             stdoutHandle = nil
             stderrHandle = nil
-            webSocketConnection = nil
             streamSubscriptions.removeAll(keepingCapacity: false)
             failPTYSubscriptionsLocked(detail)
             return (
@@ -312,7 +290,6 @@ public final class RemoteDaemonRPCClient: @unchecked Sendable {
                 capturedStdin,
                 capturedStdout,
                 capturedStderr,
-                capturedWebSocketConnection,
                 shouldNotify,
                 detail
             )
@@ -326,9 +303,8 @@ public final class RemoteDaemonRPCClient: @unchecked Sendable {
         if let process = captured.0, process.isRunning {
             process.terminate()
         }
-        captured.4?.cancel()
-        if captured.5 {
-            onUnexpectedTermination(captured.6)
+        if captured.4 {
+            onUnexpectedTermination(captured.5)
         }
     }
 
@@ -336,8 +312,4 @@ public final class RemoteDaemonRPCClient: @unchecked Sendable {
         pendingCalls.failAll(message)
     }
 
-    func removeForwardSocketDirectoryLocked() {
-        forwardSocketDirectory?.remove()
-        forwardSocketDirectory = nil
-    }
 }

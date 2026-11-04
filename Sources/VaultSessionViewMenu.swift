@@ -42,9 +42,34 @@ final class VaultSessionViewMenuPresenter {
     @discardableResult
     func present(
         isCompactView: Bool,
+        agentSourceOptions: [SessionIndexFilterOption],
+        enabledAgentIDs: Set<String>?,
+        onSelectAgentSources: @escaping @MainActor (Set<String>?) -> Void,
         onSelect: @escaping @MainActor (Bool) -> Void
     ) -> Bool {
         guard let anchorView else { return false }
+        let menu = makeMenu(
+            isCompactView: isCompactView,
+            agentSourceOptions: agentSourceOptions,
+            enabledAgentIDs: enabledAgentIDs,
+            onSelectAgentSources: onSelectAgentSources,
+            onSelect: onSelect
+        )
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: 0, y: anchorView.bounds.height + 2),
+            in: anchorView
+        )
+        return true
+    }
+
+    func makeMenu(
+        isCompactView: Bool,
+        agentSourceOptions: [SessionIndexFilterOption],
+        enabledAgentIDs: Set<String>?,
+        onSelectAgentSources: @escaping @MainActor (Set<String>?) -> Void,
+        onSelect: @escaping @MainActor (Bool) -> Void
+    ) -> NSMenu {
         let menu = NSMenu(title: Self.title)
         menu.autoenablesItems = false
         menu.addItem(.sectionHeader(title: Self.title))
@@ -55,12 +80,38 @@ final class VaultSessionViewMenuPresenter {
             item.state = option.isCompact == isCompactView ? .on : .off
             menu.addItem(item)
         }
-        menu.popUp(
-            positioning: nil,
-            at: NSPoint(x: 0, y: anchorView.bounds.height + 2),
-            in: anchorView
-        )
-        return true
+        menu.addItem(.separator())
+        let sourcesTitle = String(localized: "sessionIndex.sources.title", defaultValue: "Agent sources")
+        let sourcesItem = NSMenuItem(title: sourcesTitle, action: nil, keyEquivalent: "")
+        let sourcesMenu = NSMenu(title: sourcesTitle)
+        sourcesMenu.autoenablesItems = false
+        let allItem = SidebarRowClosureMenuItem(
+            title: String(localized: "sessionIndex.sources.all", defaultValue: "All agents (default)")
+        ) { onSelectAgentSources(nil) }
+        allItem.state = enabledAgentIDs == nil ? .on : .off
+        sourcesMenu.addItem(allItem)
+        let noneItem = SidebarRowClosureMenuItem(
+            title: String(localized: "sessionIndex.sources.none", defaultValue: "No agents")
+        ) { onSelectAgentSources([]) }
+        noneItem.state = enabledAgentIDs?.isEmpty == true ? .on : .off
+        sourcesMenu.addItem(noneItem)
+        sourcesMenu.addItem(.separator())
+        for option in agentSourceOptions {
+            let isEnabled = enabledAgentIDs?.contains(option.id) ?? true
+            let item = SidebarRowClosureMenuItem(title: option.label) {
+                // Leaving the default pins the currently known sources. Keep
+                // explicitly selected IDs even when their registration is absent.
+                var selection = enabledAgentIDs ?? Set(agentSourceOptions.map(\.id))
+                if isEnabled { selection.remove(option.id) }
+                else { selection.insert(option.id) }
+                onSelectAgentSources(selection)
+            }
+            item.state = isEnabled ? .on : .off
+            sourcesMenu.addItem(item)
+        }
+        sourcesItem.submenu = sourcesMenu
+        menu.addItem(sourcesItem)
+        return menu
     }
 }
 

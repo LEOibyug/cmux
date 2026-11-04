@@ -366,7 +366,7 @@ struct WorkspaceContentView: View {
                         workspace.bonsplitController.focusPane(paneId)
                     }
                 }
-            } else if workspace.cloudVMID != nil {
+            } else if workspace.remoteWorkspaceBinding != nil || workspace.isRemoteWorkspace {
                 TerminalPanelUnavailableView(appearance: appearance)
             } else {
                 EmptyPanelView(workspace: workspace, paneId: paneId)
@@ -476,18 +476,18 @@ struct WorkspaceContentView: View {
             }
         }
         .overlay {
-            if workspace.isManagedCloudVMWorkspace {
-                CloudSurfaceDropGate(workspaceID: workspace.id, isActive: isWorkspaceInputActive)
+            if workspace.remoteWorkspaceBinding != nil || workspace.usesSSHTui {
+                TuiSurfaceDropGate(workspaceID: workspace.id, isActive: isWorkspaceInputActive)
             }
         }
         .modifier(WorkspaceContentMinimalModeSafeAreaModifier(isFullScreen: isFullScreen))
         // A workspace is a page: accept the parent proposal instead of
         // contributing a hidden child's content-derived ideal to its ZStack.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .modifier(CloudPaneCreationFailurePresentation(
-            failureStore: workspace.cloudPaneCreationFailureStore,
+        .modifier(TuiPaneCreationFailurePresentation(
+            failureStore: workspace.tuiPaneCreationFailureStore,
             isWorkspaceVisible: isWorkspaceVisible,
-            sourceView: workspace.cloudPaneCreationFailureSourceView
+            sourceView: workspace.tuiPaneCreationFailureSourceView
         ))
     }
 

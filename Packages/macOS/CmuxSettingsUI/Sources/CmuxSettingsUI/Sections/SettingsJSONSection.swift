@@ -2,9 +2,7 @@ import CmuxFoundation
 import CmuxSettings
 import SwiftUI
 
-/// **cmux.json** section — mirrors the legacy in-app section: a card
-/// containing the User Config File row (display path + Open button)
-/// and the Documentation row (Open Docs link).
+/// **cmux.json** section with the config path and an external editor action.
 @MainActor
 public struct SettingsJSONSection: View {
     private let jsonStore: JSONConfigStore
@@ -21,8 +19,6 @@ public struct SettingsJSONSection: View {
                 .accessibilityIdentifier("SettingsJSONSection")
             SettingsCard {
                 userConfigFileRow
-                SettingsCardDivider()
-                documentationRow
             }
         }
     }
@@ -52,23 +48,6 @@ public struct SettingsJSONSection: View {
                 .accessibilityIdentifier("SettingsJSONOpenButton")
             }
             .accessibilityIdentifier("SettingsJSONOpenFileRowActions")
-        }
-    }
-
-    @ViewBuilder
-    private var documentationRow: some View {
-        SettingsCardRow(
-            configurationReview: .action,
-            searchAnchorID: "setting:settingsJSON:documentation",
-            String(localized: "settings.settingsJSON.documentation", defaultValue: "Documentation"),
-            subtitle: String(localized: "settings.settingsJSON.documentation.subtitle", defaultValue: "View supported keys, file locations, schema, and reload behavior.")
-        ) {
-            Link(
-                String(localized: "settings.settingsJSON.docsButton", defaultValue: "Open Docs"),
-                destination: URL(string: "https://cmux.com/docs/configuration#cmux-json")!
-            )
-            .cmuxFont(.caption)
-            .accessibilityIdentifier("SettingsJSONDocsLink")
         }
     }
 

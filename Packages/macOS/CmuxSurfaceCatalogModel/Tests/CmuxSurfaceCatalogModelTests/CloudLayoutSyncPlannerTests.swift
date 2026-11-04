@@ -109,7 +109,7 @@ private struct FakeDaemonScreen {
     }
 
     /// Performs one step; returns the scratch tab a split created.
-    mutating func perform(_ step: CloudLayoutSyncStep) throws -> String? {
+    mutating func perform(_ step: TuiLayoutSyncStep) throws -> String? {
         mutations += 1
         switch step {
         case .moveTab(let tab, let target):
@@ -146,10 +146,10 @@ private struct FakeDaemonScreen {
     }
 
     /// Runs the planner to completion, as the provider's sync loop does.
-    mutating func converge(to desired: CloudLayoutSyncTree, limit: Int = 40) throws -> CloudLayoutSyncStep {
+    mutating func converge(to desired: TuiLayoutSyncTree, limit: Int = 40) throws -> TuiLayoutSyncStep {
         var scratch = Set<String>()
         for _ in 0..<limit {
-            let step = CloudLayoutSyncPlanner(snapshot: snapshot, workspaceID: "ws", desired: desired, scratchTabIDs: scratch).step
+            let step = TuiLayoutSyncPlanner(snapshot: snapshot, workspaceID: "ws", desired: desired, scratchTabIDs: scratch).step
             switch step {
             case .done, .notReady, .unsupported: return step
             default: if let tab = try perform(step) { scratch.insert(tab) }
@@ -160,9 +160,9 @@ private struct FakeDaemonScreen {
     }
 
     /// The native-tree view of the current daemon layout, for final comparisons.
-    var tree: CloudLayoutSyncTree { Self.tree(root) }
+    var tree: TuiLayoutSyncTree { Self.tree(root) }
 
-    static func tree(_ node: Node) -> CloudLayoutSyncTree {
+    static func tree(_ node: Node) -> TuiLayoutSyncTree {
         switch node {
         case .leaf(_, let tabs, _): return .leaf(tabIDs: tabs, activeTabID: nil)
         case .split(_, let horizontal, let ratio, let first, let second):
@@ -171,10 +171,10 @@ private struct FakeDaemonScreen {
     }
 }
 
-private func leaf(_ tabs: String...) -> CloudLayoutSyncTree { .leaf(tabIDs: tabs, activeTabID: nil) }
+private func leaf(_ tabs: String...) -> TuiLayoutSyncTree { .leaf(tabIDs: tabs, activeTabID: nil) }
 
 @Suite
-struct CloudLayoutSyncPlannerTests {
+struct TuiLayoutSyncPlannerTests {
     /// The recorded issue #15770 shape: the machine still has one pane with four tabs,
     /// while the user arranged them locally as three tabs beside one.
     private var flatMachine: FakeDaemonScreen {
@@ -188,7 +188,7 @@ struct CloudLayoutSyncPlannerTests {
             first: .leaf(pane: "p1", tabs: ["a", "b", "c"], active: "a"),
             second: .leaf(pane: "p2", tabs: ["d"], active: "d")
         ))
-        let step = CloudLayoutSyncPlanner(
+        let step = TuiLayoutSyncPlanner(
             snapshot: daemon.snapshot, workspaceID: "ws",
             desired: .split(horizontal: true, ratio: 0.502, first: leaf("a", "b", "c"), second: leaf("d"))
         ).step
@@ -198,7 +198,7 @@ struct CloudLayoutSyncPlannerTests {
     @Test("A local drag-split of a multi-tab pane is written to the machine")
     func localSplitConverges() throws {
         var daemon = flatMachine
-        let desired = CloudLayoutSyncTree.split(horizontal: true, ratio: 0.62, first: leaf("a", "b", "c"), second: leaf("d"))
+        let desired = TuiLayoutSyncTree.split(horizontal: true, ratio: 0.62, first: leaf("a", "b", "c"), second: leaf("d"))
         #expect(try daemon.converge(to: desired) == .done)
         #expect(daemon.tree == desired)
         // The placeholder shell that held the new pane open was closed, and only it.
@@ -213,7 +213,7 @@ struct CloudLayoutSyncPlannerTests {
             first: .leaf(pane: "p1", tabs: ["a", "b", "c"], active: "a"),
             second: .leaf(pane: "p2", tabs: ["d"], active: "d")
         ))
-        let desired = CloudLayoutSyncTree.split(horizontal: true, ratio: 0.5, first: leaf("a", "c"), second: leaf("d", "b"))
+        let desired = TuiLayoutSyncTree.split(horizontal: true, ratio: 0.5, first: leaf("a", "c"), second: leaf("d", "b"))
         #expect(try daemon.converge(to: desired) == .done)
         #expect(daemon.tree == desired)
         #expect(daemon.closedTerminals.isEmpty)
@@ -222,11 +222,11 @@ struct CloudLayoutSyncPlannerTests {
     }
 
     @Test("Reorders, divider drags and direction changes converge", arguments: [
-        CloudLayoutSyncTree.split(horizontal: true, ratio: 0.3, first: leaf("c", "a", "b"), second: leaf("d")),
-        CloudLayoutSyncTree.split(horizontal: false, ratio: 0.5, first: leaf("a", "b", "c"), second: leaf("d")),
-        CloudLayoutSyncTree.split(horizontal: true, ratio: 0.5, first: leaf("d"), second: leaf("a", "b", "c")),
+        TuiLayoutSyncTree.split(horizontal: true, ratio: 0.3, first: leaf("c", "a", "b"), second: leaf("d")),
+        TuiLayoutSyncTree.split(horizontal: false, ratio: 0.5, first: leaf("a", "b", "c"), second: leaf("d")),
+        TuiLayoutSyncTree.split(horizontal: true, ratio: 0.5, first: leaf("d"), second: leaf("a", "b", "c")),
     ])
-    func sameMembershipEdits(desired: CloudLayoutSyncTree) throws {
+    func sameMembershipEdits(desired: TuiLayoutSyncTree) throws {
         var daemon = FakeDaemonScreen(root: .split(
             id: "s1", horizontal: true, ratio: 0.5,
             first: .leaf(pane: "p1", tabs: ["a", "b", "c"], active: "a"),
@@ -252,7 +252,7 @@ struct CloudLayoutSyncPlannerTests {
     @Test("Nested asymmetric arrangements converge from a flat machine")
     func nestedFromFlat() throws {
         var daemon = FakeDaemonScreen(root: .leaf(pane: "p1", tabs: ["a", "b", "c", "d", "e"], active: "a"))
-        let desired = CloudLayoutSyncTree.split(
+        let desired = TuiLayoutSyncTree.split(
             horizontal: true, ratio: 0.4,
             first: leaf("a", "b"),
             second: .split(horizontal: false, ratio: 0.7, first: leaf("c"), second: .split(
@@ -267,7 +267,7 @@ struct CloudLayoutSyncPlannerTests {
     @Test("A native tab the machine already closed is not written back")
     func nativeOnlyTabIsDropped() throws {
         var daemon = flatMachine
-        let desired = CloudLayoutSyncTree.split(horizontal: true, ratio: 0.5, first: leaf("a", "b", "c"), second: leaf("d", "closed"))
+        let desired = TuiLayoutSyncTree.split(horizontal: true, ratio: 0.5, first: leaf("a", "b", "c"), second: leaf("d", "closed"))
         #expect(try daemon.converge(to: desired) == .done)
         #expect(daemon.tree == .split(horizontal: true, ratio: 0.5, first: leaf("a", "b", "c"), second: leaf("d")))
     }
@@ -276,7 +276,7 @@ struct CloudLayoutSyncPlannerTests {
     func unprojectedMachineTabIsKept() throws {
         // Another client created "x" after "b" while the user split "d" off locally.
         var daemon = FakeDaemonScreen(root: .leaf(pane: "p1", tabs: ["a", "b", "x", "c", "d"], active: "a"))
-        let desired = CloudLayoutSyncTree.split(horizontal: true, ratio: 0.5, first: leaf("a", "b", "c"), second: leaf("d"))
+        let desired = TuiLayoutSyncTree.split(horizontal: true, ratio: 0.5, first: leaf("a", "b", "c"), second: leaf("d"))
         #expect(try daemon.converge(to: desired) == .done)
         #expect(daemon.tree == .split(horizontal: true, ratio: 0.5, first: leaf("a", "b", "x", "c"), second: leaf("d")))
     }
@@ -288,7 +288,7 @@ struct CloudLayoutSyncPlannerTests {
             first: .leaf(pane: "p1", tabs: ["a", "b"], active: "a"),
             second: .leaf(pane: "p2", tabs: ["x"], active: "x")
         ))
-        let step = CloudLayoutSyncPlanner(snapshot: daemon.snapshot, workspaceID: "ws", desired: leaf("b", "a")).step
+        let step = TuiLayoutSyncPlanner(snapshot: daemon.snapshot, workspaceID: "ws", desired: leaf("b", "a")).step
         guard case .notReady = step else {
             Issue.record("Expected deferral, got \(step)")
             return
@@ -297,7 +297,7 @@ struct CloudLayoutSyncPlannerTests {
 
     @Test("Tree equivalence tolerates pixel-rounded ratios only")
     func equivalence() {
-        let base = CloudLayoutSyncTree.split(horizontal: true, ratio: 0.5, first: leaf("a"), second: leaf("b"))
+        let base = TuiLayoutSyncTree.split(horizontal: true, ratio: 0.5, first: leaf("a"), second: leaf("b"))
         #expect(base.isEquivalent(to: .split(horizontal: true, ratio: 0.503, first: leaf("a"), second: leaf("b"))))
         #expect(!base.isEquivalent(to: .split(horizontal: true, ratio: 0.52, first: leaf("a"), second: leaf("b"))))
         #expect(!base.isEquivalent(to: .split(horizontal: false, ratio: 0.5, first: leaf("a"), second: leaf("b"))))
@@ -310,7 +310,7 @@ struct CloudLayoutSyncPlannerTests {
         var screens = snapshot["screens"] as! [[String: Any]]
         screens.append(["id": "scr2", "workspace_id": "ws", "layout": screens[0]["layout"]!])
         snapshot["screens"] = screens
-        guard case .unsupported = CloudLayoutSyncPlanner(snapshot: snapshot, workspaceID: "ws", desired: leaf("a", "b", "c", "d")).step else {
+        guard case .unsupported = TuiLayoutSyncPlanner(snapshot: snapshot, workspaceID: "ws", desired: leaf("a", "b", "c", "d")).step else {
             Issue.record("Expected unsupported for several screens")
             return
         }
@@ -318,7 +318,7 @@ struct CloudLayoutSyncPlannerTests {
         stacked["screens"] = [["id": "scr", "workspace_id": "ws", "layout": [
             "version": 1, "screen_id": "scr", "root": ["kind": "stack", "pane_ids": ["p1"]],
         ]]]
-        guard case .unsupported = CloudLayoutSyncPlanner(snapshot: stacked, workspaceID: "ws", desired: leaf("a", "b", "c", "d")).step else {
+        guard case .unsupported = TuiLayoutSyncPlanner(snapshot: stacked, workspaceID: "ws", desired: leaf("a", "b", "c", "d")).step else {
             Issue.record("Expected unsupported for a stack")
             return
         }

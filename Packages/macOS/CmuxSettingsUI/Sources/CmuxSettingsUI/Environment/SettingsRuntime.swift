@@ -1,15 +1,13 @@
 import CmuxSettings
 import SwiftUI
 
-/// The app-side bundle of catalog + stores + error log + account
-/// flow delegate, injected into the SwiftUI environment so views can
-/// resolve settings dependencies without threading each piece through
-/// every `init`.
+/// The app-side bundle of catalog, stores, error log, and host actions,
+/// injected into the SwiftUI environment so views can resolve settings
+/// dependencies without threading each piece through every `init`.
 ///
 /// `SettingsRuntime` is an immutable reference handle: the stores are
-/// actors, the error log is a `@MainActor` class, the account flow is a
-/// `@MainActor` protocol existential — the bundle itself is
-/// `Sendable`. Construct one at app startup and pass it via
+/// actors and the error log and host actions are `@MainActor` isolated —
+/// the bundle itself is `Sendable`. Construct one at app startup and pass it via
 /// ``View/settingsRuntime(_:)``.
 ///
 /// It is a class, not a struct, because it embeds the whole
@@ -33,8 +31,6 @@ public final class SettingsRuntime: @unchecked Sendable {
     public let secretStore: SecretFileStore
     /// Rolling settings error log displayed as alerts.
     public let errorLog: SettingsErrorLog
-    /// Optional host-owned account flow actions.
-    public let accountFlow: AccountFlow?
     /// Host callbacks for actions the package cannot perform itself.
     public let hostActions: SettingsHostActions
     /// Host-scoped factory-default resolver for dynamic shortcut actions.
@@ -51,7 +47,6 @@ public final class SettingsRuntime: @unchecked Sendable {
     ///   - jsonStore: cmux.json-backed settings store.
     ///   - secretStore: Secret-file-backed settings store.
     ///   - errorLog: Rolling settings error log displayed as alerts.
-    ///   - accountFlow: Optional host-owned account flow actions.
     ///   - hostActions: Host callbacks for actions the package cannot perform itself.
     ///   - shortcutDefaultResolver: Value-typed defaults supplied by the host;
     ///     defaults to the package table for previews and package-only hosts.
@@ -64,7 +59,6 @@ public final class SettingsRuntime: @unchecked Sendable {
         jsonStore: JSONConfigStore,
         secretStore: SecretFileStore,
         errorLog: SettingsErrorLog,
-        accountFlow: AccountFlow? = nil,
         hostActions: SettingsHostActions = NoopSettingsHostActions(),
         shortcutDefaultResolver: ShortcutDefaultResolver = .builtIn,
         searchIndex: SettingsSearchIndex? = nil
@@ -75,7 +69,6 @@ public final class SettingsRuntime: @unchecked Sendable {
         self.jsonStore = jsonStore
         self.secretStore = secretStore
         self.errorLog = errorLog
-        self.accountFlow = accountFlow
         self.hostActions = hostActions
         self.shortcutDefaultResolver = shortcutDefaultResolver
         self.keymapProposals = ShortcutKeymapProposalInbox()
@@ -99,7 +92,7 @@ extension EnvironmentValues {
 extension View {
     /// Injects ``runtime`` into the view tree so any descendant
     /// `@LiveSetting` property wrapper or settings section can resolve its
-    /// store, catalog, and account flow.
+    /// store, catalog, and host actions.
     public func settingsRuntime(_ runtime: SettingsRuntime) -> some View {
         environment(\.settingsRuntime, runtime)
     }

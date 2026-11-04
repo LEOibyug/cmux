@@ -17,7 +17,7 @@ extension Workspace {
     ) -> Bool {
         guard panels[panelId] != nil else { return false }
         if propagateToCloud, source != .remote,
-           let submitted = SurfaceCatalog.shared.submitCloudPanelRename(
+           let submitted = SurfaceCatalog.shared.submitTuiPanelRename(
                workspace: self, panelID: panelId, title: title, source: source
            ) { return submitted }
         let previousWorkspaceTitle = self.title
@@ -29,7 +29,7 @@ extension Workspace {
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let previous = panelCustomTitles[panelId]
         if source == .auto {
-            guard !trimmed.isEmpty, cloudProjectedResource(forPanel: panelId) == nil else { return false }
+            guard !trimmed.isEmpty, tuiProjectedResource(forPanel: panelId) == nil else { return false }
             if previous != nil, (panelCustomTitleSources[panelId] ?? .user) != .auto { return false }
         }
         var sameText = false

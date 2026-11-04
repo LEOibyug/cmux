@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Foundation
 import Network
 import Testing
@@ -20,7 +20,7 @@ struct CloudPortForwardAddressReuseTests {
         let ipv6 = "fd00::1"
         hub.refusedHosts = [ipv4]
         let dialer = CloudLoopbackPortForwardTests.FakeHubDialer(endpoint: hub.endpoint)
-        let target = CloudPortForwardTarget(host: ipv4, port: 6901, fallbackHosts: [ipv6])
+        let target = RemotePortForwardTarget(host: ipv4, port: 6901, fallbackHosts: [ipv6])
         let clock = SidebarTestManualClock()
         var relay = CloudPortForwardRelay(dialer: dialer)
         relay.clock = clock

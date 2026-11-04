@@ -1179,8 +1179,8 @@ enum TextBoxSubmit {
         case keyText(String)
         case pasteText(String)
         case pasteFilePath(String)
-        case validateCloudImages([URL])
-        case pasteCloudImages([URL])
+        case validateTuiImages([URL])
+        case pasteTuiImages([URL])
         case namedKeyRepeat(String, Int)
         case namedKey(String)
         case captureClipboardReadBaseline
@@ -1236,8 +1236,8 @@ enum TextBoxSubmit {
         }
 
         let submitKey = TextBoxAgentDetection.composedPromptSubmitKey(containsNewline: containsNewline, context: terminalAgentContext)
-        if imageTransferTarget == .cloud, containsImageAttachment(inputParts) {
-            return cloudImageDispatchEvents(from: inputParts, submitKey: submitKey)
+        if imageTransferTarget == .tui, containsImageAttachment(inputParts) {
+            return tuiImageDispatchEvents(from: inputParts, submitKey: submitKey)
         }
         if isClaude, containsImageAttachment(inputParts) {
             return claudeSequentialImageDispatchEvents(from: inputParts, submitKey: submitKey)
@@ -1299,9 +1299,9 @@ enum TextBoxSubmit {
             return nil
         }.filter { attachment in
             guard attachment.cleanupLocalURLWhenDisposed else { return false }
-            // A Cloud submit uploaded the image bytes, so nothing reads the
+            // A native SSH submit uploaded the image bytes, so nothing reads the
             // local file afterwards.
-            if imageTransferTarget == .cloud, attachment.isImage { return true }
+            if imageTransferTarget == .tui, attachment.isImage { return true }
             if isClaude, attachment.isImage {
                 let remainingCount = confirmedClaudeImageSubmissionTexts[attachment.submissionText, default: 0]
                 guard remainingCount > 0 else { return false }
@@ -1321,9 +1321,9 @@ enum TextBoxSubmit {
         }
     }
 
-    /// Sends text and Cloud image uploads in prompt order. Images stay in the
-    /// composer until submit, then use the authenticated Cloud paste channel.
-    private static func cloudImageDispatchEvents(
+    /// Sends text and SSH image uploads in prompt order. Images stay in the
+    /// composer until submit, then use the attached terminal's image channel.
+    private static func tuiImageDispatchEvents(
         from parts: [TextBoxSubmissionPart],
         submitKey: String
     ) -> [DispatchEvent] {
@@ -1350,7 +1350,7 @@ enum TextBoxSubmit {
                     if attachmentNeedsBoundarySpace {
                         events.append(.pasteText(" "))
                     }
-                    events.append(.pasteCloudImages([localURL.standardizedFileURL]))
+                    events.append(.pasteTuiImages([localURL.standardizedFileURL]))
                     attachmentNeedsBoundarySpace = true
                 } else {
                     appendText(attachment.submissionText)
@@ -1364,10 +1364,10 @@ enum TextBoxSubmit {
         }
         events.append(.namedKey(submitKey))
         let imageURLs = events.flatMap { event -> [URL] in
-            if case .pasteCloudImages(let urls) = event { return urls }
+            if case .pasteTuiImages(let urls) = event { return urls }
             return []
         }
-        return [.validateCloudImages(imageURLs)] + events
+        return [.validateTuiImages(imageURLs)] + events
     }
 
     private static func claudeSequentialImageDispatchEvents(
@@ -1565,7 +1565,7 @@ private final class TextBoxSubmitEventRunner {
     private var observers: [NSObjectProtocol] = []
     private var waitTimeoutTimer: DispatchSourceTimer?
     private var pasteFilePathTask: Task<Void, Never>?
-    private var cloudImagePasteTask: Task<Void, Never>?
+    private var tuiImagePasteTask: Task<Void, Never>?
     private var pasteFilePathMutationLease: TerminalPasteboardMutationLease?
     private var releaseTickNotifications: (() -> Void)?
     private var releaseRenderedFrameNotifications: (() -> Void)?
@@ -1695,32 +1695,32 @@ private final class TextBoxSubmitEventRunner {
                     fail(.terminalWriteRejected)
                     return
                 }
-            case .validateCloudImages(let urls):
+            case .validateTuiImages(let urls):
                 guard let terminalSurface = surface.textBoxSubmitTerminalSurface else {
                     fail(.terminalWriteRejected)
                     return
                 }
                 do {
-                    try terminalSurface.validateCloudImagesForSubmit(urls)
+                    try terminalSurface.validateTuiImagesForSubmit(urls)
                 } catch {
                     fail(.terminalWriteRejected)
                     return
                 }
-            case .pasteCloudImages(let urls):
+            case .pasteTuiImages(let urls):
                 guard let terminalSurface = surface.textBoxSubmitTerminalSurface else {
                     fail(.terminalWriteRejected)
                     return
                 }
-                cloudImagePasteTask = Task { @MainActor [weak self] in
+                tuiImagePasteTask = Task { @MainActor [weak self] in
                     guard let self else {
                         return
                     }
                     do {
-                        try await terminalSurface.pasteCloudImages(urls, cleansUpTransferredFiles: false)
-                        self.cloudImagePasteTask = nil
+                        try await terminalSurface.pasteTuiImages(urls, cleansUpTransferredFiles: false)
+                        self.tuiImagePasteTask = nil
                         self.processNext()
                     } catch {
-                        self.cloudImagePasteTask = nil
+                        self.tuiImagePasteTask = nil
                         self.fail(.terminalWriteRejected)
                     }
                 }
@@ -1763,8 +1763,8 @@ private final class TextBoxSubmitEventRunner {
     private func fail(_ failure: TextBoxSubmit.CompletionContext.Failure) {
         removeObservers()
         cancelPendingPasteboardMutation()
-        cloudImagePasteTask?.cancel()
-        cloudImagePasteTask = nil
+        tuiImagePasteTask?.cancel()
+        tuiImagePasteTask = nil
         restorePasteboardIfNeeded()
         let completion = onComplete
         onComplete = nil
@@ -1784,8 +1784,8 @@ private final class TextBoxSubmitEventRunner {
 
     private func finish() {
         cancelPendingPasteboardMutation()
-        cloudImagePasteTask?.cancel()
-        cloudImagePasteTask = nil
+        tuiImagePasteTask?.cancel()
+        tuiImagePasteTask = nil
         restorePasteboardIfNeeded()
         let completion = onComplete
         onComplete = nil
@@ -2283,10 +2283,10 @@ private final class TextBoxSubmitEventRunner {
             return "pasteText(\(debugText(text)))"
         case .pasteFilePath(let path):
             return "pasteFilePath(length:\(path.utf8.count))"
-        case .validateCloudImages(let urls):
-            return "validateCloudImages(count:\(urls.count))"
-        case .pasteCloudImages(let urls):
-            return "pasteCloudImages(count:\(urls.count))"
+        case .validateTuiImages(let urls):
+            return "validateTuiImages(count:\(urls.count))"
+        case .pasteTuiImages(let urls):
+            return "pasteTuiImages(count:\(urls.count))"
         case .namedKeyRepeat(let key, let count):
             return "namedKeyRepeat(\(key),\(count))"
         case .namedKey(let key):
@@ -2685,14 +2685,14 @@ struct TextBoxInputContainer: View {
             }
             return
         }
-        if Self.shouldRejectCloudImageCommandTemplate(
+        if Self.shouldRejectTuiImageCommandTemplate(
             action: launchAction,
             shouldForceTextEntrySubmit: shouldForceTextEntrySubmit,
             imageTransferTarget: imageTransferTarget,
             parts: submittedParts
         ) {
             // Command templates interpolate local submission paths. Keep a
-            // Cloud image draft intact rather than leaking a Mac path into a
+            // remote image draft intact rather than leaking a Mac path into a
             // remote command; text-entry submission handles the upload once an
             // agent is active.
             NSSound.beep()

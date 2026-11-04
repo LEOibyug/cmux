@@ -9,7 +9,7 @@ import Testing
         var engine = TerminalSizingEngine(initialSize: TerminalGridSize(cols: 120, rows: 40), policy: policy)
         engine.attach(TerminalSizingParticipant(id: "mac:1", userID: "u_me", deviceKind: .mac,
                                                 viewport: TerminalGridSize(cols: 120, rows: 40)))
-        return TerminalSharingSnapshot(state: engine.state, selfParticipantID: "mac:1", isCloud: false)
+        return TerminalSharingSnapshot(state: engine.state, selfParticipantID: "mac:1")
     }
 
     @Test func aloneAtMyOwnSizeShowsNoChrome() {
@@ -33,7 +33,7 @@ import Testing
                                                 viewport: TerminalGridSize(cols: 105, rows: 45)))
         engine.attach(TerminalSizingParticipant(id: "mobile:p", userID: "u_me", deviceKind: .iphone,
                                                 viewport: phoneViewport))
-        return TerminalSharingSnapshot(state: engine.state, selfParticipantID: "mac:1", isCloud: false)
+        return TerminalSharingSnapshot(state: engine.state, selfParticipantID: "mac:1")
     }
 
     @Test func sharedButMatchingTheGridShowsTheTabButNoBounds() {
@@ -57,7 +57,7 @@ import Testing
         )
         engine.attach(TerminalSizingParticipant(id: "mac:1", userID: "u_me", deviceKind: .mac,
                                                 viewport: TerminalGridSize(cols: 105, rows: 45)))
-        let snapshot = TerminalSharingSnapshot(state: engine.state, selfParticipantID: "mac:1", isCloud: false)
+        let snapshot = TerminalSharingSnapshot(state: engine.state, selfParticipantID: "mac:1")
         #expect(snapshot.showsBoundsChrome)
     }
 }

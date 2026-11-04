@@ -1,11 +1,18 @@
 import CmuxSurfaceCatalogModel
 import Foundation
 
-extension SurfaceCatalog: CloudTerminalNavigationCatalog {
+extension SurfaceCatalog: TuiTerminalNavigationCatalog {
     func localWorkspaceShowing(remoteWorkspaceID: String, placements: [SurfaceResourcePlacement]) -> UUID? {
-        CloudTreeNodeBuilder.localWorkspaceShowing(
-            remoteWorkspaceID: remoteWorkspaceID, placements: placements, snapshot: snapshot
-        )
+        let members = Set(placements)
+        var counts: [UUID: Int] = [:]
+        for projection in projections where projection.remoteWorkspaceID == remoteWorkspaceID {
+            let placement = SurfaceResourcePlacement(resource: projection.resource,
+                remoteWorkspaceID: projection.remoteWorkspaceID, remoteTabID: projection.remoteTabID)
+            if members.contains(placement) { counts[projection.workspaceID, default: 0] += 1 }
+        }
+        return counts.max { lhs, rhs in
+            lhs.value == rhs.value ? lhs.key.uuidString > rhs.key.uuidString : lhs.value < rhs.value
+        }?.key
     }
 
     func projectTerminal(_ resource: SurfaceResourceID, in workspaceID: UUID, view: SurfaceRemoteView?) async throws -> SurfaceProjection {
@@ -25,7 +32,7 @@ extension SurfaceCatalog: CloudTerminalNavigationCatalog {
     }
 
     func terminalWorkspaceLayout(machine: SurfaceMachineID, workspaceID: String) async -> SurfaceProjectionLayout? {
-        await CloudWorkspaceLayoutTranslator.fetch(machine: machine, workspaceID: workspaceID, catalog: self)
+        await TuiWorkspaceLayoutTranslator.fetch(machine: machine, workspaceID: workspaceID, catalog: self)
     }
 
     func openTerminalWorkspace(_ group: SurfaceResourceGroup, title: String, layout: SurfaceProjectionLayout?) async throws
@@ -34,7 +41,7 @@ extension SurfaceCatalog: CloudTerminalNavigationCatalog {
     }
 
     func bindTerminalWorkspace(localWorkspaceID: UUID, machine: SurfaceMachineID, remoteWorkspaceID: String, generatedTitle: String) {
-        bindCloudWorkspace(
+        bindRemoteWorkspace(
             localWorkspaceID: localWorkspaceID, machine: machine, remoteWorkspaceID: remoteWorkspaceID,
             generatedTitle: generatedTitle
         )

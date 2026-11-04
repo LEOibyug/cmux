@@ -35,7 +35,7 @@ extension Workspace {
         var records = SurfaceCatalog.shared.projectionRecords(forWorkspace: id).filter { !$0.resource.machine.isLocal }
         let recorded = Set(records.map(\.panelID))
         for (panelID, panel) in panels where !recorded.contains(panelID) {
-            if let resource = (panel as? BrowserPanel)?.cloudAccess.resourceID, !resource.machine.isLocal {
+            if let resource = (panel as? BrowserPanel)?.remoteAccess.resourceID, !resource.machine.isLocal {
                 records.append(SurfaceProjectionRecord(panelID: panelID, resource: resource))
             }
         }

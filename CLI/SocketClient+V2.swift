@@ -12,8 +12,8 @@ extension SocketClient {
         deadline: Date? = nil,
         includeCapability: Bool = true,
         capabilityEnvironment: [String: String]? = nil,
-        validateRawResponse: ((String) -> Bool)? = nil,
-        strictFrameMaximumRawBytes: Int? = nil,
+        
+        
         waitUntilCompletion: Bool = false
     ) throws -> [String: Any] {
         let requestIdentifier = requestID ?? UUID().uuidString
@@ -32,8 +32,8 @@ extension SocketClient {
                 deadline: waitUntilCompletion ? deadline : operationDeadline,
                 includeCapability: includeCapability,
                 capabilityEnvironment: capabilityEnvironment,
-                validateRawResponse: validateRawResponse,
-                strictFrameMaximumRawBytes: strictFrameMaximumRawBytes,
+                
+                
                 waitUntilCompletion: waitUntilCompletion
             )
 
@@ -57,8 +57,6 @@ extension SocketClient {
                     v2Code: error["code"] as? String,
                     isStructuredProtocolResponse: true,
                     v2Retryable: data?["retryable"] as? Bool == true,
-                    vmBackendCode: data?["backend_code"] as? String,
-                    vmBackendHTTPStatus: (data?["http_status"] as? NSNumber)?.intValue,
                     v2Method: method
                 )
                 // Admission rejects these before dispatch: `rate_limited` for
@@ -67,7 +65,6 @@ extension SocketClient {
                 // have run, relay requests, transport failures, and malformed
                 // responses never retry.
                 if !isRelayBacked,
-                   strictFrameMaximumRawBytes == nil,
                    response["ok"] as? Bool == false,
                    response["id"] as? String == requestIdentifier,
                    Self.isRetryableAdmissionRejection(code: code, method: method),
@@ -111,8 +108,8 @@ extension SocketClient {
         deadline: Date? = nil,
         includeCapability: Bool = true,
         capabilityEnvironment: [String: String]? = nil,
-        validateRawResponse: ((String) -> Bool)? = nil,
-        strictFrameMaximumRawBytes: Int? = nil,
+        
+        
         waitUntilCompletion: Bool = false
     ) throws -> [String: Any] {
         let requestIdentifier = requestID ?? UUID().uuidString
@@ -128,28 +125,10 @@ extension SocketClient {
               }) else {
             throw CLIError(message: "Invalid v2 request id")
         }
-        var tracedParams = params
-        if method.hasPrefix("vm.") {
-            for (key, env) in [("cloud_operation_id", "CMUX_CLOUD_OPERATION_ID"),
-                               ("cloud_trace_id", "CMUX_CLOUD_TRACE_ID"),
-                               ("cloud_parent_span_id", "CMUX_CLOUD_PARENT_SPAN_ID")] {
-                if let value = ProcessInfo.processInfo.environment[env] { tracedParams[key] = value }
-            }
-            // Keep the cloud control-plane request inside the CLI's remaining
-            // budget, including when the caller retries an admission rejection.
-            let requestDeadline = min(
-                deadline ?? .distantFuture,
-                Date.now.addingTimeInterval(responseTimeout ?? Self.responseTimeoutSeconds)
-            )
-            let remaining = requestDeadline.timeIntervalSinceNow
-            if remaining.isFinite, remaining > 0, remaining < 86_400 {
-                tracedParams["cloud_client_timeout_ms"] = Int(remaining * 1_000)
-            }
-        }
         var request: [String: Any] = [
             "id": requestIdentifier,
             "method": method,
-            "params": tracedParams
+            "params": params
         ]
         if includeCapability,
            let ruleID = ProcessInfo.processInfo.environment["CMUX_AUTOMATION_RULE_ID"],
@@ -162,18 +141,7 @@ extension SocketClient {
         }
 
         let raw: String
-        if let strictFrameMaximumRawBytes {
-            guard !includeCapability else {
-                throw CLIError(message: "Invalid v2 request transport")
-            }
-            raw = try sendSingleFrame(
-                command: requestLine,
-                responseTimeout: responseTimeout
-                    ?? Self.responseTimeoutSeconds,
-                maximumRawBytes: strictFrameMaximumRawBytes
-            )
-        } else {
-            raw = try send(
+        raw = try send(
                 command: requestLine,
                 responseTimeout: responseTimeout,
                 deadline: deadline,
@@ -181,10 +149,8 @@ extension SocketClient {
                 capabilityEnvironment: capabilityEnvironment,
                 waitUntilCompletion: waitUntilCompletion
             )
-        }
-        if let validateRawResponse, !validateRawResponse(raw) {
-            throw CLIError(message: "Invalid v2 response")
-        }
+        
+        
 
         // The server may return plain-text errors (e.g., "ERROR: Access denied ...")
         // before the JSON protocol starts. Surface these directly instead of letting
@@ -246,9 +212,7 @@ extension SocketClient {
         let reason = reason.map { CLITerminalText.printable($0, keepingLineBreaks: true) }
         let details = details.map { CLITerminalText.printable($0, keepingLineBreaks: true) }
         let header: String
-        if code == "vm_error" {
-            header = message
-        } else if message.contains("\n") {
+        if message.contains("\n") {
             header = "\(code):\n\(message)"
         } else {
             header = "\(code): \(message)"

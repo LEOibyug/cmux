@@ -12,8 +12,6 @@ extension TerminalController {
         "debug.textbox.interact",
         "debug.app.activate",
         "debug.workspace_todo.checklist_add_field",
-        "debug.pro_welcome_checklist.show",
-        "debug.native_pricing.show",
         "debug.command_palette.toggle",
         "debug.command_palette.rename_tab.open",
         "debug.command_palette.visible",
@@ -49,13 +47,8 @@ extension TerminalController {
         "debug.window.screenshot",
         "debug.window_hints",
         "debug.global_search.query",
-        "debug.cloudtree.gallery",
-        "debug.cloudtree.spacing",
-        "debug.cloudtree.rows",
         "debug.terminal.simulate_file_drop",
         "debug.sidebar.simulate_drag",
-        "debug.mobile.transport.disconnect",
-        "debug.mobile.transport.reconnect_loop",
         "mobile.dev_stack_auth.configure",
     ]
 }

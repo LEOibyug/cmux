@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -10,12 +10,12 @@ import Testing
 #endif
 
 @MainActor
-final class CloudWorkspaceCreationSidebarProvider: SurfaceProvider {
+final class TuiWorkspaceCreationSidebarProvider: SurfaceProvider {
     let machine: SurfaceMachineID
     var info: SurfaceMachineInfo
     unowned let catalog: SurfaceCatalog
     var beforeRefresh: (@MainActor () throws -> Void)?
-    var beforeMaterialize: (@MainActor (SurfaceResource, CloudTerminalPaneReservation?) async throws -> Void)?
+    var beforeMaterialize: (@MainActor (SurfaceResource, TuiTerminalPaneReservation?) async throws -> Void)?
     var beforeCreate: (@MainActor () async throws -> Void)?
     var afterCreateWorkspace: (@MainActor (SurfaceRemoteWorkspace) async throws -> Void)?
     var usesReceipt = false
@@ -32,11 +32,11 @@ final class CloudWorkspaceCreationSidebarProvider: SurfaceProvider {
     var closedWorkspaceIDs: [String] = []
     var onRemoteClose: (@MainActor () -> Void)?
 
-    init(catalog: SurfaceCatalog, machine: SurfaceMachineID = .cloud("create-fixture-\(UUID().uuidString)")) {
+    init(catalog: SurfaceCatalog, machine: SurfaceMachineID = TuiTestHost(destination: "create-\(UUID()).example.test").machine) {
         self.catalog = catalog
         self.machine = machine
         info = SurfaceMachineInfo(id: machine, name: "bright-teal-otter", status: "running", image: nil,
-            hasDesktop: false, memoryMb: nil, diskMb: nil, linkState: .connected, linkError: nil,
+            memoryMb: nil, diskMb: nil, linkState: .connected, linkError: nil,
             cpuPercent: nil, memoryUsedMb: nil, diskUsedMb: nil)
     }
 
@@ -81,7 +81,7 @@ final class CloudWorkspaceCreationSidebarProvider: SurfaceProvider {
         return resource
     }
 
-    func createTerminal(command: [String]?, cwd: String?, name: String?, remoteWorkspaceID: String?, request: CloudTerminalCreationRequest) async throws -> SurfaceResource {
+    func createTerminal(command: [String]?, cwd: String?, name: String?, remoteWorkspaceID: String?, request: TuiTerminalCreationRequest) async throws -> SurfaceResource {
         terminalRequests.append(request.id)
         return try await createTerminal(command: command, cwd: cwd, name: name, remoteWorkspaceID: remoteWorkspaceID)
     }
@@ -97,7 +97,7 @@ final class CloudWorkspaceCreationSidebarProvider: SurfaceProvider {
     }
 
     func materialize(_ resource: SurfaceResource, at destination: SurfaceDestination, focus: Bool) async throws -> SurfaceProjection {
-        let pane = try SurfacePaneFactory.makeCloudManualMirrorPane(
+        let pane = try SurfacePaneFactory.makeTuiManualMirrorPane(
             at: destination, focus: focus, onInput: { _ in }, keyNameResolver: nil,
             onResize: { _ in }, onRuntimeReady: {}, onFocus: {}
         )
@@ -106,7 +106,7 @@ final class CloudWorkspaceCreationSidebarProvider: SurfaceProvider {
     }
 
     func materialize(_ resource: SurfaceResource, remoteView: SurfaceRemoteView?, at destination: SurfaceDestination,
-                     focus: Bool, adopting reservation: CloudTerminalPaneReservation?) async throws -> SurfaceProjection {
+                     focus: Bool, adopting reservation: TuiTerminalPaneReservation?) async throws -> SurfaceProjection {
         try await beforeMaterialize?(resource, reservation)
         guard let reservation, adoptsReservation else { return try await materialize(resource, at: destination, focus: focus) }
         adoptedPanels.append(reservation.panelID)
@@ -131,8 +131,8 @@ final class CloudWorkspaceCreationSidebarProvider: SurfaceProvider {
         let state = try #require(CmuxTuiSnapshotParser.state(fromSnapshot: document, machine: machine))
         let resources = revision < 10 && generation == "creation"
             ? createdWorkspaces.map { terminal(in: $0) } : CmuxTuiSnapshotParser.resources(from: state)
-        catalog.replaceCloudState(state, resources: resources, info: info)
-        catalog.reconcileCloudRemoteState(machine: machine, state: state)
+        catalog.replaceTuiState(state, resources: resources, info: info)
+        catalog.reconcileTuiRemoteState(machine: machine, state: state)
     }
 
     func projectionDidEnd(_ projection: SurfaceProjection) {}

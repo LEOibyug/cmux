@@ -3,7 +3,7 @@ import Foundation
 
 /// One command a fixture read from the session, reduced to the fields the
 /// handshake tests assert on.
-struct CloudManualMirrorFixtureCommand: Sendable {
+struct TuiManualMirrorFixtureCommand: Sendable {
     let cmd: String
     let inputBytes: Data?
     let expectedGeneration: String?
@@ -51,7 +51,7 @@ struct CloudManualMirrorFixtureCommand: Sendable {
 /// daemon's responses, so handshake ordering is observable as behavior rather
 /// than as source text.
 // @unchecked Sendable: every mutable field is guarded by `lock`.
-final class CloudManualMirrorSocketFixture: @unchecked Sendable {
+final class TuiManualMirrorSocketFixture: @unchecked Sendable {
     let socketPath: String
     private let listenerFD: Int32
     private let lock = NSLock()
@@ -59,10 +59,10 @@ final class CloudManualMirrorSocketFixture: @unchecked Sendable {
     private var connectionFDs: [Int32] = []
     private var acceptedConnections = 0
     private var closed = false
-    private var received: [CloudManualMirrorFixtureCommand] = []
+    private var received: [TuiManualMirrorFixtureCommand] = []
     private var cursor = 0
     private var inputAcknowledged = false
-    private var preAcknowledgementInputs: [CloudManualMirrorFixtureCommand] = []
+    private var preAcknowledgementInputs: [TuiManualMirrorFixtureCommand] = []
 
     init() throws {
         let name = "cmux-mm-" + UUID().uuidString.prefix(8).lowercased() + ".sock"
@@ -74,7 +74,7 @@ final class CloudManualMirrorSocketFixture: @unchecked Sendable {
     }
 
     /// The next unread command, or nil when none arrives before `timeout`.
-    func nextCommand(timeout: Duration) async -> CloudManualMirrorFixtureCommand? {
+    func nextCommand(timeout: Duration) async -> TuiManualMirrorFixtureCommand? {
         let deadline = ContinuousClock.now + timeout
         while true {
             lock.lock()
@@ -195,7 +195,7 @@ final class CloudManualMirrorSocketFixture: @unchecked Sendable {
                 let line = Data(pending[..<newline])
                 pending.removeSubrange(...newline)
                 guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-                      let command = CloudManualMirrorFixtureCommand(object) else { continue }
+                      let command = TuiManualMirrorFixtureCommand(object) else { continue }
                 lock.lock()
                 received.append(command)
                 if command.inputBytes != nil, !inputAcknowledged {

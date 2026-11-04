@@ -21,7 +21,7 @@ extension Workspace {
         replayScrollback: String? = nil,
         replayFileURL: URL? = nil,
         allowTextBoxFocusDefault: Bool = true,
-        nativeReservation: CloudTerminalPaneReservation? = nil
+        nativeReservation: TuiTerminalPaneReservation? = nil
     ) -> TerminalPanel? {
         // Native ownership routes through its provider before any local process configuration.
         if machineOwningSurface(panelId)?.isSSH == true, nativeReservation == nil {
@@ -66,9 +66,8 @@ extension Workspace {
         // re-records the seeded env for the replacement panel against the current
         // workspace.
         let oldSeededWorkspaceEnvironment = oldPanel.seededWorkspaceEnvironment
-        // The welcome banner key is one-shot: a respawned shell must not reprint it.
         let initialEnvironmentOverrides = oldPanel.surface.respawnInitialEnvironmentOverrides
-            .filter { oldSeededWorkspaceEnvironment[$0.key] != $0.value && $0.key != WelcomeBannerDelivery.environmentKey }
+            .filter { oldSeededWorkspaceEnvironment[$0.key] != $0.value }
         var additionalEnvironment = startupEnvironmentMergingWorkspaceEnvironment(
             oldPanel.surface.respawnAdditionalEnvironment.filter { oldSeededWorkspaceEnvironment[$0.key] != $0.value }
         )
@@ -133,7 +132,7 @@ extension Workspace {
             replacementPanel,
             allowTextBoxFocusDefault: shouldFocus && allowTextBoxFocusDefault
         )
-        if let nativeReservation { cloudPendingCreations[panelId] = nativeReservation }
+        if let nativeReservation { tuiPendingCreations[panelId] = nativeReservation }
         panels[panelId] = replacementPanel
         panelTitles[panelId] = replacementPanel.displayTitle
         if let customTitle {

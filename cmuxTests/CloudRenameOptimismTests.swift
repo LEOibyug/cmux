@@ -67,7 +67,7 @@ struct CloudRenameOptimismTests {
 
         // A terminal-wide clear renames every view of that terminal, but the
         // exact tab intent still wins for its own view.
-        let clear = catalog.cloudRenameCoordinator.enqueue(
+        let clear = catalog.tuiRenameCoordinator.enqueue(
             key: .terminal(machine: provider.machine, id: shared.id.key), pendingName: ""
         ) { await gate.wait() }
         #expect(names() == [[nil, "renamed-two"], ["three"]])
@@ -89,12 +89,12 @@ struct CloudRenameOptimismTests {
         catalog.register(provider)
         let stale = try Self.state(machine: provider.machine, workspaceName: "Original", tabName: "old tab")
         let receipts = [
-            CloudVMPendingMutation(kind: .workspaceRename, remoteWorkspaceID: "ws_main", name: "Renamed",
+            TuiPendingMutation(kind: .workspaceRename, remoteWorkspaceID: "ws_main", name: "Renamed",
                                    receipt: .init(generation: "fixture", revision: 5)),
-            CloudVMPendingMutation(kind: .tabRename, remoteTabID: "tab_main", name: "new tab",
+            TuiPendingMutation(kind: .tabRename, remoteTabID: "tab_main", name: "new tab",
                                    receipt: .init(generation: "fixture", revision: 6)),
         ]
-        catalog.replaceCloudState(stale, resources: CmuxTuiSnapshotParser.resources(from: stale), info: provider.info,
+        catalog.replaceTuiState(stale, resources: CmuxTuiSnapshotParser.resources(from: stale), info: provider.info,
                                   observation: .init(freshness: .current, reason: nil, pendingWrites: receipts))
         #expect(catalog.snapshot.machines.first?.remoteWorkspaces?.map(\.name) == ["Renamed"])
         let views = catalog.snapshot.resources.flatMap { $0.remoteViews ?? [] }
@@ -111,14 +111,14 @@ struct CloudRenameOptimismTests {
         #expect(catalog.snapshot.resources.flatMap { $0.remoteViews ?? [] }.map(\.name) == ["new tab"])
 
         let accepted = try Self.state(machine: provider.machine, workspaceName: "Renamed", tabName: "new tab", revision: 6)
-        catalog.replaceCloudState(accepted, resources: CmuxTuiSnapshotParser.resources(from: accepted), info: provider.info)
+        catalog.replaceTuiState(accepted, resources: CmuxTuiSnapshotParser.resources(from: accepted), info: provider.info)
         #expect(catalog.authoritativeSnapshot.machines.first?.remoteWorkspaces?.map(\.name) == ["Renamed"])
         #expect(catalog.snapshot.resources.flatMap { $0.remoteViews ?? [] }.map(\.name) == ["new tab"])
     }
 
     private static func state(
         machine: SurfaceMachineID, workspaceName: String, tabName: String, revision: UInt64 = 1
-    ) throws -> CloudVMState {
+    ) throws -> TuiState {
         let document: [String: Any] = [
             "cursor": ["generation": "fixture", "revision": String(revision)],
             "workspaces": [["id": "ws_main", "name": workspaceName, "index": 0]],
@@ -182,7 +182,7 @@ private final class CatalogChangeCounter {
 
 @MainActor
 private final class CloudRenameTestProvider: SurfaceProvider {
-    let machine = SurfaceMachineID.cloud("optimistic-rename")
+    let machine = SurfaceMachineID.ssh("fc57159fe3e66271502d6a3dc4536709aeadf9fa467e0f781045424f143ff8e0")
     let workspace = SurfaceRemoteWorkspace(id: "ws_main", name: "Original", index: 0, focused: true)
     var beforeWorkspaceRename: () async throws -> Void = {}
     var beforeTabRename: () async throws -> Void = {}
@@ -190,7 +190,7 @@ private final class CloudRenameTestProvider: SurfaceProvider {
     var tabRenames: [(id: String, name: String)] = []
     var info: SurfaceMachineInfo {
         SurfaceMachineInfo(id: machine, name: "Test machine", status: "running", image: nil,
-            hasDesktop: false, memoryMb: nil, diskMb: nil, linkState: .connected,
+            memoryMb: nil, diskMb: nil, linkState: .connected,
             linkError: nil, cpuPercent: nil, memoryUsedMb: nil, diskUsedMb: nil,
             remoteWorkspaces: [workspace])
     }

@@ -188,7 +188,7 @@ extension TerminalSurface {
             magnificationPercent
             ?? globalFontMagnificationPercent()
         if runtimeSurface != nil,
-           let mobileFitResult = adjustDurableMobileViewportFontSize(
+           let mobileFitResult = adjustDurableSharedViewportFontSize(
                 applying: transform,
                 magnificationPercent: percent
            ) {
@@ -421,7 +421,7 @@ extension TerminalSurface {
         )
 
         if let runtimeSurface = liveSurfaceForGhosttyAccess(reason: "fontSize.reset") {
-            if let mobileFitResult = resetDurableMobileViewportFontSize(
+            if let mobileFitResult = resetDurableSharedViewportFontSize(
                 to: targetRuntimePoints,
                 lineage: targetLineage
             ) {
@@ -474,11 +474,11 @@ extension TerminalSurface {
     }
 
     @MainActor
-    private func adjustDurableMobileViewportFontSize(
+    private func adjustDurableSharedViewportFontSize(
         applying transform: TerminalFontSizeDeltaTransform,
         magnificationPercent: Int
     ) -> TerminalFontSizeMutationOutcome? {
-        guard var nextFitState = mobileViewportFontFitState else {
+        guard var nextFitState = sharedViewportFontFitState else {
             return nil
         }
         let policy = TerminalFontSizePolicy()
@@ -517,13 +517,13 @@ extension TerminalSurface {
         nextFitState.updateDurableBase(to: targetRuntimePoints)
         if nextFitState.fittedRuntimePointSize
                 != previousFittedRuntimePoints,
-           !performMobileViewportFontPointSizeAction(
+           !performSharedViewportFontPointSizeAction(
                 nextFitState.fittedRuntimePointSize
            ) {
             return .failed
         }
 
-        mobileViewportFontFitState = nextFitState
+        sharedViewportFontFitState = nextFitState
         followsConfiguredFontSize = false
         recordCurrentFontSizeLineage(
             TerminalFontSizeLineage(
@@ -538,11 +538,11 @@ extension TerminalSurface {
     }
 
     @MainActor
-    private func resetDurableMobileViewportFontSize(
+    private func resetDurableSharedViewportFontSize(
         to targetRuntimePoints: Float32,
         lineage targetLineage: TerminalFontSizeLineage
     ) -> TerminalFontSizeMutationOutcome? {
-        guard var nextFitState = mobileViewportFontFitState else {
+        guard var nextFitState = sharedViewportFontFitState else {
             return nil
         }
         let previousFitState = nextFitState
@@ -560,13 +560,13 @@ extension TerminalSurface {
 
         if nextFitState.fittedRuntimePointSize
                 != previousFitState.fittedRuntimePointSize,
-           !performMobileViewportFontPointSizeAction(
+           !performSharedViewportFontPointSizeAction(
                 nextFitState.fittedRuntimePointSize
            ) {
             return .failed
         }
 
-        mobileViewportFontFitState = nextFitState
+        sharedViewportFontFitState = nextFitState
         followsConfiguredFontSize = true
         if !alreadyFollowsTarget {
             recordCurrentFontSizeLineage(targetLineage)
@@ -644,8 +644,8 @@ extension TerminalSurface {
 
         let desiredLiveRuntimePoints: Float32
         let retainsMobileFit: Bool
-        let nextFitState: MobileViewportFontFitState?
-        if var fitState = mobileViewportFontFitState {
+        let nextFitState: SharedViewportFontFitState?
+        if var fitState = sharedViewportFontFitState {
             fitState.updateDurableBase(to: durableRuntimePoints)
             nextFitState = fitState
             desiredLiveRuntimePoints = fitState.fittedRuntimePointSize
@@ -657,7 +657,7 @@ extension TerminalSurface {
         }
 
         func commitDurableState() {
-            mobileViewportFontFitState = nextFitState
+            sharedViewportFontFitState = nextFitState
             followsConfiguredFontSize = !retainsExplicitBase
             recordCurrentFontSizeLineage(targetLineage)
             if pendingFontSizeConfigurationReloadState?
@@ -687,7 +687,7 @@ extension TerminalSurface {
                 commitDurableState()
                 return .alreadySatisfied
             }
-            guard performMobileViewportFontPointSizeAction(
+            guard performSharedViewportFontPointSizeAction(
                 desiredLiveRuntimePoints
             ) else {
                 return .failed
@@ -737,7 +737,7 @@ extension TerminalSurface {
             )
             let isExplicitOverride =
                 ghostty_surface_font_size_adjusted(runtimeSurface)
-            if var fitState = mobileViewportFontFitState,
+            if var fitState = sharedViewportFontFitState,
                let targetLineage =
                     activeState.resolvedTargetLineage() {
                 let durableRuntimePoints =
@@ -753,7 +753,7 @@ extension TerminalSurface {
                 fitState.updateDurableBase(
                     to: durableRuntimePoints
                 )
-                mobileViewportFontFitState = fitState
+                sharedViewportFontFitState = fitState
                 followsConfiguredFontSize =
                     !targetLineage.isExplicitOverride
                 recordCurrentFontSizeLineage(targetLineage)
@@ -834,13 +834,13 @@ extension TerminalSurface {
         guard runtimePoints.isFinite, runtimePoints > 0 else {
             return lastKnownFontSizeLineage
         }
-        if var fitState = mobileViewportFontFitState {
+        if var fitState = sharedViewportFontFitState {
             guard !isExplicitOverride
                     || !fitState.matchesFittedRuntimePointSize(runtimePoints) else {
                 return lastKnownFontSizeLineage
             }
             fitState.rebase(to: runtimePoints)
-            mobileViewportFontFitState = fitState
+            sharedViewportFontFitState = fitState
         }
         if isExplicitOverride,
            let lastKnownFontSizeLineage,

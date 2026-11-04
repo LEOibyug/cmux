@@ -1,8 +1,9 @@
 import CmuxSSHClipboardTrust
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxCore
 import CmuxSurfaceCatalogModel
+import CmuxSettings
 import Foundation
 import os
 
@@ -14,7 +15,7 @@ final class SSHTuiWorkspaceCoordinator {
     private let catalog: SurfaceCatalog
     private let sshClipboardWriteTrustStore: SSHClipboardWriteTrustStore
     private let clientURL: () -> URL?
-    private let paths: CloudTuiClientPaths
+    private let paths: TuiClientPaths
     private var attempts: [UUID: Task<Void, Never>] = [:]
     private let agentStatus: SSHTuiAgentStatusProjector
     private let retryPolicy: SSHTuiAttachRetryPolicy
@@ -37,7 +38,7 @@ final class SSHTuiWorkspaceCoordinator {
     init(
         catalog: SurfaceCatalog,
         clientURL: @escaping () -> URL?,
-        paths: CloudTuiClientPaths,
+        paths: TuiClientPaths,
         sshClipboardWriteTrustStore: SSHClipboardWriteTrustStore? = nil,
         retryPolicy: SSHTuiAttachRetryPolicy = .standard,
         clock: any Clock<Duration> = ContinuousClock()
@@ -71,15 +72,6 @@ final class SSHTuiWorkspaceCoordinator {
         restoring || hasExistingProjections || hasRemoteBinding
     }
 
-    nonisolated static func configurationForAttach(_ input: WorkspaceRemoteConfiguration) -> WorkspaceRemoteConfiguration {
-        var configuration = input
-        if let saved = configuration.restoredSSHSession,
-           saved.sshSessionOwner != "cmux-tui",
-           saved.legacyTmuxSSHConfiguration(agentSocketPath: configuration.agentSocketPath) == nil {
-            configuration.restoredSSHSession = nil
-        }
-        return configuration
-    }
 
     /// Restores and reconnects an existing SSH workspace.
     ///
@@ -101,7 +93,7 @@ final class SSHTuiWorkspaceCoordinator {
         if workspace.remoteConnectionState != .connecting {
             workspace.applyRemoteConnectionStateUpdate(.connecting, detail: nil, target: configuration.displayTarget)
         }
-        let machine = SurfaceMachineID(rawValue: SSHTuiConnection(configuration: configuration).id)
+        let machine = SurfaceMachineID.ssh(SSHTuiConnection(configuration: configuration).identityDigest)
         attempts[workspace.id] = Task { [weak self, weak workspace] in
             guard let self, let workspace else { return }
             defer {
@@ -114,7 +106,7 @@ final class SSHTuiWorkspaceCoordinator {
                 backoff: backoff,
                 failed: { [weak self, weak workspace] error in
                     guard let self, let workspace, workspace.sshTuiConnectionAttemptID == attemptID else { return }
-                    sshTuiWorkspaceLogger.info("restored SSH attach failed, retrying: \(CloudMachineLink.errorText(error), privacy: .public)")
+                    sshTuiWorkspaceLogger.info("restored SSH attach failed, retrying: \(RemoteMachineLink.errorText(error), privacy: .public)")
                     self.recoveries[workspace.id] = Recovery(
                         workspace: workspace, configuration: configuration, machine: machine,
                         linkWasConnectedAtFailure: self.catalog.machines[machine]?.linkState == .connected,
@@ -143,7 +135,7 @@ final class SSHTuiWorkspaceCoordinator {
                 self.recoveries.removeValue(forKey: workspace.id)
                 workspace.applyRemoteConnectionStateUpdate(.disconnected, detail: nil, target: configuration.displayTarget)
             case .failed(let error):
-                workspace.applyRemoteConnectionStateUpdate(.error, detail: CloudMachineLink.errorText(error), target: configuration.displayTarget)
+                workspace.applyRemoteConnectionStateUpdate(.error, detail: RemoteMachineLink.errorText(error), target: configuration.displayTarget)
                 guard !SSHTuiAttachRetryPolicy.isPermanent(error) else {
                     // Park so a later link-up still recovers the workspace
                     // and retracts this error, without a manual Reconnect.
@@ -181,7 +173,7 @@ final class SSHTuiWorkspaceCoordinator {
             } catch {
                 guard workspace.sshTuiConnectionAttemptID == attemptID, !(error is CancellationError) else { return }
                 if SSHTuiAttachRetryPolicy.isPermanent(error) {
-                    workspace.applyRemoteConnectionStateUpdate(.error, detail: CloudMachineLink.errorText(error), target: configuration.displayTarget)
+                    workspace.applyRemoteConnectionStateUpdate(.error, detail: RemoteMachineLink.errorText(error), target: configuration.displayTarget)
                     return
                 }
             }
@@ -219,11 +211,11 @@ final class SSHTuiWorkspaceCoordinator {
     }
 
     func provider(connection: SSHTuiConnection) throws -> CmuxTuiSurfaceProvider {
-        let machine = SurfaceMachineID(rawValue: connection.id)
+        let machine = SurfaceMachineID.ssh(connection.identityDigest)
         if let existing = catalog.provider(for: machine) as? CmuxTuiSurfaceProvider { return existing }
-        guard let clientURL = clientURL() else { throw CloudMachineLink.LinkError.clientMissing }
+        guard let clientURL = clientURL() else { throw RemoteMachineLink.LinkError.clientMissing }
         let links = SSHTuiLinkManager(connection: connection, clientURL: clientURL, paths: paths,
-                                     isEnabled: { ManagedRemoteConnectionsPolicy.isEnabled },
+                                     isEnabled: { ManagedRemoteConnectionsPolicy().isEnabled },
                                      agentHookProviders: { SSHTuiConnection.agentHookProviders(defaults: .standard) })
         let provider = CmuxTuiSurfaceProvider(
             summary: .ssh(connection), links: links, catalog: catalog,
@@ -254,7 +246,7 @@ final class SSHTuiWorkspaceCoordinator {
                                  initialCommand: initialCommand, restoring: restoring, focus: focus, held: held)
         } catch {
             if workspace.sshTuiConnectionAttemptID == attemptID, let reservation = held.reservation, !keepsReservationPending(error) {
-                workspace.failReservedCloudTerminalPane(reservation, error: CloudDiagnosticFailure.network)
+                workspace.failReservedTuiTerminalPane(reservation, error: TuiTransportError.connectionClosed)
             }
             throw error
         }
@@ -262,27 +254,12 @@ final class SSHTuiWorkspaceCoordinator {
 
     /// The pane an attach reserved and has not yet handed to a projection.
     private final class ReservationHold {
-        var reservation: CloudTerminalPaneReservation?
+        var reservation: TuiTerminalPaneReservation?
     }
 
     private func attachBody(workspace: Workspace, configuration: WorkspaceRemoteConfiguration, attemptID: UUID, initialCommand: [String]?,
                             restoring: Bool, focus: Bool, held: ReservationHold) async throws {
-        let discardedLegacyDescriptor = configuration.restoredSSHSession != nil
-            && Self.configurationForAttach(configuration).restoredSSHSession == nil
-        let preparedConfiguration = Self.configurationForAttach(configuration)
-        if preparedConfiguration.restoredSSHSession == nil, configuration.restoredSSHSession != nil {
-            // A workspace saved by the retired cmuxd-remote path can still be
-            // opened as a normal cmux-tui SSH workspace. Do not turn that stale
-            // descriptor into an "unsupported" Cloud error; it describes a
-            // PTY that no longer has a supported owner, so start a fresh
-            // daemon-owned workspace and keep the SSH destination/configuration.
-            workspace.remoteConfiguration = preparedConfiguration
-        }
-        let configuration = preparedConfiguration
         let connection = SSHTuiConnection(configuration: configuration)
-        if discardedLegacyDescriptor, workspace.cloudVMBinding?.vmID == connection.id {
-            workspace.cloudVMBinding = nil
-        }
         let provider = try provider(connection: connection)
         let machine = provider.machine
         held.reservation = reserveInitialTerminal(workspace: workspace, machine: machine, configuration: configuration, focus: focus)
@@ -290,7 +267,7 @@ final class SSHTuiWorkspaceCoordinator {
             // Use the same eligibility check as snapshot conversion, including
             // the legacy default when terminalTransport was not persisted.
             guard saved.legacyTmuxSSHConfiguration(agentSocketPath: configuration.agentSocketPath) != nil else {
-                throw CloudDiagnosticFailure.unsupported
+                throw TuiTransportError.unsupported
             }
         }
         // A restored workspace already has projections, so it does not reach
@@ -298,19 +275,19 @@ final class SSHTuiWorkspaceCoordinator {
         // sidecar before refreshing that existing graph, otherwise every pane
         // waits on the stale carrier left by the previous app process.
         if restoring, let sshLinks = provider.links as? SSHTuiLinkManager {
-            _ = try await sshLinks.connected(machineID: connection.id, preflight: false, upgrade: true)
+            _ = try await sshLinks.connected(machineID: connection.id, preflight: false)
         }
         let initialExisting = catalog.projections.filter {
             $0.workspaceID == workspace.id && $0.resource.machine == machine
         }
-        let hasRemoteBinding = workspace.cloudVMBinding?.vmID == connection.id
+        let hasRemoteBinding = workspace.remoteWorkspaceBinding?.machineID == connection.id
         if Self.needsInitialGraphRefresh(
             restoring: restoring,
             hasExistingProjections: !initialExisting.isEmpty,
             hasRemoteBinding: hasRemoteBinding
         ) {
             guard await provider.refreshCurrentGraphResolvingEqualCursorConflict() else {
-                throw CloudMachineLink.LinkError.failureMessage(provider.info.linkFailureMessage)
+                throw RemoteMachineLink.LinkError.failureMessage(provider.info.linkFailureMessage)
             }
         }
         try requireCurrent(workspace: workspace, attemptID: attemptID)
@@ -321,8 +298,8 @@ final class SSHTuiWorkspaceCoordinator {
         let existing = catalog.projections.filter { $0.workspaceID == workspace.id && $0.resource.machine == machine }
         if !existing.isEmpty {
             provider.projectionsRestored()
-        } else if let binding = workspace.cloudVMBinding,
-                  binding.vmID == connection.id,
+        } else if let binding = workspace.remoteWorkspaceBinding,
+                  binding.machineID == connection.id,
                   let remoteID = binding.remoteWorkspaceID {
             // A missing saved terminal is never permission to create another shell.
             let group = try catalog.remoteWorkspaceGroup(machine: machine, workspaceID: remoteID)
@@ -331,14 +308,18 @@ final class SSHTuiWorkspaceCoordinator {
                                                        focus: false, adopting: held.reservation)
                 try requireCurrent(workspace: workspace, attemptID: attemptID)
                 if let pending = held.reservation {
-                    workspace.completeReservedCloudTerminalPane(pending, adoptedPanelID: result.projection.panelID)
+                    workspace.completeReservedTuiTerminalPane(pending, adoptedPanelID: result.projection.panelID)
                     held.reservation = nil
                 }
             }
         } else {
-            let connected: CloudMachineLink.Connected
+            // A saved cmux-tui owner may only reattach its persisted workspace.
+            if configuration.restoredSSHSession?.sshSessionOwner == "cmux-tui" {
+                throw CmuxTuiSurfaceProvider.ProviderError.stateUnavailable(connection.id)
+            }
+            let connected: RemoteMachineLink.Connected
             if let sshLinks = provider.links as? SSHTuiLinkManager {
-                connected = try await sshLinks.connected(machineID: connection.id, preflight: false, upgrade: restoring)
+                connected = try await sshLinks.connected(machineID: connection.id, preflight: false)
             } else {
                 connected = try await provider.links.connected(machineID: connection.id)
             }
@@ -352,7 +333,7 @@ final class SSHTuiWorkspaceCoordinator {
             }
             let resource = try await provider.createTerminal(
                 command: initialCommand ?? connection.shellCommand, cwd: nil, name: nil, remoteWorkspaceID: remoteID,
-                request: CloudTerminalCreationRequest(
+                request: TuiTerminalCreationRequest(
                     id: workspace.stableId,
                     remoteWorkspaceID: remoteID,
                     restoring: Self.usesDurableCreationReceipt(machineID: connection.id, restoring: restoring)
@@ -365,12 +346,12 @@ final class SSHTuiWorkspaceCoordinator {
                     sshTuiWorkspaceLogger.error("publishing the workspace title to \(remoteID, privacy: .public) failed: \(String(describing: error), privacy: .public)")
                 }
             }
-            workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: connection.id, isBase: false, remoteWorkspaceID: remoteID)
+            workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: connection.id, remoteWorkspaceID: remoteID)
             let projected = try await catalog.project(resource.id, into: .workspace(id: workspace.id, placement: .tab),
                                                       focus: false, adopting: held.reservation)
             try requireCurrent(workspace: workspace, attemptID: attemptID)
             if let reservation = held.reservation {
-                workspace.completeReservedCloudTerminalPane(reservation, adoptedPanelID: projected.projection.panelID)
+                workspace.completeReservedTuiTerminalPane(reservation, adoptedPanelID: projected.projection.panelID)
                 held.reservation = nil
             }
         }
@@ -382,8 +363,8 @@ final class SSHTuiWorkspaceCoordinator {
     /// It stays unnamed so its creation fingerprint is stable: the idempotency
     /// key is per workspace, and the daemon rejects a replay whose parameters
     /// changed (`creation.conflict`), which a title edit between retries would cause.
-    static func remoteWorkspaceCreationRequest(for workspace: Workspace, socketPath: String) -> CloudTuiRequest {
-        CloudTuiRequests.createWorkspaceArguments(socketPath: socketPath, empty: true)
+    static func remoteWorkspaceCreationRequest(for workspace: Workspace, socketPath: String) -> TuiRequest {
+        TuiRequests.createWorkspaceArguments(socketPath: socketPath, empty: true)
             .withIdempotencyKey("ssh-workspace-" + workspace.stableId.uuidString.lowercased())
     }
 
@@ -405,16 +386,16 @@ final class SSHTuiWorkspaceCoordinator {
 
     /// Replace the local scaffold before yielding so an SSH workspace can never start a local shell.
     private func reserveInitialTerminal(workspace: Workspace, machine: SurfaceMachineID,
-                                        configuration: WorkspaceRemoteConfiguration, focus: Bool = false) -> CloudTerminalPaneReservation? {
+                                        configuration: WorkspaceRemoteConfiguration, focus: Bool = false) -> TuiTerminalPaneReservation? {
         guard configuration.preserveAfterTerminalExit else { return nil }
-        if let pending = workspace.cloudPendingCreations.values.first(where: { $0.machine == machine }) {
-            workspace.restartReservedCloudTerminalPane(pending)
+        if let pending = workspace.tuiPendingCreations.values.first(where: { $0.machine == machine }) {
+            workspace.restartReservedTuiTerminalPane(pending)
             return pending
         }
-        guard workspace.cloudVMBinding == nil,
+        guard workspace.remoteWorkspaceBinding == nil,
               !catalog.projections.contains(where: { $0.workspaceID == workspace.id && $0.resource.machine == machine }) else { return nil }
         let scaffold = Set(workspace.panels.keys)
-        guard let reservation = workspace.reserveCloudTerminalPane(
+        guard let reservation = workspace.reserveTuiTerminalPane(
             machine: machine, at: .workspace(id: workspace.id, placement: .tab), focus: focus
         ) else { return nil }
         reservation.retry = { [weak self, weak workspace] in
@@ -428,7 +409,7 @@ final class SSHTuiWorkspaceCoordinator {
     private func requireCurrent(workspace: Workspace, attemptID: UUID) throws {
         try Task.checkCancellation()
         guard workspace.sshTuiConnectionAttemptID == attemptID, !workspace.isRetiredFromOwningTabManager,
-              ManagedRemoteConnectionsPolicy.isEnabled else { throw CancellationError() }
+              ManagedRemoteConnectionsPolicy().isEnabled else { throw CancellationError() }
     }
 
     func disconnect(workspace: Workspace) {
@@ -437,14 +418,14 @@ final class SSHTuiWorkspaceCoordinator {
         if recoveries.removeValue(forKey: workspace.id)?.backoff != nil {
             // A backoff keeps the reserved pane pending for the next attempt.
             // No attempt follows a disconnect, so show its failure card instead.
-            for pending in workspace.cloudPendingCreations.values where pending.machine.isSSH {
-                workspace.failReservedCloudTerminalPane(pending, error: CloudDiagnosticFailure.network)
+            for pending in workspace.tuiPendingCreations.values where pending.machine.isSSH {
+                workspace.failReservedTuiTerminalPane(pending, error: TuiTransportError.connectionClosed)
             }
         }
         for projection in catalog.projections where projection.workspaceID == workspace.id && projection.resource.machine.isSSH {
             let provider = catalog.provider(for: projection.resource.machine) as? CmuxTuiSurfaceProvider
             _ = provider?.manualMirrorSessions[projection.panelID]?.cancelConnectionAttempt()
-            if !ManagedRemoteConnectionsPolicy.isEnabled, let manager = provider?.links as? SSHTuiLinkManager {
+            if !ManagedRemoteConnectionsPolicy().isEnabled, let manager = provider?.links as? SSHTuiLinkManager {
                 Task { await manager.disconnect() }
             }
         }

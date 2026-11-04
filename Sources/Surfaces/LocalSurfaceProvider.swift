@@ -36,7 +36,6 @@ final class LocalSurfaceProvider: SurfaceProvider {
             name: Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
             status: "running",
             image: nil,
-            hasDesktop: false,
             memoryMb: Int(ProcessInfo.processInfo.physicalMemory / (1024 * 1024)),
             diskMb: nil,
             linkState: .notApplicable,
@@ -260,7 +259,6 @@ final class LocalSurfaceProvider: SurfaceProvider {
             let created = preferredManager?.addWorkspaceIfActive(
                 inheritWorkingDirectory: false,
                 select: false,
-                autoWelcomeIfNeeded: false,
                 autoRefreshMetadata: false
             ) ?? AppDelegate.shared?.addWorkspaceInPreferredMainWindow(
                 titleSource: .auto,

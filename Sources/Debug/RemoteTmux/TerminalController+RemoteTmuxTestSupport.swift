@@ -56,7 +56,7 @@ extension TerminalController {
         guard allowedBins.contains(bin) else {
             return v2Error(id: id, code: "invalid_params", message: "bin must be a known tmux path")
         }
-        return v2VmCall(id: id, timeoutSeconds: 30) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: 30) {
             try FileManager.default.createDirectory(atPath: tmpdir, withIntermediateDirectories: true)
             var env = environment
             env["TMUX_TMPDIR"] = tmpdir
@@ -289,7 +289,7 @@ extension TerminalController {
         }
         // Generous timeout: the hop onto the main actor can wait out a busy
         // render/output burst in a test app running a dozen live panes.
-        return v2VmCall(id: id, timeoutSeconds: 30) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: 30) {
             // Read back the frame AFTER setFrame: AppKit clamps to min/max
             // content sizes and screen bounds, so the actual frame is the only
             // trustworthy answer — callers assert on it rather than assuming
@@ -338,7 +338,7 @@ extension TerminalController {
         guard position > 0, position < 1 else {
             return v2Error(id: id, code: "invalid_params", message: "position must be in (0, 1)")
         }
-        return v2VmCall(id: id, timeoutSeconds: 15) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: 15) {
             let result: [String: Any]? = await MainActor.run {
                 for workspace in self.tabManager?.tabs ?? [] {
                     guard let session = workspace.remoteTmuxSessionMirror,
@@ -389,7 +389,7 @@ extension TerminalController {
     /// content view marched a step wider per layout pass — a class no grid
     /// oracle can see, only the frames.
     nonisolated func v2RemoteTmuxRootFrames(id: Any?) -> String {
-        v2VmCall(id: id, timeoutSeconds: 15) {
+        v2ThrowingResultCall(id: id, timeoutSeconds: 15) {
             let report: [[String: Any]] = await MainActor.run {
                 var out: [[String: Any]] = []
                 for workspace in self.tabManager?.tabs ?? [] {

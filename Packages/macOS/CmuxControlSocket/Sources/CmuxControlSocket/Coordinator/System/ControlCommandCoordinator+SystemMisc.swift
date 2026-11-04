@@ -176,15 +176,6 @@ extension ControlCommandCoordinator {
         }
     }
 
-    /// `feedback.open` — open the feedback composer (always ok).
-    func feedbackOpen(_ params: [String: JSONValue]) -> ControlCallResult {
-        systemContext?.controlFeedbackOpen(
-            workspaceID: uuid(params, "workspace_id"),
-            windowID: uuid(params, "window_id"),
-            requestedActivate: bool(params, "activate") ?? false
-        )
-        return .ok(.object(["opened": .bool(true)]))
-    }
 
     /// `extension.sidebar.snapshot` — the sidebar extension's workspace feed.
     func extensionSidebarSnapshot(_ params: [String: JSONValue]) -> ControlCallResult {
@@ -255,29 +246,6 @@ extension ControlCommandCoordinator {
     }
 
 #if DEBUG
-    /// `mobile.dev_stack_auth.configure` — DEBUG-only dev Stack auth token
-    /// configuration for the mobile host.
-    func mobileDevStackAuthConfigure(_ params: [String: JSONValue]) -> ControlCallResult {
-        let enabled = bool(params, "enabled")
-        let token = optionalTrimmedRawString(params, "token")
-        if enabled == false {
-            systemContext?.controlMobileDevStackAuthSetToken(nil)
-            return .ok(.object(["enabled": .bool(false)]))
-        }
 
-        guard let token else {
-            return .err(
-                code: "invalid_params",
-                message: "mobile.dev_stack_auth.configure requires params.token",
-                data: nil
-            )
-        }
-
-        systemContext?.controlMobileDevStackAuthSetToken(token)
-        return .ok(.object([
-            "enabled": .bool(true),
-            "token_prefix": .string(String(token.prefix(8))),
-        ]))
-    }
 #endif
 }

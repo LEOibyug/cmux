@@ -9,8 +9,6 @@
 public enum CommandPaletteRequestKind: String, Sendable, CaseIterable {
     /// Opens the command list palette.
     case commands
-    /// Opens the agent inbox quick view.
-    case agentInbox
     /// Opens the workspace switcher palette.
     case switcher
     /// Opens the rename-tab prompt.
@@ -32,8 +30,6 @@ public enum CommandPaletteRequestKind: String, Sendable, CaseIterable {
         switch self {
         case .commands:
             return "cmux.commandPaletteRequested"
-        case .agentInbox:
-            return "cmux.agentInboxRequested"
         case .switcher:
             return "cmux.commandPaletteSwitcherRequested"
         case .renameTab:
@@ -54,7 +50,7 @@ public enum CommandPaletteRequestKind: String, Sendable, CaseIterable {
     /// change rather than a call-site edit.
     public var marksPending: Bool {
         switch self {
-        case .commands, .agentInbox, .switcher, .renameTab, .renameWorkspace, .editWorkspaceDescription, .rename:
+        case .commands, .switcher, .renameTab, .renameWorkspace, .editWorkspaceDescription, .rename:
             return true
         }
     }

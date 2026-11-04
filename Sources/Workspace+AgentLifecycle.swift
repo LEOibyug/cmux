@@ -517,6 +517,7 @@ extension Workspace {
                 noteAgentWakeAgentReported(panelId: panelId, statusKey: key)
             }
         }
+        syncTerminalTabAgentStatusBadge(forPanelId: targetPanelId)
     }
 
     @discardableResult
@@ -570,10 +571,13 @@ extension Workspace {
     }
 
     func clearAllAgentLifecycleStates() {
-        let panelIds = Array(agentLifecycleStatesByPanelId.keys)
-        guard !panelIds.isEmpty else { return }
+        let statesByPanelId = agentLifecycleStatesByPanelId
+        guard !statesByPanelId.isEmpty else { return }
         agentLifecycleStatesByPanelId.removeAll()
-        for panelId in panelIds {
+        for (panelId, states) in statesByPanelId {
+            for key in states.keys {
+                removePanelStatusEntry(key: key, panelId: panelId)
+            }
             recordAgentLifecycleChange(panelId: panelId)
         }
     }

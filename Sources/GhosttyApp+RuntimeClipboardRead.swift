@@ -1,4 +1,5 @@
-import CmuxCloud
+import CmuxRemoteSession
+import CmuxSettings
 import AppKit
 import CmuxTerminal
 import CmuxTerminalCore
@@ -245,7 +246,7 @@ extension GhosttyApp {
                     fileURLs: fileURLs,
                     target: target
                 )
-                if case .pasteCloudImages = plan {
+                if case .pasteTuiImages = plan {
                     // The daemon pastes on the authenticated lease. Complete the
                     // Ghostty request empty so no Mac path enters manual I/O.
                     requestTerminalSurface.hostedView.beginImageTransferIndicator(
@@ -258,7 +259,7 @@ extension GhosttyApp {
                             completeClipboardRequest(with: "")
                         }
                         do {
-                            try await requestTerminalSurface.pasteCloudImages(
+                            try await requestTerminalSurface.pasteTuiImages(
                                 fileURLs,
                                 operation: operation
                             )
@@ -360,8 +361,8 @@ extension GhosttyApp {
                                     for: operation
                                 )
                             }
-                            if ManagedFileTransferPolicy.isRefusal(error) {
-                                ManagedFileTransferPolicy.presentRefusal()
+                            if ManagedFileTransferPolicy().isRefusal(error) {
+                                ManagedFileTransferPolicy().presentRefusal()
                             } else {
                                 let outcome = MainActor.assumeIsolated {
                                     TerminalUploadFailureNotification.post(

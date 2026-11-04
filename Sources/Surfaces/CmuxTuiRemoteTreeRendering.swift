@@ -2,7 +2,7 @@ import CmuxCore
 import Foundation
 
 extension CmuxTuiRemoteRouting {
-    private static func vmTreeNumber(_ value: Any?) -> Double? {
+    private static func treeNumber(_ value: Any?) -> Double? {
         if let v = value as? Double { return v }
         if let v = value as? Int { return Double(v) }
         if let v = value as? Int64 { return Double(v) }
@@ -12,13 +12,11 @@ extension CmuxTuiRemoteRouting {
     /// The human rendering of one catalog machine with its resources. Pure, so the shape is
     /// testable and the same lines can back other surfaces. `workspaceTitles` maps local
     /// workspace ids (uppercased) to their sidebar title for This Mac's grouping.
-    static func vmTreeLines(machine: [String: Any], resources: [[String: Any]], workspaceTitles: [String: String] = [:]) -> [String] {
+    static func treeLines(machine: [String: Any], resources: [[String: Any]], workspaceTitles: [String: String] = [:]) -> [String] {
         let id = (machine["id"] as? String) ?? "?"
         let isLocal = (machine["local"] as? Bool) == true || id == "local"
         let terminals = resources.filter { ($0["kind"] as? String) == "terminal" }
         let browsers = resources.filter { ($0["kind"] as? String) == "browser" }
-        // "display" is the wire form; "screen" is what a pre-rename app still says.
-        let displays = resources.filter { ($0["kind"] as? String) == "display" || ($0["kind"] as? String) == "screen" }
         var lines: [String] = []
 
         if isLocal {
@@ -51,7 +49,7 @@ extension CmuxTuiRemoteRouting {
             for group in groups {
                 lines.append("    \(group.label)")
                 for terminal in group.items {
-                    lines.append("      " + vmTreeResourceCell(terminal, openHint: "cmux surface open"))
+                    lines.append("      " + treeResourceCell(terminal, openHint: "cmux surface open"))
                 }
             }
             if !browsers.isEmpty {
@@ -68,20 +66,20 @@ extension CmuxTuiRemoteRouting {
 
         let status = (machine["status"] as? String) ?? "unknown"
         var facts: [String] = []
-        if let cpus = vmTreeNumber(machine["cpus"]), cpus > 0 {
+        if let cpus = treeNumber(machine["cpus"]), cpus > 0 {
             facts.append(String(format: String(localized: "cli.vm.tree.vcpu", defaultValue: "%.0f vCPU"), cpus))
         }
-        if let memoryMb = vmTreeNumber(machine["memory_mb"]), memoryMb > 0 {
+        if let memoryMb = treeNumber(machine["memory_mb"]), memoryMb > 0 {
             facts.append(String(format: "%.0f GB", memoryMb / 1024))
         }
-        if let diskMb = vmTreeNumber(machine["disk_mb"]), diskMb > 0 {
+        if let diskMb = treeNumber(machine["disk_mb"]), diskMb > 0 {
             facts.append(String(format: String(localized: "cli.vm.tree.disk", defaultValue: "%.0f GB disk"), diskMb / 1024))
         }
         let linkState = (machine["link_state"] as? String) ?? ((machine["link"] as? [String: Any])?["state"] as? String) ?? ""
         let linkError = ((machine["link_error_message"] as? String) ?? ((machine["link"] as? [String: Any])?["error_message"] as? String))
             .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
         let linkErrorDescription = linkError ?? String(
-            localized: "cloudTree.placeholder.linkError",
+            localized: "tuiTree.placeholder.linkError",
             defaultValue: "Link failed"
         )
         if !linkState.isEmpty, linkState != "n/a" {
@@ -97,7 +95,7 @@ extension CmuxTuiRemoteRouting {
             name: String,
             index: Int,
             focused: Bool,
-            placements: [VMTreePlacement]
+            placements: [TreePlacement]
         )] = []
         // Terminal views can be numerous; keep membership assignment O(1)
         // instead of scanning every workspace for every view.
@@ -116,7 +114,7 @@ extension CmuxTuiRemoteRouting {
                 workspaces.append((
                     id: workspaceId,
                     name: (raw["name"] as? String) ?? "",
-                    index: vmTreeNumber(raw["index"]).map { Int($0) } ?? Int.max,
+                    index: treeNumber(raw["index"]).map { Int($0) } ?? Int.max,
                     focused: (raw["focused"] as? Bool) == true,
                     placements: []
                 ))
@@ -126,7 +124,7 @@ extension CmuxTuiRemoteRouting {
             // Every workspace view contributes a pointer row: one placement per daemon
             // tab, the same partition the sidebar draws (grouped by pane below).
             let kind = resource["kind"] as? String
-            guard ["terminal", "browser", "display", "screen"].contains(kind ?? "") else { continue }
+            guard ["terminal", "browser"].contains(kind ?? "") else { continue }
             var placements: [(workspace: [String: Any], view: [String: Any]?)] = []
             if let views = resource["remote_views"] as? [[String: Any]] {
                 for view in views {
@@ -139,7 +137,7 @@ extension CmuxTuiRemoteRouting {
             }
             for placement in placements {
                 guard let workspaceId = placement.workspace["id"] as? String, !workspaceId.isEmpty else { continue }
-                let member = VMTreePlacement(resource: resource, view: placement.view)
+                let member = TreePlacement(resource: resource, view: placement.view)
                 if let index = workspaceIndexByID[workspaceId] {
                     workspaces[index].placements.append(member)
                 } else {
@@ -147,7 +145,7 @@ extension CmuxTuiRemoteRouting {
                     workspaces.append((
                         id: workspaceId,
                         name: (placement.workspace["name"] as? String) ?? "",
-                        index: vmTreeNumber(placement.workspace["index"]).map { Int($0) } ?? Int.max,
+                        index: treeNumber(placement.workspace["index"]).map { Int($0) } ?? Int.max,
                         focused: (placement.workspace["focused"] as? Bool) == true,
                         placements: [member]
                     ))
@@ -163,24 +161,19 @@ extension CmuxTuiRemoteRouting {
         switch linkState {
         case "connecting":
             lines.append("    " + String(localized: "cli.vm.tree.link.connecting", defaultValue: "connecting…"))
-        case "asleep":
-            lines.append("    " + String(
-                format: String(localized: "cli.vm.tree.link.asleep", defaultValue: "asleep — cmux vm open %@ wakes it"),
-                id
-            ))
         case "error", "unavailable":
             lines.append("    " + String(
                 format: String(localized: "cli.vm.tree.link.error", defaultValue: "⚠ %@"),
                 linkErrorDescription
             ))
             lines.append("    " + String(
-                format: String(localized: "cli.vm.tree.link.retry", defaultValue: "retry: cmux vm tree %@ --refresh"),
+                format: String(localized: "cli.surface.tree.link.retry", defaultValue: "retry: cmux surface tree %@ --refresh"),
                 id
             ))
         default:
             if workspaces.isEmpty {
                 lines.append("    " + String(
-                    format: String(localized: "cli.vm.tree.noWorkspaces", defaultValue: "(none yet — cmux vm open %@ starts one)"),
+                    format: String(localized: "cli.surface.tree.noWorkspaces", defaultValue: "(no workspaces reported by %@)"),
                     id
                 ))
             }
@@ -188,14 +181,13 @@ extension CmuxTuiRemoteRouting {
         for workspace in workspaces {
             let workspaceId = workspace.id
             let name = workspace.name.isEmpty ? workspaceId : workspace.name
-            lines.append("    \(name)  \(workspaceId)\(workspace.focused ? "  *" : "")  (cmux vm open \(id)/\(workspaceId))")
+            lines.append("    \(name)  \(workspaceId)\(workspace.focused ? "  *" : "")")
             // Rows follow the layout, as in the sidebar, with every tab as a
             // sibling leaf. Pane grouping is retained only for ordering.
-            for placement in vmTreeLayoutRows(workspace.placements) {
-                lines.append("      " + vmTreeWorkspaceCell(placement, machineID: id, workspaceID: workspaceId))
+            for placement in treeLayoutRows(workspace.placements) {
+                lines.append("      " + treeWorkspaceCell(placement, machineID: id, workspaceID: workspaceId))
             }
         }
-        // Ports come before displays, matching the Cloud sidebar's group order.
         let ports = browsers.compactMap { browser -> (Int, String, [String: Any])? in
             // Snapshot parsing folds localhost browser views into the provider's
             // canonical `port:<n>` resource. Non-port daemon browsers remain
@@ -214,22 +206,12 @@ extension CmuxTuiRemoteRouting {
             for (port, _, browser) in ports {
                 let label = (browser["detail"] as? String).flatMap { $0.isEmpty ? nil : $0 }
                 let open = (browser["open"] as? Bool) == true
-                var cell = "    \(port)\(label.map { "  \($0)" } ?? "")  (cmux vm open \(id):port/\(port))"
+                var cell = "    \(port)\(label.map { "  \($0)" } ?? "")  (cmux surface open \(id)/browser/port:\(port))"
                 if open { cell += "  " + String(localized: "cli.vm.tree.openMarker", defaultValue: "(open)") }
                 lines.append(cell)
             }
         }
 
-        // Displays are catalog resources, so emit one addressable row per
-        // screen instead of collapsing several screens into one synthetic desktop.
-        lines.append("  " + String(localized: "cli.vm.tree.displays", defaultValue: "Displays/"))
-        if displays.isEmpty {
-            lines.append("    " + String(localized: "cli.vm.tree.noDisplays", defaultValue: "(none available)"))
-        } else {
-            for display in displays {
-                lines.append("    " + vmTreeResourceCell(display, openHint: "cmux surface open", showFullKey: true))
-            }
-        }
 
         // Every machine-owned terminal stays in the flat index even while its
         // link is connecting/asleep/failed. The link-status line above explains
@@ -244,19 +226,19 @@ extension CmuxTuiRemoteRouting {
             var attached: [[String: Any]] = []
             var detached: [[String: Any]] = []
             for terminal in terminals {
-                if vmTreeTerminalIsDetached(terminal) {
+                if treeTerminalIsDetached(terminal) {
                     detached.append(terminal)
                 } else {
                     attached.append(terminal)
                 }
             }
             for terminal in attached {
-                lines.append("    " + vmTreeResourceCell(terminal, openHint: "cmux surface open"))
+                lines.append("    " + treeResourceCell(terminal, openHint: "cmux surface open"))
             }
             if !detached.isEmpty {
                 lines.append("    " + String(localized: "cli.vm.tree.detached", defaultValue: "(detached — no tab on the machine shows these)"))
                 for terminal in detached {
-                    lines.append("      " + vmTreeResourceCell(terminal, openHint: "cmux surface open"))
+                    lines.append("      " + treeResourceCell(terminal, openHint: "cmux surface open"))
                 }
             }
         }
@@ -265,13 +247,13 @@ extension CmuxTuiRemoteRouting {
 
     /// Whether a catalog terminal is live and has no resolved daemon views.
     /// Exited records with stale tab ids are intentionally not detached.
-    private static func vmTreeTerminalIsDetached(_ terminal: [String: Any]) -> Bool {
+    private static func treeTerminalIsDetached(_ terminal: [String: Any]) -> Bool {
         let lifecycle = (terminal["lifecycle"] as? String) ?? "running"
         guard lifecycle == "launching" || lifecycle == "running" else { return false }
         if let views = terminal["remote_views"] as? [[String: Any]] {
             return views.isEmpty
         }
-        if let viewCount = vmTreeNumber(terminal["view_count"]) {
+        if let viewCount = treeNumber(terminal["view_count"]) {
             return viewCount == 0
         }
         return terminal["remote_workspace"] == nil
@@ -280,18 +262,18 @@ extension CmuxTuiRemoteRouting {
     /// One workspace placement as the catalog payload describes it: the resource and the
     /// daemon tab (`remote_views` entry) showing it in this workspace; nil for payloads
     /// that predate views.
-    struct VMTreePlacement {
+    struct TreePlacement {
         let resource: [String: Any]
         let view: [String: Any]?
     }
 
     /// Maps wire placements through the same ``RemoteWorkspaceLayout`` used by the sidebar.
     /// Formatting stays in the CLI; pane grouping, ordering, and active-tab selection do not.
-    static func vmTreeLayoutRows(_ placements: [VMTreePlacement]) -> [VMTreePlacement] {
+    static func treeLayoutRows(_ placements: [TreePlacement]) -> [TreePlacement] {
         func position(_ view: [String: Any]?, _ key: String) -> Int? {
-            vmTreeNumber(view?[key]).flatMap { Int(exactly: $0) }
+            treeNumber(view?[key]).flatMap { Int(exactly: $0) }
         }
-        let kindRank: [String: Int] = ["terminal": 0, "browser": 1, "display": 2, "screen": 2]
+        let kindRank: [String: Int] = ["terminal": 0, "browser": 1]
         let layout = RemoteWorkspaceLayout(placements: placements.map { placement in
             RemoteWorkspacePlacement(
                 screenID: placement.view?["screen_id"] as? String,
@@ -306,29 +288,18 @@ extension CmuxTuiRemoteRouting {
         return layout.flatPlacementIndices.map { placements[$0] }
     }
 
-    /// A workspace pointer cell: terminals address through the workspace (`cmux vm open <m>/<ws>/<term>`),
-    /// and through the tab when the placement names one (`…/<term>/<tab>`). Browsers and displays
-    /// address through `cmux surface open`.
-    private static func vmTreeWorkspaceCell(_ placement: VMTreePlacement, machineID: String, workspaceID: String) -> String {
+    /// Every workspace resource opens through the generic surface command.
+    private static func treeWorkspaceCell(_ placement: TreePlacement, machineID: String, workspaceID: String) -> String {
         var resource = placement.resource
         if let name = (placement.view?["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
             resource["title"] = name
         }
-        if (resource["kind"] as? String) == "terminal" {
-            let key = (resource["key"] as? String) ?? (resource["id"] as? String) ?? "?"
-            let tabID = (placement.view?["tab_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let command: String
-            if let tabID, !tabID.isEmpty {
-                command = "cmux vm open \(machineID)/\(workspaceID)/\(key)/\(tabID)"
-            } else {
-                command = "cmux vm open \(machineID)/\(workspaceID)/\(key)"
-            }
-            return vmTreeResourceCell(resource, openHint: command, addressKey: "key", command: command)
-        }
-        return vmTreeResourceCell(resource, openHint: "cmux surface open", showFullKey: true)
+        let resourceID = resource["id"] as? String ?? "?"
+        let command = "cmux surface open \(resourceID)"
+        return treeResourceCell(resource, openHint: command, showFullKey: true, command: command)
     }
 
-    private static func vmTreeResourceCell(
+    private static func treeResourceCell(
         _ terminal: [String: Any],
         openHint: String,
         addressKey: String = "id",

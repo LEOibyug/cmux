@@ -210,29 +210,12 @@ extension TerminalController {
                 }
 #endif
                 if policy.runsOnSocketWorker {
-                    // Cloud display creation awaits provider work and optional
-                    // projection. Keep the connection task suspendable instead
-                    // of routing it through the semaphore-backed legacy adapter.
-                    if authorizedRequest.method == "surface.new_display" {
-                        return await self.socketSurfaceNewDisplayResponseWithDeadline(authorizedRequest)
-                    }
+                    
                     // Terminal rename performs an awaited cloud-link mutation. Keep the
                     // actual socket connection task asynchronous instead of parking a
                     // worker thread behind the legacy semaphore bridge.
-                    if authorizedRequest.method == "vm.terminal_rename" {
-                        return await self.socketCloudRenameResponseWithDeadline(
-                            id: authorizedRequest.id
-                        ) {
-                            await self.socketWorkerVMTerminalRenameResponseAsync(authorizedRequest)
-                        }
-                    }
-                    if authorizedRequest.method == "vm.tab_rename" {
-                        return await self.socketCloudRenameResponseWithDeadline(
-                            id: authorizedRequest.id
-                        ) {
-                            await self.socketWorkerVMTabRenameResponseAsync(authorizedRequest)
-                        }
-                    }
+                    
+                    
                     return try await self.socketWorkerV2ResponseAsync(authorizedRequest)
                 }
                 return try await self.processParsedV2CommandAsync(authorizedRequest)
@@ -283,9 +266,7 @@ extension TerminalController {
     private nonisolated func socketWorkerV2ResponseAsync(
         _ request: ControlRequest
     ) async throws -> String? {
-        if Self.authTeamSocketMethods.contains(request.method) {
-            return try await v2AuthTeamResponseAsync(request)
-        }
+        
         if request.method == "surface.read_selection" {
             return await socketSurfaceSelectionResponseAsync(request)
         }
@@ -500,127 +481,9 @@ extension TerminalController {
         )
     }
 
-    /// Applies one deadline to the complete cloud rename transaction. The
-    /// provider can perform several refreshes, compare-and-set writes, retries,
-    /// and compensation writes, so a per-command timeout alone does not bound
-    /// the socket request. The operation task is cancelled when the deadline
-    /// wins; the provider's next cancellation check or command boundary then
-    /// stops further writes, while the canonical graph remains the authority
-    /// for any command that was already in flight.
-    private nonisolated func socketCloudRenameResponseWithDeadline(
-        id: JSONValue?,
-        operation: @escaping @Sendable () async -> String
-    ) async -> String {
-        let (responses, continuation) = AsyncStream<String>.makeStream(
-            bufferingPolicy: .bufferingOldest(1)
-        )
-        let operationTask = Task {
-            let response = await operation()
-            continuation.yield(response)
-            continuation.finish()
-        }
-        let timeoutTask = Task {
-            do {
-                try await ContinuousClock().sleep(for: .seconds(120))
-            } catch {
-                return
-            }
-            guard !Task.isCancelled else { return }
-            continuation.yield(Self.v2Encoder.error(
-                id: id,
-                code: "timeout",
-                message: String(
-                    localized: "socket.vm.renameTimedOut",
-                    defaultValue: "The remote rename timed out after 120 seconds. Refresh and try again."
-                )
-            ))
-            continuation.finish()
-        }
-        continuation.onTermination = { @Sendable _ in
-            operationTask.cancel()
-            timeoutTask.cancel()
-        }
+    
 
-        let response = await withTaskCancellationHandler(
-            operation: {
-                var iterator = responses.makeAsyncIterator()
-                return await iterator.next()
-            },
-            onCancel: {
-                operationTask.cancel()
-                timeoutTask.cancel()
-                continuation.finish()
-            }
-        )
-        operationTask.cancel()
-        timeoutTask.cancel()
-        continuation.finish()
-        return response ?? Self.v2Encoder.error(
-            id: id,
-            code: "request_error",
-            message: "Request failed before returning a result"
-        )
-    }
-
-    /// Applies the cloud-display request deadline without parking a socket
-    /// worker thread. Cancellation reaches the catalog task when the deadline
-    /// or the client connection wins the race.
-    private nonisolated func socketSurfaceNewDisplayResponseWithDeadline(
-        _ request: ControlRequest
-    ) async -> String {
-        let (responses, continuation) = AsyncStream<String>.makeStream(
-            bufferingPolicy: .bufferingOldest(1)
-        )
-        let operationTask = Task {
-            let response = await self.socketWorkerSurfaceNewDisplayResponseAsync(request)
-            continuation.yield(response)
-            continuation.finish()
-        }
-        let timeoutTask = Task {
-            do {
-                try await ContinuousClock().sleep(for: .seconds(240))
-            } catch {
-                return
-            }
-            guard !Task.isCancelled else { return }
-            continuation.yield(Self.v2Encoder.error(
-                id: request.id,
-                code: "timeout",
-                message: String(
-                    localized: "socket.surface.newDisplay.timedOut",
-                    defaultValue: "Creating the cloud display timed out. Check the catalog before retrying."
-                )
-            ))
-            continuation.finish()
-        }
-        continuation.onTermination = { @Sendable _ in
-            operationTask.cancel()
-            timeoutTask.cancel()
-        }
-
-        let response = await withTaskCancellationHandler(
-            operation: {
-                var iterator = responses.makeAsyncIterator()
-                return await iterator.next()
-            },
-            onCancel: {
-                operationTask.cancel()
-                timeoutTask.cancel()
-                continuation.finish()
-            }
-        )
-        operationTask.cancel()
-        timeoutTask.cancel()
-        continuation.finish()
-        return response ?? Self.v2Encoder.error(
-            id: request.id,
-            code: "request_error",
-            message: String(
-                localized: "socket.surface.newDisplay.requestFailed",
-                defaultValue: "The cloud display request ended before returning a result."
-            )
-        )
-    }
+    
 
     private nonisolated func processParsedV2CommandAsync(
         _ request: ControlRequest

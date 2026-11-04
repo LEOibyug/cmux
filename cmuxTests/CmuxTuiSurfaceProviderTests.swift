@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import Darwin
 import Foundation
@@ -12,7 +12,7 @@ import Testing
 /// The cmux-tui provider's pure parts: snapshot → resources, the argv it hands the
 /// client, the URLs it opens, and the client identity paths it shares with the CLI.
 @Suite struct CmuxTuiSurfaceProviderTests {
-    static let machine = SurfaceMachineID.cloud("vivid-newt")
+    static let machine = SurfaceMachineID.ssh("447a90a30c234eddad32fd4c6fa490dd78c825e77f965cb62980f2cb5704c838")
     static let sessionSnapshot: [String: Any] = [
         "workspaces": [
             ["id": "ws_main", "name": "main", "focused": true],
@@ -73,7 +73,7 @@ import Testing
         #expect(created.screenID == "screen_1")
         #expect(created.paneID == "pane_1")
         #expect(created.tabID == "tab_browser")
-        #expect(created.cursor == CloudVMCursor(generation: "g1", revision: 8))
+        #expect(created.cursor == TuiCursor(generation: "g1", revision: 8))
     }
 
     @Test func browserCreationReceiptRejectsAnUnboundRemotePath() {
@@ -90,27 +90,26 @@ import Testing
     }
 
     @Test func malformedBrowserCreationReceiptHasAResponseFailure() {
-        #expect(CloudDiagnosticFailure.classify(CmuxTuiSurfaceProvider.ProviderError.browserNotCreated) == .response)
+        #expect(CmuxTuiSurfaceProvider.ProviderError.browserNotCreated.errorDescription == "The SSH host could not create a browser tab. Refresh the host and retry.")
     }
 
     @Test @MainActor
     func committedBrowserReceiptMovesToTheReplacementProvider() throws {
         let catalog = SurfaceCatalog()
-        let summary = VMSummary(id: "browser-replacement-\(UUID())", provider: "freestyle", status: "running", image: "fixture", createdAt: 0, base: nil)
-        let links = CloudMachineLinkManager(clientURL: nil, hub: nil, hostThemeColors: { nil })
-        let original = CmuxTuiSurfaceProvider(summary: summary, ownerTeamID: "team", links: links, catalog: catalog)
-        let replacement = CmuxTuiSurfaceProvider(summary: summary, ownerTeamID: "team", links: links, catalog: catalog)
+        let host = TuiTestHost(destination: "browser-replacement-\(UUID()).example.test")
+        let original = CmuxTuiSurfaceProvider(summary: host.summary, links: host.links(), catalog: catalog)
+        let replacement = CmuxTuiSurfaceProvider(summary: host.summary, links: host.links(), catalog: catalog)
         catalog.register(original)
-        original.suspendForFeatureFlag()
+        original.retireTransport()
         catalog.register(replacement)
         defer {
-            original.suspendForFeatureFlag()
-            replacement.suspendForFeatureFlag()
+            original.retireTransport()
+            replacement.retireTransport()
             catalog.unregister(machine: original.machine)
         }
         let receipt = CmuxTuiSnapshotParser.CreatedBrowserPath(
             browserID: "browser_created", workspaceID: "ws_main", screenID: "screen_1",
-            paneID: "pane_1", tabID: "tab_created", cursor: CloudVMCursor(generation: "g1", revision: 8)
+            paneID: "pane_1", tabID: "tab_created", cursor: TuiCursor(generation: "g1", revision: 8)
         )
 
         let resource = try original.recordCommittedBrowser(receipt, url: URL(string: "http://localhost:4312/health")!, name: nil)
@@ -121,34 +120,9 @@ import Testing
         #expect(catalog.resources[resource.id]?.remoteViews?.first?.workspace.id == "ws_main")
     }
 
-    @Test @MainActor
-    func committedBrowserReceiptCannotCrossOwnershipTeardown() throws {
-        let catalog = SurfaceCatalog()
-        let summary = VMSummary(id: "browser-retirement-\(UUID())", provider: "freestyle", status: "running", image: "fixture", createdAt: 0, base: nil)
-        let links = CloudMachineLinkManager(clientURL: nil, hub: nil, hostThemeColors: { nil })
-        let original = CmuxTuiSurfaceProvider(summary: summary, ownerTeamID: "old-team", links: links, catalog: catalog)
-        let replacement = CmuxTuiSurfaceProvider(summary: summary, ownerTeamID: "new-team", links: links, catalog: catalog)
-        catalog.register(original)
-        original.suspendForFeatureFlag()
-        catalog.register(replacement)
-        defer {
-            replacement.suspendForFeatureFlag()
-            catalog.unregister(machine: original.machine)
-        }
-        let receipt = CmuxTuiSnapshotParser.CreatedBrowserPath(
-            browserID: "browser_created", workspaceID: "ws_main", screenID: "screen_1",
-            paneID: "pane_1", tabID: "tab_created", cursor: CloudVMCursor(generation: "g1", revision: 8)
-        )
-
-        #expect(throws: (any Error).self) {
-            try original.recordCommittedBrowser(receipt, url: URL(string: "http://localhost:4312/health")!, name: nil)
-        }
-        #expect(replacement.pendingRemoteCreations.isEmpty)
-        #expect(catalog.resources.isEmpty)
-    }
 
     @Test func browserCreationRequestTargetsTheBoundMachineWorkspaceAndPane() {
-        let request = CloudTuiRequests.createBrowserArguments(
+        let request = TuiRequests.createBrowserArguments(
             socketPath: "/tmp/cmux-tui.sock",
             workspaceID: "ws_main",
             screenID: "screen_1",
@@ -368,134 +342,6 @@ import Testing
         #expect(legacyBuild.remoteViews?.map(\.tabID) == ["tab_1"])
     }
 
-    @Test func vmOpenWorkspaceSelectorsPreferIdsAndRejectAmbiguousNames() {
-        let machine: [String: Any] = [
-            "id": "vivid-newt",
-            "remote_workspaces": [
-                ["id": "ws-id", "name": "other"],
-                // A mutable name can equal another workspace's id. The id wins.
-                ["id": "ws-other", "name": "ws-id"],
-                ["id": "ws-a", "name": "same"],
-                ["id": "ws-b", "name": "same"],
-            ],
-        ]
-
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteWorkspaceSelector("ws-id", in: machine) == .resolved("ws-id"))
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteWorkspaceSelector("other", in: machine) == .resolved("ws-id"))
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteWorkspaceSelector("same", in: machine) == .ambiguous(["ws-a", "ws-b"]))
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteWorkspaceSelector("missing", in: machine) == .notFound)
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteWorkspaceSelector("ws-id", in: ["id": "vivid-newt"]) == .unavailable)
-        let unfocused: [String: Any] = ["machines": [["id": "vivid-newt", "link_state": "connected", "remote_workspaces": [["id": "ws-a"], ["id": "ws-b"]]]], "resources": [[String: Any]]()]
-        #expect(VMRemoteWorkspaceResolver().resolveVMMachineTerminal(machine: "vivid-newt", catalog: unfocused) == .unavailable)
-        let disconnected: [String: Any] = ["machines": [["id": "vivid-newt", "link_state": "asleep", "remote_workspaces": [["id": "ws-a"]]]], "resources": [[String: Any]]()]
-        #expect(VMRemoteWorkspaceResolver().resolveVMMachineTerminal(machine: "vivid-newt", catalog: disconnected) == .unavailable)
-    }
-
-    @Test func vmOpenWorkspaceUsesTheSelectedTabView() {
-        let resource: [String: Any] = [
-            "id": "vivid-newt/terminal/term_build",
-            "remote_views": [
-                [
-                    "tab_id": "tab_main",
-                    "workspace": ["id": "ws_main", "name": "main"],
-                    "focused": false,
-                ],
-                [
-                    "tab_id": "tab_api",
-                    "workspace": ["id": "ws_api", "name": "api"],
-                    "focused": true,
-                ],
-            ],
-        ]
-
-        #expect(VMRemoteWorkspaceResolver().vmRemoteView(in: resource, workspaceID: "ws_api")?["tab_id"] as? String == "tab_api")
-        #expect(VMRemoteWorkspaceResolver().vmRemoteView(in: resource, workspaceID: "ws_missing") == nil)
-
-        var duplicate = resource
-        duplicate["remote_views"] = [
-            [
-                "tab_id": "tab_a",
-                "workspace": ["id": "ws_main", "name": "main"],
-                "focused": false,
-            ],
-            [
-                "tab_id": "tab_b",
-                "workspace": ["id": "ws_main", "name": "main"],
-                "focused": true,
-            ],
-        ]
-        #expect(VMRemoteWorkspaceResolver().vmRemoteView(in: duplicate, workspaceID: "ws_main")?["tab_id"] as? String == "tab_b")
-
-        duplicate["remote_views"] = [
-            ["tab_id": "tab_a", "workspace": ["id": "ws_main", "name": "main"], "focused": false],
-            ["tab_id": "tab_b", "workspace": ["id": "ws_main", "name": "main"], "focused": false],
-        ]
-        #expect(VMRemoteWorkspaceResolver().vmRemoteView(in: duplicate, workspaceID: "ws_main") == nil)
-    }
-
-    @Test func vmOpenTerminalResolvesAnExactTabOrFailsClosed() {
-        let resource: [String: Any] = [
-            "id": "vivid-newt/terminal/term_build",
-            "machine": "vivid-newt",
-            "kind": "terminal",
-            "key": "term_build",
-            "remote_views": [
-                [
-                    "tab_id": "tab_main",
-                    "workspace": ["id": "ws_main", "name": "main"],
-                    "focused": false,
-                ],
-                [
-                    "tab_id": "tab_api",
-                    "workspace": ["id": "ws_api", "name": "api"],
-                    "focused": true,
-                ],
-            ],
-        ]
-        let catalog: [String: Any] = ["resources": [resource]]
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteTerminalPlacement("term_build", machine: "vivid-newt", workspaceID: "ws_api", in: catalog) == .resolved(terminalID: "term_build", tabID: "tab_api"))
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteTerminalPlacement("term_build", machine: "vivid-newt", workspaceID: "ws_missing", in: catalog) == .notFound)
-
-        var inconsistent = resource
-        inconsistent["key"] = "stale-key"
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteTerminalPlacement("vivid-newt/terminal/term_build", machine: "vivid-newt", workspaceID: "ws_api", in: ["resources": [inconsistent]]) == .resolved(terminalID: "term_build", tabID: "tab_api"))
-
-        // A catalog key must be a key, never a complete resource id. A malformed
-        // explicit key must fall back to the canonical id, or fail closed when no
-        // canonical id exists.
-        var fullIDKey = resource
-        fullIDKey["key"] = "vivid-newt/terminal/term_build"
-        #expect(VMRemoteWorkspaceResolver().vmTerminalID(in: fullIDKey, machine: "vivid-newt") == "term_build")
-        #expect(VMRemoteWorkspaceResolver().vmTerminalID(in: ["key": "vivid-newt/terminal/term_build"], machine: "vivid-newt") == nil)
-
-        var duplicate = resource
-        duplicate["remote_views"] = [
-            ["tab_id": "tab_a", "workspace": ["id": "ws_main"], "focused": false],
-            ["tab_id": "tab_b", "workspace": ["id": "ws_main"], "focused": false],
-        ]
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteTerminalPlacement("term_build", machine: "vivid-newt", workspaceID: "ws_main", in: ["resources": [duplicate]]) == .ambiguous)
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteTerminalPlacement("term_build", machine: "vivid-newt", workspaceID: "ws_main", in: ["resources": [duplicate]], tabID: "tab_a") == .resolved(terminalID: "term_build", tabID: "tab_a"))
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteTerminalPlacement("term_build", machine: "vivid-newt", workspaceID: "ws_main", in: ["resources": [duplicate]], tabID: "tab_missing") == .notFound)
-
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteTerminalPlacement("term_build", machine: "vivid-newt", workspaceID: "ws_main", in: ["resources": [["kind": "terminal", "key": "term_build", "remote_views": NSNull()]]]) == .unavailable)
-
-        let legacy = [
-            "id": "vivid-newt/terminal/term_legacy",
-            "key": "term_legacy",
-            "remote_workspace": ["id": "ws_main", "name": "main"],
-        ] as [String: Any]
-        if case .legacy = VMRemoteWorkspaceResolver().resolveVMRemoteView(in: legacy, workspaceID: "ws_main") {
-            // Whole-workspace opens may use the legacy terminal/workspace edge.
-        } else {
-            Issue.record("legacy workspace resources must remain openable as a group")
-        }
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteTerminalPlacement(
-            "term_legacy",
-            machine: "vivid-newt",
-            workspaceID: "ws_main",
-            in: ["resources": [legacy]]
-        ) == .unavailable, "an exact terminal selector still requires a tab id")
-    }
 
     @Test func catalogNilViewsRetainLegacyPlacementSemantics() {
         var resource = SurfaceResource(
@@ -503,100 +349,44 @@ import Testing
             title: "Port 3000", detail: nil, lifecycle: .running, agent: nil,
             remoteWorkspace: nil, port: 3000, url: "http://localhost:3000"
         )
-        let resolver = VMRemoteWorkspaceResolver()
         let unplaced = TerminalController.surfaceResourcePayload(resource, projections: [])
-        if case .notFound = resolver.resolveVMRemoteView(in: unplaced, workspaceID: "ws_main") {} else {
-            Issue.record("a catalog port without modeled views is not an unknown pane")
-        }
+        #expect(unplaced["remote_views"] is NSNull)
+        #expect(resource.remoteWorkspaces.isEmpty)
         resource.remoteWorkspace = SurfaceRemoteWorkspace(id: "ws_main", name: "main", index: 0, focused: false)
         let legacy = TerminalController.surfaceResourcePayload(resource, projections: [])
-        if case .legacy = resolver.resolveVMRemoteView(in: legacy, workspaceID: "ws_main") {} else {
-            Issue.record("null views must preserve the catalog's legacy workspace edge")
-        }
+        #expect((legacy["remote_workspace"] as? [String: Any])?["id"] as? String == "ws_main")
+        #expect(legacy["remote_views"] is NSNull)
         resource.remoteViews = []
         let detached = TerminalController.surfaceResourcePayload(resource, projections: [])
-        if case .notFound = resolver.resolveVMRemoteView(in: detached, workspaceID: "ws_main") {} else {
-            Issue.record("an authoritative empty view array overrides stale legacy placement")
-        }
-        let malformedValues: [Any] = ["invalid", [[:]] as [[String: Any]]]
-        for malformed in malformedValues {
-            var payload = legacy
-            payload["remote_views"] = malformed
-            if case .unavailable = resolver.resolveVMRemoteView(in: payload, workspaceID: "ws_main") {} else {
-                Issue.record("malformed view metadata must not authorize empty-workspace mutation")
-            }
-        }
+        #expect((detached["remote_views"] as? [[String: Any]])?.isEmpty == true)
+        #expect(resource.remoteWorkspaces.isEmpty)
     }
 
-    @Test func vmOpenWorkspaceSkipsAmbiguousAndExitedTerminalsWhenSafeCandidateExists() {
-        let resources: [[String: Any]] = [
-            [
-                "id": "vivid-newt/terminal/term_ambiguous",
-                "machine": "vivid-newt",
-                "kind": "terminal",
-                "key": "term_ambiguous",
-                "lifecycle": "running",
-                "remote_views": [
-                    ["tab_id": "tab_a", "workspace": ["id": "ws_main"], "focused": false],
-                    ["tab_id": "tab_b", "workspace": ["id": "ws_main"], "focused": false],
-                ],
-            ],
-            [
-                // An exited row must not block opening the workspace, even when its
-                // stale placement is ambiguous.
-                "id": "vivid-newt/terminal/term_exited",
-                "machine": "vivid-newt",
-                "kind": "terminal",
-                "key": "term_exited",
-                "lifecycle": "exited",
-                "remote_views": [
-                    ["tab_id": "tab_c", "workspace": ["id": "ws_main"], "focused": false],
-                    ["tab_id": "tab_d", "workspace": ["id": "ws_main"], "focused": false],
-                ],
-            ],
-            [
-                "id": "vivid-newt/terminal/term_safe",
-                "machine": "vivid-newt",
-                "kind": "terminal",
-                "key": "term_safe",
-                "lifecycle": "running",
-                "remote_views": [
-                    ["tab_id": "tab_safe", "workspace": ["id": "ws_main"], "focused": true],
-                ],
-            ],
-        ]
-
-        #expect(VMRemoteWorkspaceResolver().resolveVMRemoteWorkspaceTerminal(
-            resources,
-            machine: "vivid-newt",
-            workspaceID: "ws_main"
-        ) == .resolved(terminalID: "term_safe", tabID: "tab_safe"))
-    }
 
     @Test func cloudRenameWriteThroughTargetsAndNames() throws {
         // The persisted binding wins over projections.
-        let bound = CloudWorkspaceRenameService().remoteTarget(
-            binding: WorkspaceCloudVMBinding(vmID: "vivid-newt", isBase: false, remoteWorkspaceID: "ws_main"),
+        let bound = TuiWorkspaceRenameService().remoteTarget(
+            binding: RemoteWorkspaceBinding(machineID: Self.machine.rawValue, remoteWorkspaceID: "ws_main"),
             projectedResources: []
         )
-        #expect(bound?.machine == .cloud("vivid-newt"))
+        #expect(bound?.machine == .ssh("447a90a30c234eddad32fd4c6fa490dd78c825e77f965cb62980f2cb5704c838"))
         #expect(bound?.remoteWorkspaceID == "ws_main")
 
         // Without a binding, projections decide only when every view agrees…
         let resources = CmuxTuiSnapshotParser.terminals(fromSnapshot: Self.sessionSnapshot, machine: Self.machine)
         let shell = try #require(resources.first { $0.id.key == "term_shell" })
-        #expect(CloudWorkspaceRenameService().remoteTarget(binding: nil, projectedResources: [shell])?.remoteWorkspaceID == "ws_api")
+        #expect(TuiWorkspaceRenameService().remoteTarget(binding: nil, projectedResources: [shell])?.remoteWorkspaceID == "ws_api")
 
         // …a terminal viewed in two remote workspaces, or no panes at all, refuses to guess.
         let build = try #require(resources.first { $0.id.key == "term_build" })
-        #expect(CloudWorkspaceRenameService().remoteTarget(binding: nil, projectedResources: [build])?.remoteWorkspaceID == nil)
-        #expect(CloudWorkspaceRenameService().remoteTarget(binding: nil, projectedResources: [])?.remoteWorkspaceID == nil)
+        #expect(TuiWorkspaceRenameService().remoteTarget(binding: nil, projectedResources: [build])?.remoteWorkspaceID == nil)
+        #expect(TuiWorkspaceRenameService().remoteTarget(binding: nil, projectedResources: [])?.remoteWorkspaceID == nil)
 
         // Exact user payload preservation, including legacy bindings, is covered
         // through the real submission path in cloudLegacyWorkspaceNameAdmission.
     }
 
-    @Test func cloudTerminalRenameRejectsMismatchedLegacyWorkspaceFallback() throws {
+    @Test func tuiTerminalRenameRejectsMismatchedLegacyWorkspaceFallback() throws {
         let resources = CmuxTuiSnapshotParser.terminals(fromSnapshot: Self.sessionSnapshot, machine: Self.machine)
         let shell = try #require(resources.first { $0.id.key == "term_shell" })
         let workspaceID = UUID()
@@ -608,7 +398,7 @@ import Testing
             remoteWorkspaceID: "ws_api",
             remoteTabID: "tab_2"
         )
-        #expect(CloudWorkspaceRenameService().remoteTabID(for: exact, resource: shell) == "tab_2")
+        #expect(TuiWorkspaceRenameService().remoteTabID(for: exact, resource: shell) == "tab_2")
 
         let matchingLegacy = SurfaceProjection(
             resource: shell.id,
@@ -616,7 +406,7 @@ import Testing
             panelID: UUID(),
             remoteWorkspaceID: "ws_api"
         )
-        #expect(CloudWorkspaceRenameService().remoteTabID(for: matchingLegacy, resource: shell) == "tab_2")
+        #expect(TuiWorkspaceRenameService().remoteTabID(for: matchingLegacy, resource: shell) == "tab_2")
 
         let mismatchedLegacy = SurfaceProjection(
             resource: shell.id,
@@ -624,14 +414,14 @@ import Testing
             panelID: UUID(),
             remoteWorkspaceID: "ws_main"
         )
-        #expect(CloudWorkspaceRenameService().remoteTabID(for: mismatchedLegacy, resource: shell) == nil)
+        #expect(TuiWorkspaceRenameService().remoteTabID(for: mismatchedLegacy, resource: shell) == nil)
 
         let unscopedLegacy = SurfaceProjection(
             resource: shell.id,
             workspaceID: workspaceID,
             panelID: UUID()
         )
-        #expect(CloudWorkspaceRenameService().remoteTabID(for: unscopedLegacy, resource: shell) == "tab_2")
+        #expect(TuiWorkspaceRenameService().remoteTabID(for: unscopedLegacy, resource: shell) == "tab_2")
 
         let build = try #require(resources.first { $0.id.key == "term_build" })
         let ambiguous = SurfaceProjection(
@@ -640,10 +430,10 @@ import Testing
             panelID: UUID(),
             remoteWorkspaceID: "ws_main"
         )
-        #expect(CloudWorkspaceRenameService().remoteTabID(for: ambiguous, resource: build) == nil)
+        #expect(TuiWorkspaceRenameService().remoteTabID(for: ambiguous, resource: build) == nil)
     }
 
-    @Test func inferredWorkspaceBindingRequiresOneCloudIdentity() throws {
+    @Test @MainActor func inferredWorkspaceBindingRequiresOneSSHIdentity() throws {
         let resources = CmuxTuiSnapshotParser.terminals(fromSnapshot: Self.sessionSnapshot, machine: Self.machine)
         let shell = try #require(resources.first { $0.id.key == "term_shell" })
         let build = try #require(resources.first { $0.id.key == "term_build" })
@@ -657,7 +447,7 @@ import Testing
             remoteTabID: "tab_2"
         )
         #expect(
-            CloudWorkspaceRenameService().inferredRemoteWorkspaceTarget(
+            TuiWorkspaceRenameService().inferredRemoteWorkspaceTarget(
                 projections: [exact],
                 resources: resources
             )?.remoteWorkspaceID == "ws_api"
@@ -670,7 +460,7 @@ import Testing
             panelID: UUID()
         )
         #expect(
-            CloudWorkspaceRenameService().inferredRemoteWorkspaceTarget(
+            TuiWorkspaceRenameService().inferredRemoteWorkspaceTarget(
                 projections: [legacy],
                 resources: resources
             )?.remoteWorkspaceID == "ws_api"
@@ -695,7 +485,7 @@ import Testing
             panelID: UUID()
         )
         #expect(
-            CloudWorkspaceRenameService().inferredRemoteWorkspaceTarget(
+            TuiWorkspaceRenameService().inferredRemoteWorkspaceTarget(
                 projections: [exact, localProjection],
                 resources: resources + [local]
             ) == nil
@@ -708,21 +498,20 @@ import Testing
             remoteTabID: "tab_1"
         )
         #expect(
-            CloudWorkspaceRenameService().inferredRemoteWorkspaceTarget(
+            TuiWorkspaceRenameService().inferredRemoteWorkspaceTarget(
                 projections: [exact, multiView],
                 resources: resources
             ) == nil
         )
     }
 
-    @Test func cloudVMBindingSnapshotCarriesTheRemoteWorkspace() throws {
-        // Legacy snapshots (no remote id) still decode and restore machine-only bindings.
-        let legacy = try JSONDecoder().decode(SessionCloudVMBindingSnapshot.self, from: Data(#"{"vmID":"vivid-newt","isBase":false}"#.utf8))
-        #expect(Workspace.restoredCloudVMBinding(from: legacy) == WorkspaceCloudVMBinding(vmID: "vivid-newt", isBase: false))
-        // New snapshots round-trip the remote workspace id through Codable and restore.
-        let bound = SessionCloudVMBindingSnapshot(vmID: "vivid-newt", isBase: true, remoteWorkspaceID: "ws_main")
-        let decoded = try JSONDecoder().decode(SessionCloudVMBindingSnapshot.self, from: JSONEncoder().encode(bound))
-        #expect(Workspace.restoredCloudVMBinding(from: decoded) == WorkspaceCloudVMBinding(vmID: "vivid-newt", isBase: true, remoteWorkspaceID: "ws_main"))
+    @Test func remoteWorkspaceBindingSnapshotCarriesTheRemoteWorkspace() throws {
+        let machineOnly = try JSONDecoder().decode(SessionRemoteWorkspaceBindingSnapshot.self,
+            from: JSONSerialization.data(withJSONObject: ["machineID": Self.machine.rawValue]))
+        #expect(Workspace.restoredRemoteWorkspaceBinding(from: machineOnly) == RemoteWorkspaceBinding(machineID: Self.machine.rawValue))
+        let bound = SessionRemoteWorkspaceBindingSnapshot(machineID: Self.machine.rawValue, remoteWorkspaceID: "ws_main")
+        let decoded = try JSONDecoder().decode(SessionRemoteWorkspaceBindingSnapshot.self, from: JSONEncoder().encode(bound))
+        #expect(Workspace.restoredRemoteWorkspaceBinding(from: decoded) == RemoteWorkspaceBinding(machineID: Self.machine.rawValue, remoteWorkspaceID: "ws_main"))
     }
 
     @Test func snapshotBrowsersJoinTheirWorkspaces() throws {
@@ -779,10 +568,6 @@ import Testing
             ) == "http://10.16.4.9:3000/path"
         )
         #expect(CmuxTuiSurfaceProvider.privateBrowserURL("https://cmux.com", privateAddress: "10.0.0.2") == nil)
-        #expect(
-            CmuxTuiSurfaceProvider.privateDesktopURL(privateAddress: "10.16.4.9")
-                == "http://10.16.4.9:6901/vnc.html?path=websockify&autoconnect=1&resize=remote&reconnect=1&reconnect_delay=2000"
-        )
     }
 
     @Test func snapshotListsEveryWorkspaceIncludingEmptyOnes() {
@@ -798,7 +583,7 @@ import Testing
         let target = try #require(
             CmuxTuiSnapshotParser.terminalProjectionTarget(from: Self.sessionSnapshot)
         )
-        #expect(target == CloudTuiTerminalProjectionTarget(
+        #expect(target == TuiTerminalProjectionTarget(
             workspaceID: "ws_main",
             screenID: "screen_1",
             paneID: "pane_1",
@@ -860,11 +645,11 @@ import Testing
     }
 
     @Test func terminalProjectionArgvUsesTheRemoteDestination() {
-        let target = CloudTuiTerminalProjectionTarget(
+        let target = TuiTerminalProjectionTarget(
             workspaceID: "ws_main", screenID: "screen_1", paneID: "pane_1", index: 2
         )
         #expect(
-            CloudTuiCommandLine.projectTerminalArguments(
+            TuiCommandLine.projectTerminalArguments(
                 socketPath: "/k.sock", terminalID: "term_detached", target: target
             ) == [
                 "--socket", "/k.sock", "--json", "terminal", "term_detached", "project",
@@ -875,11 +660,11 @@ import Testing
     }
 
     @Test func terminalProjectionArgvCanFenceAConcurrentSnapshotMutation() {
-        let target = CloudTuiTerminalProjectionTarget(
+        let target = TuiTerminalProjectionTarget(
             workspaceID: "ws_main", screenID: "screen_1", paneID: "pane_1", index: 0
         )
         #expect(
-            CloudTuiCommandLine.projectTerminalArguments(
+            TuiCommandLine.projectTerminalArguments(
                 socketPath: "/k.sock",
                 terminalID: "term_detached",
                 target: target,
@@ -934,7 +719,7 @@ import Testing
         var missingAgentIdentity = snapshot
         missingAgentIdentity["agents"] = [["terminal_id": "term_build", "state": "working"]]
         let legacyAgentState = CmuxTuiSnapshotParser.state(fromSnapshot: missingAgentIdentity, machine: Self.machine)
-        #expect(legacyAgentState?.agents == [CloudVMAgentState(id: nil, terminalID: "term_build", state: "working", source: nil)])
+        #expect(legacyAgentState?.agents == [TuiAgentState(id: nil, terminalID: "term_build", state: "working", source: nil)])
 
         var duplicateAgentIDs = snapshot
         duplicateAgentIDs["agents"] = (Self.sessionSnapshot["agents"] as! [[String: Any]]) + [
@@ -997,18 +782,16 @@ import Testing
         }
     }
 
-    @Test func resourceKindWireFormAcceptsTheOldScreenName() throws {
-        #expect(SurfaceResourceKind(wire: "display") == .display)
-        #expect(SurfaceResourceKind(wire: "screen") == .display, "pre-rename apps and persisted sessions say screen")
+    @Test func resourceKindWireFormRejectsRemovedDisplayKinds() throws {
+        #expect(SurfaceResourceKind(wire: "display") == nil)
+        #expect(SurfaceResourceKind(wire: "screen") == nil)
         #expect(SurfaceResourceKind(wire: "terminal") == .terminal)
+        #expect(SurfaceResourceKind(wire: "browser") == .browser)
         #expect(SurfaceResourceKind(wire: "bogus") == nil)
-        #expect(SurfaceResourceKind.display.rawValue == "display", "the emitted wire form is display")
-
-        let old = try #require(SurfaceResourceID(rawValue: "vivid-newt/screen/display:1"))
-        #expect(old.kind == .display)
-        #expect(old.rawValue == "vivid-newt/display/display:1", "old ids re-emit as display")
-        let decoded = try JSONDecoder().decode(SurfaceResourceKind.self, from: Data(#""screen""#.utf8))
-        #expect(decoded == .display)
+        #expect(SurfaceResourceID(rawValue: "vm/screen/display:1") == nil)
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(SurfaceResourceKind.self, from: Data(#""screen""#.utf8))
+        }
     }
 
     @Test func exitedTerminalWithoutATabIsNotASurface() {
@@ -1039,68 +822,55 @@ import Testing
     }
 
     @Test func closeArgvFollowsTheCLIGrammar() {
-        #expect(CloudTuiCommandLine.closeTerminalArguments(socketPath: "/tmp/s.sock", terminalID: "term_1")
+        #expect(TuiCommandLine.closeTerminalArguments(socketPath: "/tmp/s.sock", terminalID: "term_1")
             == ["--socket", "/tmp/s.sock", "--json", "terminal", "term_1", "close"])
-        #expect(CloudTuiCommandLine.closeTabArguments(socketPath: "/tmp/s.sock", tabID: "tab_1")
+        #expect(TuiCommandLine.closeTabArguments(socketPath: "/tmp/s.sock", tabID: "tab_1")
             == ["--socket", "/tmp/s.sock", "--json", "tab", "tab_1", "close"])
-        #expect(CloudTuiCommandLine.closeWorkspaceArguments(socketPath: "/tmp/s.sock", workspaceID: "ws_1")
+        #expect(TuiCommandLine.closeWorkspaceArguments(socketPath: "/tmp/s.sock", workspaceID: "ws_1")
             == ["--socket", "/tmp/s.sock", "--json", "workspace", "ws_1", "close"])
     }
 
     @Test func workspaceCreationKeepsDaemonNamingAndExplicitEmptyReceivers() {
-        #expect(CloudTuiCommandLine.createWorkspaceArguments(socketPath: "/tmp/s.sock")
+        #expect(TuiCommandLine.createWorkspaceArguments(socketPath: "/tmp/s.sock")
             == ["--socket", "/tmp/s.sock", "--json", "workspace", "create"])
-        #expect(CloudTuiCommandLine.createWorkspaceArguments(socketPath: "/tmp/s.sock", name: "")
+        #expect(TuiCommandLine.createWorkspaceArguments(socketPath: "/tmp/s.sock", name: "")
             == ["--socket", "/tmp/s.sock", "--json", "workspace", "create"])
-        #expect(CloudTuiCommandLine.createWorkspaceArguments(socketPath: "/tmp/s.sock", name: "receiver", empty: true)
+        #expect(TuiCommandLine.createWorkspaceArguments(socketPath: "/tmp/s.sock", name: "receiver", empty: true)
             == ["--socket", "/tmp/s.sock", "--json", "workspace", "create", "--name", "receiver", "--empty"])
     }
 
-    @Test(.timeLimit(.minutes(1))) @MainActor
-    func forcedRegistryRefreshCompletesAfterAnEmptyPass() async {
-        // A registry without a catalog/client makes performRefresh return immediately.
-        // A forced caller must still clear that completed flight; otherwise the old
-        // implementation re-entered its `while let refreshInFlight` loop forever and
-        // pinned the main actor at 100% CPU (the live `vm tree --refresh` repro).
-        let links = CloudMachineLinkManager(
-            clientURL: nil,
-            hostThemeColors: { nil }
-        )
-        let registry = CmuxTuiSurfaceProviderRegistry(links: links)
-        #expect(await registry.refresh(force: true) == false)
-    }
 
     @Test func headlessTerminalIOArgvFollowsTheCLIGrammar() {
         // Verified live against a machine: `write --text` types as-is (no newline),
         // `keys` takes bare key names, `screen read` / `screen wait --pattern` read back.
-        #expect(CloudTuiCommandLine.writeArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", text: "echo hi $((6*7))")
+        #expect(TuiCommandLine.writeArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", text: "echo hi $((6*7))")
             == ["--socket", "/tmp/s.sock", "--json", "terminal", "term_1", "write", "--text", "echo hi $((6*7))"])
-        #expect(CloudTuiCommandLine.keysArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", keys: ["ctrl+c", "enter"])
+        #expect(TuiCommandLine.keysArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", keys: ["ctrl+c", "enter"])
             == ["--socket", "/tmp/s.sock", "--json", "terminal", "term_1", "keys", "ctrl+c", "enter"])
-        #expect(CloudTuiCommandLine.screenReadArguments(socketPath: "/tmp/s.sock", terminalID: "term_1")
+        #expect(TuiCommandLine.screenReadArguments(socketPath: "/tmp/s.sock", terminalID: "term_1")
             == ["--socket", "/tmp/s.sock", "--json", "terminal", "term_1", "screen", "read"])
-        #expect(CloudTuiCommandLine.screenWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", pattern: "pass|fail", timeoutMs: 5000)
+        #expect(TuiCommandLine.screenWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", pattern: "pass|fail", timeoutMs: 5000)
             == ["--socket", "/tmp/s.sock", "--json", "terminal", "term_1", "screen", "wait", "--pattern", "pass|fail", "--timeout-ms", "5000"])
         // No timeout (or a non-positive one) leaves the daemon default in charge.
-        #expect(CloudTuiCommandLine.screenWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", pattern: "λ", timeoutMs: nil).contains("--timeout-ms") == false)
-        #expect(CloudTuiCommandLine.screenWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", pattern: "λ", timeoutMs: 0).contains("--timeout-ms") == false)
+        #expect(TuiCommandLine.screenWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", pattern: "λ", timeoutMs: nil).contains("--timeout-ms") == false)
+        #expect(TuiCommandLine.screenWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", pattern: "λ", timeoutMs: 0).contains("--timeout-ms") == false)
     }
 
     @Test func terminalExitAndOutputArgvFollowTheCLIGrammar() {
         // `terminal <id> process wait` is the exit fact behind `cmux vm terminal wait-exit`;
         // `terminal <id> output read` is the retained log behind `cmux vm terminal output`.
-        #expect(CloudTuiCommandLine.processWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", timeoutMs: 45_000)
+        #expect(TuiCommandLine.processWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", timeoutMs: 45_000)
             == ["--socket", "/tmp/s.sock", "--json", "terminal", "term_1", "process", "wait", "--timeout-ms", "45000"])
         // No timeout (or a non-positive one) leaves the daemon default in charge.
-        #expect(CloudTuiCommandLine.processWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", timeoutMs: nil)
+        #expect(TuiCommandLine.processWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", timeoutMs: nil)
             == ["--socket", "/tmp/s.sock", "--json", "terminal", "term_1", "process", "wait"])
-        #expect(CloudTuiCommandLine.processWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", timeoutMs: 0).contains("--timeout-ms") == false)
-        #expect(CloudTuiCommandLine.outputReadArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", after: 1_024, maxBytes: 65_536)
+        #expect(TuiCommandLine.processWaitArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", timeoutMs: 0).contains("--timeout-ms") == false)
+        #expect(TuiCommandLine.outputReadArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", after: 1_024, maxBytes: 65_536)
             == ["--socket", "/tmp/s.sock", "--json", "terminal", "term_1", "output", "read", "--after", "1024", "--max-bytes", "65536"])
         // Offset 0 is a real cursor (read from the start); a zero byte cap is not a cap.
-        #expect(CloudTuiCommandLine.outputReadArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", after: 0, maxBytes: 0)
+        #expect(TuiCommandLine.outputReadArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", after: 0, maxBytes: 0)
             == ["--socket", "/tmp/s.sock", "--json", "terminal", "term_1", "output", "read", "--after", "0"])
-        #expect(CloudTuiCommandLine.outputReadArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", after: nil, maxBytes: nil)
+        #expect(TuiCommandLine.outputReadArguments(socketPath: "/tmp/s.sock", terminalID: "term_1", after: nil, maxBytes: nil)
             == ["--socket", "/tmp/s.sock", "--json", "terminal", "term_1", "output", "read"])
     }
 
@@ -1128,24 +898,24 @@ import Testing
         let created = CmuxTuiSnapshotParser.createdTerminal(fromRunResult: wrapped)
         #expect(created?.terminalID == "term_new")
         #expect(created?.workspaceID == "ws_main")
-        #expect(created?.cursor == CloudVMCursor(generation: "g1", revision: 42))
+        #expect(created?.cursor == TuiCursor(generation: "g1", revision: 42))
         #expect(CmuxTuiSnapshotParser.mutationCursor(fromResult: ["generation": "g1", "revision": true]) == nil)
         #expect(CmuxTuiSnapshotParser.mutationCursor(fromResult: ["terminal_id": "term_bare"]) == nil)
         #expect(
             CmuxTuiSnapshotParser.mutationCursor(
                 fromResult: ["result": ["value": [:], "generation": "g2", "revision": "7"]]
-            ) == CloudVMCursor(generation: "g2", revision: 7)
+            ) == TuiCursor(generation: "g2", revision: 7)
         )
         #expect(
             CmuxTuiSnapshotParser.mutationCursor(
                 fromResult: ["cursor": ["generation": "g3", "revision": "8"]]
-            ) == CloudVMCursor(generation: "g3", revision: 8)
+            ) == TuiCursor(generation: "g3", revision: 8)
         )
         #expect(
             CmuxTuiSnapshotParser.mutationCursor(
                 fromResult: ["revision": "9"],
                 fallbackGeneration: "g4"
-            ) == CloudVMCursor(generation: "g4", revision: 9)
+            ) == TuiCursor(generation: "g4", revision: 9)
         )
         #expect(CmuxTuiSnapshotParser.createdTerminal(fromRunResult: ["terminal_id": "term_bare"])?.terminalID == "term_bare")
         #expect(CmuxTuiSnapshotParser.createdTerminal(fromRunResult: ["value": ["kind": "terminal"]]) == nil)
@@ -1159,7 +929,7 @@ import Testing
         #expect(CmuxTuiSnapshotParser.localSocket(fromLinkLine: "not json") == nil)
     }
 
-    @Test func listeningPortsScreensDesktopAndPortBrowsers() {
+    @Test func listeningPortsAndPortBrowsers() {
         let ss = """
         State   Recv-Q  Send-Q  Local Address:Port  Peer Address:Port Process
         LISTEN  0       4096    0.0.0.0:3000        0.0.0.0:*
@@ -1167,115 +937,49 @@ import Testing
         LISTEN  0       128     127.0.0.1:5901      0.0.0.0:*
         LISTEN  0       128     0.0.0.0:3000        0.0.0.0:*
         """
-        #expect(CmuxTuiSnapshotParser.listeningPorts(fromSocketListing: ss) == [1337, 3000, 5901]); let probe = VMExecResult(exitCode: 0, stdout: ss, stderr: ""); #expect(CmuxTuiSurfaceProvider.ports(from: probe, displayPortsOwned: true) == [3000]); #expect(CmuxTuiSurfaceProvider.ports(from: probe, displayPortsOwned: false) == [3000, 5901])
-        #expect(CmuxTuiSnapshotParser.displayPorts.isSuperset(of: [5901, 5902, 5916, 6901, 6902, 6916]))
-        #expect(CmuxTuiSnapshotParser.machineHasDesktop(image: "cmux-xfce-vnc:latest"))
-        #expect(!CmuxTuiSnapshotParser.machineHasDesktop(image: "cmuxd-ws:tooling-20260509f"))
-
-        let display = CmuxTuiSnapshotParser.display(machine: Self.machine)
-        #expect(display.id == SurfaceResourceID(machine: Self.machine, kind: .display, key: "display:1"))
-        #expect(display.id.rawValue == "vivid-newt/display/display:1")
-        #expect(display.port == 6901)
+        #expect(CmuxTuiSnapshotParser.listeningPorts(fromSocketListing: ss) == [1337, 3000, 5901])
+        #expect(CmuxTuiSurfaceProvider.ports(from: ss) == [3000, 5901])
         let port = CmuxTuiSnapshotParser.portBrowser(machine: Self.machine, port: 3000)
-        #expect(port.id.rawValue == "vivid-newt/browser/port:3000")
+        #expect(port.id.rawValue == "\(Self.machine.rawValue)/browser/port:3000")
         #expect(port.title == ":3000")
-        #expect(CmuxTuiSnapshotParser.desktopURL(openURL: "http://localhost:3777/vm/desktop/m?cmux_token=t") == "http://localhost:3777/vm/desktop/m?cmux_token=t&autoconnect=1&resize=remote&reconnect=1&reconnect_delay=2000")
     }
 
     @Test func clientArgvIsExact() {
-        // A machine's trusted listener is dialed with --carrier: no invite file, no enrollment.
-        #expect(CloudTuiCommandLine.linkArguments(route: "wss://m.vm.cmux.sh/v1/link?t=1", deviceName: "cmux-mac", stateDir: "/s", carrier: true) ==
-            ["remote", "connect", "wss://m.vm.cmux.sh/v1/link?t=1", "--device-name", "cmux-mac", "--state-dir", "/s", "--headless", "--json", "--exit-with-parent", "--lanes", "single", "--carrier"])
-        // A machine this Mac enrolled with before trusted listeners presents its stored key.
-        #expect(CloudTuiCommandLine.linkArguments(route: "r", deviceName: "d", stateDir: "/s") ==
-            ["remote", "connect", "r", "--device-name", "d", "--state-dir", "/s", "--headless", "--json", "--exit-with-parent", "--lanes", "single"])
-        // A private-network machine dials through the app's WireGuard hub. Both long-lived
-        // helper processes must also stop if their app parent exits without cleanup.
-        #expect(CloudTuiCommandLine.linkArguments(route: "ws://[fd00::10]:1337/v1/link", deviceName: "d", stateDir: "/s", carrier: true, wireguardHubSocket: "/h.sock") ==
-            ["remote", "connect", "ws://[fd00::10]:1337/v1/link", "--device-name", "d", "--state-dir", "/s", "--headless", "--json", "--exit-with-parent", "--lanes", "single", "--carrier", "--wireguard-hub", "/h.sock"])
-        #expect(CloudTuiCommandLine.linkArguments(route: "r", deviceName: "d", stateDir: "/s", wireguardHubSocket: "") ==
-            ["remote", "connect", "r", "--device-name", "d", "--state-dir", "/s", "--headless", "--json", "--exit-with-parent", "--lanes", "single"])
-        #expect(CloudTuiCommandLine.wireGuardHubArguments(configPath: "/w/cmux-app.conf", socketPath: "/w/hub-1.sock") ==
-            ["wg", "hub", "--config", "/w/cmux-app.conf", "--socket", "/w/hub-1.sock", "--exit-with-parent"])
-        let browserProxy = CloudTuiCommandLine.browserProxyArguments(
-            route: "ws://10.0.0.4:1337/v1/link", addresses: ["10.0.0.4"],
-            stateDir: "/s", wireGuardHubSocket: "/h.sock", carrier: false, remoteNetwork: true
-        )
-        #expect(browserProxy.contains("--allow-loopback"))
-        #expect(browserProxy.contains("localhost"))
-        #expect(browserProxy.contains("::1"))
-        #expect(browserProxy.contains("--allow-remote-network"))
-        #expect(CloudTuiCommandLine.snapshotArguments(socketPath: "/k.sock") == ["--socket", "/k.sock", "--json", "session", "current", "snapshot"])
-        #expect(CloudTuiCommandLine.eventsArguments(socketPath: "/k.sock") == ["--socket", "/k.sock", "--jsonl", "session", "current", "events"])
-        #expect(CloudTuiCommandLine.runArguments(socketPath: "/k.sock", workspaceID: "ws_main", command: ["claude", "-p", "fix it"]) ==
+        #expect(TuiCommandLine.snapshotArguments(socketPath: "/k.sock") == ["--socket", "/k.sock", "--json", "session", "current", "snapshot"])
+        #expect(TuiCommandLine.eventsArguments(socketPath: "/k.sock") == ["--socket", "/k.sock", "--jsonl", "session", "current", "events"])
+        #expect(TuiCommandLine.runArguments(socketPath: "/k.sock", workspaceID: "ws_main", command: ["claude", "-p", "fix it"]) ==
             ["--socket", "/k.sock", "--json", "workspace", "ws_main", "run", "--", "claude", "-p", "fix it"])
-        #expect(CloudTuiCommandLine.attachArguments(socketPath: "/k.sock", terminalID: "term_1") == ["--socket", "/k.sock", "attach", "--terminal", "term_1"])
-        #expect(CloudTuiCommandLine.attachShellCommand(clientPath: "/Applications/cmux DEV.app/Contents/Resources/bin/cmux-tui", socketPath: "/k.sock", terminalID: "term_1") ==
+        #expect(TuiCommandLine.attachArguments(socketPath: "/k.sock", terminalID: "term_1") == ["--socket", "/k.sock", "attach", "--terminal", "term_1"])
+        #expect(TuiCommandLine.attachShellCommand(clientPath: "/Applications/cmux DEV.app/Contents/Resources/bin/cmux-tui", socketPath: "/k.sock", terminalID: "term_1") ==
             "'/Applications/cmux DEV.app/Contents/Resources/bin/cmux-tui' --socket /k.sock attach --terminal term_1")
-        #expect(CloudTuiCommandLine.commandStartingIn(cwd: nil, command: ["bash", "-l"]) == ["bash", "-l"])
-        #expect(CloudTuiCommandLine.commandStartingIn(cwd: "/root/work/my app", command: ["codex", "exec", "it's"]) ==
+        #expect(TuiCommandLine.commandStartingIn(cwd: nil, command: ["bash", "-l"]) == ["bash", "-l"])
+        #expect(TuiCommandLine.commandStartingIn(cwd: "/root/work/my app", command: ["codex", "exec", "it's"]) ==
             ["sh", "-lc", "cd '/root/work/my app' && exec codex exec 'it'\\''s'"])
         // Rename takes the name via --name (verified live; positional is usage.invalid).
-        #expect(CloudTuiCommandLine.renameWorkspaceArguments(socketPath: "/k.sock", workspaceID: "ws_main", name: "backend work") ==
+        #expect(TuiCommandLine.renameWorkspaceArguments(socketPath: "/k.sock", workspaceID: "ws_main", name: "backend work") ==
             ["--socket", "/k.sock", "--json", "workspace", "ws_main", "rename", "--name", "backend work"])
-        #expect(CloudTuiCommandLine.renameWorkspaceArguments(socketPath: "/k.sock", workspaceID: "ws_main", name: "backend work", expectedRevision: 7) ==
+        #expect(TuiCommandLine.renameWorkspaceArguments(socketPath: "/k.sock", workspaceID: "ws_main", name: "backend work", expectedRevision: 7) ==
             ["--socket", "/k.sock", "--json", "--expected-revision", "7", "workspace", "ws_main", "rename", "--name", "backend work"])
         // Verified live: the flat `set-default-colors` verb is `usage.invalid` in the v2
         // resource CLI; the session-scoped form below is the one machines accept.
-        #expect(CloudTuiCommandLine.setDefaultColorsArguments(socketPath: "/k.sock", foreground: "#d8dee9", background: "#171b2e") ==
+        #expect(TuiCommandLine.setDefaultColorsArguments(socketPath: "/k.sock", foreground: "#d8dee9", background: "#171b2e") ==
             ["--socket", "/k.sock", "--json", "session", "current", "terminal", "defaults", "set", "--foreground", "#d8dee9", "--background", "#171b2e"])
-        #expect(CloudTuiCommandLine.setDefaultColorsArguments(socketPath: "/k.sock", foreground: nil, background: "#171b2e") ==
+        #expect(TuiCommandLine.setDefaultColorsArguments(socketPath: "/k.sock", foreground: nil, background: "#171b2e") ==
             ["--socket", "/k.sock", "--json", "session", "current", "terminal", "defaults", "set", "--background", "#171b2e"])
         // No colors, no command: pushing an empty defaults update would be a no-op round trip.
-        #expect(CloudTuiCommandLine.setDefaultColorsArguments(socketPath: "/k.sock", foreground: nil, background: nil) == nil)
-        #expect(CloudTuiCommandLine.renameTabArguments(socketPath: "/k.sock", tabID: "tab_1", name: "db shell") ==
+        #expect(TuiCommandLine.setDefaultColorsArguments(socketPath: "/k.sock", foreground: nil, background: nil) == nil)
+        #expect(TuiCommandLine.renameTabArguments(socketPath: "/k.sock", tabID: "tab_1", name: "db shell") ==
             ["--socket", "/k.sock", "--json", "tab", "tab_1", "rename", "--name", "db shell"])
         // The daemon treats an empty tab name as a clear operation. Keep the
         // empty token in argv so this stays distinct from a missing value.
-        #expect(CloudTuiCommandLine.renameTabArguments(socketPath: "/k.sock", tabID: "tab_1", name: "") ==
+        #expect(TuiCommandLine.renameTabArguments(socketPath: "/k.sock", tabID: "tab_1", name: "") ==
             ["--socket", "/k.sock", "--json", "tab", "tab_1", "rename", "--name", ""])
-        #expect(CloudRemoteRenameName(rawValue: " \n") == .cleared)
-        #expect(CloudRemoteRenameName(rawValue: "  db shell  ").wireValue == "db shell")
-        #expect(CloudTuiCommandLine.renameTabArguments(socketPath: "/k.sock", tabID: "tab_1", name: "db shell", expectedRevision: 9) ==
+        #expect(TuiRemoteRenameName(rawValue: " \n") == .cleared)
+        #expect(TuiRemoteRenameName(rawValue: "  db shell  ").wireValue == "db shell")
+        #expect(TuiCommandLine.renameTabArguments(socketPath: "/k.sock", tabID: "tab_1", name: "db shell", expectedRevision: 9) ==
             ["--socket", "/k.sock", "--json", "--expected-revision", "9", "tab", "tab_1", "rename", "--name", "db shell"])
     }
 
-    @Test func vmTuiConnectPassesReceiptSession() throws {
-        let harness = CMUXCLIErrorOutputRegressionTests()
-        let cliPath = try harness.bundledCLIPath()
-        // The pane helper enters through the CLI's app-socket connection gate.
-        let socketPath = "/tmp/cmux-tui-argv-\(UUID().uuidString.prefix(8)).sock"
-        let responder = try UnixSocketResponder(path: socketPath, response: "OK")
-        defer { responder.stop() }
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cmux-tui-argv-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let client = root.appendingPathComponent("client")
-        try "#!/bin/sh\nprintf '%s\\n' \"$@\"\n".write(to: client, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: client.path)
-        let configURL = root.appendingPathComponent("config.json")
-        try JSONSerialization.data(withJSONObject: [
-            "vmId": "vm-1", "route": "ws://10.0.0.7:1337/v1/link",
-            "session": "cloud", "carrier": true, "clientPath": client.path,
-            "stateDir": root.path, "deviceName": "cmux-mac",
-        ]).write(to: configURL)
-        var environment = BundledCLITestSupport.hermeticCLIEnvironment(home: root)
-        environment["CMUX_SOCKET_PATH"] = socketPath
-        let result = harness.runProcess(
-            executablePath: cliPath,
-            arguments: ["vm-tui-connect", "--config", configURL.path],
-            environment: environment
-        )
-        #expect(!result.timedOut, "\(result.stderr)")
-        #expect(result.status == 0, "\(result.stderr)")
-        #expect(result.stdout.split(separator: "\n").map(String.init) == [
-            "remote", "connect", "ws://10.0.0.7:1337/v1/link",
-            "--device-name", "cmux-mac", "--state-dir", root.path,
-            "--carrier", "--session", "cloud",
-        ])
-        #expect(!FileManager.default.fileExists(atPath: configURL.path))
-    }
 
     @Test func socketRenameParameterPreservesExplicitEmptyValue() {
         #expect(TerminalController.surfaceString("") == nil)
@@ -1288,7 +992,7 @@ import Testing
     @Test func clientPathsMirrorTheCLI() throws {
         let home = FileManager.default.temporaryDirectory.appendingPathComponent("cmux-cloud-paths-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: home) }
-        let paths = CloudTuiClientPaths(home: home)
+        let paths = TuiClientPaths(home: home)
         #expect(paths.stateDir.path == home.appendingPathComponent(".cmuxterm/cmux-tui-client").path)
         #expect(paths.devicesStoreURL.path == home.appendingPathComponent(".cmuxterm/vm-tui-devices.json").path)
         #expect(paths.deviceFingerprint(for: "vivid-newt") == nil)
@@ -1298,7 +1002,7 @@ import Testing
         let raw = try JSONSerialization.jsonObject(with: Data(contentsOf: paths.devicesStoreURL)) as? [String: [String: Any]]
         #expect(raw?["vivid-newt"]?["deviceFingerprint"] as? String == "fp-1")
         #expect(raw?["vivid-newt"]?["updatedAtUnix"] != nil)
-        #expect(CloudTuiClientPaths.deviceName(hostName: "Austin's MacBook.local").hasPrefix("cmux-Austin-s-MacBook"))
+        #expect(TuiClientPaths.deviceName(hostName: "Austin's MacBook.local").hasPrefix("cmux-Austin-s-MacBook"))
     }
 
     @Test @MainActor func optimisticPanePlaceholdersLabelAndEscape() {
@@ -1323,7 +1027,7 @@ import Testing
         // Lines arrive as the child writes them, a trailing CR is dropped, and an
         // unterminated last line is delivered at EOF.
         let pipe = Pipe()
-        let lines = CloudLinkPipe.lines(from: pipe.fileHandleForReading)
+        let lines = RemoteLinkPipe.lines(from: pipe.fileHandleForReading)
         let writer = pipe.fileHandleForWriting
         writer.write(Data("{\"a\":1}\nsecond\r\npart".utf8))
         writer.write(Data("ial\n".utf8))
@@ -1333,14 +1037,14 @@ import Testing
         for await line in lines { received.append(line) }
         #expect(received == ["{\"a\":1}", "second", "partial", "tail"])
 
-        let split = CloudLinkPipe.splitLines(Data("x\ny\r\nz".utf8))
+        let split = RemoteLinkPipe.splitLines(Data("x\ny\r\nz".utf8))
         #expect(split.lines == ["x", "y"])
         #expect(String(decoding: split.rest, as: UTF8.self) == "z")
 
         let whole = Pipe()
         whole.fileHandleForWriting.write(Data("all of it".utf8))
         try whole.fileHandleForWriting.close()
-        let data = await CloudLinkPipe.readToEnd(whole.fileHandleForReading)
+        let data = await RemoteLinkPipe.readToEnd(whole.fileHandleForReading)
         #expect(String(decoding: data, as: UTF8.self) == "all of it")
     }
 
@@ -1348,7 +1052,7 @@ import Testing
         // The daemon caps a message at 4 MiB; a peer that withholds the newline must not
         // pin Mac memory, and the line after the oversized one still arrives intact.
         let pipe = Pipe()
-        let lines = CloudLinkPipe.lines(from: pipe.fileHandleForReading)
+        let lines = RemoteLinkPipe.lines(from: pipe.fileHandleForReading)
         let writer = pipe.fileHandleForWriting
         let chunk = Data(repeating: 0x41, count: 1024 * 1024)
         let writeTask = Task.detached {
@@ -1363,13 +1067,13 @@ import Testing
     }
 
     @Test func linkFirstValueResolvesOnce() async {
-        let socket = CloudLinkFirstValue<String>()
+        let socket = RemoteLinkFirstValue<String>()
         async let awaited = socket.result
         socket.resolve("/tmp/a.sock")
         socket.resolve("/tmp/b.sock")
         #expect(await awaited == "/tmp/a.sock")
         #expect(await socket.result == "/tmp/a.sock", "later awaits see the same value")
-        let eof = CloudLinkFirstValue<String>()
+        let eof = RemoteLinkFirstValue<String>()
         eof.resolve(nil)
         #expect(await eof.result == nil, "finished without a value reads as nil")
     }
@@ -1388,18 +1092,18 @@ import Testing
         exit 2
         """.write(to: client, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: client.path)
-        let link = CloudMachineLink(
+        let link = RemoteMachineLink(
             machineID: "test-machine",
             clientURL: client,
-            paths: CloudTuiClientPaths(home: root)
+            paths: TuiClientPaths(home: root)
         )
         // The error kind is the whole check: before the fix this path threw
         // `timedOut` the moment stdout closed, so a wall-clock bound adds nothing
         // and only measures how fast the host spawns a fresh script.
         do {
-            _ = try await link.connect(route: "ws://10.0.0.1:1337/v1/link", session: "main", carrier: true, timeout: .seconds(60))
+            _ = try await link.connect(ssh: TuiTestHost(destination: "failure.example.test").connection, timeout: .seconds(60))
             Issue.record("a client that exits before its socket line must fail the connect")
-        } catch CloudMachineLink.LinkError.exitedBeforeSocket(let status, let output) {
+        } catch RemoteMachineLink.LinkError.exitedBeforeSocket(let status, let output) {
             #expect(status == 2)
             #expect(output.contains("unknown option"), "the client's stderr must reach the error: \(output)")
         } catch {
@@ -1426,12 +1130,12 @@ import Testing
         exec /bin/sleep 30
         """.write(to: client, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: client.path)
-        let link = CloudMachineLink(
+        let link = RemoteMachineLink(
             machineID: "test-machine",
             clientURL: client,
-            paths: CloudTuiClientPaths(home: root)
+            paths: TuiClientPaths(home: root)
         )
-        _ = try await link.connect(route: "ws://10.0.0.1:1337/v1/link", session: "main")
+        _ = try await link.connect(ssh: TuiTestHost(destination: "disconnect.example.test").connection)
         let linkPID = try #require(Int32(try String(contentsOf: linkPIDFile, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)))
         defer { _ = Darwin.kill(linkPID, SIGKILL) }
@@ -1444,38 +1148,6 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: eventPIDFile.path), "event subscription must not spawn a CLI child")
     }
 
-    @Test func displayTabsPointWorkspacesAtTheMachineScreen() throws {
-        var snapshot = Self.sessionSnapshot
-        var tabs = snapshot["tabs"] as! [[String: Any]]
-        tabs.append(["id": "tab_desk", "pane_id": "pane_2", "content_kind": "display", "content_id": "display:1"])
-        snapshot["tabs"] = tabs
-        let resources = CmuxTuiSnapshotParser.terminals(fromSnapshot: snapshot, machine: Self.machine)
-        let display = try #require(resources.first { $0.kind == .display })
-        #expect(display.id.key == "display:1", "the pool's own id, so the pointer and the pool entry are one resource")
-        #expect(display.remoteWorkspaces.map(\.id) == ["ws_api"])
-        #expect(display.remoteViews?.map(\.tabID) == ["tab_desk"])
-        #expect(display.port == CmuxTuiSnapshotParser.desktopPort)
-        // Closing the pointer closes its tab (a display has no process to end).
-        #expect(CmuxTuiSnapshotParser.tabByTerminal(fromSnapshot: snapshot)["display:1"] == "tab_desk")
-        // The pool entry yields to the pointed one; a machine nobody points at keeps the bare entry.
-        let pool = [CmuxTuiSnapshotParser.display(machine: Self.machine)]
-        let merged = CmuxTuiSnapshotParser.mergingDisplays(pool: pool, parsed: resources)
-        #expect(merged.filter { $0.kind == .display }.count == 1)
-        #expect(merged.first { $0.kind == .display }?.remoteViews?.isEmpty == false)
-        let untouched = CmuxTuiSnapshotParser.mergingDisplays(pool: pool, parsed: resources.filter { $0.kind != .display })
-        #expect(untouched.filter { $0.kind == .display }.count == 1)
-        #expect(untouched.first { $0.kind == .display }?.remoteViews == nil)
-
-        // Older daemon snapshots called the VNC pointer a screen. The wire
-        // alias must still project the same display resource.
-        tabs[tabs.count - 1]["content_kind"] = "screen"
-        snapshot["tabs"] = tabs
-        let legacyDisplay = try #require(
-            CmuxTuiSnapshotParser.terminals(fromSnapshot: snapshot, machine: Self.machine)
-                .first { $0.kind == .display }
-        )
-        #expect(legacyDisplay.remoteViews?.map(\.tabID) == ["tab_desk"])
-    }
 
     @Test func revisionedStateRetainsTheWholeRemoteDocumentAndAppliesTabDelta() throws {
         var snapshot = Self.sessionSnapshot
@@ -1488,7 +1160,7 @@ import Testing
         snapshot["clients"] = [["id": "client-1", "session_id": "session-1", "transport": "unix"]]
         snapshot["notifications"] = [["id": "notice-1", "title": "Build", "body": "done"]]
         let state = try #require(CmuxTuiSnapshotParser.state(fromSnapshot: snapshot, machine: Self.machine))
-        #expect(state.cursor == CloudVMCursor(generation: "daemon-a", revision: 7))
+        #expect(state.cursor == TuiCursor(generation: "daemon-a", revision: 7))
         #expect(state.tabs.first { $0.id == "tab_1" }?.name == nil)
         #expect(state.panes.first { $0.id == "pane_1" }?.tabIDs == ["tab_1", "tab_3"])
         #expect(state.entity(kind: "clients", id: "client-1") != nil)
@@ -1525,10 +1197,10 @@ import Testing
         let deltaData = try JSONSerialization.data(withJSONObject: deltaObject)
         let next = try #require(CmuxTuiSnapshotParser.applying(
             deltaPayload: deltaData,
-            cursor: CloudVMCursor(generation: "daemon-a", revision: 8),
+            cursor: TuiCursor(generation: "daemon-a", revision: 8),
             to: state
         ))
-        #expect(next.cursor == CloudVMCursor(generation: "daemon-a", revision: 8))
+        #expect(next.cursor == TuiCursor(generation: "daemon-a", revision: 8))
         let nextCursor = try #require(next.snapshotObject()?["cursor"] as? [String: Any])
         #expect(nextCursor["future_cursor_field"] as? [String: String] == ["lease": "keep-me"])
         #expect(next.tabs.first { $0.id == "tab_1" }?.name == "renamed")
@@ -1550,7 +1222,7 @@ import Testing
 
         let application = try #require(CmuxTuiSnapshotParser.applyingWithImpact(
             deltaPayload: deltaData,
-            cursor: CloudVMCursor(generation: "daemon-a", revision: 8),
+            cursor: TuiCursor(generation: "daemon-a", revision: 8),
             to: state
         ))
         #expect(application.impact.resourceIDs.contains(SurfaceResourceID(machine: Self.machine, kind: .terminal, key: "term_build")))
@@ -1578,7 +1250,7 @@ import Testing
         let data = try JSONSerialization.data(withJSONObject: delta)
         let next = try #require(CmuxTuiSnapshotParser.applying(
             deltaPayload: data,
-            cursor: CloudVMCursor(generation: "daemon-a", revision: 8),
+            cursor: TuiCursor(generation: "daemon-a", revision: 8),
             to: state
         ))
         #expect(next.lookupIndex.terminal(id: "term_build")?.tabIDs == ["tab_1"])
@@ -1624,7 +1296,7 @@ import Testing
         let data = try JSONSerialization.data(withJSONObject: delta)
         let next = try #require(CmuxTuiSnapshotParser.applying(
             deltaPayload: data,
-            cursor: CloudVMCursor(generation: "daemon-a", revision: 8),
+            cursor: TuiCursor(generation: "daemon-a", revision: 8),
             to: state
         ))
         #expect(next.entities(kind: "notifications").count == 300)
@@ -1660,13 +1332,13 @@ import Testing
         let data = try JSONSerialization.data(withJSONObject: delta)
         #expect(CmuxTuiSnapshotParser.applying(
             deltaPayload: data,
-            cursor: CloudVMCursor(generation: "daemon-a", revision: 8),
+            cursor: TuiCursor(generation: "daemon-a", revision: 8),
             to: state
         ) == nil)
     }
 
     @Test func fragmentedDocumentMatchesPayloadIdentityAndRejectsAmbiguity() throws {
-        var legacyDocument = CloudVMStateDocument(snapshot: [
+        var legacyDocument = TuiStateDocument(snapshot: [
             "agents": [["terminal_id": "term_build", "state": "working"]],
         ])
         let didUpsertLegacy = legacyDocument.upsert(
@@ -1686,7 +1358,7 @@ import Testing
         #expect(didDeleteLegacy)
         #expect(legacyDocument.opaqueEntities(excluding: []).isEmpty)
 
-        var ambiguousDocument = CloudVMStateDocument(snapshot: [
+        var ambiguousDocument = TuiStateDocument(snapshot: [
             "notifications": [
                 ["id": "notice", "body": "first"],
                 ["id": "notice", "body": "second"],
@@ -1714,7 +1386,7 @@ import Testing
         #expect(!didUpsertMismatched)
         #expect(ambiguousDocument.data() == before)
 
-        var relationshipDocument = CloudVMStateDocument(snapshot: [
+        var relationshipDocument = TuiStateDocument(snapshot: [
             "agents": [["id": "agent-1", "terminal_id": "term-a", "state": "working"]],
         ])
         let relationshipBefore = try #require(relationshipDocument.data())
@@ -1726,7 +1398,7 @@ import Testing
         #expect(!didDeleteWrongRelationship)
         #expect(relationshipDocument.data() == relationshipBefore)
 
-        var missingRelationshipDocument = CloudVMStateDocument(snapshot: [
+        var missingRelationshipDocument = TuiStateDocument(snapshot: [
             "agents": [["id": "agent-1", "state": "working"]],
         ])
         let missingRelationshipBefore = try #require(missingRelationshipDocument.data())
@@ -1778,7 +1450,7 @@ import Testing
         #expect(CmuxTuiSnapshotParser.state(fromSnapshot: malformed, machine: Self.machine) == nil)
     }
 
-    @Test func cloudStateIndexIsDerivedAndRebuiltAfterCoding() throws {
+    @Test func tuiStateIndexIsDerivedAndRebuiltAfterCoding() throws {
         let state = try #require(CmuxTuiSnapshotParser.state(fromSnapshot: Self.sessionSnapshot, machine: Self.machine))
         let encoded = try JSONEncoder().encode(state)
         let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
@@ -1786,7 +1458,7 @@ import Testing
         #expect(object["document"] != nil)
         #expect(object["rawSnapshot"] == nil)
 
-        let decoded = try JSONDecoder().decode(CloudVMState.self, from: encoded)
+        let decoded = try JSONDecoder().decode(TuiState.self, from: encoded)
         #expect(decoded == state)
         #expect(decoded.lookupIndex.tab(id: "tab_1")?.contentID == "term_build")
         #expect(decoded.lookupIndex.screenIDs(workspaceID: "ws_main") == ["screen_1"])
@@ -1798,7 +1470,7 @@ import Testing
         legacyObject.removeValue(forKey: "document")
         legacyObject["rawSnapshot"] = state.rawSnapshot.base64EncodedString()
         let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
-        let legacyDecoded = try JSONDecoder().decode(CloudVMState.self, from: legacyData)
+        let legacyDecoded = try JSONDecoder().decode(TuiState.self, from: legacyData)
         #expect(legacyDecoded == state)
     }
 
@@ -1818,10 +1490,10 @@ import Testing
         let data = try JSONSerialization.data(withJSONObject: upsert)
         let next = try #require(CmuxTuiSnapshotParser.applying(
             deltaPayload: data,
-            cursor: CloudVMCursor(generation: "daemon-a", revision: 8),
+            cursor: TuiCursor(generation: "daemon-a", revision: 8),
             to: state
         ))
-        #expect(next.agents == [CloudVMAgentState(id: nil, terminalID: "term_build", state: "waiting", source: nil)])
+        #expect(next.agents == [TuiAgentState(id: nil, terminalID: "term_build", state: "waiting", source: nil)])
 
         // An explicit id moving to a different terminal cannot be matched to the
         // old id-less row. Appending it would leave a stale agent badge, so the
@@ -1838,7 +1510,7 @@ import Testing
         let reassignmentData = try JSONSerialization.data(withJSONObject: reassignment)
         #expect(CmuxTuiSnapshotParser.applying(
             deltaPayload: reassignmentData,
-            cursor: CloudVMCursor(generation: "daemon-a", revision: 8),
+            cursor: TuiCursor(generation: "daemon-a", revision: 8),
             to: state
         ) == nil)
 
@@ -1861,7 +1533,7 @@ import Testing
         let explicitData = try JSONSerialization.data(withJSONObject: explicitChange)
         #expect(CmuxTuiSnapshotParser.applying(
             deltaPayload: explicitData,
-            cursor: CloudVMCursor(generation: "daemon-a", revision: 8),
+            cursor: TuiCursor(generation: "daemon-a", revision: 8),
             to: explicitState
         ) == nil)
     }
@@ -1893,7 +1565,7 @@ import Testing
         mismatchedEnvelope["sequence"] = 0
         #expect(CmuxTuiSnapshotParser.applying(
             deltaPayload: try data(mismatchedEnvelope, revision: "9"),
-            cursor: CloudVMCursor(generation: "daemon-a", revision: 8),
+            cursor: TuiCursor(generation: "daemon-a", revision: 8),
             to: state
         ) == nil)
 
@@ -1901,26 +1573,26 @@ import Testing
         badSequence["sequence"] = 1
         #expect(CmuxTuiSnapshotParser.applying(
             deltaPayload: try data(badSequence),
-            cursor: CloudVMCursor(generation: "daemon-a", revision: 8),
+            cursor: TuiCursor(generation: "daemon-a", revision: 8),
             to: state
         ) == nil)
     }
 
     @Test func stateSyncRejectsGapsAndOpaqueGenerationOrdering() {
-        let current = CloudVMCursor(generation: "daemon-a", revision: 7)
-        #expect(CloudVMStateSyncDecision.forSnapshot(incoming: CloudVMCursor(generation: "daemon-a", revision: 6), current: current) == .ignoreStale)
-        #expect(CloudVMStateSyncDecision.forSnapshot(incoming: CloudVMCursor(generation: "daemon-b", revision: 1), current: current) == .installSnapshot)
-        #expect(CloudVMStateSyncDecision.forDelta(generation: "daemon-a", previousRevision: 6, revision: 8, current: current) == .fetchSnapshot)
-        #expect(CloudVMStateSyncDecision.forDelta(generation: "daemon-a", previousRevision: 7, revision: 8, current: current) == .installSnapshot)
-        #expect(CloudVMStateSyncDecision.forDelta(generation: "daemon-a", previousRevision: 7, revision: 9, current: current) == .fetchSnapshot)
-        #expect(CloudVMStateSyncDecision.forDelta(generation: "daemon-b", previousRevision: 7, revision: 8, current: current) == .fetchSnapshot)
-        #expect(CloudVMStateSyncDecision.forSnapshot(incoming: nil, current: nil) == .installSnapshot)
-        #expect(CloudVMStateSyncDecision.forSnapshot(incoming: nil, current: current) == .ignoreStale)
+        let current = TuiCursor(generation: "daemon-a", revision: 7)
+        #expect(TuiStateSyncDecision.forSnapshot(incoming: TuiCursor(generation: "daemon-a", revision: 6), current: current) == .ignoreStale)
+        #expect(TuiStateSyncDecision.forSnapshot(incoming: TuiCursor(generation: "daemon-b", revision: 1), current: current) == .installSnapshot)
+        #expect(TuiStateSyncDecision.forDelta(generation: "daemon-a", previousRevision: 6, revision: 8, current: current) == .fetchSnapshot)
+        #expect(TuiStateSyncDecision.forDelta(generation: "daemon-a", previousRevision: 7, revision: 8, current: current) == .installSnapshot)
+        #expect(TuiStateSyncDecision.forDelta(generation: "daemon-a", previousRevision: 7, revision: 9, current: current) == .fetchSnapshot)
+        #expect(TuiStateSyncDecision.forDelta(generation: "daemon-b", previousRevision: 7, revision: 8, current: current) == .fetchSnapshot)
+        #expect(TuiStateSyncDecision.forSnapshot(incoming: nil, current: nil) == .installSnapshot)
+        #expect(TuiStateSyncDecision.forSnapshot(incoming: nil, current: current) == .ignoreStale)
     }
 
     @Test func remoteMutationAuthorityRejectsStaleGraphsAndScopesReceipts() {
         #expect(
-            CloudVMRemoteMutationAuthority.resolve(
+            TuiRemoteMutationAuthority.resolve(
                 refreshEstablishedCurrentGraph: true,
                 hasAcceptedState: true,
                 targetVisible: true,
@@ -1929,7 +1601,7 @@ import Testing
             ) == .currentGraph
         )
         #expect(
-            CloudVMRemoteMutationAuthority.resolve(
+            TuiRemoteMutationAuthority.resolve(
                 refreshEstablishedCurrentGraph: true,
                 hasAcceptedState: true,
                 targetVisible: false,
@@ -1940,7 +1612,7 @@ import Testing
         // A receipt has only a revision. Without a successful current refresh
         // its generation is unknown, so it cannot authorize a write.
         #expect(
-            CloudVMRemoteMutationAuthority.resolve(
+            TuiRemoteMutationAuthority.resolve(
                 refreshEstablishedCurrentGraph: false,
                 hasAcceptedState: true,
                 targetVisible: false,
@@ -1949,7 +1621,7 @@ import Testing
             ) == .unavailable
         )
         #expect(
-            CloudVMRemoteMutationAuthority.resolve(
+            TuiRemoteMutationAuthority.resolve(
                 refreshEstablishedCurrentGraph: true,
                 hasAcceptedState: true,
                 targetVisible: true,
@@ -1958,7 +1630,7 @@ import Testing
             ) == .snapshotOnly
         )
         #expect(
-            CloudVMRemoteMutationAuthority.resolve(
+            TuiRemoteMutationAuthority.resolve(
                 refreshEstablishedCurrentGraph: true,
                 hasAcceptedState: true,
                 targetVisible: false,
@@ -1969,46 +1641,46 @@ import Testing
     }
 
     @Test func remoteMutationReceiptsFenceDelayedGraphs() {
-        let receipt = CloudVMCursor(generation: "daemon-a", revision: 8)
+        let receipt = TuiCursor(generation: "daemon-a", revision: 8)
         #expect(
-            CloudVMRemoteMutationReceiptDecision.resolve(
+            TuiRemoteMutationReceiptDecision.resolve(
                 receipt: receipt,
-                incoming: CloudVMCursor(generation: "daemon-a", revision: 7),
+                incoming: TuiCursor(generation: "daemon-a", revision: 7),
                 targetMatches: false
             ) == .rejectStale
         )
         #expect(
-            CloudVMRemoteMutationReceiptDecision.resolve(
+            TuiRemoteMutationReceiptDecision.resolve(
                 receipt: receipt,
-                incoming: CloudVMCursor(generation: "daemon-a", revision: 8),
+                incoming: TuiCursor(generation: "daemon-a", revision: 8),
                 targetMatches: false
             ) == .rejectConflict
         )
         #expect(
-            CloudVMRemoteMutationReceiptDecision.resolve(
+            TuiRemoteMutationReceiptDecision.resolve(
                 receipt: receipt,
-                incoming: CloudVMCursor(generation: "daemon-a", revision: 8),
+                incoming: TuiCursor(generation: "daemon-a", revision: 8),
                 targetMatches: true
             ) == .accept
         )
         #expect(
-            CloudVMRemoteMutationReceiptDecision.resolve(
+            TuiRemoteMutationReceiptDecision.resolve(
                 receipt: receipt,
-                incoming: CloudVMCursor(generation: "daemon-a", revision: 9),
+                incoming: TuiCursor(generation: "daemon-a", revision: 9),
                 targetMatches: false
             ) == .accept
         )
         #expect(
-            CloudVMRemoteMutationReceiptDecision.resolve(
+            TuiRemoteMutationReceiptDecision.resolve(
                 receipt: receipt,
                 incoming: nil,
                 targetMatches: true
             ) == .rejectStale
         )
         #expect(
-            CloudVMRemoteMutationReceiptDecision.resolve(
+            TuiRemoteMutationReceiptDecision.resolve(
                 receipt: receipt,
-                incoming: CloudVMCursor(generation: "daemon-b", revision: 1),
+                incoming: TuiCursor(generation: "daemon-b", revision: 1),
                 targetMatches: false
             ) == .accept
         )
@@ -2017,21 +1689,21 @@ import Testing
     @Test func repeatedDaemonGenerationIsRecognizedAsAnOldLink() {
         let accepted = Set(["daemon-a", "daemon-b"])
         #expect(
-            CloudVMGenerationAcceptanceDecision.resolve(
+            TuiGenerationAcceptanceDecision.resolve(
                 incoming: "daemon-a",
                 current: "daemon-b",
                 accepted: accepted
             ) == .rejectStale
         )
         #expect(
-            CloudVMGenerationAcceptanceDecision.resolve(
+            TuiGenerationAcceptanceDecision.resolve(
                 incoming: "daemon-c",
                 current: "daemon-b",
                 accepted: accepted
             ) == .accept
         )
         #expect(
-            CloudVMGenerationAcceptanceDecision.resolve(
+            TuiGenerationAcceptanceDecision.resolve(
                 incoming: "daemon-b",
                 current: "daemon-b",
                 accepted: accepted
@@ -2040,23 +1712,23 @@ import Testing
     }
 
     @Test func snapshotClearsEventWarningOnlyAfterLiveFeedResumes() {
-        let cursor = CloudVMCursor(generation: "daemon-a", revision: 7)
-        #expect(!CloudVMEventFeedRecoveryDecision.shouldClearWarning(
+        let cursor = TuiCursor(generation: "daemon-a", revision: 7)
+        #expect(!TuiEventFeedRecoveryDecision.shouldClearWarning(
             snapshotCursor: nil,
             subscriptionResumed: false
         ))
-        #expect(!CloudVMEventFeedRecoveryDecision.shouldClearWarning(
+        #expect(!TuiEventFeedRecoveryDecision.shouldClearWarning(
             snapshotCursor: cursor,
             subscriptionResumed: false
         ))
-        #expect(CloudVMEventFeedRecoveryDecision.shouldClearWarning(
+        #expect(TuiEventFeedRecoveryDecision.shouldClearWarning(
             snapshotCursor: cursor,
             subscriptionResumed: true
         ))
     }
 
     @Test func eventRecoveryUsesPositiveCappedBackoff() {
-        let policy = CloudMachineLinkEventsRecoveryPolicy.standard
+        let policy = RemoteMachineLinkEventsRecoveryPolicy.standard
         #expect(policy.delay(forAttempt: 1) == .milliseconds(250))
         #expect(policy.delay(forAttempt: 5) == .seconds(4))
         #expect(policy.delay(forAttempt: 6) == nil)
@@ -2065,16 +1737,16 @@ import Testing
     }
 
     @Test func eventRecoveryRestartCannotBypassTheBudget() {
-        #expect(CloudMachineLink.canRestartEventsSubscription(for: .healthy))
-        #expect(CloudMachineLink.canRestartEventsSubscription(for: .recovering(attempt: 3)))
-        #expect(CloudMachineLink.canRestartEventsSubscription(for: .snapshotRecovery))
-        #expect(!CloudMachineLink.canRestartEventsSubscription(for: .exhausted(canResumeFromSnapshot: true)))
-        #expect(!CloudMachineLink.canRestartEventsSubscription(for: .exhausted(canResumeFromSnapshot: false)))
-        #expect(!CloudMachineLink.canRestartEventsSubscription(for: .snapshotOnly))
+        #expect(RemoteMachineLink.canRestartEventsSubscription(for: .healthy))
+        #expect(RemoteMachineLink.canRestartEventsSubscription(for: .recovering(attempt: 3)))
+        #expect(RemoteMachineLink.canRestartEventsSubscription(for: .snapshotRecovery))
+        #expect(!RemoteMachineLink.canRestartEventsSubscription(for: .exhausted(canResumeFromSnapshot: true)))
+        #expect(!RemoteMachineLink.canRestartEventsSubscription(for: .exhausted(canResumeFromSnapshot: false)))
+        #expect(!RemoteMachineLink.canRestartEventsSubscription(for: .snapshotOnly))
     }
 
-    @Test func cloudTreeRecognizesLegacyWorkspaceProjectionWithoutTabID() throws {
-        let machine = SurfaceMachineID.cloud("legacy-placement")
+    @Test @MainActor func legacyWorkspaceProjectionResolvesItsExactTab() throws {
+        let machine = SurfaceMachineID.ssh("5c0ebcbbc9e7e820cf05dab48564fef11ad77dfcd4c774268ea2a9b5950db7ad")
         let workspace = SurfaceRemoteWorkspace(id: "ws_main", name: "main", index: 0, focused: true)
         let view = SurfaceRemoteView(tabID: "tab_shell", workspace: workspace)
         let resource = SurfaceResource(
@@ -2095,7 +1767,7 @@ import Testing
                 name: machine.rawValue,
                 status: "running",
                 image: nil,
-                hasDesktop: false,
+                
                 memoryMb: nil,
                 diskMb: nil,
                 linkState: .connected,
@@ -2117,31 +1789,14 @@ import Testing
             )]
         )
 
-        let nodes = CloudTreeNodeBuilder.nodes(
-            machines: [],
-            snapshot: snapshot,
-            localWorkspaces: [],
-            includeLocalMachine: false
-        )
-        let flattened = CloudTreeNodeBuilder.flattened(nodes)
-        let workspaceNode = try #require(flattened.first { $0.id == "machine:legacy-placement/ws/ws_main" })
-        if case .workspace(_, _, _, _, let openIn) = workspaceNode.kind {
-            #expect(openIn == localWorkspaceID)
-        } else {
-            Issue.record("expected the legacy workspace row")
-        }
-        let terminalNode = try #require(flattened.first {
-            $0.id == "machine:legacy-placement/ws/ws_main/resource:legacy-placement/terminal/term_shell/tab:tab_shell"
-        })
-        if case .terminal(let row) = terminalNode.kind {
-            #expect(row.isOpen)
-        } else {
-            Issue.record("expected the legacy terminal pointer row")
-        }
+        let rename = TuiWorkspaceRenameService()
+        let projection = try #require(snapshot.projections.first)
+        #expect(rename.remoteTabID(for: projection, resource: resource) == view.tabID)
+        #expect(rename.inferredRemoteWorkspaceTarget(projections: snapshot.projections, resources: snapshot.resources)?.remoteWorkspaceID == workspace.id)
     }
 
-    @Test func cloudTreeRecognizesPrePlacementProjectionWithoutRemoteIDs() throws {
-        let machine = SurfaceMachineID.cloud("pre-placement")
+    @Test @MainActor func prePlacementProjectionResolvesOneCurrentView() throws {
+        let machine = SurfaceMachineID.ssh("8cfa0278cd5227ff482b11e72b39d11e320e3d7535a3998953e79ce87231edd6")
         let workspace = SurfaceRemoteWorkspace(id: "ws_main", name: "main", index: 0, focused: true)
         let view = SurfaceRemoteView(tabID: "tab_shell", workspace: workspace)
         let resource = SurfaceResource(
@@ -2162,7 +1817,7 @@ import Testing
                 name: machine.rawValue,
                 status: "running",
                 image: nil,
-                hasDesktop: false,
+                
                 memoryMb: nil,
                 diskMb: nil,
                 linkState: .connected,
@@ -2184,29 +1839,18 @@ import Testing
             )]
         )
 
-        let nodes = CloudTreeNodeBuilder.nodes(
-            machines: [],
-            snapshot: snapshot,
-            localWorkspaces: [],
-            includeLocalMachine: false
-        )
-        let flattened = CloudTreeNodeBuilder.flattened(nodes)
-        let terminalNode = try #require(flattened.first {
-            $0.id == "machine:pre-placement/ws/ws_main/resource:pre-placement/terminal/term_shell/tab:tab_shell"
-        })
-        if case .terminal(let row) = terminalNode.kind {
-            #expect(row.isOpen)
-        } else {
-            Issue.record("expected the pre-placement terminal pointer row")
-        }
+        let rename = TuiWorkspaceRenameService()
+        let projection = try #require(snapshot.projections.first)
+        #expect(rename.remoteTabID(for: projection, resource: resource) == view.tabID)
+        #expect(rename.inferredRemoteWorkspaceTarget(projections: snapshot.projections, resources: snapshot.resources)?.remoteWorkspaceID == workspace.id)
     }
 
     @Test func cursorDecodingRejectsBooleanFractionalAndOverflowNumbers() {
-        #expect(CloudVMCursor(wire: ["generation": "g1", "revision": NSNumber(value: true)]) == nil)
-        #expect(CloudVMCursor(wire: ["generation": "g1", "revision": NSNumber(value: 1.5)]) == nil)
-        #expect(CloudVMCursor(wire: ["generation": "g1", "revision": NSNumber(value: -1)]) == nil)
-        #expect(CloudVMCursor(wire: ["generation": "g1", "revision": NSNumber(value: 8)]) == CloudVMCursor(generation: "g1", revision: 8))
-        #expect(CloudVMCursor(wire: ["generation": "g1", "revision": " 9 "]) == CloudVMCursor(generation: "g1", revision: 9))
+        #expect(TuiCursor(wire: ["generation": "g1", "revision": NSNumber(value: true)]) == nil)
+        #expect(TuiCursor(wire: ["generation": "g1", "revision": NSNumber(value: 1.5)]) == nil)
+        #expect(TuiCursor(wire: ["generation": "g1", "revision": NSNumber(value: -1)]) == nil)
+        #expect(TuiCursor(wire: ["generation": "g1", "revision": NSNumber(value: 8)]) == TuiCursor(generation: "g1", revision: 8))
+        #expect(TuiCursor(wire: ["generation": "g1", "revision": " 9 "]) == TuiCursor(generation: "g1", revision: 9))
     }
 
     @Test func staleCloudStateExportLabelsLastKnownDocument() throws {
@@ -2219,7 +1863,7 @@ import Testing
             "access_token": "do-not-export",
         ]]
         let state = try #require(CmuxTuiSnapshotParser.state(fromSnapshot: snapshot, machine: Self.machine))
-        let payload = TerminalController.surfaceCloudStatePayload(
+        let payload = TerminalController.surfaceTuiStatePayload(
             state,
             observation: .stale(reason: "asleep")
         )
@@ -2252,53 +1896,53 @@ import Testing
         let data = try JSONSerialization.data(withJSONObject: delta)
         #expect(CmuxTuiSnapshotParser.applying(
             deltaPayload: data,
-            cursor: CloudVMCursor(generation: "g1", revision: 4),
+            cursor: TuiCursor(generation: "g1", revision: 4),
             to: state
         ) == nil)
     }
 
     @Test func eventEnvelopeParsingKeepsCursorAndCanonicalPayload() throws {
         let snapshotLine = #"{"type":"stream_item","cursor":{"generation":"g1","revision":"4"},"item":{"kind":"snapshot","reset_reason":"initial","snapshot":{"workspaces":[]}}}"#
-        guard case .snapshot(let cursor, let reason, let payload) = CloudMachineLink.parseChangeLine(snapshotLine) else {
+        guard case .snapshot(let cursor, let reason, let payload) = RemoteMachineLink.parseChangeLine(snapshotLine) else {
             Issue.record("expected a snapshot event")
             return
         }
-        #expect(cursor == CloudVMCursor(generation: "g1", revision: 4))
+        #expect(cursor == TuiCursor(generation: "g1", revision: 4))
         #expect(reason == "initial")
         let object = try #require(JSONSerialization.jsonObject(with: payload) as? [String: Any])
         #expect((object["cursor"] as? [String: Any])?["revision"] as? String == "4")
 
         let nullCursorSnapshotLine = #"{"type":"stream_item","cursor":{"generation":"g2","revision":"6"},"item":{"kind":"snapshot","snapshot":{"cursor":null,"workspaces":[]}}}"#
-        guard case .snapshot(let nullCursorEnvelope, _, let nullCursorPayload) = CloudMachineLink.parseChangeLine(nullCursorSnapshotLine) else {
+        guard case .snapshot(let nullCursorEnvelope, _, let nullCursorPayload) = RemoteMachineLink.parseChangeLine(nullCursorSnapshotLine) else {
             Issue.record("a versioned snapshot with a null embedded cursor must remain versioned")
             return
         }
-        #expect(nullCursorEnvelope == CloudVMCursor(generation: "g2", revision: 6))
+        #expect(nullCursorEnvelope == TuiCursor(generation: "g2", revision: 6))
         let nullCursorObject = try #require(JSONSerialization.jsonObject(with: nullCursorPayload) as? [String: Any])
         #expect((nullCursorObject["cursor"] as? [String: Any])?["revision"] as? String == "6")
 
         let deltaLine = #"{"type":"stream_item","item":{"kind":"delta","cursor":{"generation":"g1","revision":"5"},"previous_revision":"4","revision":"5","changes":[]}}"#
-        guard case .delta(let deltaCursor, let previous, let revision, _) = CloudMachineLink.parseChangeLine(deltaLine) else {
+        guard case .delta(let deltaCursor, let previous, let revision, _) = RemoteMachineLink.parseChangeLine(deltaLine) else {
             Issue.record("expected a delta event")
             return
         }
-        #expect(deltaCursor == CloudVMCursor(generation: "g1", revision: 5))
+        #expect(deltaCursor == TuiCursor(generation: "g1", revision: 5))
         #expect(previous == 4)
         #expect(revision == 5)
 
-        guard case .unknown = CloudMachineLink.parseChangeLine(
+        guard case .unknown = RemoteMachineLink.parseChangeLine(
             #"{"type":"stream_item","item":{"kind":"delta","cursor":{"generation":"g1","revision":true},"previous_revision":"4","revision":"5","changes":[]}}"#
         ) else {
             Issue.record("boolean cursor revision must be a synchronization barrier")
             return
         }
 
-        guard case .streamEnded(let streamReason, let endCursor) = CloudMachineLink.parseChangeLine(#"{"type":"stream_end","reason":"gap","cursor":{"generation":"g1","revision":"5"}}"#) else {
+        guard case .streamEnded(let streamReason, let endCursor) = RemoteMachineLink.parseChangeLine(#"{"type":"stream_end","reason":"gap","cursor":{"generation":"g1","revision":"5"}}"#) else {
             Issue.record("expected a stream end")
             return
         }
         #expect(streamReason == "gap")
-        #expect(endCursor == CloudVMCursor(generation: "g1", revision: 5))
+        #expect(endCursor == TuiCursor(generation: "g1", revision: 5))
     }
 
     @Test func placementGroupsRoundTripExactTabAndRejectLegacyAmbiguity() throws {
@@ -2343,7 +1987,7 @@ import Testing
 /// cast that fails for every non-empty array. Empty snapshots never reach the
 /// cast, so the crash only appeared once a machine actually connected.
 @Suite struct CmuxTuiSnapshotRowOrderingRegressionTests {
-    static let machine = SurfaceMachineID.cloud("gentle-ochre-dingo")
+    static let machine = SurfaceMachineID.ssh("028b9f3eb7912b74bc078b9df68967abb10cff370bd69a0751dcbaa010487b37")
 
     @Test func workspacesFromANonEmptySnapshotSurviveAndFollowTheirIndexes() {
         let snapshot: [String: Any] = [

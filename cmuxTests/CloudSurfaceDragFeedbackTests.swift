@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import AppKit
 import Bonsplit
 import CmuxSurfaceCatalogModel
@@ -54,9 +54,9 @@ struct CloudSurfaceDragFeedbackTests {
     @Test("Cloud pane forwarding stays stable while the pointer remains in one pane")
     /// Keeps the original pane destination through a transient portal hit-test result.
     func destinationStaysValidDuringPortalHitTestChurn() throws {
-        let fixture = try CloudSurfaceDragFixture(kind: .display)
+        let fixture = try CloudSurfaceDragFixture(kind: .terminal)
         defer { fixture.finish() }
-        fixture.workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "a", isBase: false)
+        fixture.workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: SurfaceMachineID.ssh("ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb").rawValue)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 240, height: 240),
             styleMask: .borderless,
@@ -70,7 +70,7 @@ struct CloudSurfaceDragFeedbackTests {
         root.addSubview(destination)
         let portalHost = NSView(frame: root.bounds)
         root.addSubview(portalHost, positioned: .below, relativeTo: destination)
-        let gate = CloudSurfaceDropGateView(frame: root.bounds, sourceResolver: fixture.resolver)
+        let gate = TuiSurfaceDropGateView(frame: root.bounds, sourceResolver: fixture.resolver)
         gate.workspace = fixture.workspace
         gate.isActive = true
         root.addSubview(gate)
@@ -79,7 +79,7 @@ struct CloudSurfaceDragFeedbackTests {
 
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("cloud-drag-stability-\(UUID())"))
         #expect(fixture.registration.write(to: pasteboard))
-        let sender = CloudSidebarDraggingInfo(source: NSOutlineView(), pasteboard: pasteboard, location: NSPoint(x: 80, y: 80))
+        let sender = SurfaceDraggingInfo(source: NSOutlineView(), pasteboard: pasteboard, location: NSPoint(x: 80, y: 80))
 
         #expect(gate.draggingEntered(sender) == .move)
         root.nextHitTestResult = portalHost
@@ -91,20 +91,20 @@ struct CloudSurfaceDragFeedbackTests {
 
     @Test("The pure rule rejects unknown/local/foreign owners and preserves local destinations")
     func policy() {
-        let policy = SurfaceOwnershipPolicy(cloudMachine: .cloud("b"))
-        for owner in [nil, SurfaceMachineID.local, .cloud("a")] {
-            #expect(policy.rejection(for: owner) == .cloudMachineMismatch)
-            #expect(SurfaceOwnershipPolicy(cloudMachine: nil).rejection(for: owner) == nil)
+        let policy = SurfaceOwnershipPolicy(remoteMachine: .ssh("3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d"))
+        for owner in [nil, SurfaceMachineID.local, .ssh("ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb")] {
+            #expect(policy.rejection(for: owner) == .remoteMachineMismatch)
+            #expect(SurfaceOwnershipPolicy(remoteMachine: nil).rejection(for: owner) == nil)
         }
-        #expect(policy.rejection(for: .cloud("b")) == nil)
-        #expect(policy.rejection(for: [SurfaceResourceID]()) == .cloudMachineMismatch)
+        #expect(policy.rejection(for: .ssh("3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d")) == nil)
+        #expect(policy.rejection(for: [SurfaceResourceID]()) == .remoteMachineMismatch)
     }
 
     @Test("A surface already in the Cloud workspace can be reordered or split within it")
     func ownSurfaceMovesWithinWorkspace() throws {
         let workspace = Workspace()
         defer { workspace.teardownAllPanels() }
-        workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "b", isBase: false)
+        workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: SurfaceMachineID.ssh("3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d").rawValue)
         let panelID = try #require(workspace.focusedPanelId)
         let tabID = try #require(workspace.surfaceIdFromPanelId(panelID))
         let paneID = try #require(workspace.paneId(forPanelId: panelID))
@@ -118,20 +118,23 @@ struct CloudSurfaceDragFeedbackTests {
         #expect(workspace.canPerformPortalSurfaceDrop(own))
 
         let foreign = PaneDragTransfer(tabId: UUID(), sourcePaneId: paneID.id, sourceProcessId: processID)
-        #expect(workspace.surfaceDropRejection(foreign, source: .surface) == .cloudMachineMismatch)
+        #expect(workspace.surfaceDropRejection(foreign, source: .surface) == .remoteMachineMismatch)
         let otherProcess = PaneDragTransfer(tabId: tabID.uuid, sourcePaneId: paneID.id, sourceProcessId: processID &+ 1)
-        #expect(workspace.surfaceDropRejection(otherProcess, source: .surface) == .cloudMachineMismatch)
+        #expect(workspace.surfaceDropRejection(otherProcess, source: .surface) == .remoteMachineMismatch)
     }
 
     @Test("SwiftUI gate and AppKit pane router agree for every resource kind", arguments: SurfaceResourceKind.allCases)
     func destinationParity(kind: SurfaceResourceKind) throws {
         let fixture = try CloudSurfaceDragFixture(kind: kind)
         defer { fixture.finish() }
-        let gate = CloudSurfaceDropGateView(frame: NSRect(x: 0, y: 0, width: 240, height: 240), sourceResolver: fixture.resolver)
+        let gate = TuiSurfaceDropGateView(frame: NSRect(x: 0, y: 0, width: 240, height: 240), sourceResolver: fixture.resolver)
         gate.workspace = fixture.workspace
         gate.isActive = true
         for destination in ["b", "a"] {
-            fixture.workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: destination, isBase: false)
+            let owner = destination == "a"
+                ? SurfaceMachineID.ssh("ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb")
+                : SurfaceMachineID.ssh("3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d")
+            fixture.workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: owner.rawValue)
             let router = fixture.router()
             let result = router.resolve(pasteboard: fixture.pasteboard, context: fixture.context, proposedZone: .right)
             if kind == .browser || destination == "a" {
@@ -141,7 +144,7 @@ struct CloudSurfaceDragFeedbackTests {
                 #expect(gate.rejection(for: fixture.pasteboard) == nil)
             } else {
                 #expect(result == .rejected)
-                #expect(router.rejection == .cloudMachineMismatch)
+                #expect(router.rejection == .remoteMachineMismatch)
                 #expect(gate.rejection(for: fixture.pasteboard) == router.rejection)
             }
             router.clear()
@@ -151,42 +154,37 @@ struct CloudSurfaceDragFeedbackTests {
 
     @Test("Browser surface transfers are allowed into and out of Cloud workspaces")
     func browserTransfersRemainPortable() throws {
-        let cloudWorkspace = Workspace()
+        let tuiWorkspace = Workspace()
         let localWorkspace = Workspace()
         defer {
-            cloudWorkspace.teardownAllPanels()
+            tuiWorkspace.teardownAllPanels()
             localWorkspace.teardownAllPanels()
         }
-        cloudWorkspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "cloud", isBase: false)
+        tuiWorkspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: SurfaceMachineID.ssh("56681010b753e1abe52c449d0aab291b28f1808a3a91b6baeaa726883baad4b0").rawValue)
         let transfer = PaneDragTransfer(tabId: UUID(), sourcePaneId: UUID(), sourceProcessId: Int32(ProcessInfo.processInfo.processIdentifier))
         let browserGroup = SurfaceResourceGroup(title: "Browser", resources: [SurfaceResourceID(machine: .local, kind: .browser, key: "browser")])
-        #expect(cloudWorkspace.surfaceDropRejection(transfer, source: .surfaceResources(browserGroup)) == nil)
-        let cloudBrowserGroup = SurfaceResourceGroup(title: "Browser", resources: [SurfaceResourceID(machine: .cloud("cloud"), kind: .browser, key: "browser")])
+        #expect(tuiWorkspace.surfaceDropRejection(transfer, source: .surfaceResources(browserGroup)) == nil)
+        let cloudBrowserGroup = SurfaceResourceGroup(title: "Browser", resources: [SurfaceResourceID(machine: .ssh("56681010b753e1abe52c449d0aab291b28f1808a3a91b6baeaa726883baad4b0"), kind: .browser, key: "browser")])
         #expect(localWorkspace.surfaceDropRejection(transfer, source: .surfaceResources(cloudBrowserGroup)) == nil)
         let mixedTerminalGroup = SurfaceResourceGroup(title: "mixed", resources: [
             SurfaceResourceID(machine: .local, kind: .browser, key: "browser"),
             SurfaceResourceID(machine: .local, kind: .terminal, key: "terminal")
         ])
-        #expect(cloudWorkspace.surfaceDropRejection(transfer, source: .surfaceResources(mixedTerminalGroup)) == .cloudMachineMismatch)
-        let mixedDisplayGroup = SurfaceResourceGroup(title: "mixed", resources: [
-            SurfaceResourceID(machine: .local, kind: .browser, key: "browser"),
-            SurfaceResourceID(machine: .local, kind: .display, key: "display")
-        ])
-        #expect(cloudWorkspace.surfaceDropRejection(transfer, source: .surfaceResources(mixedDisplayGroup)) == .cloudMachineMismatch)
+        #expect(tuiWorkspace.surfaceDropRejection(transfer, source: .surfaceResources(mixedTerminalGroup)) == .remoteMachineMismatch)
     }
 
-    @Test("Rebinding after hover is rejected before mutation", arguments: [SurfaceResourceKind.terminal, .display])
+    @Test("Rebinding after hover is rejected before mutation", arguments: [SurfaceResourceKind.terminal])
     func destinationChangesBeforeDrop(kind: SurfaceResourceKind) throws {
         let fixture = try CloudSurfaceDragFixture(kind: kind)
         defer { fixture.finish() }
-        fixture.workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "a", isBase: false)
+        fixture.workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: SurfaceMachineID.ssh("ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb").rawValue)
         let router = fixture.router()
         guard case .accepted(let plan) = router.resolve(
             pasteboard: fixture.pasteboard, context: fixture.context, proposedZone: .right
         ) else { Issue.record("Same-machine hover should be accepted"); return }
         let panels = Set(fixture.workspace.panels.keys)
         let panes = fixture.workspace.bonsplitController.allPaneIds
-        fixture.workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "b", isBase: false)
+        fixture.workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: SurfaceMachineID.ssh("3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d").rawValue)
         #expect(!router.perform(plan, pasteboard: fixture.pasteboard))
         #expect(Set(fixture.workspace.panels.keys) == panels)
         #expect(fixture.workspace.bonsplitController.allPaneIds == panes)
@@ -198,7 +196,7 @@ struct CloudSurfaceDragFeedbackTests {
     func staleDragCannotPerform() throws {
         let fixture = try CloudSurfaceDragFixture(kind: .browser)
         defer { fixture.finish() }
-        fixture.workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "a", isBase: false)
+        fixture.workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: SurfaceMachineID.ssh("ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb").rawValue)
         let router = fixture.router()
         guard case .accepted(let plan) = router.resolve(
             pasteboard: fixture.pasteboard, context: fixture.context, proposedZone: .center
@@ -211,16 +209,16 @@ struct CloudSurfaceDragFeedbackTests {
 
     @Test("Warning is red, wrapped, accessible, and cleared on cancel or completion")
     func warningLifecycle() throws {
-        let fixture = try CloudSurfaceDragFixture(kind: .display)
+        let fixture = try CloudSurfaceDragFixture(kind: .terminal)
         defer { fixture.finish() }
-        let view = CloudSurfaceDropGateView(frame: NSRect(x: 0, y: 0, width: 240, height: 240), sourceResolver: fixture.resolver)
+        let view = TuiSurfaceDropGateView(frame: NSRect(x: 0, y: 0, width: 240, height: 240), sourceResolver: fixture.resolver)
         view.workspace = fixture.workspace
         view.isActive = true
-        let sender = CloudSidebarDraggingInfo(source: NSOutlineView(), pasteboard: fixture.pasteboard, location: .zero)
-        let expected = "Cloud workspaces can only hold terminals and displays from their own Cloud machine. Browser tabs can move freely. Open a local workspace to move other splits there."
-        #expect(SurfaceTransferRejection.cloudMachineMismatch.message == expected)
+        let sender = SurfaceDraggingInfo(source: NSOutlineView(), pasteboard: fixture.pasteboard, location: .zero)
+        let expected = "SSH workspaces can only hold terminals from their own SSH host. Browser tabs can move freely. Open a local workspace to move other splits there."
+        #expect(SurfaceTransferRejection.remoteMachineMismatch.message == expected)
         #expect(view.draggingEntered(sender).isEmpty)
-        #expect(view.feedback.rejection == .cloudMachineMismatch)
+        #expect(view.feedback.rejection == .remoteMachineMismatch)
         #expect(!view.feedback.badge.isHidden)
         #expect(view.feedback.badge.accessibilityLabel() == expected)
         #expect(view.feedback.badge.frame.width <= view.bounds.width)
@@ -253,79 +251,10 @@ struct CloudSurfaceDragFeedbackTests {
         fixture.pasteboard.setString("{\"tab\":{\"id\":\"\(UUID())\"},\"sourcePaneId\":\"\(UUID())\",\"sourceProcessId\":1}", forType: DragOverlayRoutingPolicy.bonsplitTabTransferType)
         let router = fixture.router()
         #expect(router.resolve(pasteboard: fixture.pasteboard, context: fixture.context, proposedZone: .center) == .rejected)
-        #expect(router.rejection == .cloudMachineMismatch)
+        #expect(router.rejection == .remoteMachineMismatch)
         router.clear()
     }
 
-    @Test("A foreign Cloud terminal warns over the pane and stays silent over the Cloud tree")
-    func cloudTreeFeedback() async throws {
-        try await AppContextSerialGate.withExclusiveAppContext {
-            let app = try VaultPaneAppFixture()
-            defer { app.tearDown() }
-            let fixture = CloudSidebarOrderingFixture()
-            defer { fixture.close() }
-            fixture.coordinator.apply(nodes: fixture.nodes())
-            let outline = try #require(fixture.coordinator.outlineView)
-            let target = try #require(CloudTreeNodeBuilder.flattened(fixture.nodes()).first { $0.structureTag == "workspace" })
-            let focusedPanelID = try #require(app.workspace.focusedPanelId)
-            let sourcePanel = try #require(app.workspace.panels[focusedPanelID])
-            sourcePanel.retainTransferredSurfaceMachine(.cloud("foreign-cloud"))
-            #expect(app.workspace.machineOwningSurface(focusedPanelID) == .cloud("foreign-cloud"))
-            let tabID = try #require(app.workspace.surfaceIdFromPanelId(focusedPanelID))
-            let pane = try #require(app.workspace.bonsplitController.allPaneIds.first)
-            let registration = try #require(app.appDelegate.tabDragTransferRegistry.register(TabDragTransfer(
-                tab: Tab(id: tabID, title: "Cloud terminal", kind: "terminal"), sourcePaneId: pane
-            )))
-            let pasteboard = NSPasteboard(name: NSPasteboard.Name("cloud-tree-ownership-\(UUID())"))
-            #expect(registration.write(to: pasteboard))
-            defer { app.appDelegate.tabDragTransferRegistry.end(registration); pasteboard.clearContents() }
-            let destination = Workspace()
-            defer { destination.teardownAllPanels() }
-            destination.cloudVMBinding = WorkspaceCloudVMBinding(vmID: fixture.machine.rawValue, isBase: false)
-            let gate = CloudSurfaceDropGateView(frame: NSRect(x: 0, y: 0, width: 240, height: 480))
-            gate.workspace = destination
-            gate.isActive = true
-            let sourcePanels = Set(app.workspace.panels.keys)
-            let destinationPanels = Set(destination.panels.keys)
-            let destinationPanes = destination.bonsplitController.allPaneIds
-            let organization = fixture.catalog.sidebarOrganization.state
-            let sender = CloudSidebarDraggingInfo(source: outline, pasteboard: pasteboard, location: .zero)
-            #expect(gate.draggingEntered(sender).isEmpty)
-            #expect(gate.feedback.rejection == .cloudMachineMismatch)
-            #expect(gate.feedback.badge.accessibilityLabel() == SurfaceTransferRejection.cloudMachineMismatch.message)
-            #expect(gate.feedback.badge.superview === gate)
-            gate.draggingExited(sender)
-            #expect(gate.feedback.badge.superview == nil)
-            #expect(fixture.coordinator.outlineView(outline, validateDrop: sender, proposedItem: target,
-                                                    proposedChildIndex: NSOutlineViewDropOnItemIndex).isEmpty)
-            let host = try #require(fixture.window.contentView?.superview)
-            #expect(host.subviews.compactMap { $0 as? FileDropHintBadgeView }.isEmpty)
-            #expect(!fixture.coordinator.outlineView(outline, acceptDrop: sender, item: target,
-                                                     childIndex: NSOutlineViewDropOnItemIndex))
-            #expect(host.subviews.compactMap { $0 as? FileDropHintBadgeView }.isEmpty)
-            // A rebuilt outline and the old source's delayed completion must
-            // not introduce a second presenter or leave a badge on the window.
-            let replacement = CloudTreeContainerView(coordinator: fixture.coordinator)
-            let replacementOutline = try #require(fixture.coordinator.outlineView)
-            #expect(replacementOutline !== outline)
-            #expect(fixture.coordinator.outlineView(replacementOutline, validateDrop: sender, proposedItem: target,
-                                                    proposedChildIndex: NSOutlineViewDropOnItemIndex).isEmpty)
-            outline.draggingEnded(sender)
-            #expect(replacementOutline.subviews.compactMap { $0 as? FileDropHintBadgeView }.isEmpty)
-            #expect(host.subviews.compactMap { $0 as? FileDropHintBadgeView }.isEmpty)
-            #expect(gate.draggingEntered(sender).isEmpty)
-            #expect(gate.feedback.rejection == .cloudMachineMismatch)
-            #expect(!gate.performDragOperation(sender))
-            #expect(gate.feedback.badge.superview == nil)
-            #expect(Set(app.workspace.panels.keys) == sourcePanels)
-            #expect(Set(destination.panels.keys) == destinationPanels)
-            #expect(destination.bonsplitController.allPaneIds == destinationPanes)
-            #expect(fixture.catalog.sidebarOrganization.state == organization)
-            #expect(fixture.provider.moved.isEmpty && fixture.provider.projected.isEmpty && fixture.provider.closedTabs.isEmpty)
-            #expect(app.appDelegate.tabDragTransferRegistry.resolve(from: pasteboard) != nil)
-            _ = replacement
-        }
-    }
 
     @Test("Pane warnings stay outside the sidebar and onscreen beside short splits", arguments: [false, true])
     func paneWarningPlacement(short: Bool) throws {
@@ -337,11 +266,11 @@ struct CloudSurfaceDragFeedbackTests {
         window.contentView = root
         defer { window.contentView = nil }
         let frame = NSRect(x: 0, y: short ? 420 : 0, width: 240, height: short ? 80 : 500)
-        let gate = CloudSurfaceDropGateView(frame: frame, sourceResolver: fixture.resolver)
+        let gate = TuiSurfaceDropGateView(frame: frame, sourceResolver: fixture.resolver)
         root.addSubview(gate)
         gate.workspace = fixture.workspace
         gate.isActive = true
-        let sender = CloudSidebarDraggingInfo(source: NSOutlineView(), pasteboard: fixture.pasteboard, location: .zero)
+        let sender = SurfaceDraggingInfo(source: NSOutlineView(), pasteboard: fixture.pasteboard, location: .zero)
         #expect(gate.draggingEntered(sender).isEmpty)
         let host = try #require(gate.feedback.badge.superview)
         #expect(host === window.contentView?.superview)
@@ -365,13 +294,13 @@ struct CloudSurfaceDragFeedbackTests {
         let fixture = try CloudSurfaceDragFixture(kind: .terminal)
         defer { fixture.finish() }
         let root = NSView(frame: NSRect(x: 0, y: 0, width: 240, height: 480))
-        let gate = CloudSurfaceDropGateView(frame: root.bounds, sourceResolver: fixture.resolver)
+        let gate = TuiSurfaceDropGateView(frame: root.bounds, sourceResolver: fixture.resolver)
         root.addSubview(gate)
         gate.workspace = fixture.workspace
         gate.isActive = true
-        let sender = CloudSidebarDraggingInfo(source: NSOutlineView(), pasteboard: fixture.pasteboard, location: .zero)
+        let sender = SurfaceDraggingInfo(source: NSOutlineView(), pasteboard: fixture.pasteboard, location: .zero)
         #expect(gate.draggingEntered(sender).isEmpty)
-        #expect(gate.feedback.rejection == .cloudMachineMismatch)
+        #expect(gate.feedback.rejection == .remoteMachineMismatch)
         switch boundary {
         case "exit": gate.draggingExited(sender)
         case "end": gate.draggingEnded(sender)
@@ -386,7 +315,7 @@ struct CloudSurfaceDragFeedbackTests {
             gate.setFrameSize(.zero)
             #expect(gate.draggingUpdated(sender).isEmpty)
         case "sameVM":
-            fixture.workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "a", isBase: false)
+            fixture.workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: SurfaceMachineID.ssh("ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb").rawValue)
             #expect(gate.draggingUpdated(sender).isEmpty)
             #expect(gate.rejection(for: fixture.pasteboard) == nil)
             guard case .accepted = fixture.router().resolve(

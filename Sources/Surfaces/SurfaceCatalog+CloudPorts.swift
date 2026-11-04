@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxFoundation
 import CmuxSurfaceCatalogModel
 import Foundation
@@ -8,7 +8,7 @@ extension SurfaceCatalog {
     nonisolated static func portDestinationUnavailableMessage(machine: SurfaceMachineID) -> String {
         String(
             format: String(
-                localized: "cloudTree.port.noLocalWorkspace",
+                localized: "tuiTree.port.noLocalWorkspace",
                 defaultValue: "No local workspace is showing %@; select a workspace and retry."
             ),
             machine.rawValue
@@ -19,10 +19,9 @@ extension SurfaceCatalog {
     nonisolated static func portPreviewUnavailableMessage(machineID: String) -> String {
         String(
             format: String(
-                localized: "cloudTree.port.unsupported",
-                defaultValue: "%@’s provider cannot open machine ports as previews; reach the service from inside the machine with `cmux vm exec %@ -- …`."
+                localized: "tuiTree.port.unsupported",
+                defaultValue: "%@’s provider cannot open port previews. Connect to the SSH host directly to reach this service."
             ),
-            machineID,
             machineID
         )
     }
@@ -35,7 +34,7 @@ extension SurfaceCatalog {
     /// refreshing the provider can therefore replace its metadata without
     /// changing the row, projection, or CLI address.
     @discardableResult
-    func openCloudPort(
+    func openTuiPort(
         machine: SurfaceMachineID,
         port: Int,
         into destination: SurfaceDestination,
@@ -47,7 +46,7 @@ extension SurfaceCatalog {
         try validateOwnership(of: [id], at: destination)
         guard machine.tuiMachineID != nil, (1...65_535).contains(port) else {
             throw SurfaceCatalogError.unsupported(
-                String(localized: "cloudTree.port.invalidMachine", defaultValue: "Ports can only be opened on a cloud machine.")
+                String(localized: "tuiTree.port.invalidMachine", defaultValue: "Ports require an SSH host and a port number from 1 to 65535.")
             )
         }
         guard let provider = provider(for: machine) else {
@@ -124,10 +123,7 @@ extension SurfaceCatalog {
         for projection in projections where relatedIDs.contains(projection.resource) {
             projectionCounts[projection.workspaceID, default: 0] += 1
         }
-        // Select the same highest-count/lowest-UUID winner as
-        // `CloudTreeNodeBuilder.localWorkspaceShowing`, but in one pass. This
-        // path runs for every port-row open, so sorting all local workspaces
-        // needlessly turns a linear vote into O(W log W).
+        // Highest-count/lowest-UUID ownership voting stays linear on frequent port opens.
         var winner: (id: UUID, count: Int)?
         for (id, count) in projectionCounts {
             guard let current = winner else {
@@ -154,13 +150,10 @@ extension SurfaceCatalog {
         let refreshedIDs = Set(refreshed.map(\.id))
         let previousIDs = Set(previous.map(\.id))
         let projectedResourceIDs = Set(projections.map(\.resource))
-        let displayPortsOwned = machineInfo(for: machine)?.hasDesktop == true
-            || previous.contains { $0.kind == .display }
         var result = refreshed
         for candidate in snapshot.resources(on: machine)
         where candidate.id.isForwardedPort
             && !CmuxTuiSnapshotParser.internalPorts.contains(candidate.id.forwardedPort ?? -1)
-            && (!displayPortsOwned || !CmuxTuiSnapshotParser.displayPorts.contains(candidate.id.forwardedPort ?? -1))
             && !refreshedIDs.contains(candidate.id) {
             let wasAddedDuringRefresh = !previousIDs.contains(candidate.id)
             let remainsProjected = projectedResourceIDs.contains(candidate.id)
@@ -172,27 +165,13 @@ extension SurfaceCatalog {
 }
 
 extension CmuxTuiSurfaceProvider {
-    /// Classifies the authenticated loopback route, excluding provider-owned display ports.
-    nonisolated static func portScan(
-        from result: VMExecResult,
-        privateAddress: String? = nil,
-        displayPortsOwned: Bool = false
-    ) -> CloudPortScanResult? {
-        guard result.exitCode == 0, let scan = CloudPortScanResult(socketListing: result.stdout) else { return nil }
-        let excluded = displayPortsOwned ? CmuxTuiSnapshotParser.displayPorts : []
-        return CloudPortScanResult(
-            ports: scan.ports.filter { !excluded.contains($0) },
-            loopbackOnlyPorts: scan.loopbackOnlyPorts.filter { !excluded.contains($0) },
-            otherBindingPorts: scan.otherBindingPorts.filter { !excluded.contains($0) }
-        )
+    /// Parses the listening-port output returned by the SSH host's daemon.
+    nonisolated static func portScan(from socketListing: String) -> TuiPortScanResult? {
+        TuiPortScanResult(socketListing: socketListing)
     }
 
-    nonisolated static func ports(
-        from result: VMExecResult,
-        privateAddress: String? = nil,
-        displayPortsOwned: Bool = false
-    ) -> [Int]? {
-        portScan(from: result, privateAddress: privateAddress, displayPortsOwned: displayPortsOwned)?.ports
+    nonisolated static func ports(from socketListing: String) -> [Int]? {
+        portScan(from: socketListing)?.ports
     }
 
     /// Reconciles one machine's port scan with its prior catalog values.
@@ -204,8 +183,7 @@ extension CmuxTuiSurfaceProvider {
         machine: SurfaceMachineID,
         scannedPorts: [Int]?,
         previousResources: [SurfaceResource],
-        privateAddress: String?,
-        displayPortsOwned: Bool = false
+        privateAddress: String?
     ) -> [SurfaceResource] {
         let previous: [SurfaceResourceID: SurfaceResource] = Dictionary(
             uniqueKeysWithValues: previousResources
@@ -213,7 +191,6 @@ extension CmuxTuiSurfaceProvider {
                     $0.id.machine == machine
                         && $0.id.isForwardedPort
                         && !CmuxTuiSnapshotParser.internalPorts.contains($0.id.forwardedPort ?? -1)
-                        && (!displayPortsOwned || !CmuxTuiSnapshotParser.displayPorts.contains($0.id.forwardedPort ?? -1))
                 }
                 .map { ($0.id, $0) }
         )
@@ -234,7 +211,6 @@ extension CmuxTuiSurfaceProvider {
         return scannedPorts
             .filter { (port: Int) in
                 (1...65_535).contains(port) && seen.insert(port).inserted
-                    && (!displayPortsOwned || !CmuxTuiSnapshotParser.displayPorts.contains(port))
             }
             .sorted(by: <)
             .map { (port: Int) -> SurfaceResource in
@@ -354,11 +330,7 @@ extension CmuxTuiSurfaceProvider {
             return cleared
         }
 
-        // If the snapshot itself discovered a port that the probe missed, its
-        // canonical resource is already in `parsedResources`; if it replaced a
-        // pooled port, the pooled copy was removed above. Display de-duplication
-        // remains the parser's existing invariant.
-        return CmuxTuiSnapshotParser.mergingDisplays(pool: remainingPool, parsed: parsedResources)
+        return remainingPool + parsedResources
     }
 
     /// Adds a browser's daemon view metadata to a canonical port resource while

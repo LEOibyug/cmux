@@ -13,7 +13,7 @@ extension CmuxTuiSurfaceProvider {
     /// retires the overlay because the old placement cannot be proven to exist.
     func resourcesWithPendingCreations(
         _ resources: [SurfaceResource],
-        state: CloudVMState?
+        state: TuiState?
     ) -> [SurfaceResource] {
         var merged = resources
         var mergedIndex: [SurfaceResourceID: Int] = [:]
@@ -52,12 +52,11 @@ extension CmuxTuiSurfaceProvider {
 
     private func pendingCreationIsVisible(
         _ pending: PendingRemoteCreation,
-        in state: CloudVMState
+        in state: TuiState
     ) -> Bool {
         let resourceVisible: Bool = switch pending.resource.kind {
         case .terminal: state.lookupIndex.terminal(id: pending.resource.id.key) != nil
         case .browser: state.lookupIndex.browser(id: pending.resource.id.key) != nil
-        case .display: false
         }
         guard resourceVisible else { return false }
         guard let tabID = pending.tabID else { return true }
@@ -93,7 +92,7 @@ extension CmuxTuiSurfaceProvider {
         resources[resourceIndex] = resource
     }
 
-    func remoteWorkspaces(for state: CloudVMState?) -> [SurfaceRemoteWorkspace]? {
+    func remoteWorkspaces(for state: TuiState?) -> [SurfaceRemoteWorkspace]? {
         var result = state.map(Self.remoteWorkspaces) ?? info.remoteWorkspaces ?? []
         var seen = Set(result.map(\.id))
         for pending in pendingRemoteCreations.values {
@@ -104,9 +103,9 @@ extension CmuxTuiSurfaceProvider {
         return result.isEmpty ? nil : result
     }
 
-    func pendingMutationMetadata() -> [CloudVMPendingMutation] {
+    func pendingMutationMetadata() -> [TuiPendingMutation] {
         var writes = pendingRemoteCreations.map { resourceID, pending in
-            CloudVMPendingMutation(
+            TuiPendingMutation(
                 kind: pending.resource.kind == .browser ? .browserCreate : .terminalCreate,
                 resource: resourceID,
                 remoteWorkspaceID: pending.resource.remoteWorkspace?.id,
@@ -118,7 +117,7 @@ extension CmuxTuiSurfaceProvider {
         writes.append(contentsOf: pendingRemoteRenames.map { key, pending in
             switch key {
             case .workspace(let id):
-                return CloudVMPendingMutation(
+                return TuiPendingMutation(
                     kind: .workspaceRename,
                     resource: nil,
                     remoteWorkspaceID: id,
@@ -127,7 +126,7 @@ extension CmuxTuiSurfaceProvider {
                     receipt: pending.receipt
                 )
             case .tab(let id):
-                return CloudVMPendingMutation(
+                return TuiPendingMutation(
                     kind: .tabRename,
                     resource: nil,
                     remoteWorkspaceID: nil,
@@ -148,8 +147,8 @@ extension CmuxTuiSurfaceProvider {
     }
 
     func observationWithPendingWrites(
-        _ base: CloudVMStateObservation = .current
-    ) -> CloudVMStateObservation {
+        _ base: TuiStateObservation = .current
+    ) -> TuiStateObservation {
         var observation = base
         let pending = pendingMutationMetadata()
         observation.pendingWrites = pending.isEmpty ? nil : pending
@@ -157,7 +156,7 @@ extension CmuxTuiSurfaceProvider {
     }
 
     func publishPendingMutationMetadata() {
-        catalog.updateCloudPendingWrites(
+        catalog.updateTuiPendingWrites(
             on: machine,
             writes: pendingMutationMetadata(),
             from: self
@@ -180,7 +179,7 @@ extension CmuxTuiSurfaceProvider {
             guard var pending = pendingRemoteCreations[resourceID], pending.tabID == tabID else { continue }
             if let receipt = pending.receipt {
                 guard revision >= receipt.revision else { continue }
-                pending.receipt = CloudVMCursor(generation: receipt.generation, revision: revision)
+                pending.receipt = TuiCursor(generation: receipt.generation, revision: revision)
             }
             if var views = pending.resource.remoteViews,
                let viewIndex = views.firstIndex(where: { $0.tabID == tabID }) {

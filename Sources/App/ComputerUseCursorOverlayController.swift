@@ -258,7 +258,6 @@ enum ComputerUseCursorColorParsing {
 @MainActor
 final class ComputerUseCursorOverlayController {
     private let stateDirectoryURL: URL
-    private let featureEnabled: @MainActor () -> Bool
     private let feed: ComputerUseCursorFeed
     private let pollInterval: TimeInterval
     private let glideDuration: TimeInterval
@@ -281,13 +280,11 @@ final class ComputerUseCursorOverlayController {
 
     init(
         stateDirectoryURL: URL,
-        featureEnabled: @escaping @MainActor () -> Bool,
         feed: ComputerUseCursorFeed = ComputerUseCursorFeed(),
         pollInterval: TimeInterval = 0.75,
         glideDuration: TimeInterval = 0.35
     ) {
         self.stateDirectoryURL = stateDirectoryURL
-        self.featureEnabled = featureEnabled
         self.feed = feed
         self.pollInterval = pollInterval
         self.glideDuration = glideDuration
@@ -302,13 +299,6 @@ final class ComputerUseCursorOverlayController {
         guard !started else { return }
         started = true
         scanGeneration &+= 1
-
-        NotificationCenter.default.publisher(for: .cmuxFeatureFlagsDidChange)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
-            }
-            .store(in: &cancellables)
 
         startWatchingStateDirectory()
         // The filesystem watcher fires on writes, but the driver stops writing when
@@ -338,7 +328,7 @@ final class ComputerUseCursorOverlayController {
     }
 
     func refresh() {
-        guard started, featureEnabled() else {
+        guard started else {
             hide(animated: false)
             return
         }
@@ -382,7 +372,7 @@ final class ComputerUseCursorOverlayController {
     }
 
     private func applyScannedState(_ state: ComputerUseCursorState?) {
-        guard started, featureEnabled() else {
+        guard started else {
             hide(animated: false)
             return
         }

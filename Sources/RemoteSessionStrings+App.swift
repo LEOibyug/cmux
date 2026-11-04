@@ -3,16 +3,15 @@ import Foundation
 
 // User-facing connection-state strings resolve here, in the app target, so
 // String(localized:) binds to the app bundle's localization tables (the
-// package never localizes). Keys and default values are identical to the
-// legacy controller's inline String(localized:) calls.
+// package never localizes).
 extension RemoteSessionStrings {
     /// The app-bundle-resolved session strings, built at the composition root
     /// and injected into each `RemoteSessionCoordinator`.
     static var appLocalized: RemoteSessionStrings {
         RemoteSessionStrings(
-            connectedVMNoProxyFormat: String(
-                localized: "remote.state.connected.vmNoProxy",
-                defaultValue: "Connected to %@ (VM, proxy disabled)"
+            connectedWithoutDaemonFormat: String(
+                localized: "remote.state.connected.withoutDaemon",
+                defaultValue: "Connected to %@ (remote helper disabled)"
             ),
             suspendedDetailFormat: String(
                 localized: "remote.state.suspended.detail",

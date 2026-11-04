@@ -121,7 +121,7 @@ struct WindowDockLifecycleTests {
     @MainActor
     func dockToolbarCreationClaimsKeyboardFocus() throws {
         try withIsolatedAppDelegate { appDelegate in
-            let manager = TabManager(autoWelcomeIfNeeded: false)
+            let manager = TabManager()
             let windowId = appDelegate.registerMainWindowContextForTesting(tabManager: manager)
             defer {
                 appDelegate.unregisterMainWindowContextForTesting(windowId: windowId)
@@ -142,7 +142,7 @@ struct WindowDockLifecycleTests {
     @MainActor
     func dockPaneSelectionClaimsKeyboardFocus() throws {
         try withIsolatedAppDelegate { appDelegate in
-            let manager = TabManager(autoWelcomeIfNeeded: false)
+            let manager = TabManager()
             let windowId = appDelegate.registerMainWindowContextForTesting(tabManager: manager)
             defer {
                 appDelegate.unregisterMainWindowContextForTesting(windowId: windowId)
@@ -167,7 +167,7 @@ struct WindowDockLifecycleTests {
     @MainActor
     func plainDockSurfaceCreationRemainsKeyboardFocusNeutral() throws {
         try withIsolatedAppDelegate { appDelegate in
-            let manager = TabManager(autoWelcomeIfNeeded: false)
+            let manager = TabManager()
             let windowId = appDelegate.registerMainWindowContextForTesting(tabManager: manager)
             defer {
                 appDelegate.unregisterMainWindowContextForTesting(windowId: windowId)
@@ -189,7 +189,7 @@ struct WindowDockLifecycleTests {
     @MainActor
     func dockActivationRestoresLoadedBrowserAddressBarIntent() throws {
         try withIsolatedAppDelegate { appDelegate in
-            let manager = TabManager(autoWelcomeIfNeeded: false)
+            let manager = TabManager()
             let windowId = appDelegate.registerMainWindowContextForTesting(tabManager: manager)
             defer {
                 appDelegate.unregisterMainWindowContextForTesting(windowId: windowId)
@@ -222,7 +222,7 @@ struct WindowDockLifecycleTests {
     @MainActor
     func dockActivationRestoresLoadedBrowserFindFieldIntent() throws {
         try withIsolatedAppDelegate { appDelegate in
-            let manager = TabManager(autoWelcomeIfNeeded: false)
+            let manager = TabManager()
             let windowId = appDelegate.registerMainWindowContextForTesting(tabManager: manager)
             defer {
                 appDelegate.unregisterMainWindowContextForTesting(windowId: windowId)
@@ -255,8 +255,8 @@ struct WindowDockLifecycleTests {
     @MainActor
     func windowDocksAreIndependentPerWindow() {
         withIsolatedAppDelegate { appDelegate in
-            let firstManager = TabManager(autoWelcomeIfNeeded: false)
-            let secondManager = TabManager(autoWelcomeIfNeeded: false)
+            let firstManager = TabManager()
+            let secondManager = TabManager()
             let firstWindowId = appDelegate.registerMainWindowContextForTesting(tabManager: firstManager)
             let secondWindowId = appDelegate.registerMainWindowContextForTesting(tabManager: secondManager)
             defer {
@@ -301,12 +301,11 @@ struct WindowDockLifecycleTests {
     @Test("Retired workspaces reject late panel callbacks")
     @MainActor
     func retiredWorkspaceRejectsLatePanelCallbacks() throws {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let workspace = manager.addWorkspace(
-            title: "Cloud VM",
-            initialSurface: .cloudVMLoading,
-            inheritWorkingDirectory: false,
-            autoWelcomeIfNeeded: false
+            title: "SSH",
+            initialSurface: .remoteLoading,
+            inheritWorkingDirectory: false
         )
         defer {
             if !manager.isFinalizedForWindowClose {
@@ -320,9 +319,9 @@ struct WindowDockLifecycleTests {
         workspace.retireFromOwningTabManager()
 
         #expect(
-            workspace.replaceCloudVMLoadingSurfaceWithTerminal(
+            workspace.replaceRemoteLoadingSurfaceWithTerminal(
                 workspaceId: workspace.id,
-                initialCommand: "cmux vm-pty-connect --id stale",
+                initialCommand: "ssh user@example.test",
                 focus: false
             ) == nil
         )
@@ -341,7 +340,7 @@ struct WindowDockLifecycleTests {
     @Test("Finalized managers reject late session restoration")
     @MainActor
     func finalizedManagerRejectsLateSessionRestoration() {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let snapshot = manager.sessionSnapshot(includeScrollback: false)
 
         manager.finalizeAllWorkspacesForWindowClose()
@@ -356,7 +355,7 @@ struct WindowDockLifecycleTests {
     func windowDockTearsDownOnAuthoritativeRouteRemoval() async throws {
         try await AppContextSerialGate.withExclusiveAppContext {
             let appDelegate = try #require(AppDelegate.shared)
-            let manager = TabManager(autoWelcomeIfNeeded: false)
+            let manager = TabManager()
             let windowId = appDelegate.registerMainWindowContextForTesting(tabManager: manager)
             var unregistered = false
             defer {
@@ -422,7 +421,7 @@ struct WindowDockLifecycleTests {
             let appDelegate = AppDelegate()
             AppDelegate.shared = appDelegate
 
-            let manager = TabManager(autoWelcomeIfNeeded: false)
+            let manager = TabManager()
             let windowId = appDelegate.registerMainWindowContextForTesting(
                 tabManager: manager
             )
@@ -512,7 +511,7 @@ struct WindowDockLifecycleTests {
             AppDelegate.shared = appDelegate
             BrowserAvailabilitySettings.setDisabled(false)
 
-            var manager: TabManager? = TabManager(autoWelcomeIfNeeded: false)
+            var manager: TabManager? = TabManager()
             weak var releasedManager = manager
             let workspace = try #require(manager?.selectedWorkspace)
             let terminal = try #require(workspace.focusedTerminalPanel)
@@ -574,7 +573,7 @@ struct WindowDockLifecycleTests {
     @MainActor
     func runtimeCloseRoutesWindowDockTerminals() throws {
         let appDelegate = try #require(AppDelegate.shared)
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let windowId = appDelegate.registerMainWindowContextForTesting(tabManager: manager)
         defer {
             appDelegate.unregisterMainWindowContextForTesting(windowId: windowId)
@@ -604,8 +603,8 @@ struct WindowDockLifecycleTests {
         try await AppContextSerialGate.withExclusiveAppContext {
             let previousAppDelegate = AppDelegate.shared
             let appDelegate = AppDelegate()
-            let activeManager = TabManager(autoWelcomeIfNeeded: false)
-            let dockManager = TabManager(autoWelcomeIfNeeded: false)
+            let activeManager = TabManager()
+            let dockManager = TabManager()
             AppDelegate.shared = appDelegate
             appDelegate.tabManager = activeManager
             let activeWindowId = appDelegate.registerMainWindowContextForTesting(tabManager: activeManager)
@@ -654,7 +653,7 @@ struct WindowDockLifecycleTests {
     @MainActor
     func triggerFlashDoesNotChangeDockFocus() throws {
         try withIsolatedAppDelegate { appDelegate in
-            let manager = TabManager(autoWelcomeIfNeeded: false)
+            let manager = TabManager()
             let windowId = appDelegate.registerMainWindowContextForTesting(tabManager: manager)
             defer {
                 manager.tabs.forEach { $0.teardownAllPanels() }
@@ -677,7 +676,7 @@ struct WindowDockLifecycleTests {
     @MainActor
     func externalDropMovesLastMainPanelIntoOwnWindowDock() throws {
         let appDelegate = try #require(AppDelegate.shared)
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let windowId = appDelegate.registerMainWindowContextForTesting(tabManager: manager)
         defer {
             appDelegate.unregisterMainWindowContextForTesting(windowId: windowId)
@@ -716,7 +715,7 @@ struct WindowDockLifecycleTests {
     @MainActor
     func externalDropIntoOwnWindowDockRejectsRemoteTmuxMirrorPanel() throws {
         let appDelegate = try #require(AppDelegate.shared)
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let windowId = appDelegate.registerMainWindowContextForTesting(tabManager: manager)
         defer {
             appDelegate.unregisterMainWindowContextForTesting(windowId: windowId)
@@ -749,8 +748,8 @@ struct WindowDockLifecycleTests {
     @MainActor
     func windowDocksRenderSimultaneouslyInBothWindows() throws {
         try withIsolatedAppDelegate { appDelegate in
-            let firstManager = TabManager(autoWelcomeIfNeeded: false)
-            let secondManager = TabManager(autoWelcomeIfNeeded: false)
+            let firstManager = TabManager()
+            let secondManager = TabManager()
             let firstWindowId = appDelegate.registerMainWindowContextForTesting(tabManager: firstManager)
             let secondWindowId = appDelegate.registerMainWindowContextForTesting(tabManager: secondManager)
             defer {

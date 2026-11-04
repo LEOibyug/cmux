@@ -13,10 +13,10 @@ struct TerminalPanelUnavailableView: View {
                 pointSize: 28,
                 tint: Color(nsColor: .secondaryLabelColor)
             )
-            Text(String(localized: "cloud.overlay.manual.unavailable.title", defaultValue: "Cloud terminal unavailable"))
+            Text(String(localized: "terminal.unavailable.title", defaultValue: "Terminal unavailable"))
                 .cmuxFont(size: 14, weight: .semibold)
                 .foregroundStyle(.primary)
-            Text(String(localized: "cloud.overlay.manual.reopen.detail", defaultValue: "Close this tab and reopen the terminal from the Cloud sidebar."))
+            Text(String(localized: "terminal.unavailable.reopen", defaultValue: "Close this tab and reopen the terminal."))
                 .cmuxFont(size: 12)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

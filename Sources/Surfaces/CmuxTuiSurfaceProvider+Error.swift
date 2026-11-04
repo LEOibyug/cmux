@@ -1,11 +1,10 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Foundation
 
-/// Errors surfaced by a Cloud machine provider. Preview credentials never enter error text.
+/// Failures of an SSH host's terminal and browser provider.
 extension CmuxTuiSurfaceProvider {
     enum ProviderError: Error, LocalizedError {
-        case notSignedIn
-        case machineAsleep(String)
+        case connectionUnavailable(String)
         case noWorkspaceOnMachine(String)
         case remoteWorkspaceNotFound(String)
         case remotePlacementUnavailable(String)
@@ -16,27 +15,23 @@ extension CmuxTuiSurfaceProvider {
         case terminalExited(String)
         /// The daemon did not answer the resolver within the bounded retries.
         /// The terminal may still be running; this is never "not created".
-        case terminalAttachTimedOut(terminalID: String, failure: CloudTuiSurfaceIDResolution.Failure)
+        case terminalAttachTimedOut(terminalID: String, failure: TuiSurfaceIDResolution.Failure)
         case invalidSnapshot(String)
         case snapshotOnly(String)
         case stateUnavailable(String)
         case tabStateUnavailable(String)
         case invalidPreviewURL
-        /// No user-space WireGuard hub in this build (no bundled cmux-tui client).
-        case hubUnavailable
         /// The private URL could not be rewritten onto the loopback forward.
         case localForwardURLUnavailable
 
         var errorDescription: String? {
             switch self {
-            case .notSignedIn:
-                return "Cloud VM access requires sign-in. Run `cmux auth login`, then retry."
-            case .machineAsleep(let id):
-                return "\(id) is asleep; open it (`cmux vm shell \(id)`) to wake it before listing its terminals."
+            case .connectionUnavailable(let id):
+                return String(format: String(localized: "ssh.tui.hostDisconnected", defaultValue: "The SSH connection to %@ is unavailable. Reconnect the host, then retry."), id)
             case .noWorkspaceOnMachine(let id):
                 return String(
                     format: String(
-                        localized: "cloudTree.error.noWorkspaceOnMachine",
+                        localized: "tuiTree.error.noWorkspaceOnMachine",
                         defaultValue: "%@ has no remote workspace yet."
                     ),
                     id
@@ -44,7 +39,7 @@ extension CmuxTuiSurfaceProvider {
             case .remoteWorkspaceNotFound(let id):
                 return String(
                     format: String(
-                        localized: "cloudTree.error.remoteWorkspaceNotFound",
+                        localized: "tuiTree.error.remoteWorkspaceNotFound",
                         defaultValue: "Remote workspace %@ is no longer available. Refresh and retry."
                     ),
                     id
@@ -52,7 +47,7 @@ extension CmuxTuiSurfaceProvider {
             case .remotePlacementUnavailable(let id):
                 return String(
                     format: String(
-                        localized: "cloudTree.error.remotePlacementUnavailable",
+                        localized: "tuiTree.error.remotePlacementUnavailable",
                         defaultValue: "Remote workspace %@ has no available terminal placement. Refresh and retry."
                     ),
                     id
@@ -60,7 +55,7 @@ extension CmuxTuiSurfaceProvider {
             case .remoteTabNotFound(let id):
                 return String(
                     format: String(
-                        localized: "cloudTree.error.remoteTabNotFound",
+                        localized: "tuiTree.error.remoteTabNotFound",
                         defaultValue: "Remote tab %@ is no longer available. Refresh and retry."
                     ),
                     id
@@ -68,17 +63,17 @@ extension CmuxTuiSurfaceProvider {
             case .terminalNotCreated(let detail):
                 return String(
                     format: String(
-                        localized: "cloudTree.error.terminalNotCreated",
-                        defaultValue: "The Cloud service did not report the new terminal: %@"
+                        localized: "tuiTree.error.terminalNotCreated",
+                        defaultValue: "The SSH host did not report the new terminal: %@"
                     ),
-                    Self.sanitizedDetail(detail)
+                    detail
                 )
             case .browserNotCreated:
-                return String(localized: "cloud.browser.creationUnavailable", defaultValue: "Cloud browsers are unavailable on this machine. Refresh the machine and retry.")
+                return String(localized: "ssh.tui.browserUnavailable", defaultValue: "The SSH host could not create a browser tab. Refresh the host and retry.")
             case .terminalExited(let id):
                 return String(
                     format: String(
-                        localized: "cloudTree.error.terminalExited",
+                        localized: "tuiTree.error.terminalExited",
                         defaultValue: "%@ already exited on the machine."
                     ),
                     id
@@ -86,7 +81,7 @@ extension CmuxTuiSurfaceProvider {
             case let .terminalAttachTimedOut(terminalID, failure):
                 return String(
                     format: String(
-                        localized: "cloudTree.error.terminalAttachTimedOut",
+                        localized: "tuiTree.error.terminalAttachTimedOut",
                         defaultValue: "Could not attach %@ in time (%@). The terminal may still be running on the machine; try opening it again."
                     ),
                     terminalID,
@@ -95,23 +90,23 @@ extension CmuxTuiSurfaceProvider {
             case .invalidSnapshot(let id):
                 return String(
                     format: String(
-                        localized: "cloudTree.error.invalidSnapshot",
-                        defaultValue: "The Cloud service returned an unversioned or malformed session snapshot for %@."
+                        localized: "tuiTree.error.invalidSnapshot",
+                        defaultValue: "The SSH host returned an unversioned or malformed session snapshot for %@."
                     ),
                     id
                 )
             case .snapshotOnly(let id):
                 return String(
                     format: String(
-                        localized: "cloudTree.error.snapshotOnly",
-                        defaultValue: "%@ uses an older Cloud protocol. Refresh it to enable live sync and rename operations."
+                        localized: "tuiTree.error.snapshotOnly",
+                        defaultValue: "%@ uses an older cmux-tui protocol. Install a compatible cmux-tui on the SSH host to enable live sync and rename operations."
                     ),
                     id
                 )
             case .stateUnavailable(let id):
                 return String(
                     format: String(
-                        localized: "cloudTree.error.renameTerminalUnavailable",
+                        localized: "tuiTree.error.renameTerminalUnavailable",
                         defaultValue: "The current state for %@ is unavailable. Refresh and retry before renaming."
                     ),
                     id
@@ -119,33 +114,24 @@ extension CmuxTuiSurfaceProvider {
             case .tabStateUnavailable(let id):
                 return String(
                     format: String(
-                        localized: "cloudTree.error.renameTabUnavailable",
+                        localized: "tuiTree.error.renameTabUnavailable",
                         defaultValue: "The current state for tab %@ is unavailable. Refresh and retry before renaming."
                     ),
                     id
                 )
             case .invalidPreviewURL:
                 return String(
-                    localized: "cloudTree.error.invalidPreviewURL",
-                    defaultValue: "The Cloud service returned an unusable preview address. Refresh and retry."
-                )
-            case .hubUnavailable:
-                return String(
-                    localized: "cloudTree.error.hubUnavailable",
-                    defaultValue: "This cmux build has no user-space WireGuard hub, so it cannot reach ports on Cloud machines."
+                    localized: "tuiTree.error.invalidPreviewURL",
+                    defaultValue: "The SSH host returned an unusable preview address. Refresh and retry."
                 )
             case .localForwardURLUnavailable:
                 return String(
-                    localized: "cloudTree.error.localForwardURLUnavailable",
+                    localized: "tuiTree.error.localForwardURLUnavailable",
                     defaultValue: "cmux could not build a local address for this port forward."
                 )
             }
         }
 
-        private static func sanitizedDetail(_ detail: String) -> String {
-            let serviceName = String(localized: "cloud.service.name", defaultValue: "Cloud service")
-            return detail.replacingOccurrences(of: "cmux-tui", with: serviceName, options: [.caseInsensitive])
-        }
     }
 
 }

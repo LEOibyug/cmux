@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxSettings
 import CmuxCore
 import CmuxFoundation
 import AppKit
@@ -407,15 +407,6 @@ enum FileExplorerWorkspaceRoot: Equatable {
         rootPath: String?,
         isAvailable: Bool,
         unavailableDetail: String?
-    )
-    case remoteCloud(
-        workspaceId: UUID,
-        vmID: String,
-        displayTarget: String,
-        rootPath: String?,
-        isAvailable: Bool,
-        unavailableDetail: String?,
-        target: CloudFileExplorerTarget?
     )
 }
 
@@ -1105,15 +1096,12 @@ final class ProcessSSHFileExplorerTransport: SSHFileExplorerTransport {
 enum FileExplorerError: LocalizedError, Equatable {
     case providerUnavailable
     case sshCommandFailed(String)
-    case remoteCommandFailed(String)
     case mutationFailed
     case invalidMutationName
     /// A create, rename or duplicate target name is already taken.
     case mutationTargetExists
     /// The containing folder is not writable.
     case mutationPermissionDenied
-    case previewCapacity
-    case remoteFileTooLarge
 
     var errorDescription: String? {
         switch self {
@@ -1121,12 +1109,6 @@ enum FileExplorerError: LocalizedError, Equatable {
             return String(localized: "fileExplorer.error.unavailable", defaultValue: "File explorer is not available")
         case .sshCommandFailed:
             return String(localized: "fileExplorer.error.sshFailed", defaultValue: "SSH command failed")
-        case .previewCapacity:
-            return String(localized: "fileExplorer.preview.capacity", defaultValue: "Close a Cloud file preview and try again.")
-        case .remoteFileTooLarge:
-            return String(localized: "fileExplorer.error.cloudPreviewTooLarge", defaultValue: "Cloud file previews are limited to 1 MB.")
-        case .remoteCommandFailed:
-            return String(localized: "fileExplorer.error.remoteFailed", defaultValue: "Remote command failed")
         case .mutationFailed:
             return String(localized: "fileExplorer.error.mutationFailed", defaultValue: "Unable to update this file or folder.")
         case .invalidMutationName:
@@ -1205,7 +1187,7 @@ final class FileExplorerStore: ObservableObject {
     var workspaceRootObservation: FileExplorerWorkspaceObservation?
     var remoteHomeResolutionTask: Task<Void, Never>?
     var remoteHomeResolutionKey: String?
-    let cloudPreviewCache = CloudFilePreviewCache()
+    let remotePreviewCache = RemoteFilePreviewCache()
     private(set) var resourceContextID = UUID()
 
     private let gitStatusProvider: GitStatusProvider
@@ -1216,9 +1198,6 @@ final class FileExplorerStore: ObservableObject {
     }
 
     var displayRootPath: String {
-        if rootPath.isEmpty, let cloudProvider = provider as? CloudVMFileExplorerProvider {
-            return cloudProvider.displayTarget
-        }
         if let sshProvider = provider as? SSHFileExplorerProvider {
             guard !rootPath.isEmpty else {
                 return "ssh://\(sshProvider.displayTarget)"
@@ -1256,15 +1235,6 @@ final class FileExplorerStore: ObservableObject {
                 isAvailable: isAvailable,
                 unavailableDetail: unavailableDetail,
                 sshTransport: sshTransport
-            )
-        case .remoteCloud(let workspaceId, let vmID, let displayTarget, let rootPath, let isAvailable, let unavailableDetail, let target):
-            applyRemoteCloudWorkspaceRoot(
-                workspaceId: workspaceId,
-                vmID: vmID,
-                displayTarget: displayTarget,
-                rootPath: rootPath,
-                isAvailable: isAvailable,
-                unavailableDetail: unavailableDetail, target: target
             )
         }
     }
@@ -1343,8 +1313,8 @@ final class FileExplorerStore: ObservableObject {
     ) async throws -> URL {
         // `DisableFileTransfer` (MDM): a preview copies the file off the remote
         // host onto this Mac, which is a cmux-mediated download.
-        guard !ManagedFileTransferPolicy.isDisabled else {
-            throw ManagedFileTransferPolicy.refusalError()
+        guard !ManagedFileTransferPolicy().isDisabled else {
+            throw ManagedFileTransferPolicy().refusalError()
         }
         guard expectedWorkspaceRootIdentity == nil || workspaceRootIdentity == expectedWorkspaceRootIdentity,
               let remoteProvider = provider as? SSHFileExplorerProvider else {
@@ -1462,7 +1432,7 @@ final class FileExplorerStore: ObservableObject {
     }
 
     /// Removes entries, moving them to the Trash when the provider supports it
-    /// (local roots) and deleting them permanently otherwise (SSH and Cloud).
+    /// (local roots) and deleting them permanently otherwise (SSH).
     func removeEntries(paths: [String]) async throws {
         guard !paths.isEmpty,
               paths.allSatisfy({ Self.path($0, isContainedIn: rootPath) && !Self.pathsEqual($0, rootPath) }) else {

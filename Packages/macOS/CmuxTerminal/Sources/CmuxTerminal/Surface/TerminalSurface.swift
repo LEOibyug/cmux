@@ -424,7 +424,7 @@ public final class TerminalSurface: Identifiable, ObservableObject {
     var lastUncappedPixelHeight: UInt32 = 0
     var lastXScale: CGFloat = 0
     var lastYScale: CGFloat = 0
-    var mobileViewportCellLimit: (columns: Int, rows: Int)?
+    var sharedViewportCellLimit: (columns: Int, rows: Int)?
     /// tmux-assigned cell grid for manual-IO mirror panes. A mirror's grid
     /// must EQUAL tmux's assignment, not merely fit it: a wider grid never
     /// sets wrap flags where tmux wrapped (unwrapped reads split one tmux
@@ -440,8 +440,8 @@ public final class TerminalSurface: Identifiable, ObservableObject {
     /// A runtime creation that waits for the first committed pane geometry so
     /// the PTY's initial window size is the pane's real size.
     var pendingRuntimeSurfaceCreationSource: RuntimeSurfaceCreationSource?
-    /// Temporary runtime font-size ownership while a mobile viewport is fitted.
-    var mobileViewportFontFitState: MobileViewportFontFitState?
+    /// Temporary runtime font-size ownership while a shared viewport is fitted.
+    var sharedViewportFontFitState: SharedViewportFontFitState?
     // Debug metadata is read from debug/CLI paths off the main thread; the
     // lock is the sanctioned carve-out for tiny values shared with
     // synchronous off-isolation readers.

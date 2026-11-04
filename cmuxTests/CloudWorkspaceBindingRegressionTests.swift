@@ -10,10 +10,10 @@ import Testing
 @MainActor
 @Suite
 struct CloudWorkspaceBindingRegressionTests {
-    private static let machine = SurfaceMachineID.cloud("vivid-newt")
+    private static let machine = SurfaceMachineID.ssh("447a90a30c234eddad32fd4c6fa490dd78c825e77f965cb62980f2cb5704c838")
     private static let workspace = SurfaceRemoteWorkspace(id: "ws_api", name: "api", index: 0, focused: true)
 
-    private static func state(workspaces: [[String: Any]]) throws -> CloudVMState {
+    private static func state(workspaces: [[String: Any]]) throws -> TuiState {
         try #require(CmuxTuiSnapshotParser.state(fromSnapshot: [
             "cursor": ["generation": "g", "revision": "12"],
             "workspaces": workspaces,
@@ -27,9 +27,9 @@ struct CloudWorkspaceBindingRegressionTests {
 
     @Test func aDeletedBoundWorkspaceCannotRouteCreationBackToItsStaleID() {
         let bound = UUID()
-        let coordinator = CloudPlacementCoordinator(binding: { id in
+        let coordinator = TuiPlacementCoordinator(binding: { id in
             id == bound
-                ? WorkspaceCloudVMBinding(vmID: "vivid-newt", isBase: false, remoteWorkspaceID: "ws_deleted")
+                ? RemoteWorkspaceBinding(machineID: "vivid-newt", remoteWorkspaceID: "ws_deleted")
                 : nil
         }, workspaceExists: { _, remoteID in remoteID == "ws_deleted" ? false : nil })
         let resource = SurfaceResource(
@@ -58,9 +58,9 @@ struct CloudWorkspaceBindingRegressionTests {
 
     @Test func mixedRemotePlacementsUseTheSelectedAnchorAndNeverTheFocusedWorkspace() {
         let bound = UUID()
-        let coordinator = CloudPlacementCoordinator(binding: { id in
+        let coordinator = TuiPlacementCoordinator(binding: { id in
             id == bound
-                ? WorkspaceCloudVMBinding(vmID: "vivid-newt", isBase: false, remoteWorkspaceID: "ws_deleted")
+                ? RemoteWorkspaceBinding(machineID: "vivid-newt", remoteWorkspaceID: "ws_deleted")
                 : nil
         }, workspaceExists: { _, _ in false })
         let other = SurfaceRemoteWorkspace(id: "ws_other", name: "other", index: 1, focused: false)
@@ -81,9 +81,9 @@ struct CloudWorkspaceBindingRegressionTests {
 
     @Test func aSelectedLivePlacementOverridesAnotherLiveWorkspaceBinding() {
         let bound = UUID()
-        let coordinator = CloudPlacementCoordinator(binding: { id in
+        let coordinator = TuiPlacementCoordinator(binding: { id in
             id == bound
-                ? WorkspaceCloudVMBinding(vmID: "vivid-newt", isBase: false, remoteWorkspaceID: "ws_api")
+                ? RemoteWorkspaceBinding(machineID: "vivid-newt", remoteWorkspaceID: "ws_api")
                 : nil
         }, workspaceExists: { _, remoteID in ["ws_api", "ws_other"].contains(remoteID) })
         let other = SurfaceRemoteWorkspace(id: "ws_other", name: "other", index: 1, focused: false)
@@ -102,7 +102,7 @@ struct CloudWorkspaceBindingRegressionTests {
     }
 
     @Test func authoritativeDeletionRebindsOneSurvivingProjectedWorkspace() throws {
-        let service = CloudWorkspaceRenameService()
+        let service = TuiWorkspaceRenameService()
         let state = try Self.state(workspaces: [["id": "ws_api", "name": "api"]])
         let resource = SurfaceResource(
             id: SurfaceResourceID(machine: Self.machine, kind: .terminal, key: "term_1"),
@@ -121,7 +121,7 @@ struct CloudWorkspaceBindingRegressionTests {
 
         #expect(
             service.bindingReconciliation(
-                binding: WorkspaceCloudVMBinding(vmID: "vivid-newt", isBase: false, remoteWorkspaceID: "ws_deleted"),
+                binding: RemoteWorkspaceBinding(machineID: "vivid-newt", remoteWorkspaceID: "ws_deleted"),
                 machine: Self.machine,
                 state: state,
                 observation: .current,
@@ -132,7 +132,7 @@ struct CloudWorkspaceBindingRegressionTests {
     }
 
     @Test func authoritativeDeletionClearsMixedOrEmptyBindingWithoutMovingPanes() throws {
-        let service = CloudWorkspaceRenameService()
+        let service = TuiWorkspaceRenameService()
         let other = SurfaceRemoteWorkspace(id: "ws_other", name: "other", index: 1, focused: false)
         let state = try Self.state(workspaces: [
             ["id": "ws_api", "name": "api"], ["id": "ws_other", "name": "other"],
@@ -159,7 +159,7 @@ struct CloudWorkspaceBindingRegressionTests {
 
         #expect(
             service.bindingReconciliation(
-                binding: WorkspaceCloudVMBinding(vmID: "vivid-newt", isBase: false, remoteWorkspaceID: "ws_deleted"),
+                binding: RemoteWorkspaceBinding(machineID: "vivid-newt", remoteWorkspaceID: "ws_deleted"),
                 machine: Self.machine,
                 state: state,
                 observation: .current,
@@ -169,7 +169,7 @@ struct CloudWorkspaceBindingRegressionTests {
         )
         #expect(
             service.bindingReconciliation(
-                binding: WorkspaceCloudVMBinding(vmID: "vivid-newt", isBase: false, remoteWorkspaceID: "ws_deleted"),
+                binding: RemoteWorkspaceBinding(machineID: "vivid-newt", remoteWorkspaceID: "ws_deleted"),
                 machine: Self.machine,
                 state: state,
                 observation: .stale(reason: "offline"),

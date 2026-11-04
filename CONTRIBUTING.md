@@ -1,161 +1,49 @@
-# Contributing to cmux
+# 本地开发
 
-New here? Read [docs/start-here.md](docs/start-here.md) first: how to pick an
-issue, what you can fix without a Mac, and what happens to your pull request.
-This file is the mechanics: setup, checks, CI and the pull request checklist.
+此仓库只维护个人 macOS 版本，不使用 GitHub Actions、官方发布流水线或自动上游同步。
 
-Be nice, assume the best: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Write issues
-and pull requests the way the short [writing guide](STYLE.md) says.
+## 前提
 
-## Prerequisites
+- macOS 14+，完整 Xcode；版本见 `.xcode-version`。
+- Xcode Metal 工具链：`xcodebuild -downloadComponent MetalToolchain`。
+- Ghostty 固定版本的 Zig（当前为 0.16.0）和 Rust/rustup。
+- Homebrew rustup 需要将 `/opt/homebrew/opt/rustup/bin` 加入 `PATH`。
 
-Only needed for the native app. Docs, translations, Python tooling, `cmux-tui` and
-`web/` work on Linux; see [what you can fix without a Mac build](docs/start-here.md#2-things-you-can-fix-without-a-mac-build).
+## 首次构建
 
-- macOS 14+
-- Xcode 26 (the pinned toolchain). Xcode 16.2 on Intel Macs with macOS 14.5+ also
-  builds the app, best effort ([Swift 6.0 limits](skills/cmux-architecture/references/swift-6-0-compatibility.md)).
-- The Xcode 26 Metal compiler, which is a separate download. Select the Xcode you
-  build with first (`DEVELOPER_DIR` overrides `xcode-select`), then:
-
-  ```bash
-  xcodebuild -downloadComponent MetalToolchain
-  ```
-
-- [Zig](https://ziglang.org/): `brew install zig`
-- [Rust](https://rustup.rs). Every app build compiles the bundled `cmux-cua` engine
-  with `cargo`, and `scripts/setup.sh` looks for `rustup` in `~/.cargo/bin`, where
-  the official installer puts it:
-
-  ```bash
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  ```
-
-  Homebrew's `rustup` works too, but it is keg-only: add `$(brew --prefix rustup)/bin`
-  to `PATH` and run `rustup default stable` yourself.
-
-## Getting Started
-
-```bash
-git clone --recursive https://github.com/manaflow-ai/cmux.git
+```sh
+git clone --recursive https://github.com/LEOibyug/cmux.git
 cd cmux
 ./scripts/setup.sh
-CMUX_DEV_BACKEND_MODE=local ./scripts/reload.sh --tag my-feature
+(cd cmux-tui && cargo build --release --locked -p cmux-tui --bin cmux-tui)
+CMUX_DEV_BACKEND_MODE=local ./scripts/reload.sh --release --tag personal --no-global-cli-links
 ```
 
-- `setup.sh` initializes the submodules, installs the pinned Rust toolchain, and
-  fetches a checksum-pinned prebuilt `GhosttyKit.xcframework` (it builds from source
-  with Zig if that fails; force that with `CMUX_GHOSTTYKIT_NO_PREBUILT=1`).
-- `reload.sh --tag <tag>` builds a tagged Debug app and prints its path. Add
-  `--launch` to open it, or `--build-only` to only compile.
-  `CMUX_DEV_BACKEND_MODE=local` points it at the local dev origin; without it a
-  tagged build expects the maintainers' shared backend and stops. See
-  [tagged builds](skills/cmux-dev-workflow/references/tagged-builds.md) for cache
-  reuse and Release variants.
-- `reload.sh` skips emitting the app's Swift module to make rebuilds a little
-  faster, except on Xcode 26.2 and 26.3, where that build stops at the module merge
-  with `error: type mismatch of function ... but used in a swift module as ...`.
-  If you see that error on another Xcode, rerun with
-  `CMUX_RELOAD_APP_EMIT_MODULE=1`.
-- After pulling changes to setup or the merge drivers, rerun
-  `./scripts/install-git-hooks.sh`. With a custom `core.hooksPath` it prints the
-  `pre-commit` and `post-merge` lines to add yourself; wire both.
+`setup.sh` 准备固定依赖和本地 Git hooks；`reload.sh` 不需要后端、官方账号或服务凭据。SSH helper 使用本地 `cmux-tui/target/release/cmux-tui`，也可用 `CMUX_TUI_CLIENT_LOCAL` 明确指定。
 
-Team members with a Stack account can also sign DEBUG builds in and attach an iOS
-build: see [team dev setup](docs/team-dev-setup.md).
+后续构建复用相同 tag 和 DerivedData。已有缓存目录时，用 `--derived-data <绝对路径>`；加 `--launch` 启动隔离验证版。不要使用裸 `xcodebuild`、未标记的开发版或全局 `/tmp/cmux-cli`。
 
-<a id="fast-checks-before-building-or-pushing"></a>
+## 按功能验证
 
-## Fast checks before committing or building
+只验证本次改动实际影响的路径：
 
-```bash
-python3 scripts/verify-local.py
+1. Swift 改动先做定向语法检查：`python3 scripts/verify-local.py --only swift-syntax --swift-changed`。
+2. 原生行为有变化时，编译上述 tagged app，并在其中实际操作一次对应功能。
+3. 只有不确定的边界或用户指定时，才运行相关测试。不默认跑全量 app-host/UI/回归套件。
+4. UI 文案变化运行 `./scripts/localize-changes`；新增 Swift 文件用 `scripts/wire-app-sources.py` 接入构建。
+
+针对隔离版使用：
+
+```sh
+CMUX_TAG=personal scripts/cmux-debug-cli.sh identify --json
 ```
 
-It picks the static checks your diff touches (localization, project and test
-wiring, package grouping, generated policy, feature flags) and parses changed
-Swift. It compares against your local `upstream/HEAD`, then `origin/HEAD`, and
-fetches nothing. When a check fails it prints the rerun command, for example:
+若构建使用了自定义 DerivedData，同时传入 `CMUX_DERIVED_DATA`。完整流程参考 [tagged builds](skills/cmux-dev-workflow/references/tagged-builds.md)。
 
-```bash
-python3 scripts/verify-local.py --only project --only test-wiring
-```
+## 提交与安装
 
-`--list` previews, `--all` runs the full static recipe CI uses, and `--receipt -`
-prints JSON ([details](docs/verification-receipts.md)). Parsing is not typechecking
-or testing. The script runs repository code, so use a
-[trusted checkout](docs/contributor-verification.md#trust-boundary). Git push does
-not run it for you.
+只提交源码和必要构建输入，不提交用户配置、对话、凭据、缓存、安装回执或临时验证脚本。提交并推送到个人 fork；上游更新只按用户要求选择性整合，不追求兼容过去版本。
 
-For `web/` and other JS/TS sources, run `bun run biome:check` from the repository
-root. The root `biome.json` deliberately scopes that to maintained web and JS/TS
-sources, excluding generated bundles, build outputs, vendored trees and review-tool
-metadata. Formatting and import sorting are off for now, so do not wire this into
-required CI until the remaining source lint diagnostics are paid down.
+正式安装前由用户退出当前 cmux，再复用已验证产物替换。不得退出、强退或覆盖承载会话的运行中主程序；本地签名不代表官方公证，系统权限可能需要重新授予。
 
-## Tests and CI
-
-Go up the [verification ladder](docs/contributor-verification.md) as far as your
-change needs: source checks, the owning package's tests, compiling the app and
-tests, then runtime and physical checks. In the pull request, say which of those
-you ran. A parse or a build is not a test run.
-
-**You do not need to run the app-host or UI tests on your own Mac.** They launch
-the app and need a disposable GUI session. If you can't run them, open the pull
-request anyway and say so under Testing. Opening the pull request is the request
-for CI:
-
-- Static checks run on every pull request. The Linux guards run when your diff
-  touches what they cover.
-- Swift, package, app-host and tooling tests are routed from your diff: an edited
-  suite runs, and an app-source change runs the suites whose tests mention what
-  you changed. No label needed.
-- The broad macOS suite is label-gated. A maintainer adds `full-ci` when a change
-  needs it ([PR CI coverage](skills/cmux-testing/references/pr-ci-coverage.md)).
-  It is not a merge requirement.
-- No pull request job runs `cmuxUITests/` in full. If you touch that directory, the
-  `suite-coverage` check stays red until a maintainer runs the affected classes and
-  records it with `no-full-ci`.
-- On your first pull request, checks wait for a maintainer to approve the workflow
-  run. That's a GitHub default for new contributors, not a judgement on the patch.
-
-Read which tests actually ran on your commit, not the color of the checks list: a
-skipped job is green and is not coverage.
-
-## Ghostty Submodule
-
-`ghostty` points to [manaflow-ai/ghostty](https://github.com/manaflow-ai/ghostty),
-our fork of Ghostty. To change it, rebuild `GhosttyKit.xcframework` or pull in
-upstream, follow the [cmux-ghostty skill](skills/cmux-ghostty/SKILL.md): push the
-submodule commit to the fork before committing the pointer here. Fork changes and
-conflict notes are in [docs/ghostty-fork.md](docs/ghostty-fork.md).
-
-## Pull Requests
-
-- One change per pull request. A fix plus a reformat is two pull requests.
-- Fill in the template: a summary of the problem and what someone can do after
-  the change, and Testing with the commands you ran.
-- For a bug fix, commit the failing regression test before the fix
-  ([regression commits](skills/cmux-testing/SKILL.md#reproduce-and-repair)).
-- Under `## Changelog`, write one `Added`/`Changed`/`Fixed`/`Removed` line for a
-  user-visible change, or `none`. Don't edit [CHANGELOG.md](CHANGELOG.md); releases
-  build it from these lines.
-- Localize user-facing strings ([localization skill](skills/cmux-localization/SKILL.md)).
-- No unrelated formatting, generated files, vendored trees or version bumps.
-- Sign the [CLA](CLA.md) once by commenting
-  `I have read the CLA Document v2.2 and I hereby sign the CLA` on your pull request.
-  The check matches commit author emails to your GitHub account, so commit with an
-  email linked to it.
-
-Merges are squash merges, so the title and description become the commit that
-ships. How review works and what makes a patch wait is in
-[start here](docs/start-here.md#5-what-happens-next).
-
-Agents working in this repository also follow [CLAUDE.md](CLAUDE.md) (also `AGENTS.md`).
-
-## License
-
-By contributing to this repository, you agree that:
-
-1. Your contributions are licensed under the license of the directory you contribute to: the Business Source License 1.1 (`BUSL-1.1`) for the server directories listed in [LICENSE](LICENSE) (`web/`, `workers/ci-artifacts/`, `workers/iroh-v2/`, `workers/presence/`, `services/iroh-relay-minter/`, `cmux-tui/relays/cloudflare-do/`), and the project's GNU General Public License v3.0 or later (`GPL-3.0-or-later`) everywhere else unless a file states otherwise.
-2. You grant Manaflow, Inc. a perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use, reproduce, modify, sublicense, and distribute your contributions under any license, including a commercial license offered to third parties.
+许可证与第三方归属见 [LICENSE](LICENSE) 和 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。

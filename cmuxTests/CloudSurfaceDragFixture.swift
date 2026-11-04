@@ -19,7 +19,7 @@ final class CloudSurfaceDragFixture {
     let resolver: PaneTransferSourceResolver
 
     init(kind: SurfaceResourceKind) throws {
-        workspace.cloudVMBinding = WorkspaceCloudVMBinding(vmID: "b", isBase: false)
+        workspace.remoteWorkspaceBinding = RemoteWorkspaceBinding(machineID: SurfaceMachineID.ssh("3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d").rawValue)
         let panelID = try #require(workspace.focusedPanelId)
         let paneID = try #require(workspace.paneId(forPanelId: panelID))
         context = PaneDropContext(workspaceId: workspace.id, panelId: panelID, paneId: paneID)
@@ -27,7 +27,7 @@ final class CloudSurfaceDragFixture {
         registration = try #require(registry.register(transfer))
         let registry = registry
         let group = SurfaceResourceGroup(title: "same name", resources: [
-            SurfaceResourceID(machine: .cloud("a"), kind: kind, key: "resource")
+            SurfaceResourceID(machine: .ssh("ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"), kind: kind, key: "resource")
         ])
         resolver = PaneTransferSourceResolver(
             vaultSessionRegistry: { nil }, tabTransferRegistry: { registry },

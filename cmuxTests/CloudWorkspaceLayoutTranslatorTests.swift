@@ -11,8 +11,8 @@ import Testing
 /// session snapshot (screens carrying `LayoutDocument`s, panes, tabs) becomes the
 /// `SurfaceProjectionLayout` the catalog walks. Directions, ratios, tab order, exact
 /// remote views, dropped unknowns, collapsed empty panes, and the fail-closed cases.
-@Suite struct CloudWorkspaceLayoutTranslatorTests {
-    static let machine = SurfaceMachineID.cloud("vivid-newt")
+@Suite struct TuiWorkspaceLayoutTranslatorTests {
+    static let machine = SurfaceMachineID.ssh("447a90a30c234eddad32fd4c6fa490dd78c825e77f965cb62980f2cb5704c838")
 
     // MARK: - Fixture
 
@@ -99,7 +99,7 @@ import Testing
     }
 
     static func translate(_ snapshot: [String: Any], workspace: String = "ws_main") -> SurfaceProjectionLayout? {
-        CloudWorkspaceLayoutTranslator.projectionLayout(snapshot: snapshot, machine: machine, workspaceID: workspace, resources: resources)
+        TuiWorkspaceLayoutTranslator.projectionLayout(snapshot: snapshot, machine: machine, workspaceID: workspace, resources: resources)
     }
 
     static func keys(_ placements: [SurfaceResourcePlacement]) -> [String] { placements.map(\.resource.key) }

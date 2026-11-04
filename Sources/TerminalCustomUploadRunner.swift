@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxFoundation
 import CmuxSettings
 import Darwin
@@ -41,7 +41,7 @@ struct TerminalCustomUploadRunner {
 
     init(
         runProcess: @escaping ProcessRunner = TerminalCustomUploadRunner.spawnCommand,
-        isFileTransferDisabled: @escaping () -> Bool = { ManagedFileTransferPolicy.isDisabled },
+        isFileTransferDisabled: @escaping () -> Bool = { ManagedFileTransferPolicy().isDisabled },
         uploadRules: @escaping @MainActor () -> [TerminalUploadCommandRule] = {
             AppDelegate.shared?.settingsRuntime.map {
                 $0.jsonStore.snapshotValue(for: $0.catalog.terminal.uploadCommands)
@@ -170,7 +170,7 @@ struct TerminalCustomUploadRunner {
             cleanup(fileURLs)
             DispatchQueue.main.async {
                 guard operation.finish() else { return }
-                completion(.failure(ManagedFileTransferPolicy.refusalError()))
+                completion(.failure(ManagedFileTransferPolicy().refusalError()))
             }
             return true
         }

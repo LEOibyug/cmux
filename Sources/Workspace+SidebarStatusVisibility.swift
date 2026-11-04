@@ -34,15 +34,53 @@ extension Workspace {
         return agentStatusEntriesByPanelId[panelId]?[key]
     }
 
+    /// The newest visible report owned by this terminal, never a workspace
+    /// summary or a different pane's report for the same agent key.
+    func terminalAgentStatusEntryVisibleForDisplay(panelId: UUID) -> SidebarStatusEntry? {
+        guard panels[panelId] is TerminalPanel,
+              let entries = agentStatusEntriesByPanelId[panelId] else { return nil }
+        var newest: SidebarStatusEntry?
+        for entry in entries.values {
+            guard statusEntries[entry.key] != nil else { continue }
+            if entry.key == Self.programStatusKey {
+                // OSC reports belong to their terminal store, not a hook PID.
+                guard programStatusStoresByPanelId[panelId]?.mostUrgentRecord() != nil else { continue }
+            } else {
+                guard AgentHibernationLifecycleStatusKeys.allowedStatusKeys.contains(entry.key) else { continue }
+                let ownsLocalPID = agentPIDKeysByPanelId[panelId]?.contains {
+                    agentStatusKey(forAgentPIDKey: $0) == entry.key
+                } ?? false
+                guard ownsLocalPID || (showsRelayHostAgentStatus
+                    && agentLifecycleStatesByPanelId[panelId]?[entry.key] != nil) else { continue }
+            }
+            if let current = newest, !isSidebarStatusEntryLessCurrent(current, than: entry) {
+                continue
+            }
+            newest = entry
+        }
+        return newest
+    }
+
     func setStatusEntry(_ entry: SidebarStatusEntry, key: String, panelId: UUID?) {
         statusEntries[key] = entry
         if let panelId, panels[panelId] != nil {
             agentStatusEntriesByPanelId[panelId, default: [:]][key] = entry
+            syncTerminalTabAgentStatusBadge(forPanelId: panelId)
         }
     }
 
     func clearStatusEntry(key: String, panelId: UUID?) {
-        removeStatusEntry(forKey: key)
+        guard let panelId,
+              AgentHibernationLifecycleStatusKeys.allowedStatusKeys.contains(key) else {
+            removeStatusEntry(forKey: key)
+            return
+        }
+        removePanelStatusEntry(key: key, panelId: panelId)
+        if let remainingEntry = mostUrgentPanelStatusEntry(forKey: key) {
+            statusEntries[key] = remainingEntry
+        } else {
+            removeStatusEntry(forKey: key)
+        }
     }
 
     /// Removes the key and every pane's copy of it, so a later report for the
@@ -62,6 +100,7 @@ extension Workspace {
         if agentStatusEntriesByPanelId[panelId]?.isEmpty == true {
             agentStatusEntriesByPanelId.removeValue(forKey: panelId)
         }
+        syncTerminalTabAgentStatusBadge(forPanelId: panelId)
     }
 
     /// Several panes can report the same agent key (two Claude panes share

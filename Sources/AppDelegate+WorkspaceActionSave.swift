@@ -206,10 +206,6 @@ extension AppDelegate {
             defaultValue: "Open cmux.json"
         ))
         alert.addButton(withTitle: String(
-            localized: "settings.settingsJSON.docsButton",
-            defaultValue: "Open Docs"
-        ))
-        alert.addButton(withTitle: String(
             localized: "common.ok",
             defaultValue: "OK"
         ))
@@ -273,9 +269,6 @@ extension AppDelegate {
             // Reuse the existing in-cmux config editor path used by Settings'
             // workspace-layout customization.
             openWorkspaceLayoutsCustomization()
-        case .alertSecondButtonReturn:
-            guard let url = URL(string: "https://cmux.com/docs/custom-commands") else { return }
-            NSWorkspace.shared.open(url)
         default:
             break
         }

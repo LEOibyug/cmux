@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -10,15 +10,15 @@ import Testing
 #endif
 
 @Suite("Cloud terminal creation")
-struct CloudTerminalCreationCoordinatorTests {
+struct TuiTerminalCreationCoordinatorTests {
     @Test @MainActor
     func retryDuringCreationDoesNotStartAnotherRemoteTerminal() async {
-        let started = CloudLinkFirstValue<Bool>()
-        let release = CloudLinkFirstValue<Bool>()
-        let completed = CloudLinkFirstValue<Bool>()
+        let started = RemoteLinkFirstValue<Bool>()
+        let release = RemoteLinkFirstValue<Bool>()
+        let completed = RemoteLinkFirstValue<Bool>()
         let resource = Self.resource(key: "term_created")
         var createCount = 0
-        let coordinator = CloudTerminalCreationCoordinator(
+        let coordinator = TuiTerminalCreationCoordinator(
             create: {
                 createCount += 1
                 started.resolve(true)
@@ -49,7 +49,7 @@ struct CloudTerminalCreationCoordinatorTests {
         var starts = 0
         var failures = 0
         let projection = SurfaceProjection(resource: resource.id, workspaceID: UUID(), panelID: UUID())
-        let coordinator = CloudTerminalCreationCoordinator(
+        let coordinator = TuiTerminalCreationCoordinator(
             create: {
                 createCount += 1
                 return resource
@@ -81,7 +81,7 @@ struct CloudTerminalCreationCoordinatorTests {
     func cancellationReportsOnceAndSkipsFailure() async {
         var cancelled = 0
         var failed = 0
-        let coordinator = CloudTerminalCreationCoordinator(
+        let coordinator = TuiTerminalCreationCoordinator(
             create: {
                 try await Task.sleep(for: .seconds(5))
                 return Self.resource(key: "term_slow")
@@ -102,7 +102,7 @@ struct CloudTerminalCreationCoordinatorTests {
     func classifiedCancellationReportsCancelWithoutFailure() async {
         var cancelled = 0
         var failed = 0
-        let coordinator = CloudTerminalCreationCoordinator(
+        let coordinator = TuiTerminalCreationCoordinator(
             create: { throw URLError(.cancelled) },
             project: { _ in throw URLError(.cancelled) },
             onFailure: { _ in failed += 1 },
@@ -123,7 +123,7 @@ struct CloudTerminalCreationCoordinatorTests {
         let startedStream = AsyncStream<Void>.makeStream()
         var release: CheckedContinuation<Void, Never>?
         var discarded = false
-        let coordinator = CloudTerminalCreationCoordinator(
+        let coordinator = TuiTerminalCreationCoordinator(
             create: { resource },
             project: { _ in
                 startedStream.continuation.yield(())
@@ -149,7 +149,7 @@ struct CloudTerminalCreationCoordinatorTests {
 
     private static func resource(key: String) -> SurfaceResource {
         SurfaceResource(
-            id: SurfaceResourceID(machine: .cloud("machine"), kind: .terminal, key: key),
+            id: SurfaceResourceID(machine: .ssh("bc020a35b7f9cb1382e7b534c68e3c531d849b119bf14f75ddead6cc45c3ccc1"), kind: .terminal, key: key),
             title: "", detail: nil, lifecycle: .launching, agent: nil,
             remoteWorkspace: nil, remoteViews: [], port: nil, url: nil
         )

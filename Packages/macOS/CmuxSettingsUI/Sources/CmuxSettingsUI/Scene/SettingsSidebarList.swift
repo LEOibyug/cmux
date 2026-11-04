@@ -6,11 +6,10 @@ import SwiftUI
 struct SettingsSidebarList: View {
     @Bindable var query: SettingsSearchQuery
     @Binding var selection: String
-    let isCloudSectionAvailable: Bool
 
     var body: some View {
         List(selection: $selection) {
-            SettingsSidebarRows(query: query, isCloudSectionAvailable: isCloudSectionAvailable)
+            SettingsSidebarRows(query: query)
         }
         .listStyle(.sidebar)
         .navigationTitle(String(localized: "settings.title", defaultValue: "Settings"))
@@ -25,10 +24,9 @@ struct SettingsSidebarList: View {
 @MainActor
 private struct SettingsSidebarRows: View {
     let query: SettingsSearchQuery
-    let isCloudSectionAvailable: Bool
 
     var body: some View {
-        let matches = query.results.filter { isEntryVisible($0) }
+        let matches = query.results
         if matches.isEmpty {
             Text(String(localized: "settings.search.noResults", defaultValue: "No Results"))
                 .foregroundStyle(.secondary)
@@ -56,16 +54,6 @@ private struct SettingsSidebarRows: View {
         }
     }
 
-    private func isEntryVisible(_ entry: SettingsSearchIndex.Entry) -> Bool {
-        guard !isCloudSectionAvailable else { return true }
-        switch entry.kind {
-        case .section:
-            return entry.id != "section:\(SettingsSectionID.cloudMachines.rawValue)"
-        case .setting(let parent):
-            return parent != .cloudMachines
-        }
-    }
-
     /// Renders one existing search-index entry as a selectable sidebar leaf.
     private func entryRow(_ entry: SettingsSearchIndex.Entry) -> some View {
         SettingsSidebarEntryRow(
@@ -76,10 +64,7 @@ private struct SettingsSidebarRows: View {
         .tag(entry.id)
     }
 
-    /// Returns the existing section entries in taxonomy order without
-    /// changing their ids or targets. Runtime visibility filtering happens
-    /// before this step, so unavailable leaves simply disappear from their
-    /// group while the remaining destinations keep their stable identities.
+    /// Returns the section entries in taxonomy order without changing their ids or targets.
     private func taxonomyEntries(
         for group: SettingsTaxonomyGroup,
         from entries: [SettingsSearchIndex.Entry]

@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -11,8 +11,8 @@ import Testing
 #endif
 
 @Suite("Cloud terminal layout creation")
-struct CloudTerminalLayoutCreationTests {
-    private static let machine = SurfaceMachineID.cloud("startup-fixture")
+struct TuiTerminalLayoutCreationTests {
+    private static let machine = SurfaceMachineID.ssh("d826416564de123b32dd8e4f79bf26b2fdd8bc5d84d3732f8937c24624453d5e")
     private static let socketPath = "/tmp/startup-fixture.sock"
 
     @Test(arguments: [SurfaceSplitDirection.right, .down])
@@ -47,7 +47,7 @@ struct CloudTerminalLayoutCreationTests {
         let command = try #require(await runner.commands.last)
         #expect(command.operation == "pane.run")
         #expect(command.params["pane"] as? String == "pane_target")
-        #expect(command.params["argv"] as? [String] == CloudTuiCommandLine.defaultTerminalCommand)
+        #expect(command.params["argv"] as? [String] == TuiCommandLine.defaultTerminalCommand)
         #expect(command.idempotencyKey == "request-tab")
     }
 
@@ -72,7 +72,7 @@ struct CloudTerminalLayoutCreationTests {
 
     @Test("A burst of rejected revisions preserves one intent until it commits")
     func repeatedRevisionConflictsRefreshPlacementBeforeCommitting() async throws {
-        var responses: [Result<Data, CloudMachineLink.LinkError>] = []
+        var responses: [Result<Data, RemoteMachineLink.LinkError>] = []
         for revision in 10..<18 {
             responses.append(.success(try Self.snapshot(revision: String(revision))))
             responses.append(.failure(.exited(status: 1, output: #"{"code":"revision.conflict"}"#)))
@@ -97,7 +97,7 @@ struct CloudTerminalLayoutCreationTests {
         let runner = LayoutCreationRunner(responses: [
             .success(try Self.snapshot()), .failure(.timedOut)
         ])
-        await #expect(throws: CloudMachineLink.LinkError.self) {
+        await #expect(throws: RemoteMachineLink.LinkError.self) {
             try await operation(runner).run(nearTabID: "tab_source", splitDirection: .down)
         }
         #expect(await runner.commands.count == 2)
@@ -108,7 +108,7 @@ struct CloudTerminalLayoutCreationTests {
         let runner = LayoutCreationRunner(responses: [])
         var operation = operation(runner)
         operation.commandDeadline = .zero
-        await #expect(throws: CloudDiagnosticFailure.timeout) {
+        await #expect(throws: TuiTransportError.timedOut) {
             try await operation.run(nearTabID: "tab_source", splitDirection: .right)
         }
         #expect(await runner.commands.isEmpty)
@@ -117,13 +117,13 @@ struct CloudTerminalLayoutCreationTests {
     @MainActor
     @Test("Parallel Cloud creates keep one machine mutation turn", .timeLimit(.minutes(1)), arguments: [false, true])
     func parallelCreatesPreservePlacement(cancelQueuedIntent: Bool) async throws {
-        let queue = CloudTerminalMutationQueue()
+        let queue = TuiTerminalMutationQueue()
         let runner = BurstLayoutCreationRunner()
         // Admission is synchronous: all twelve intents are reserved before the
         // first snapshot is released. Each body executes the production operation.
         let tasks = (0..<12).map { index in
             queue.enqueue {
-                try await CloudTerminalLayoutCreation(
+                try await TuiTerminalLayoutCreation(
                     machine: Self.machine, socketPath: Self.socketPath, commandRunner: runner
                 ).run(
                     nearTabID: "tab_source", splitDirection: index.isMultiple(of: 2) ? .right : nil,
@@ -137,8 +137,8 @@ struct CloudTerminalLayoutCreationTests {
             if cancelQueuedIntent { tasks[3].cancel() }
 
             // Another machine must continue while this machine's read is held.
-            let otherMachineQueue = CloudTerminalMutationQueue()
-            #expect(try await otherMachineQueue.run { SurfaceMachineID.cloud("other") } == .cloud("other"))
+            let otherMachineQueue = TuiTerminalMutationQueue()
+            #expect(try await otherMachineQueue.run { SurfaceMachineID.ssh("d9298a10d1b0735837dc4bd85dac641b0f3cef27a47e5d53a54f2f3f5b2fcffa") } == .ssh("d9298a10d1b0735837dc4bd85dac641b0f3cef27a47e5d53a54f2f3f5b2fcffa"))
             await runner.releaseFirstSnapshot()
 
             var terminalIDs: Set<String> = []
@@ -211,7 +211,7 @@ struct CloudTerminalLayoutCreationTests {
 
     @Test("A source moved to another workspace cannot redirect a captured create", arguments: [false, true])
     func movedWorkspaceFailsBeforeMutation(afterConflict: Bool) async throws {
-        var responses: [Result<Data, CloudMachineLink.LinkError>] = []
+        var responses: [Result<Data, RemoteMachineLink.LinkError>] = []
         if afterConflict {
             responses = [.success(try Self.snapshot()), .failure(.exited(status: 1, output: "revision.conflict"))]
         }
@@ -226,8 +226,8 @@ struct CloudTerminalLayoutCreationTests {
         #expect(commands.filter { $0.operation == "pane.split" }.count == (afterConflict ? 1 : 0))
     }
 
-    private func operation(_ runner: LayoutCreationRunner) -> CloudTerminalLayoutCreation {
-        CloudTerminalLayoutCreation(machine: Self.machine, socketPath: Self.socketPath, commandRunner: runner)
+    private func operation(_ runner: LayoutCreationRunner) -> TuiTerminalLayoutCreation {
+        TuiTerminalLayoutCreation(machine: Self.machine, socketPath: Self.socketPath, commandRunner: runner)
     }
 
     fileprivate nonisolated static func snapshot(revision: String = "10", paneID: String = "pane_target", workspaceID: String = "ws_target") throws -> Data {
@@ -251,15 +251,15 @@ struct CloudTerminalLayoutCreationTests {
 }
 
 /// An ordered daemon script; every command passes through the production operation.
-private actor LayoutCreationRunner: CloudTuiCommandRunning {
-    private var responses: [Result<Data, CloudMachineLink.LinkError>]
-    private(set) var commands: [CloudTuiRequest] = []
+private actor LayoutCreationRunner: TuiCommandRunning {
+    private var responses: [Result<Data, RemoteMachineLink.LinkError>]
+    private(set) var commands: [TuiRequest] = []
 
-    init(responses: [Result<Data, CloudMachineLink.LinkError>]) {
+    init(responses: [Result<Data, RemoteMachineLink.LinkError>]) {
         self.responses = responses
     }
 
-    func runTuiCommand(arguments: CloudTuiRequest, deadline: Duration) async throws -> Data {
+    func runTuiCommand(arguments: TuiRequest, deadline: Duration) async throws -> Data {
         commands.append(arguments)
         return try responses.removeFirst().get()
     }
@@ -267,7 +267,7 @@ private actor LayoutCreationRunner: CloudTuiCommandRunning {
 
 /// Holds a transaction between its read and write so parallel admission cannot
 /// be mistaken for a set of synchronous, already-completed calls.
-private actor BurstLayoutCreationRunner: CloudTuiCommandRunning {
+private actor BurstLayoutCreationRunner: TuiCommandRunning {
     let firstSnapshot: AsyncStream<Bool>
     private let firstSnapshotContinuation: AsyncStream<Bool>.Continuation
     private let release: AsyncStream<Bool>
@@ -288,9 +288,9 @@ private actor BurstLayoutCreationRunner: CloudTuiCommandRunning {
         releaseContinuation.finish()
     }
 
-    func runTuiCommand(arguments: CloudTuiRequest, deadline: Duration) async throws -> Data {
+    func runTuiCommand(arguments: TuiRequest, deadline: Duration) async throws -> Data {
         if arguments.operation == "session.snapshot" {
-            let snapshot = try CloudTerminalLayoutCreationTests.snapshot(revision: String(revision))
+            let snapshot = try TuiTerminalLayoutCreationTests.snapshot(revision: String(revision))
             activeTransactions += 1
             maximumConcurrentTransactions = max(maximumConcurrentTransactions, activeTransactions)
             if !hasRead {
@@ -304,7 +304,7 @@ private actor BurstLayoutCreationRunner: CloudTuiCommandRunning {
         activeTransactions -= 1
         guard arguments.params["expected_revision"] as? String == String(revision) else {
             conflicts += 1
-            throw CloudMachineLink.LinkError.exited(status: 1, output: #"{"code":"revision.conflict"}"#)
+            throw RemoteMachineLink.LinkError.exited(status: 1, output: #"{"code":"revision.conflict"}"#)
         }
         revision += 1
         let key = arguments.idempotencyKey ?? "missing"

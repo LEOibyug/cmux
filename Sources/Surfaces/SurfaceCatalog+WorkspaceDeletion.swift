@@ -4,13 +4,13 @@ import Foundation
 extension SurfaceCatalog {
     /// Synchronous admission makes the row disappear before the first network
     /// suspension. Every sidebar and CLI delete shares this request and result.
-    func deleteCloudWorkspace(
+    func deleteTuiWorkspace(
         machine: SurfaceMachineID,
         workspaceID: String,
         provider suppliedProvider: (any SurfaceProvider)? = nil
     ) -> Task<Int, Error> {
-        let ledger = cloudWorkspaceDeletionLedger
-        let key = CloudWorkspaceDeletionLedger.Key(machine: machine, workspaceID: workspaceID)
+        let ledger = tuiWorkspaceDeletionLedger
+        let key = TuiWorkspaceDeletionLedger.Key(machine: machine, workspaceID: workspaceID)
         if let entry = ledger.entries[key] {
             if let existing = entry.task { return existing }
             if entry.completed { return Task { entry.closedTerminalCount } }
@@ -18,12 +18,12 @@ extension SurfaceCatalog {
         guard let token = ledger.begin(machine: machine, workspaceID: workspaceID, previous: authoritativeSnapshot) else {
             return Task { throw CancellationError() }
         }
-        cloudWorkspaceCreationCoordinator.cancel(machine: machine, workspaceID: workspaceID)
-        let projectionToken = cloudWorkspaceProjectionCoordinator.beginLocalMutation(on: machine)
+        tuiWorkspaceCreationCoordinator.cancel(machine: machine, workspaceID: workspaceID)
+        let projectionToken = tuiWorkspaceProjectionCoordinator.beginLocalMutation(on: machine)
         notifyChange()
         let task = Task { @MainActor in
             defer {
-                self.cloudWorkspaceProjectionCoordinator.endLocalMutation(projectionToken, on: machine, catalog: self)
+                self.tuiWorkspaceProjectionCoordinator.endLocalMutation(projectionToken, on: machine, catalog: self)
                 self.notifyChange()
             }
             do {
@@ -52,16 +52,16 @@ extension SurfaceCatalog {
                 // Once close returns successfully, cancellation must not undo a
                 // committed remote mutation or display the old row again.
                 _ = ledger.succeed(machine: machine, workspaceID: workspaceID, token: token, closedTerminalCount: doomed.count)
-                if let state = self.cloudStates[machine], self.cloudStateObservations[machine]?.freshness == .current {
+                if let state = self.tuiStates[machine], self.tuiStateObservations[machine]?.freshness == .current {
                     ledger.reconcile(state)
                 }
-                self.cloudWorkspaceProjectionCoordinator.request(machine: machine, catalog: self)
+                self.tuiWorkspaceProjectionCoordinator.request(machine: machine, catalog: self)
                 return doomed.count
             } catch {
                 _ = ledger.fail(machine: machine, workspaceID: workspaceID, token: token)
                 // The catalog retained provider state throughout. Partial terminal
                 // closes remain authoritative; rollback never invents live processes.
-                self.cloudWorkspaceProjectionCoordinator.request(machine: machine, catalog: self)
+                self.tuiWorkspaceProjectionCoordinator.request(machine: machine, catalog: self)
                 throw error
             }
         }
@@ -69,23 +69,23 @@ extension SurfaceCatalog {
         return task
     }
 
-    func isCloudWorkspaceDeletionHidden(machine: SurfaceMachineID, workspaceID: String) -> Bool {
-        cloudWorkspaceDeletionLedger.hides(machine: machine, workspaceID: workspaceID)
+    func isTuiWorkspaceDeletionHidden(machine: SurfaceMachineID, workspaceID: String) -> Bool {
+        tuiWorkspaceDeletionLedger.hides(machine: machine, workspaceID: workspaceID)
     }
 
-    func isCloudWorkspaceDeletionPending(machine: SurfaceMachineID, workspaceID: String) -> Bool {
-        cloudWorkspaceDeletionLedger.isPending(machine: machine, workspaceID: workspaceID)
+    func isTuiWorkspaceDeletionPending(machine: SurfaceMachineID, workspaceID: String) -> Bool {
+        tuiWorkspaceDeletionLedger.isPending(machine: machine, workspaceID: workspaceID)
     }
 
     /// Only a locally admitted delete may invalidate a captured navigation intent.
     /// Other destination failures keep their existing error path.
-    func checkCloudWorkspaceNavigation(machine: SurfaceMachineID, workspaceID: String) throws {
-        if isCloudWorkspaceDeletionHidden(machine: machine, workspaceID: workspaceID) { throw CancellationError() }
+    func checkTuiWorkspaceNavigation(machine: SurfaceMachineID, workspaceID: String) throws {
+        if isTuiWorkspaceDeletionHidden(machine: machine, workspaceID: workspaceID) { throw CancellationError() }
     }
-    func isDeletingCloudResource(_ id: SurfaceResourceID, remoteWorkspaceID: String?) -> Bool {
+    func isDeletingTuiResource(_ id: SurfaceResourceID, remoteWorkspaceID: String?) -> Bool {
         if let workspaceID = remoteWorkspaceID,
-           isCloudWorkspaceDeletionHidden(machine: id.machine, workspaceID: workspaceID) { return true }
-        return cloudWorkspaceDeletionLedger.entries.values.contains { $0.terminalIDs.contains(id) }
+           isTuiWorkspaceDeletionHidden(machine: id.machine, workspaceID: workspaceID) { return true }
+        return tuiWorkspaceDeletionLedger.entries.values.contains { $0.terminalIDs.contains(id) }
     }
     private func checkDeletionProvider(_ provider: any SurfaceProvider, machine: SurfaceMachineID) throws {
         try Task.checkCancellation()

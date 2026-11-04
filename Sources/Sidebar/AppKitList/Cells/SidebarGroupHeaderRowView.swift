@@ -591,7 +591,7 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         ))
         appendResolvedConfigItems(to: menu)
         menu.addItem(.separator())
-        appendConfigAndDocsItems(to: menu)
+        appendConfigItems(to: menu)
         return menu
     }
 
@@ -608,15 +608,11 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         }
     }
 
-    private func appendConfigAndDocsItems(to menu: NSMenu) {
+    private func appendConfigItems(to menu: NSMenu) {
         guard let actions else { return }
         menu.addItem(menuItem(
             String(localized: "workspaceGroup.plus.contextMenu.editConfig", defaultValue: "Edit Group Config..."),
             action: actions.onEditConfig
-        ))
-        menu.addItem(menuItem(
-            String(localized: "workspaceGroup.plus.contextMenu.openDocs", defaultValue: "Open Workspace Groups Docs"),
-            action: actions.onOpenDocs
         ))
     }
 
@@ -670,7 +666,7 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
             action: actions.onMarkAllUnread
         ))
         menu.addItem(.separator())
-        appendConfigAndDocsItems(to: menu)
+        appendConfigItems(to: menu)
         menu.addItem(.separator())
         if !model.isPinned || model.memberCount > 0 {
             menu.addItem(menuItem(

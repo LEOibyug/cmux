@@ -1,6 +1,6 @@
 import Foundation
 
-/// One durable cmux notification in the cross-device chronological feed.
+/// One durable cmux notification in the local chronological feed.
 struct NotificationFeedHistoryRecord: Codable, Equatable, Identifiable, Sendable {
     static let historyTitleByteLimit = 512
     static let historySubtitleByteLimit = 512

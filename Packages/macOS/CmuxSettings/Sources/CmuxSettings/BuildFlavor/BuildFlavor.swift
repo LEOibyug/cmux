@@ -1,9 +1,6 @@
 import Foundation
 
 /// The release channel this build belongs to, detected from its bundle names and identifier.
-///
-/// Telemetry, checkout attribution, and host identity report it as a channel
-/// token (`dev`, `nightly`, `rc`, `stable`).
 public enum BuildFlavor: String, Sendable {
     /// A local or tagged debug build.
     case dev

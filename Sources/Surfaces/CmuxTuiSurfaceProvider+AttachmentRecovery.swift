@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import Foundation
 
 /// Keeps every open native pane of this machine attached.
@@ -12,8 +12,8 @@ import Foundation
 extension CmuxTuiSurfaceProvider {
     /// Returns false when the refresh was superseded while resolving.
     func reconcileManualMirrorAttachments(
-        connected: CloudMachineLink.Connected,
-        link: CloudMachineLink,
+        connected: RemoteMachineLink.Connected,
+        link: RemoteMachineLink,
         lifecycle: UInt64,
         refresh generation: UInt64
     ) async -> Bool {
@@ -42,7 +42,7 @@ extension CmuxTuiSurfaceProvider {
                     attempt: attachmentRetry.failures + 1,
                     outcome: resolution
                 )
-                switch CloudAttachmentReconcileDecision.decide(phase: session.phase, resolution: resolution) {
+                switch TuiAttachmentReconcileDecision.decide(phase: session.phase, resolution: resolution) {
                 case let .rebind(surfaceID):
                     session.updateRemoteSurfaceID(surfaceID)
                     reconnectableSessionIDs.insert(ObjectIdentifier(session))

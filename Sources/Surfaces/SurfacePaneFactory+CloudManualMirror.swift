@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import CmuxTerminal
 import GhosttyKit
@@ -12,7 +12,7 @@ import Foundation
 @MainActor
 extension SurfacePaneFactory {
     /// Creates a manual-mirror terminal at `destination`.
-    static func makeCloudManualMirrorPane(
+    static func makeTuiManualMirrorPane(
         at destination: SurfaceDestination,
         focus: Bool,
         iconAssetName: String? = nil,
@@ -21,13 +21,13 @@ extension SurfacePaneFactory {
         onResize: @escaping @MainActor @Sendable (TerminalSurfaceRawSizingSample) -> Void,
         onRuntimeReady: @escaping @MainActor @Sendable () -> Void,
         onFocus: @escaping @MainActor @Sendable () -> Void,
-        attachment: CloudTerminalAttachmentStatus? = nil,
+        attachment: RemoteTerminalAttachmentStatus? = nil,
         allowsRemoteClipboardWrites: Bool = false
     ) throws -> (workspaceID: UUID, panelID: UUID, surface: TerminalSurface) {
         guard let workspace = AppDelegate.shared?.tabManagerFor(tabId: destination.workspaceID)?.tabs.first(where: { $0.id == destination.workspaceID }) else {
             throw SurfaceCatalogError.destinationNotFound(destination.workspaceID.uuidString)
         }
-        return try workspace.addCloudManualMirrorPane(
+        return try workspace.addTuiManualMirrorPane(
             at: destination,
             focus: focus,
             iconAssetName: iconAssetName,

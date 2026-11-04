@@ -12,7 +12,7 @@ extension Workspace {
         let originalTabs = controller.tabs(inPane: originalPane)
         if let tab = controller.selectedTab(inPane: movedTabPane),
            let panelID = panelIdFromSurfaceId(tab.id),
-           let source = cloudTerminalSourcePlacement(forPanel: panelID) {
+           let source = tuiTerminalSourcePlacement(forPanel: panelID) {
             let frames = controller.treeSnapshot().paneFrames(for: Set([
                 originalPane.id.uuidString, movedTabPane.id.uuidString
             ]))
@@ -22,7 +22,7 @@ extension Workspace {
                 ? (originalFrame.midX < movedFrame.midX ? .left : .right)
                 : (originalFrame.midY < movedFrame.midY ? .up : .down)
             if let terminal = terminalPanel(for: panelID) { rememberTerminalConfigInheritanceSource(terminal) }
-            _ = routeCloudPaneTerminalCreate(
+            _ = routeTuiPaneTerminalCreate(
                 source: source, sourcePanelID: panelID,
                 destination: .tab(workspaceID: id, paneID: originalPane.id.uuidString, index: nil),
                 focus: false, splitDirection: direction

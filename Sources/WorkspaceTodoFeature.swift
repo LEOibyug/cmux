@@ -4,26 +4,17 @@ import CmuxWorkspaces
 import Foundation
 import UniformTypeIdentifiers
 
-/// The remote workspace todo controls feature gate and the shared UI
-/// entry points for mutating a workspace's todo state. Every UI surface
-/// (sidebar row, context menu, command palette, keyboard shortcut) funnels
-/// through ``WorkspaceTodoActions`` so gated status/add-item mutations and the
-/// backend caps/anti-rot apply identically everywhere.
+/// Local opt-in for todo controls and shared UI mutation entry points.
+/// Existing checklist items remain visible when creation controls are off.
 enum WorkspaceTodoFeature {
-    /// Synchronous read of the local beta opt-in plus remote-enabled feature
-    /// flag for status and add-item controls. Existing checklist items stay
-    /// visible/usable when this is off; only the controls that create items or
-    /// set workspace completion/status lanes are hidden.
+    /// Reads the user's local beta opt-in for status and add-item controls.
     @MainActor
     static var isEnabled: Bool {
-        isEnabled(
-            defaults: .standard,
-            remoteEnabled: CmuxFeatureFlags.shared.isWorkspaceTodoControlsEnabled
-        )
+        isEnabled(defaults: .standard)
     }
 
-    static func isEnabled(defaults: UserDefaults, remoteEnabled: Bool) -> Bool {
-        remoteEnabled || localControlsOptIn(defaults: defaults)
+    static func isEnabled(defaults: UserDefaults) -> Bool {
+        localControlsOptIn(defaults: defaults)
     }
 
     static func localControlsOptIn(defaults: UserDefaults) -> Bool {

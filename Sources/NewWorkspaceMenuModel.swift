@@ -28,7 +28,6 @@ struct NewWorkspaceMenuModel: Equatable {
 
     static func build(
         newWorkspaceContextMenuItems: [CmuxResolvedConfigContextMenuItem],
-        agentChatAction: CmuxResolvedConfigAction?,
         templateNames: [String],
         loadedActions: [CmuxResolvedConfigAction],
         newWorkspaceActionID: String?,
@@ -71,21 +70,6 @@ struct NewWorkspaceMenuModel: Equatable {
             }
         }
 
-        if let agentChatAction {
-            createRows.append(.action(
-                CmuxResolvedConfigMenuAction(
-                    id: agentChatAction.id,
-                    title: agentChatAction.title,
-                    icon: agentChatAction.icon,
-                    iconSourcePath: agentChatAction.iconSourcePath,
-                    tooltip: agentChatAction.tooltip,
-                    action: agentChatAction
-                ),
-                deletable: deletable(agentChatAction),
-                isDefault: agentChatAction.id == newWorkspaceActionID
-            ))
-        }
-
         let defaultLayout = NewWorkspaceDefaultLayoutMenuModel.build(
             loadedActions: loadedActions,
             newWorkspaceActionID: newWorkspaceActionID
@@ -106,7 +90,7 @@ struct NewWorkspaceMenuModel: Equatable {
             sections.append(.templates(templateNames))
         }
         // Always present: the Save affordance must survive an otherwise-empty
-        // menu (no create/cloud/layout/template rows), matching the pre-model menu.
+        // menu (no create/layout/template rows), matching the pre-model menu.
         sections.append(.management(management))
 
         return NewWorkspaceMenuModel(sections: sections)

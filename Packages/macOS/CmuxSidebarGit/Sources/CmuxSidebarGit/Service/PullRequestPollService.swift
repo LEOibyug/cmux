@@ -36,10 +36,8 @@ public final class PullRequestPollService: PullRequestProbing {
     let gitMetadataService: any GitRepositoryDiscovering
     // Fetches and matches GitHub PRs (stateless CmuxGit pipeline).
     let probeService: PullRequestProbeService
-    // Drives the poll deadline and mobile-host deferral sleeps.
+    // Drives the poll deadline.
     let clock: any GitPollClock
-    // Mobile-host background-work deferral intervals.
-    let mobileHostDeferral: MobileHostDeferralPolicy
     // Debug diagnostics sink (the app injects its debug logger in DEBUG).
     let debugLog: @Sendable (String) -> Void
     // The window-side seam; set once via attach(host:). Weak: the host owns
@@ -64,19 +62,16 @@ public final class PullRequestPollService: PullRequestProbing {
     ///   - gitMetadataService: Resolves GitHub slugs for candidate seeds.
     ///   - probeService: The stateless fetch/match pipeline.
     ///   - clock: Poll-deadline clock; tests inject virtual time.
-    ///   - mobileHostDeferral: Mobile-host deferral intervals.
     ///   - debugLog: Diagnostics sink; defaults to a no-op.
     public init(
         gitMetadataService: any GitRepositoryDiscovering,
         probeService: PullRequestProbeService,
         clock: any GitPollClock = SystemGitPollClock(),
-        mobileHostDeferral: MobileHostDeferralPolicy = .standard,
         debugLog: @escaping @Sendable (String) -> Void = { _ in }
     ) {
         self.gitMetadataService = gitMetadataService
         self.probeService = probeService
         self.clock = clock
-        self.mobileHostDeferral = mobileHostDeferral
         self.debugLog = debugLog
     }
 
@@ -129,28 +124,6 @@ public final class PullRequestPollService: PullRequestProbing {
         }
     }
 
-    /// Reschedules the workspace pull-request refresh after the paired mobile
-    /// host goes quiet, so background polling does not contend with active
-    /// mobile-host request traffic. Re-arming cancels the previous deadline.
-    func deferWorkspacePullRequestRefreshForMobileHost() {
-        workspacePullRequestPollTask?.cancel()
-        workspacePullRequestPollTask = nil
-
-        let quietDelay = host?.mobileHostQuietDelay(for: mobileHostDeferral.quietInterval) ?? 0
-        let delay = max(mobileHostDeferral.deferralInterval, quietDelay)
-        let clock = clock
-        workspacePullRequestPollTask = Task { @MainActor [weak self] in
-            // Bounded, cancellable mobile-host deferral on the injected clock;
-            // re-arming cancels the previous task.
-            do {
-                try await clock.sleep(for: .seconds(delay))
-            } catch {
-                return
-            }
-            guard let self, !Task.isCancelled else { return }
-            self.refreshTrackedWorkspacePullRequestsIfNeeded(reason: "mobileHostDeferred")
-        }
-    }
 
     // MARK: Refresh pass
 
@@ -166,10 +139,6 @@ public final class PullRequestPollService: PullRequestProbing {
         let activity = sidebarPullRequestActivity
         guard activity.performsActivePolling else {
             stopWorkspacePullRequestPolling(activity: activity)
-            return
-        }
-        guard !host.mobileHostHasRecentActivity(within: mobileHostDeferral.quietInterval) else {
-            deferWorkspacePullRequestRefreshForMobileHost()
             return
         }
 

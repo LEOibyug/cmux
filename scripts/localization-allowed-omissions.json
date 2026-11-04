@@ -1,8 +1,4 @@
 {
-  "cloud.welcome.title.eyebrow": {
-    "class": "brand",
-    "source": "cmux cloud"
-  },
   "actions.discovery.menuTitle": {
     "source": "Actions · cmux.json…",
     "identityLocales": {
@@ -29,14 +25,6 @@
     "source": "1.0.6 · September 2026",
     "identityLocales": {
       "de": "September has the same spelling in German; the version and date are invariant."
-    }
-  },
-  "cloudTree.resources.provisionedCPU": {
-    "source": "%@ vCPU · %@",
-    "identityLocales": {
-      "de": "vCPU is an invariant resource unit symbol; placeholders and the separator are identical in this locale.",
-      "fr": "vCPU is an invariant resource unit symbol; placeholders and the separator are identical in this locale.",
-      "es": "vCPU is an invariant resource unit symbol; placeholders and the separator are identical in this locale."
     }
   },
   "cli.socketControlStatus.command": {
@@ -546,18 +534,6 @@
     "class": "syntax",
     "source": "read-selection [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>]"
   },
-  "cli.vm.list.planMeter": {
-    "source": "%1$d of %2$d machines on the %3$@ plan",
-    "identityLocales": {
-      "fr": {
-        "reason": "These French count nouns have the same spelling as English. Only the listed leaf text may be identical; the surrounding sentence must still be translated.",
-        "values": [
-          "%d machine",
-          "%d machines"
-        ]
-      }
-    }
-  },
   "cli.vm.tree.agent": {
     "source": "[agent %@]",
     "identityLocales": {
@@ -567,10 +543,6 @@
   "cli.vm.tree.browsers": {
     "class": "syntax",
     "source": "browsers/"
-  },
-  "cli.vm.tree.displays": {
-    "class": "syntax",
-    "source": "VNC Displays/"
   },
   "cli.vm.tree.localSummary": {
     "source": "%1$d terminals · %2$d browsers",
@@ -601,104 +573,9 @@
     "class": "syntax",
     "source": "workspaces/"
   },
-  "cli.vpn.status.backend": {
-    "source": "Backend: %@",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required.",
-      "es": "Reviewed shared native developer term, abbreviation, or borrowed technical noun. The translated entry is still required."
-    }
-  },
   "clipboard.sshError.item": {
     "class": "format",
     "source": "%lld. %@ (%@): %@"
-  },
-  "cloudPane.newTerminalFailed.ok": {
-    "source": "OK",
-    "identityLocales": {
-      "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
-      "fr": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
-      "es": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
-      "ja": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "cloudTree.group.ports": {
-    "source": "Ports",
-    "identityLocales": {
-      "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
-      "fr": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "cloudTree.group.terminals": {
-    "source": "Terminals",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "cloudTree.node.desktop": {
-    "source": "Desktop",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "cloudTree.node.desktop.detail": {
-    "class": "technical",
-    "source": "noVNC"
-  },
-  "cloudTree.node.desktop.detail.screen": {
-    "class": "format",
-    "source": "%1$@ · %2$@"
-  },
-  "cloudTree.group.cloudMachines.usage": {
-    "class": "format",
-    "source": "%1$d/%2$d"
-  },
-  "cloudTree.stats.cpu": {
-    "class": "format",
-    "source": "CPU %d%%"
-  },
-  "cloudTree.stats.memory": {
-    "source": "Mem %@/%@ GB",
-    "identityLocales": {
-      "es": "Reviewed shared native developer term, abbreviation, or borrowed technical noun. The translated entry is still required."
-    }
-  },
-  "cloudTree.terminal.badge.views": {
-    "class": "format",
-    "source": "×%d"
-  },
-  "cloudTree.terminal.untitled": {
-    "source": "terminal",
-    "identityLocales": {
-      "fr": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required.",
-      "es": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "cloudTree.workspace.terminalCount.one": {
-    "source": "1 terminal",
-    "identityLocales": {
-      "es": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "cloudTree.workspace.terminalCount.other": {
-    "source": "%d terminals",
-    "identityLocales": {
-      "fr": {
-        "reason": "These French count nouns have the same spelling as English. Only the listed leaf text may be identical; the surrounding sentence must still be translated.",
-        "values": [
-          "%d terminal"
-        ]
-      },
-      "es": {
-        "reason": "Terminal, byte and bytes are valid Spanish technical nouns with the same spelling. Only these exact plural leaf values are exempt.",
-        "values": [
-          "%d terminal"
-        ]
-      }
-    }
-  },
-  "cloudTunnel.vpnConfiguration.name": {
-    "source": "cmux Cloud",
-    "class": "brand"
   },
   "command.applyUpdateIfAvailable.subtitle": {
     "source": "Global",
@@ -734,39 +611,8 @@
       "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
     }
   },
-  "command.checkForUpdates.subtitle": {
-    "source": "Global",
-    "identityLocales": {
-      "es": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required.",
-      "fr": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
   "command.closeTab.subtitle": {
     "source": "Tab",
-    "identityLocales": {
-      "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "command.cloudVM.failed.details": {
-    "source": "Details:",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "command.cloudVM.ports.title": {
-    "source": "Ports",
-    "identityLocales": {
-      "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
-      "fr": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "command.cloudVM.restore.prompt.placeholder": {
-    "class": "syntax",
-    "source": "snapshot-id"
-  },
-  "command.cloudVM.status.title": {
-    "source": "Status",
     "identityLocales": {
       "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
     }
@@ -776,13 +622,6 @@
     "identityLocales": {
       "de": "Cloud is the established German UI noun for the product area; an explicit translated entry remains required.",
       "fr": "Cloud is the established French UI noun for the product area; an explicit translated entry remains required."
-    }
-  },
-  "command.cloudVM.subtitle": {
-    "source": "Cloud",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required.",
-      "fr": "Reviewed shared native developer term, abbreviation, or borrowed technical noun. The translated entry is still required."
     }
   },
   "command.cmuxConfig.builtInSubtitle": {
@@ -1349,37 +1188,6 @@
       "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
     }
   },
-  "featureFlags.column.flag": {
-    "source": "Flag",
-    "identityLocales": {
-      "de": "Reviewed native word, technical abbreviation, or SaaS tier name with the same spelling in this context."
-    }
-  },
-  "featureFlags.column.source": {
-    "source": "Source",
-    "identityLocales": {
-      "fr": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "featureFlags.simulator.title": {
-    "source": "Simulator",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "featureFlags.source.local": {
-    "source": "Local",
-    "identityLocales": {
-      "fr": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
-      "es": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "featureFlags.source.remote": {
-    "source": "Remote",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
   "feed.badge.plan": {
     "source": "Plan",
     "identityLocales": {
@@ -1652,240 +1460,6 @@
       "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
     }
   },
-  "machines.agent.claude": {
-    "source": "Claude Code",
-    "identityLocales": {
-      "ar": "Agent product names are invariant brand names; the translated entry is still required.",
-      "bs": "Agent product names are invariant brand names; the translated entry is still required.",
-      "da": "Agent product names are invariant brand names; the translated entry is still required.",
-      "de": "Agent product names are invariant brand names; the translated entry is still required.",
-      "es": "Agent product names are invariant brand names; the translated entry is still required.",
-      "fr": "Agent product names are invariant brand names; the translated entry is still required.",
-      "it": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ja": "Agent product names are invariant brand names; the translated entry is still required.",
-      "km": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ko": "Agent product names are invariant brand names; the translated entry is still required.",
-      "nb": "Agent product names are invariant brand names; the translated entry is still required.",
-      "pl": "Agent product names are invariant brand names; the translated entry is still required.",
-      "pt-BR": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ru": "Agent product names are invariant brand names; the translated entry is still required.",
-      "th": "Agent product names are invariant brand names; the translated entry is still required.",
-      "tr": "Agent product names are invariant brand names; the translated entry is still required.",
-      "uk": "Agent product names are invariant brand names; the translated entry is still required.",
-      "zh-Hans": "Agent product names are invariant brand names; the translated entry is still required.",
-      "zh-Hant": "Agent product names are invariant brand names; the translated entry is still required."
-    }
-  },
-  "machines.agent.codex": {
-    "source": "Codex",
-    "identityLocales": {
-      "ar": "Agent product names are invariant brand names; the translated entry is still required.",
-      "bs": "Agent product names are invariant brand names; the translated entry is still required.",
-      "da": "Agent product names are invariant brand names; the translated entry is still required.",
-      "de": "Agent product names are invariant brand names; the translated entry is still required.",
-      "es": "Agent product names are invariant brand names; the translated entry is still required.",
-      "fr": "Agent product names are invariant brand names; the translated entry is still required.",
-      "it": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ja": "Agent product names are invariant brand names; the translated entry is still required.",
-      "km": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ko": "Agent product names are invariant brand names; the translated entry is still required.",
-      "nb": "Agent product names are invariant brand names; the translated entry is still required.",
-      "pl": "Agent product names are invariant brand names; the translated entry is still required.",
-      "pt-BR": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ru": "Agent product names are invariant brand names; the translated entry is still required.",
-      "th": "Agent product names are invariant brand names; the translated entry is still required.",
-      "tr": "Agent product names are invariant brand names; the translated entry is still required.",
-      "uk": "Agent product names are invariant brand names; the translated entry is still required.",
-      "zh-Hans": "Agent product names are invariant brand names; the translated entry is still required.",
-      "zh-Hant": "Agent product names are invariant brand names; the translated entry is still required."
-    }
-  },
-  "machines.agent.opencode": {
-    "source": "OpenCode",
-    "identityLocales": {
-      "ar": "Agent product names are invariant brand names; the translated entry is still required.",
-      "bs": "Agent product names are invariant brand names; the translated entry is still required.",
-      "da": "Agent product names are invariant brand names; the translated entry is still required.",
-      "de": "Agent product names are invariant brand names; the translated entry is still required.",
-      "es": "Agent product names are invariant brand names; the translated entry is still required.",
-      "fr": "Agent product names are invariant brand names; the translated entry is still required.",
-      "it": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ja": "Agent product names are invariant brand names; the translated entry is still required.",
-      "km": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ko": "Agent product names are invariant brand names; the translated entry is still required.",
-      "nb": "Agent product names are invariant brand names; the translated entry is still required.",
-      "pl": "Agent product names are invariant brand names; the translated entry is still required.",
-      "pt-BR": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ru": "Agent product names are invariant brand names; the translated entry is still required.",
-      "th": "Agent product names are invariant brand names; the translated entry is still required.",
-      "tr": "Agent product names are invariant brand names; the translated entry is still required.",
-      "uk": "Agent product names are invariant brand names; the translated entry is still required.",
-      "zh-Hans": "Agent product names are invariant brand names; the translated entry is still required.",
-      "zh-Hant": "Agent product names are invariant brand names; the translated entry is still required."
-    }
-  },
-  "machines.agent.pi": {
-    "source": "Pi",
-    "identityLocales": {
-      "ar": "Agent product names are invariant brand names; the translated entry is still required.",
-      "bs": "Agent product names are invariant brand names; the translated entry is still required.",
-      "da": "Agent product names are invariant brand names; the translated entry is still required.",
-      "de": "Agent product names are invariant brand names; the translated entry is still required.",
-      "es": "Agent product names are invariant brand names; the translated entry is still required.",
-      "fr": "Agent product names are invariant brand names; the translated entry is still required.",
-      "it": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ja": "Agent product names are invariant brand names; the translated entry is still required.",
-      "km": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ko": "Agent product names are invariant brand names; the translated entry is still required.",
-      "nb": "Agent product names are invariant brand names; the translated entry is still required.",
-      "pl": "Agent product names are invariant brand names; the translated entry is still required.",
-      "pt-BR": "Agent product names are invariant brand names; the translated entry is still required.",
-      "ru": "Agent product names are invariant brand names; the translated entry is still required.",
-      "th": "Agent product names are invariant brand names; the translated entry is still required.",
-      "tr": "Agent product names are invariant brand names; the translated entry is still required.",
-      "uk": "Agent product names are invariant brand names; the translated entry is still required.",
-      "zh-Hans": "Agent product names are invariant brand names; the translated entry is still required.",
-      "zh-Hant": "Agent product names are invariant brand names; the translated entry is still required."
-    }
-  },
-  "machines.freeAccess.upgrade": {
-    "source": "Upgrade",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "machines.kind.base": {
-    "source": "Base",
-    "identityLocales": {
-      "es": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
-      "fr": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "machines.kind.desktop": {
-    "source": "Desktop",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "machines.menu.checkpoint": {
-    "source": "Checkpoint",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "machines.menu.fork": {
-    "source": "Fork",
-    "identityLocales": {
-      "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "machines.menu.status": {
-    "source": "Status",
-    "identityLocales": {
-      "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "machines.meter.count": {
-    "source": "%1$d of %2$d machines",
-    "identityLocales": {
-      "fr": {
-        "reason": "These French count nouns have the same spelling as English. Only the listed leaf text may be identical; the surrounding sentence must still be translated.",
-        "values": [
-          "%d machine",
-          "%d machines"
-        ]
-      }
-    }
-  },
-  "machines.meter.count.unlimited": {
-    "source": "%1$d machines",
-    "identityLocales": {
-      "fr": {
-        "reason": "These French count nouns have the same spelling as English. Only the listed leaf text may be identical; the surrounding sentence must still be translated.",
-        "values": [
-          "%1$d machine",
-          "%1$d machines"
-        ]
-      }
-    }
-  },
-  "machines.meter.count.unlimited.single": {
-    "source": "1 machine",
-    "identityLocales": {
-      "fr": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "machines.new.image.label": {
-    "source": "Image",
-    "identityLocales": {
-      "fr": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "machines.new.name.label": {
-    "source": "Name",
-    "identityLocales": {
-      "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "machines.new.plan.multi": {
-    "source": "%1$d of %2$d machines in use",
-    "identityLocales": {
-      "fr": {
-        "reason": "These French count nouns have the same spelling as English. Only the listed leaf text may be identical; the surrounding sentence must still be translated.",
-        "values": [
-          "%d machine",
-          "%d machines"
-        ]
-      }
-    }
-  },
-  "machines.new.size.gb": {
-    "class": "format",
-    "source": "%d GB"
-  },
-  "machines.new.size.mb": {
-    "class": "format",
-    "source": "%d MB"
-  },
-  "machines.new.size.option": {
-    "source": "%d GB RAM",
-    "class": "format"
-  },
-  "machines.new.size.ram": {
-    "source": "RAM",
-    "class": "technical"
-  },
-  "machines.stats.cpu": {
-    "class": "technical",
-    "source": "CPU",
-    "identityLocales": {
-      "bs": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "da": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "it": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "km": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "nb": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "pl": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "pt-BR": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "th": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "tr": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required."
-    }
-  },
-  "machines.stats.memory": {
-    "source": "Mem",
-    "identityLocales": {
-      "es": "Reviewed native word, technical abbreviation, or SaaS tier name with the same spelling in this context."
-    }
-  },
-  "machines.stats.provisioned": {
-    "class": "format",
-    "source": "%@ GB"
-  },
-  "machines.usage.line": {
-    "source": "%1$@ · %2$@ tokens · %3$@",
-    "identityLocales": {
-      "es": "Reviewed native word, technical abbreviation, or SaaS tier name with the same spelling in this context."
-    }
-  },
   "markdown.font.system": {
     "source": "System",
     "identityLocales": {
@@ -2034,30 +1608,6 @@
       "fr": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
     }
   },
-  "mobile.pairing.getApp.badge.platform": {
-    "source": "iPhone",
-    "class": "brand"
-  },
-  "mobile.pairing.target.appStore": {
-    "class": "brand",
-    "source": "cmux"
-  },
-  "mobile.pairing.target.beta": {
-    "class": "brand",
-    "source": "cmux BETA"
-  },
-  "mobile.pairing.target.demo": {
-    "class": "brand",
-    "source": "cmux DEMO"
-  },
-  "mobile.pairing.target.dev": {
-    "class": "brand",
-    "source": "cmux DEV %@"
-  },
-  "mobile.pairing.target.internal": {
-    "class": "brand",
-    "source": "cmux INTERNAL"
-  },
   "mode.compact": {
     "source": "Compact",
     "identityLocales": {
@@ -2107,101 +1657,6 @@
     "identityLocales": {
       "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
     }
-  },
-  "pricing.enterprise.f3": {
-    "class": "technical",
-    "source": "SOC 2"
-  },
-  "pricing.enterprise.name": {
-    "source": "Enterprise",
-    "identityLocales": {
-      "de": "Reviewed native word, technical abbreviation, or SaaS tier name with the same spelling in this context."
-    }
-  },
-  "pricing.native.compare.concurrent.paid": {
-    "source": "5",
-    "identityLocales": {
-      "de": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "fr": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "ar": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "es": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "zh-Hant": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "zh-Hans": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "ko": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "ja": "The concurrent machine count is a numeric plan limit and is invariant across locales."
-    }
-  },
-  "pricing.native.compare.support.community": {
-    "source": "Community",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "pricing.native.eyebrow": {
-    "class": "brand",
-    "source": "cmux Pro"
-  },
-  "pricing.native.free.price": {
-    "class": "price",
-    "source": "$0"
-  },
-  "pricing.native.metric.vm.value": {
-    "class": "technical",
-    "source": "4 vCPU / 16 GB"
-  },
-  "pricing.native.plan.enterprise": {
-    "source": "Enterprise",
-    "identityLocales": {
-      "de": "Reviewed native word, technical abbreviation, or SaaS tier name with the same spelling in this context."
-    }
-  },
-  "pricing.native.plan.pro": {
-    "source": "Pro",
-    "class": "brand"
-  },
-  "pricing.native.plan.team": {
-    "source": "Team",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "pricing.native.pro.price": {
-    "class": "price",
-    "source": "$50"
-  },
-  "pricing.native.size.large.rate": {
-    "class": "price",
-    "source": "$0.80"
-  },
-  "pricing.native.size.medium.rate": {
-    "class": "price",
-    "source": "$0.40"
-  },
-  "pricing.native.size.small.rate": {
-    "class": "price",
-    "source": "$0.20"
-  },
-  "pricing.native.team.price": {
-    "class": "price",
-    "source": "$60"
-  },
-  "pricing.pro.name": {
-    "class": "brand",
-    "source": "cmux Pro"
-  },
-  "pricing.pro.workspace.title": {
-    "class": "brand",
-    "source": "cmux Pro"
-  },
-  "pricing.team.name": {
-    "source": "Team",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "pricing.window.title": {
-    "class": "brand",
-    "source": "cmux Pro"
   },
   "projectSchemes.badge.personal": {
     "source": "personal",
@@ -2508,10 +1963,6 @@
       "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
     }
   },
-  "settings.account.pro.title": {
-    "class": "brand",
-    "source": "cmux Pro"
-  },
   "settings.app.markdownFontFamily.placeholder": {
     "source": "System",
     "identityLocales": {
@@ -2650,37 +2101,6 @@
     "source": "Yandex",
     "class": "brand"
   },
-  "settings.cloudMachines.plan.summary": {
-    "source": "%1$@ · %2$d of %3$d machines",
-    "identityLocales": {
-      "fr": {
-        "reason": "These French count nouns have the same spelling as English. Only the listed leaf text may be identical; the surrounding sentence must still be translated.",
-        "values": [
-          "%d machine",
-          "%d machines"
-        ]
-      }
-    }
-  },
-  "settings.cloudMachines.plan.summary.unlimited": {
-    "source": "%1$@ · %2$d machines, no limit",
-    "identityLocales": {
-      "fr": {
-        "reason": "These French count nouns have the same spelling as English. Only the listed leaf text may be identical; the surrounding sentence must still be translated.",
-        "values": [
-          "%d machine",
-          "%d machines"
-        ]
-      }
-    }
-  },
-  "settings.cloudMachines.plan.title": {
-    "source": "Plan",
-    "identityLocales": {
-      "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
-      "es": "Plan is the standard Spanish name for a subscription plan."
-    }
-  },
   "settings.common.ok": {
     "source": "OK",
     "identityLocales": {
@@ -2688,18 +2108,6 @@
       "fr": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
       "es": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
       "ja": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "settings.computers.offline": {
-    "source": "Offline",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "settings.computers.online": {
-    "source": "Online",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
     }
   },
   "settings.config.source.cmux": {
@@ -2741,24 +2149,6 @@
       "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required.",
       "es": "Reviewed shared native developer term, abbreviation, or borrowed technical noun. The translated entry is still required."
     }
-  },
-  "settings.mobile.route.iroh": {
-    "class": "brand",
-    "source": "Iroh"
-  },
-  "settings.mobile.route.loopback": {
-    "source": "Loopback",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "settings.mobile.route.tailscale": {
-    "class": "brand",
-    "source": "Tailscale"
-  },
-  "settings.mobile.route.websocket": {
-    "class": "technical",
-    "source": "WebSocket"
   },
   "settings.networking.custom.name": {
     "source": "Name",
@@ -3133,16 +2523,6 @@
   "sidebar.help.discord": {
     "class": "brand",
     "source": "Discord"
-  },
-  "sidebar.help.feedback.emailPlaceholder": {
-    "class": "syntax",
-    "source": "you@example.com"
-  },
-  "sidebar.help.feedback.message": {
-    "source": "Message",
-    "identityLocales": {
-      "fr": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
   },
   "sidebar.help.githubIssues": {
     "source": "GitHub Issues",
@@ -3907,60 +3287,11 @@
       "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
     }
   },
-  "update.error.details.code": {
-    "source": "Code",
-    "identityLocales": {
-      "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
-      "fr": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "update.error.details.domain": {
-    "source": "Domain",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "update.error.details.feed": {
-    "source": "Feed",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
-  "update.error.details.message": {
-    "source": "Message",
-    "identityLocales": {
-      "fr": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "update.error.details.url": {
-    "class": "technical",
-    "source": "URL"
-  },
-  "update.popover.version": {
-    "source": "Version:",
-    "identityLocales": {
-      "de": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
-    }
-  },
   "workspaceTodoPane.title": {
     "source": "Todos",
     "identityLocales": {
       "de": "Reviewed shared native developer term, abbreviation, or borrowed technical noun. The translated entry is still required."
     }
-  },
-  "cloudTree.terminal.badge.hiddenTabs": {
-    "source": "+%d",
-    "class": "format"
-  },
-  "cloudTree.group.displays": {
-    "source": "Displays",
-    "identityLocales": {
-      "de": "Displays is the established German plural for computer displays; the translated entry remains required."
-    }
-  },
-  "cli.vm.env.set": {
-    "source": "vm env set: %1$@",
-    "class": "syntax"
   },
   "sudo.cli.global_usage.run": {
     "source": "sudo run [-r reason] [-t timeout] (-c 'command' | script.sh | -)",
@@ -3974,25 +3305,6 @@
     "source": "sudo setup-touch-id",
     "class": "syntax"
   },
-  "cli.vm.push.secretDelivered": {
-    "source": "OK %1$@ (%2$ld bytes, mode %3$@) delivered over the link",
-    "identityLocales": {
-      "de": {
-        "reason": "Byte/Bytes are the established German computing unit; only the exact unit leaf may share English spelling.",
-        "values": [
-          "%ld Byte",
-          "%ld Bytes"
-        ]
-      },
-      "es": {
-        "reason": "byte/bytes are the established Spanish computing unit; the surrounding sentence remains translated.",
-        "values": [
-          "%ld byte",
-          "%ld bytes"
-        ]
-      }
-    }
-  },
   "cli.billing.global_usage": {
     "source": "billing checkout --plan <go|pro|max> [--no-open]",
     "identityLocales": {
@@ -4004,68 +3316,6 @@
       "zh-Hans": "Command syntax is intentionally identical in this locale.",
       "ko": "Command syntax is intentionally identical in this locale.",
       "ja": "Command syntax is intentionally identical in this locale."
-    }
-  },
-  "machines.new.plan.name.max": {
-    "source": "Max",
-    "class": "brand"
-  },
-  "pricing.native.plan.max": {
-    "source": "Max",
-    "class": "brand"
-  },
-  "machines.new.plan.name.pro": {
-    "source": "Pro",
-    "class": "brand"
-  },
-  "pricing.native.plan.go": {
-    "source": "Plus",
-    "class": "brand"
-  },
-  "pricing.native.max.price": {
-    "source": "$200",
-    "class": "format"
-  },
-  "pricing.native.go.price": {
-    "source": "$15",
-    "class": "format"
-  },
-  "cloud.ports.title": {
-    "source": "Ports",
-    "identityLocales": {
-      "de": "Standard technical UI term with the same spelling in this language.",
-      "fr": "Standard technical UI term with the same spelling in this language."
-    }
-  },
-  "cloud.ports.status": {
-    "source": "Status",
-    "identityLocales": {
-      "de": "Standard technical UI term with the same spelling in this language.",
-      "da": "Standard technical UI term with the same spelling in this language.",
-      "nb": "Standard technical UI term with the same spelling in this language."
-    }
-  },
-  "cloudTree.resources.loading.symbol": {
-    "source": "…",
-    "class": "format"
-  },
-  "cloudTree.resources.missing": {
-    "source": "—",
-    "class": "format"
-  },
-  "cloudTree.resources.ram": {
-    "source": "RAM",
-    "class": "technical",
-    "identityLocales": {
-      "bs": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "da": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "it": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "km": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "nb": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "pl": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "pt-BR": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "th": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required.",
-      "tr": "Established resource abbreviation with the same spelling; an explicit translated catalog entry remains required."
     }
   },
   "settings.shortcuts.paneResizeStep.value": {
@@ -4485,310 +3735,6 @@
       "zh-Hant": "Command-line syntax is invariant across locales; the translated catalog entry is still required."
     }
   },
-  "pricing.native.compare.concurrent.free": {
-    "source": "1",
-    "identityLocales": {
-      "de": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "fr": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "ar": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "es": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "zh-Hant": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "zh-Hans": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "ko": "The concurrent machine count is a numeric plan limit and is invariant across locales.",
-      "ja": "The concurrent machine count is a numeric plan limit and is invariant across locales."
-    }
-  },
-  "machines.new.plan.retry": {
-    "source": "Retry",
-    "identityLocales": {
-      "ar": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "bs": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "da": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "de": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "es": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "fr": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "it": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "ja": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "km": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "ko": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "nb": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "pl": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "pt-BR": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "ru": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "th": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "tr": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "uk": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "zh-Hans": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      },
-      "zh-Hant": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Retry"
-        ]
-      }
-    }
-  },
-  "machines.new.plan.error": {
-    "source": "Cloud plan details are still loading. Retry in a moment.",
-    "identityLocales": {
-      "ar": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "bs": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "da": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "de": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "es": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "fr": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "it": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "ja": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "km": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "ko": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "nb": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "pl": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "pt-BR": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "ru": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "th": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "tr": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "uk": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "zh-Hans": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      },
-      "zh-Hant": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Cloud plan details are still loading. Retry in a moment."
-        ]
-      }
-    }
-  },
-  "machines.new.plan.loading": {
-    "source": "Loading your Cloud machine plan…",
-    "identityLocales": {
-      "de": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Loading your Cloud machine plan…"
-        ]
-      },
-      "fr": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Loading your Cloud machine plan…"
-        ]
-      },
-      "ar": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Loading your Cloud machine plan…"
-        ]
-      },
-      "es": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Loading your Cloud machine plan…"
-        ]
-      },
-      "zh-Hant": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Loading your Cloud machine plan…"
-        ]
-      },
-      "zh-Hans": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Loading your Cloud machine plan…"
-        ]
-      },
-      "ko": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Loading your Cloud machine plan…"
-        ]
-      },
-      "ja": {
-        "reason": "Cloud machine provisioning status is intentionally English for this transient technical action; the localized catalog entry remains required.",
-        "values": [
-          "Loading your Cloud machine plan…"
-        ]
-      }
-    }
-  },
   "surfaceTabBar.compact.menu.terminal": {
     "source": "Terminal",
     "identityLocales": {
@@ -4802,10 +3748,6 @@
     "identityLocales": {
       "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
     }
-  },
-  "cloudTree.group.coderouter": {
-    "class": "brand",
-    "source": "Coderouter"
   },
   "coderouter.guide.title": {
     "class": "brand",
@@ -4850,77 +3792,6 @@
       "zh-Hant": "Command-line syntax is invariant across locales; the translated catalog entry is still required."
     }
   },
-  "cloudTree.device.build.dev": {
-    "source": "DEV",
-    "identityLocales": {
-      "ar": "DEV is the invariant cmux build channel name.",
-      "de": "DEV is the invariant cmux build channel name.",
-      "es": "DEV is the invariant cmux build channel name.",
-      "fr": "DEV is the invariant cmux build channel name.",
-      "ja": "DEV is the invariant cmux build channel name.",
-      "ko": "DEV is the invariant cmux build channel name.",
-      "zh-Hans": "DEV is the invariant cmux build channel name.",
-      "zh-Hant": "DEV is the invariant cmux build channel name."
-    }
-  },
-  "cloudTree.device.build.nightly": {
-    "source": "Nightly",
-    "identityLocales": {
-      "ar": "Nightly is the invariant cmux build channel name.",
-      "de": "Nightly is the invariant cmux build channel name.",
-      "es": "Nightly is the invariant cmux build channel name.",
-      "fr": "Nightly is the invariant cmux build channel name.",
-      "ja": "Nightly is the invariant cmux build channel name.",
-      "ko": "Nightly is the invariant cmux build channel name.",
-      "zh-Hans": "Nightly is the invariant cmux build channel name.",
-      "zh-Hant": "Nightly is the invariant cmux build channel name."
-    }
-  },
-  "cloudTree.device.build.rc": {
-    "source": "RC",
-    "identityLocales": {
-      "ar": "RC is the invariant cmux build channel name.",
-      "de": "RC is the invariant cmux build channel name.",
-      "es": "RC is the invariant cmux build channel name.",
-      "fr": "RC is the invariant cmux build channel name.",
-      "ja": "RC is the invariant cmux build channel name.",
-      "ko": "RC is the invariant cmux build channel name.",
-      "zh-Hans": "RC is the invariant cmux build channel name.",
-      "zh-Hant": "RC is the invariant cmux build channel name."
-    }
-  },
-  "cloudTree.device.build.staging": {
-    "source": "Staging",
-    "identityLocales": {
-      "ar": "Staging is the invariant cmux build channel name.",
-      "de": "Staging is the invariant cmux build channel name.",
-      "es": "Staging is the invariant cmux build channel name.",
-      "fr": "Staging is the invariant cmux build channel name.",
-      "ja": "Staging is the invariant cmux build channel name.",
-      "ko": "Staging is the invariant cmux build channel name.",
-      "zh-Hans": "Staging is the invariant cmux build channel name.",
-      "zh-Hant": "Staging is the invariant cmux build channel name."
-    }
-  },
-  "cloudTree.device.build.tagged": {
-    "source": "%1$@ · %2$@",
-    "identityLocales": {
-      "ar": "Format-only string; the placeholders and separator are invariant.",
-      "de": "Format-only string; the placeholders and separator are invariant.",
-      "es": "Format-only string; the placeholders and separator are invariant.",
-      "fr": "Format-only string; the placeholders and separator are invariant.",
-      "ja": "Format-only string; the placeholders and separator are invariant.",
-      "ko": "Format-only string; the placeholders and separator are invariant.",
-      "zh-Hans": "Format-only string; the placeholders and separator are invariant.",
-      "zh-Hant": "Format-only string; the placeholders and separator are invariant."
-    }
-  },
-  "mobile.agentFeed.filter": {
-    "source": "Filter",
-    "identityLocales": {
-      "de": "Filter has the same spelling in this locale; a translated entry is still required."
-    }
-  },
   "mobile.agentFeed.title": {
     "source": "Feed",
     "identityLocales": {
@@ -4935,38 +3806,6 @@
       "es": "Feed is the established product term in this locale; a translated entry is still required."
     }
   },
-  "cloud.network.domains.label": {
-    "source": "Domains (HTTPS)",
-    "identityLocales": {
-      "de": "Domains and HTTPS are the established technical terms in this locale; a translated entry is still required."
-    }
-  },
-  "cloud.network.ranges.port": {
-    "source": "Port",
-    "identityLocales": {
-      "de": "Port is the established networking term with the same spelling in this locale; a translated entry is still required.",
-      "fr": "Port is the established networking term with the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "cloudTree.device.status.offline": {
-    "source": "Offline",
-    "identityLocales": {
-      "de": "Offline has the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "cloudTree.device.status.online": {
-    "source": "Online",
-    "identityLocales": {
-      "de": "Online has the same spelling in this locale; a translated entry is still required."
-    }
-  },
-  "machines.new.row.agents.short": {
-    "source": "Agents",
-    "identityLocales": {
-      "de": "Agents has the same spelling in this locale; a translated entry is still required.",
-      "fr": "Agents has the same spelling in this locale; a translated entry is still required."
-    }
-  },
   "sidebar.account.settingsLabel": {
     "source": "%1$@, %2$@",
     "identityLocales": {
@@ -4974,12 +3813,6 @@
       "es": "Format-only string; the placeholders and separator are invariant.",
       "fr": "Format-only string; the placeholders and separator are invariant.",
       "ko": "Format-only string; the placeholders and separator are invariant."
-    }
-  },
-  "mobile.agentFeed.question.pageLabel": {
-    "source": "Question %lld",
-    "identityLocales": {
-      "fr": "Question has the same spelling in this locale; the placeholder is invariant."
     }
   },
   "globalSearch.agent.claude": {
@@ -5296,6 +4129,82 @@
     "source": "Suggestions",
     "identityLocales": {
       "fr": "Suggestions is the standard French noun for this label and shares the English spelling."
+    }
+  },
+  "panel.remoteLoading.title": {
+    "class": "technical",
+    "source": "SSH"
+  },
+  "tuiPane.newTerminalFailed.ok": {
+    "source": "OK",
+    "identityLocales": {
+      "de": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
+      "fr": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
+      "es": "Established UI or technical term with the same spelling in this locale; a translated entry is still required.",
+      "ja": "Established UI or technical term with the same spelling in this locale; a translated entry is still required."
+    }
+  },
+  "tuiTree.device.build.dev": {
+    "source": "DEV",
+    "identityLocales": {
+      "ar": "DEV is the invariant cmux build channel name.",
+      "de": "DEV is the invariant cmux build channel name.",
+      "es": "DEV is the invariant cmux build channel name.",
+      "fr": "DEV is the invariant cmux build channel name.",
+      "ja": "DEV is the invariant cmux build channel name.",
+      "ko": "DEV is the invariant cmux build channel name.",
+      "zh-Hans": "DEV is the invariant cmux build channel name.",
+      "zh-Hant": "DEV is the invariant cmux build channel name."
+    }
+  },
+  "tuiTree.device.build.nightly": {
+    "source": "Nightly",
+    "identityLocales": {
+      "ar": "Nightly is the invariant cmux build channel name.",
+      "de": "Nightly is the invariant cmux build channel name.",
+      "es": "Nightly is the invariant cmux build channel name.",
+      "fr": "Nightly is the invariant cmux build channel name.",
+      "ja": "Nightly is the invariant cmux build channel name.",
+      "ko": "Nightly is the invariant cmux build channel name.",
+      "zh-Hans": "Nightly is the invariant cmux build channel name.",
+      "zh-Hant": "Nightly is the invariant cmux build channel name."
+    }
+  },
+  "tuiTree.device.build.rc": {
+    "source": "RC",
+    "identityLocales": {
+      "ar": "RC is the invariant cmux build channel name.",
+      "de": "RC is the invariant cmux build channel name.",
+      "es": "RC is the invariant cmux build channel name.",
+      "fr": "RC is the invariant cmux build channel name.",
+      "ja": "RC is the invariant cmux build channel name.",
+      "ko": "RC is the invariant cmux build channel name.",
+      "zh-Hans": "RC is the invariant cmux build channel name.",
+      "zh-Hant": "RC is the invariant cmux build channel name."
+    }
+  },
+  "tuiTree.device.build.staging": {
+    "source": "Staging",
+    "identityLocales": {
+      "ar": "Staging is the invariant cmux build channel name.",
+      "de": "Staging is the invariant cmux build channel name.",
+      "es": "Staging is the invariant cmux build channel name.",
+      "fr": "Staging is the invariant cmux build channel name.",
+      "ja": "Staging is the invariant cmux build channel name.",
+      "ko": "Staging is the invariant cmux build channel name.",
+      "zh-Hans": "Staging is the invariant cmux build channel name.",
+      "zh-Hant": "Staging is the invariant cmux build channel name."
+    }
+  },
+  "tuiTree.device.build.tagged": {
+    "class": "format",
+    "source": "%1$@ · %2$@"
+  },
+  "tuiTree.terminal.untitled": {
+    "source": "terminal",
+    "identityLocales": {
+      "fr": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required.",
+      "es": "Reviewed native UI spelling, established developer terminology, or the named macOS Dock component; an explicit translated entry remains required."
     }
   }
 }

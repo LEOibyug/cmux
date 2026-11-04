@@ -95,15 +95,13 @@ struct ComputerUseToolOnboardingTests {
         #expect(fixture.runtime.permissionPhase == .onboardingRequired)
     }
 
-    @Test func explicitToolRequestEnablesComputerUseEvenWhenMenuFeatureIsOff() async throws {
+    @Test func explicitToolRequestEnablesComputerUseWhenLocallyDisabled() async throws {
         let fixture = try ComputerUseToolOnboardingFixture()
         defer { fixture.remove() }
         try await fixture.enable()
-        fixture.featureEnabled = false
         await fixture.send("cmux-cua.get_app_state")
         #expect(fixture.presentations == [.overview])
         #expect(fixture.runtime.permissionPhase == .onboarding)
-        fixture.featureEnabled = true
         await fixture.runtime.setEnabled(false)
         await fixture.send("cmux-cua.get_app_state")
         #expect(fixture.presentations == [.overview, .overview])

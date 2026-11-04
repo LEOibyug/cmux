@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -40,7 +40,7 @@ extension SurfaceCatalog {
     }
 
     func validateOwnership(of resources: [SurfaceResourceID], at destination: SurfaceDestination) throws {
-        guard let workspace = cloudWorkspaceRenameService.environment.workspace(destination.workspaceID)
+        guard let workspace = tuiWorkspaceRenameService.environment.workspace(destination.workspaceID)
                 ?? Workspace.liveWorkspace(id: destination.workspaceID) else {
             throw SurfaceCatalogError.destinationNotFound(destination.workspaceID.uuidString)
         }
@@ -76,7 +76,7 @@ extension SurfaceCatalog {
     }
 
     func ownershipRejection(for resources: [SurfaceResourceID], policy: SurfaceOwnershipPolicy) -> SurfaceTransferRejection? {
-        guard policy.cloudMachine != nil else { return nil }
+        guard policy.remoteMachine != nil else { return nil }
         guard !resources.isEmpty else { return policy.rejection(for: nil) }
         return resources.compactMap { policy.rejection(for: machineOwningResource($0), kind: $0.kind) }.first
     }
@@ -89,7 +89,7 @@ extension SurfaceCatalog {
             return dock.machineOwningSurface(panelID) ?? resource.machine
         }
         if let projection = projection(forPanel: panelID),
-           let workspace = cloudWorkspaceRenameService.environment.workspace(projection.workspaceID)
+           let workspace = tuiWorkspaceRenameService.environment.workspace(projection.workspaceID)
                 ?? Workspace.liveWorkspace(id: projection.workspaceID),
            let machine = workspace.machineOwningSurface(panelID, catalog: self) {
             return machine

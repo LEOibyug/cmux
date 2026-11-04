@@ -95,7 +95,7 @@ struct SurfaceCatalogObservationTests {
     @Test("Pending restore changes invalidate cold and warm membership readers", arguments: [false, true])
     func pendingRestoreChangesNotify(warmCache: Bool) async {
         let catalog = SurfaceCatalog()
-        let workspace = Workspace(initialSurface: .cloudVMLoading)
+        let workspace = Workspace(initialSurface: .remoteLoading)
         defer { workspace.teardownAllPanels() }
         let pending = projection(workspaceID: workspace.id)
         if warmCache {
@@ -123,7 +123,7 @@ struct SurfaceCatalogObservationTests {
     @Test("Consuming a staged identity invalidates its cached membership")
     func consumedRestoreIsNoLongerCloudBacked() async {
         let catalog = SurfaceCatalog()
-        let workspace = Workspace(initialSurface: .cloudVMLoading)
+        let workspace = Workspace(initialSurface: .remoteLoading)
         defer { workspace.teardownAllPanels() }
         let pending = projection(workspaceID: workspace.id)
         catalog.restore(
@@ -140,7 +140,7 @@ struct SurfaceCatalogObservationTests {
 
     private func projection(workspaceID: UUID = UUID()) -> SurfaceProjection {
         SurfaceProjection(
-            resource: SurfaceResourceID(machine: .cloud("observation-test"), kind: .terminal, key: "terminal"),
+            resource: SurfaceResourceID(machine: .ssh("6a512ed252cf61046b74c64782083cddeab3bc1385bc18832b4ca6708086451e"), kind: .terminal, key: "terminal"),
             workspaceID: workspaceID,
             panelID: UUID()
         )

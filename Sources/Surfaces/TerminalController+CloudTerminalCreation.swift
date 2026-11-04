@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
@@ -17,10 +17,10 @@ extension TerminalController {
         guard let provider = try await Self.surfaceProvider(for: machine, catalog: catalog) else {
             throw SurfaceCatalogError.noProvider(machine)
         }
-        let token = await catalog.cloudWorkspaceProjectionCoordinator.beginLocalMutation(on: machine)
+        let token = await catalog.tuiWorkspaceProjectionCoordinator.beginLocalMutation(on: machine)
         do {
         let resource = try await provider.createTerminal(command: command, cwd: cwd, name: name, remoteWorkspaceID: remoteWorkspaceID)
-        let remoteView = try CloudTerminalSourcePlacement(machine: machine, remoteWorkspaceID: remoteWorkspaceID).remoteView(of: resource)
+        let remoteView = try TuiTerminalSourcePlacement(machine: machine, remoteWorkspaceID: remoteWorkspaceID).remoteView(of: resource)
         var payload: [String: Any] = [
             "resource": resource.id.rawValue,
             "terminal_id": resource.id.key,
@@ -42,10 +42,10 @@ extension TerminalController {
             payload["workspace_id"] = opened.projection.workspaceID.uuidString
             payload["surface_id"] = opened.projection.panelID.uuidString
         }
-        await catalog.cloudWorkspaceProjectionCoordinator.endLocalMutation(token, on: machine, catalog: catalog)
+        await catalog.tuiWorkspaceProjectionCoordinator.endLocalMutation(token, on: machine, catalog: catalog)
         return payload
         } catch {
-            await catalog.cloudWorkspaceProjectionCoordinator.endLocalMutation(token, on: machine, catalog: catalog)
+            await catalog.tuiWorkspaceProjectionCoordinator.endLocalMutation(token, on: machine, catalog: catalog)
             throw error
         }
     }

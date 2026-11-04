@@ -1,6 +1,6 @@
 import Foundation
 
-/// One cancellable observation of the current workspace's Cloud authority.
+/// One cancellable observation of the current workspace's remote authority.
 /// Catalog churn can schedule only one re-observation; equal roots do no I/O.
 @MainActor
 final class FileExplorerWorkspaceObservation {
@@ -36,7 +36,7 @@ final class FileExplorerWorkspaceObservation {
         ) { [weak self, weak workspace] notification in
             MainActor.assumeIsolated {
                 guard let self, let workspace,
-                      let machine = workspace.cloudVMBinding?.vmID else { return }
+                      let machine = workspace.remoteWorkspaceBinding?.machineID else { return }
                 if let changedMachines = notification.userInfo?["machines"] as? [String],
                    !changedMachines.contains(machine) { return }
                 self.refresh()
@@ -44,7 +44,7 @@ final class FileExplorerWorkspaceObservation {
         }
         bindingChangesTask = Task { @MainActor [weak self, weak workspace] in
             guard let workspace else { return }
-            for await _ in workspace.cloudBindingState.changes() {
+            for await _ in workspace.remoteBindingState.changes() {
                 guard let self, self.workspace === workspace else { return }
                 self.refresh()
             }

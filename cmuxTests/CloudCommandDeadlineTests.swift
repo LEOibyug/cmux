@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import Foundation
 import Testing
 #if canImport(cmux_DEV)
@@ -11,13 +11,13 @@ import Testing
 #endif
 
 @Suite(.timeLimit(.minutes(1))) struct CloudCommandDeadlineTests {
-    private typealias Socket = CloudTuiManualIOConnectionTests
+    private typealias Socket = TuiManualIOConnectionTests
 
     @Test(arguments: [false, true])
     func responseAfterDeadlineFailsEvenWhenTimerHasNotResumed(raw: Bool) async throws {
         let clock = CloudCommandDeadlineClock()
         try await Socket.withResourceConnection(clock: clock) { channel, peer in
-            let command = Task { try await channel.request(CloudTuiRequest("session.ping", raw: raw), timeout: .seconds(30)) }
+            let command = Task { try await channel.request(TuiRequest("session.ping", raw: raw), timeout: .seconds(30)) }
             defer { command.cancel() }
             let bytes = try await Socket.blocking { try Socket.readLine(peer) }
             let request = try Socket.object(bytes)
@@ -28,10 +28,10 @@ import Testing
             do {
                 _ = try await command.value
                 Issue.record("a response delivered after resume cannot turn an expired request into success")
-            } catch CloudMachineLink.LinkError.requestTimedOut {}
+            } catch RemoteMachineLink.LinkError.requestTimedOut {}
 
             // An expired request never closes the machine-owned socket or replays work.
-            async let sibling = channel.request(CloudTuiRequest("session.snapshot"))
+            async let sibling = channel.request(TuiRequest("session.snapshot"))
             try await Socket.blocking {
                 var next = try Socket.object(Socket.readLine(peer))
                 if next["operation"] as? String == "request.cancel" {
@@ -52,7 +52,7 @@ import Testing
     func responseBeforeDeadlinePreservesOutput(raw: Bool) async throws {
         let clock = CloudCommandDeadlineClock()
         try await Socket.withResourceConnection(clock: clock) { channel, peer in
-            async let command = channel.request(CloudTuiRequest("session.ping", raw: raw), timeout: .seconds(30))
+            async let command = channel.request(TuiRequest("session.ping", raw: raw), timeout: .seconds(30))
             let bytes = try await Socket.blocking { try Socket.readLine(peer) }
             await clock.waitUntilSleeping()
             clock.advance(by: .seconds(29), wakingTimers: false)
@@ -64,11 +64,11 @@ import Testing
 
     @Test(arguments: [Duration.zero, .seconds(-1)])
     func expiredBudgetIsRejectedBeforeOpeningSocket(timeout: Duration) async throws {
-        let channel = CloudTuiPersistentResourceConnection(socketPath: "/does/not/exist")
+        let channel = TuiPersistentResourceConnection(socketPath: "/does/not/exist")
         do {
-            _ = try await channel.request(CloudTuiRequest("session.ping"), timeout: timeout)
+            _ = try await channel.request(TuiRequest("session.ping"), timeout: timeout)
             Issue.record("an expired request must be rejected")
-        } catch CloudMachineLink.LinkError.requestTimedOut {}
+        } catch RemoteMachineLink.LinkError.requestTimedOut {}
         await channel.close()
     }
 }

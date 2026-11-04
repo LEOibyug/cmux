@@ -1,27 +1,16 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 
 extension Workspace {
-    /// URL-only entrypoints have no display provenance. Use the catalog's
-    /// machine/resource open path for noVNC in a VM-bound workspace.
-    func acceptsUnownedBrowserURL(_ url: URL?) -> Bool {
-        url?.path != "/vnc.html" || surfaceOwnershipPolicy.rejection(for: nil) == nil
-    }
-
-    /// A saved URL is a connection target, never evidence of which VM owns it.
-    /// Old noVNC records without provenance may open in local workspaces only.
+    /// A saved browser URL never establishes remote ownership by itself.
     func acceptsRestoredPanel(_ snapshot: SessionPanelSnapshot, projection: SurfaceProjectionRecord?, policy: SurfaceOwnershipPolicy? = nil) -> Bool {
         let policy = policy ?? surfaceOwnershipPolicy
-        if let resource = snapshot.browser?.cloudResource {
+        if let resource = snapshot.browser?.remoteResource {
             if let projection, projection.resource != resource { return false }
             return policy.rejection(for: resource.machine, kind: resource.kind) == nil
         }
         if let projection { return policy.rejection(for: projection.resource.machine, kind: projection.resource.kind) == nil }
-        if snapshot.type == .browser, let raw = snapshot.browser?.urlString,
-           URL(string: raw)?.path == "/vnc.html" {
-            return policy.rejection(for: nil) == nil
-        }
         return true
     }
 
@@ -29,9 +18,9 @@ extension Workspace {
     /// binding. Startup may adopt a saved owner; an already bound workspace may
     /// never be rebound as a side effect of restoring foreign display views.
     func acceptsRestoredSession(_ snapshot: SessionWorkspaceSnapshot) -> Bool {
-        let savedOwner = Self.restoredCloudVMBinding(from: snapshot.cloudVM).map { SurfaceMachineID(rawValue: $0.vmID) }
-        if let owner = surfaceOwnershipPolicy.cloudMachine, savedOwner != owner { return false }
-        let policy = SurfaceOwnershipPolicy(cloudMachine: savedOwner ?? surfaceOwnershipPolicy.cloudMachine)
+        let savedOwner = Self.restoredRemoteWorkspaceBinding(from: snapshot.remoteWorkspace).flatMap { SurfaceMachineID(rawValue: $0.machineID) }
+        if let owner = surfaceOwnershipPolicy.remoteMachine, savedOwner != owner { return false }
+        let policy = SurfaceOwnershipPolicy(remoteMachine: savedOwner ?? surfaceOwnershipPolicy.remoteMachine)
         let records = snapshot.surfaceProjections ?? []
         if !records.isEmpty, policy.rejection(for: records.map(\.resource)) != nil { return false }
         let byPanel = Dictionary(records.map { ($0.panelID, $0) }, uniquingKeysWith: { first, _ in first })

@@ -93,12 +93,6 @@
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
-	<key>CMUX_IROH_V2_ENVIRONMENT</key>
-	<string>$(CMUX_IROH_V2_ENVIRONMENT)</string>
-	<key>CMUX_IROH_V2_BASE_URL</key>
-	<string>$(CMUX_IROH_V2_BASE_URL)</string>
-	<key>CMUX_IROH_V2_FORCE_RELAY</key>
-	<string>$(CMUX_IROH_V2_FORCE_RELAY)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
@@ -136,8 +130,6 @@
 	<string>A program running within cmux would like to use speech recognition.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>A program running within cmux would like to access motion data.</string>
-	<key>NSSystemExtensionUsageDescription</key>
-	<string>cmux installs a network extension so this Mac can reach your Cloud machines on their private network. It runs only while you use cmux Cloud.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>A program running within cmux would like to use Bluetooth to discover passkeys and security keys.</string>
 	<key>NSAppleEventsUsageDescription</key>
@@ -191,10 +183,10 @@
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>CFBundleURLName</key>
-			<string>$(PRODUCT_BUNDLE_IDENTIFIER).auth</string>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).local</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>$(CMUX_AUTH_CALLBACK_SCHEME)</string>
+				<string>cmux</string>
 			</array>
 			<key>LSHandlerRank</key>
 			<string>Default</string>
@@ -210,25 +202,6 @@
 			</array>
 			<key>LSHandlerRank</key>
 			<string>Alternate</string>
-		</dict>
-	</array>
-	<key>CMUXIrohRelayPolicyKeyID</key>
-	<string>$(CMUX_IROH_RELAY_POLICY_KEY_ID)</string>
-	<key>CMUXIrohRelayPolicyPublicKeyBase64</key>
-	<string>$(CMUX_IROH_RELAY_POLICY_PUBLIC_KEY_BASE64)</string>
-	<key>CMUXIrohRelayPolicyTrustKeys</key>
-	<array>
-		<dict>
-			<key>keyID</key>
-			<string>$(CMUX_IROH_RELAY_POLICY_KEY_ID)</string>
-			<key>publicKeyBase64</key>
-			<string>$(CMUX_IROH_RELAY_POLICY_PUBLIC_KEY_BASE64)</string>
-		</dict>
-		<dict>
-			<key>keyID</key>
-			<string>$(CMUX_IROH_RELAY_POLICY_NEXT_KEY_ID)</string>
-			<key>publicKeyBase64</key>
-			<string>$(CMUX_IROH_RELAY_POLICY_NEXT_PUBLIC_KEY_BASE64)</string>
 		</dict>
 	</array>
 	<key>CMUXSidebarExtensionPointIdentifier</key>
@@ -295,18 +268,6 @@
 	</array>
 	<key>OSAScriptingDefinition</key>
 	<string>cmux.sdef</string>
-	<key>SUAutomaticallyUpdate</key>
-	<false/>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>SUFeedURL</key>
-	<string>https://github.com/manaflow-ai/cmux/releases/latest/download/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>$(SPARKLE_PUBLIC_KEY)</string>
-	<key>SUScheduledCheckInterval</key>
-	<integer>86400</integer>
-	<key>SUSendProfileInfo</key>
-	<false/>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>

@@ -223,15 +223,14 @@ struct ComputerUseWatchTargetFeed: Sendable {
 /// cursor click on top of cmux while the real target stays hidden behind it.
 ///
 /// Fronts each distinct target exactly once (`ComputerUseWatchTargetDecision`)
-/// so it never competes with the user's own focus while a session runs. Gated by
-/// `featureEnabled` and validated with `ComputerUseTargetIdentity`, mirroring the
+/// so it never competes with the user's own focus while a session runs.
+/// Validated with `ComputerUseTargetIdentity`, mirroring the
 /// menu bar's "Focus Computer Use" action and the cursor overlay's watcher shape.
 /// An explicit "Focus Computer Use" or "Focus Calling Terminal" choice is
 /// reasserted on later authenticated actions until the active turn ends.
 @MainActor
 final class ComputerUseWatchTargetController {
     private let stateDirectoryURL: URL
-    private let featureEnabled: @MainActor () -> Bool
     /// Maps each surface-derived driver session ID to the logical agent session
     /// currently occupying that surface.
     private let liveDriverSessions:
@@ -277,7 +276,6 @@ final class ComputerUseWatchTargetController {
 
     init(
         stateDirectoryURL: URL,
-        featureEnabled: @escaping @MainActor () -> Bool,
         liveDriverSessions:
             @escaping @MainActor () -> [String: ComputerUseLiveDriverSession],
         currentLiveDriverSession:
@@ -319,7 +317,6 @@ final class ComputerUseWatchTargetController {
         }
     ) {
         self.stateDirectoryURL = stateDirectoryURL
-        self.featureEnabled = featureEnabled
         self.liveDriverSessions = liveDriverSessions
         self.currentLiveDriverSession = currentLiveDriverSession
         self.feed = feed
@@ -344,12 +341,6 @@ final class ComputerUseWatchTargetController {
         started = true
         scanGeneration &+= 1
 
-        NotificationCenter.default.publisher(for: .cmuxFeatureFlagsDidChange)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                Task { @MainActor in self?.reconcileObservation() }
-            }
-            .store(in: &cancellables)
         NotificationCenter.default.publisher(for: .sharedLiveAgentIndexDidChange)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -542,7 +533,6 @@ final class ComputerUseWatchTargetController {
 
     func refresh() {
         guard started,
-              featureEnabled(),
               !observedDriverSessions.isEmpty
         else {
             return
@@ -622,7 +612,7 @@ final class ComputerUseWatchTargetController {
     private func applyScannedActivities(
         _ activities: [ComputerUseWatchTargetActivity]
     ) {
-        guard started, featureEnabled() else { return }
+        guard started else { return }
         let newlyUpdated = activities.filter { activity in
             let previous =
                 lastObservedActionAtByDriverSessionID[activity.driverSessionID]
@@ -835,7 +825,7 @@ final class ComputerUseWatchTargetController {
         let sessionsChanged = liveSessions != observedDriverSessions
         observedDriverSessions = liveSessions
 
-        guard featureEnabled(), !liveSessions.isEmpty else {
+        guard !liveSessions.isEmpty else {
             suspendObservation()
             return
         }
@@ -894,7 +884,7 @@ final class ComputerUseWatchTargetController {
     }
 
     private func ensureStateDirectoryObservation() {
-        guard started, featureEnabled(), !observedDriverSessions.isEmpty else {
+        guard started, !observedDriverSessions.isEmpty else {
             return
         }
         if startWatchingStateDirectory() {
@@ -1004,7 +994,6 @@ final class ComputerUseWatchTargetController {
                 guard
                     let self,
                     self.started,
-                    self.featureEnabled(),
                     !self.observedDriverSessions.isEmpty,
                     !Task.isCancelled
                 else {

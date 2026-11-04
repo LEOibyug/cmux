@@ -7137,7 +7137,7 @@ extension SessionPersistenceTests {
     @MainActor
     func testRestorePreservesUnmountedVolumeCwdBindingsWhenInitialReportsAreScrambled() throws {
         try withAutoResumeAgentSessionsEnabled {
-            let manager = TabManager(autoWelcomeIfNeeded: false)
+            let manager = TabManager()
             defer { manager.tabs.forEach { $0.teardownAllPanels() } }
             let volumeName = "cmux-issue-5278-\(UUID().uuidString)"
             let expectedCwdsByWorkspaceAndPanel = try makeUnmountedVolumeCwdSnapshot(
@@ -7152,7 +7152,7 @@ extension SessionPersistenceTests {
             }
             let snapshotData = try JSONEncoder().encode(sourceSnapshot)
             let decodedSnapshot = try JSONDecoder().decode(SessionTabManagerSnapshot.self, from: snapshotData)
-            let restored = TabManager(autoWelcomeIfNeeded: false)
+            let restored = TabManager()
             defer { restored.tabs.forEach { $0.teardownAllPanels() } }
 
             restored.restoreSessionSnapshot(decodedSnapshot)
@@ -7220,8 +7220,8 @@ extension SessionPersistenceTests {
     ) throws -> [String: [String: String]] {
         let workspaces = [
             try XCTUnwrap(manager.selectedWorkspace),
-            manager.addWorkspace(inheritWorkingDirectory: false, select: true, autoWelcomeIfNeeded: false),
-            manager.addWorkspace(inheritWorkingDirectory: false, select: true, autoWelcomeIfNeeded: false),
+            manager.addWorkspace(inheritWorkingDirectory: false, select: true),
+            manager.addWorkspace(inheritWorkingDirectory: false, select: true),
         ]
         var expected: [String: [String: String]] = [:]
 
@@ -7532,7 +7532,7 @@ extension SessionPersistenceTests {
             AppDelegate.shared = previousAppDelegate
         }
 
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let windowId = app.registerMainWindowContextForTesting(tabManager: manager)
         defer {
             app.unregisterMainWindowContextForTesting(windowId: windowId)
@@ -8058,3 +8058,5 @@ extension SessionPersistenceTests {
         XCTAssertNil(MarkdownPanelFileLinkResolver.resolve(rawPath: "https://example.com/notes.md", relativeToMarkdownFile: openedFile.path))
     }
 }
+
+

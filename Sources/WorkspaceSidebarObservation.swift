@@ -32,7 +32,7 @@ extension View {
         task(id: ids) { @MainActor in
             await withTaskGroup(of: Void.self) { group in
                 for (id, workspace) in zip(ids, workspaces) {
-                    let cloudChanges = workspace.cloudBindingState.changes()
+                    let tuiChanges = workspace.remoteBindingState.changes()
                     let immediateChanges = workspace.sidebarImmediateObservationPublisher
                         .values
                     let debouncedChanges = workspace.sidebarObservationPublisher
@@ -46,7 +46,7 @@ extension View {
                         .values
                     group.addTask { @MainActor in
                         var first = true
-                        for await _ in cloudChanges {
+                        for await _ in tuiChanges {
                             if Task.isCancelled { break }
                             if first && !deliverInitialValue { first = false; continue }
                             first = false
@@ -76,10 +76,10 @@ extension View {
         }
     }
 
-    /// Keeps extension sidebar projections current using the same Cloud invalidation source.
-    func sidebarCloudBindingObservations(
+    /// Keeps extension sidebar projections current using the same SSH invalidation source.
+    func sidebarTuiBindingObservations(
         ids: [UUID],
-        models: [WorkspaceCloudBindingState],
+        models: [WorkspaceRemoteBindingState],
         onChange: @MainActor @escaping () -> Void
     ) -> some View {
         task(id: ids) { @MainActor in

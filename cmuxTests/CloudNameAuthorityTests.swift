@@ -20,7 +20,7 @@ extension SetAutoTitleSocketTests {
     @Test("Cmd+R terminal and workspace writes keep identity before and after an agent name", arguments: [false, true])
     func cloudUserRenameOrder(agentFirst: Bool) async throws {
         try await withCloudNameFixture { fixture in
-            let oldContext = try #require(fixture.catalog.cloudAgentNameContext(
+            let oldContext = try #require(fixture.catalog.tuiAgentNameContext(
                 workspaceID: fixture.workspace.id, panelID: fixture.panelID))
             if agentFirst { try await fixture.agentName("Calculate 2+2") }
             // These are the shared owner actions invoked by the command palette's
@@ -42,7 +42,7 @@ extension SetAutoTitleSocketTests {
     func cloudLateCallbacks() async throws {
         try await withCloudNameFixture { fixture in
             let oldGraph = fixture.provider.graph
-            let context = try #require(fixture.catalog.cloudAgentNameContext(workspaceID: fixture.workspace.id, panelID: fixture.panelID))
+            let context = try #require(fixture.catalog.tuiAgentNameContext(workspaceID: fixture.workspace.id, panelID: fixture.panelID))
             try await fixture.agentName("New conversation", context: context)
             try await fixture.agentName("Old conversation", context: context)
             #expect(!fixture.provider.install(oldGraph))
@@ -91,19 +91,19 @@ extension SetAutoTitleSocketTests {
     @Test("A callback cannot cross machine or workspace identity despite identical display names")
     func cloudNameIdentity() async throws {
         try await withCloudNameFixture { fixture in
-            let context = try #require(fixture.catalog.cloudAgentNameContext(workspaceID: fixture.workspace.id, panelID: fixture.panelID))
-            let other = try CloudNameAuthorityTestProvider(machine: .cloud("other-" + UUID().uuidString),
+            let context = try #require(fixture.catalog.tuiAgentNameContext(workspaceID: fixture.workspace.id, panelID: fixture.panelID))
+            let other = try CloudNameAuthorityTestProvider(destination: "other-\(UUID()).example.test",
                 catalog: fixture.catalog, renameService: fixture.renameService)
             fixture.catalog.register(other)
             #expect(other.install(other.graph))
             defer { fixture.catalog.unregister(machine: other.machine) }
-            #expect(fixture.catalog.cloudAgentNameContext(workspaceID: UUID(), panelID: fixture.panelID) == nil)
+            #expect(fixture.catalog.tuiAgentNameContext(workspaceID: UUID(), panelID: fixture.panelID) == nil)
             var forged = try #require(context.wire)
             var projection = try #require(forged["projection"] as? [String: Any])
             projection["remoteWorkspaceID"] = "b"
             forged["projection"] = projection
             let result = try await fixture.call("surface.sync_codex_native_title", extra: [
-                "title": "wrong workspace", "cloud_name_context": forged
+                "title": "wrong workspace", "tui_name_context": forged
             ])
             #expect(result["applied"] as? Bool == false)
             try await fixture.agentName("Correct terminal", context: context)
@@ -132,7 +132,7 @@ extension SetAutoTitleSocketTests {
     @Test("An unacknowledged user rename projects in the sidebar and rejects a racing auto result")
     func cloudPendingNameParity() async throws {
         try await withCloudNameFixture { fixture in
-            let context = try #require(fixture.catalog.cloudAgentNameContext(workspaceID: fixture.workspace.id, panelID: fixture.panelID))
+            let context = try #require(fixture.catalog.tuiAgentNameContext(workspaceID: fixture.workspace.id, panelID: fixture.panelID))
             let gate = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
             fixture.provider.beforeRename = {
                 for await _ in gate.stream { break }
@@ -140,7 +140,7 @@ extension SetAutoTitleSocketTests {
             #expect(fixture.workspace.setPanelCustomTitle(panelId: fixture.panelID, title: "Chosen name"))
             try fixture.expectParity("terminal", sidebarName: "Chosen name")
             let response = try await fixture.call("surface.sync_codex_native_title", extra: [
-                "title": "Racing agent", "cloud_name_context": try #require(context.wire)
+                "title": "Racing agent", "tui_name_context": try #require(context.wire)
             ])
             #expect(response["applied"] as? Bool == false)
             try fixture.expectParity("terminal", sidebarName: "Chosen name")
@@ -172,7 +172,7 @@ extension SetAutoTitleSocketTests {
             #expect(fixture.workspace.setPanelCustomTitle(panelId: fixture.panelID, title: "Keep this name"))
             try await fixture.settle()
             #expect(fixture.provider.graph.lookupIndex.tab(id: "tab_a")?.nameAuthority?.source == .user)
-            #expect(fixture.catalog.cloudAgentNameContext(workspaceID: fixture.workspace.id, panelID: fixture.panelID) == nil)
+            #expect(fixture.catalog.tuiAgentNameContext(workspaceID: fixture.workspace.id, panelID: fixture.panelID) == nil)
             try fixture.expectParity("Keep this name")
         }
     }
@@ -180,9 +180,9 @@ extension SetAutoTitleSocketTests {
     @Test("A legacy Cloud projection resolves its workspace identity before renaming")
     func cloudLegacyWorkspaceNameAdmission() async throws {
         try await withCloudNameFixture { fixture in
-            fixture.workspace.cloudVMBinding = nil
+            fixture.workspace.remoteWorkspaceBinding = nil
             #expect(fixture.manager.setCustomTitle(tabId: fixture.workspace.id, title: "machine: User's exact name"))
-            #expect(fixture.workspace.cloudVMBinding?.remoteWorkspaceID == "a")
+            #expect(fixture.workspace.remoteWorkspaceBinding?.remoteWorkspaceID == "a")
             try fixture.expectParity("terminal", workspaceName: "Same workspace",
                                      sidebarWorkspaceName: "machine: User's exact name")
             try await fixture.settle()
@@ -192,20 +192,20 @@ extension SetAutoTitleSocketTests {
 
     @Test("Reporting a failed rename without a live window never starts a modal loop")
     func cloudRenameFailureWithoutWindowReturns() throws {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         let workspace = try #require(manager.selectedWorkspace)
         defer { for panel in workspace.panels.values { panel.close() } }
         #expect(manager.window == nil)
-        workspace.presentCloudRenameFailure(SurfaceCatalogError.noProvider(.cloud("missing")))
+        workspace.presentCloudRenameFailure(SurfaceCatalogError.noProvider(.ssh("ffa63583dfa6706b87d284b86b0d693a161e4840aad2c5cf6b5d27c3b9621f7d")))
         #expect(manager.window == nil)
     }
 
     @Test("A blank Cloud workspace name leaves its name and legacy binding untouched")
     func cloudBlankWorkspaceNameIsNotLocalAlias() async throws {
         try await withCloudNameFixture { fixture in
-            fixture.workspace.cloudVMBinding = nil
+            fixture.workspace.remoteWorkspaceBinding = nil
             #expect(!fixture.manager.setCustomTitle(tabId: fixture.workspace.id, title: nil))
-            #expect(fixture.workspace.cloudVMBinding == nil)
+            #expect(fixture.workspace.remoteWorkspaceBinding == nil)
             #expect(fixture.provider.writes.isEmpty)
             try fixture.expectParity("terminal", workspaceName: "Same workspace")
         }

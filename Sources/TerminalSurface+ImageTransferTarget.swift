@@ -10,14 +10,13 @@ extension TerminalSurface {
         // The bound session remains authoritative even during reconnect, before
         // its local workspace or a fresh remote numeric surface can be resolved.
         let workspace = workspace ?? owningWorkspace()
-        // Native SSH projections use SCP/SFTP upload for both paste and drag/drop.
-        // They have no Cloud image coordinator, so never turn an SSH file into
-        // a local path or a Cloud image request.
+        // Native SSH projections use SCP/SFTP upload for both paste and drop,
+        // so their paths remain on the SSH upload route.
         if let workspace, workspace.usesSSHTui,
            workspace.machineOwningSurface(id)?.isSSH == true {
             return .remote(.workspaceRemote)
         }
-        if mode == .paste, isManagedCloudImageTarget(in: workspace) { return .cloud }
+        if mode == .paste, isTuiImageTarget(in: workspace) { return .tui }
         guard let workspace else { return .local }
         if workspace.isRemoteTerminalSurface(id) {
             return .remote(.workspaceRemote)
@@ -112,13 +111,10 @@ extension TerminalSurface {
     }
 
     @MainActor
-    private func isManagedCloudImageTarget(in workspace: Workspace?) -> Bool {
-        if hostedView.cloudTerminalOverlay.session != nil { return true }
+    private func isTuiImageTarget(in workspace: Workspace?) -> Bool {
+        if hostedView.tuiTerminalOverlay.session != nil { return true }
         guard let workspace else { return false }
-        if workspace.cloudProjectedResource(forPanel: id)?.id.machine.cloudMachineID != nil { return true }
-        if (workspace.panels[id] as? TerminalPanel)?.cloudAttachment != nil { return true }
-        // A VM label alone also describes legacy SSH workspaces. Their existing
-        // SSH upload path remains authoritative until a native Cloud view exists.
-        return false
+        if workspace.tuiProjectedResource(forPanel: id)?.id.machine.isSSH == true { return true }
+        return (workspace.panels[id] as? TerminalPanel)?.remoteAttachment != nil
     }
 }

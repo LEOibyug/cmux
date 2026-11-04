@@ -706,8 +706,7 @@ final class BrowserReplTabAttachment {
             return
         }
         releaseRenderHost()
-        guard panel.mobileBrowserStreamRenderHost == nil,
-              !webView.cmuxIsElementFullscreenActiveOrTransitioning else {
+        guard !webView.cmuxIsElementFullscreenActiveOrTransitioning else {
             return
         }
         // A shown tab keeps its pane's size, so the page does not reflow.

@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -12,14 +12,14 @@ import WebKit
 @MainActor
 @Suite("Live Cloud workspace projection")
 struct CloudWorkspaceLiveProjectionTests {
-    private let machine = SurfaceMachineID.cloud("live-fixture")
+    private let machine = SurfaceMachineID.ssh("7a0de802bce3021a1ea158d37697c3125407d93bb2d6f2abf4a0f6a34849df87")
 
     private func graph(
         _ placement: [String: String],
         revision: Int,
         generation: String = "live",
         contentIDs: [String: String] = [:]
-    ) throws -> CloudVMState {
+    ) throws -> TuiState {
         let tabs = placement.keys.sorted()
         let terminalIDs = Set(tabs.map { contentIDs[$0] ?? ($0 == "third" ? "term_other" : "term_shared") }).sorted()
         let document: [String: Any] = [
@@ -41,16 +41,16 @@ struct CloudWorkspaceLiveProjectionTests {
     }
 
     private func install(
-        _ state: CloudVMState,
+        _ state: TuiState,
         catalog: SurfaceCatalog,
         extraResources: [SurfaceResource] = [],
         resourceOverride: [SurfaceResource]? = nil
     ) {
-        let info = SurfaceMachineInfo(id: machine, name: "Fixture", status: "running", image: nil, hasDesktop: false,
+        let info = SurfaceMachineInfo(id: machine, name: "Fixture", status: "running", image: nil, 
             memoryMb: nil, diskMb: nil, linkState: .connected, linkError: nil,
             cpuPercent: nil, memoryUsedMb: nil, diskUsedMb: nil,
             remoteWorkspaces: state.workspaces.map { SurfaceRemoteWorkspace(id: $0.id, name: $0.name, index: $0.index, focused: $0.focused) })
-        catalog.replaceCloudState(
+        catalog.replaceTuiState(
             state,
             resources: resourceOverride ?? (CmuxTuiSnapshotParser.resources(from: state) + extraResources),
             info: info
@@ -68,22 +68,22 @@ struct CloudWorkspaceLiveProjectionTests {
             focus: focusDesktop, initialDividerPosition: 0.65, websiteDataStore: .nonPersistent()
         ))
         defer { browser.close() }
-        let binding = WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "a")
+        let binding = RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "a")
         var closed: [SurfaceProjection] = []
         var appliedLayouts = 0
-        let coordinator = CloudWorkspaceProjectionCoordinator(environment: .init(
+        let coordinator = TuiWorkspaceProjectionCoordinator(environment: .init(
             bindings: { [workspace.id: binding] }, close: { closed.append($0) },
             applyLayout: { id, layout, projections in
                 #expect(id == workspace.id)
                 appliedLayouts += 1
-                workspace.applyCloudWorkspaceLayout(layout, projections: projections)
+                workspace.applyTuiWorkspaceLayout(layout, projections: projections)
             }
         ))
         let catalog = SurfaceCatalog(
-            cloudPlacementCoordinator: CloudPlacementCoordinator(binding: { _ in binding }),
-            cloudWorkspaceProjectionCoordinator: coordinator
+            tuiPlacementCoordinator: TuiPlacementCoordinator(binding: { _ in binding }),
+            tuiWorkspaceProjectionCoordinator: coordinator
         )
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        catalog.register(TuiPlacementTestProvider(machine: machine))
         let desktop = isPort
             ? CmuxTuiSnapshotParser.portBrowser(machine: machine, port: 6969)
             : CmuxTuiSnapshotParser.display(machine: machine)
@@ -121,16 +121,16 @@ struct CloudWorkspaceLiveProjectionTests {
         defer { live.tearDown() }
         let local = live.id(), other = live.id(), viewer = UUID()
         let bindings = [
-            local: WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "a"),
-            other: WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "b")
+            local: RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "a"),
+            other: RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "b")
         ]
         var closed: [SurfaceProjection] = []
-        let coordinator = CloudWorkspaceProjectionCoordinator(environment: .init(
+        let coordinator = TuiWorkspaceProjectionCoordinator(environment: .init(
             bindings: { bindings }, close: { closed.append($0) }
         ))
-        let placement = CloudPlacementCoordinator(binding: { bindings[$0] })
-        let catalog = SurfaceCatalog(live: live, cloudPlacementCoordinator: placement, cloudWorkspaceProjectionCoordinator: coordinator)
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let placement = TuiPlacementCoordinator(binding: { bindings[$0] })
+        let catalog = SurfaceCatalog(live: live, tuiPlacementCoordinator: placement, tuiWorkspaceProjectionCoordinator: coordinator)
+        let provider = TuiPlacementTestProvider(machine: machine)
         catalog.register(provider)
         let port = CmuxTuiSnapshotParser.portBrowser(machine: machine, port: 6969)
         install(try graph(["first": "a"], revision: 1), catalog: catalog, extraResources: [port])
@@ -164,16 +164,16 @@ struct CloudWorkspaceLiveProjectionTests {
         let live = LiveWorkspaceFixture()
         defer { live.tearDown() }
         let a = live.id(), b = live.id()
-        let bindings = [a: WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "a"),
-                        b: WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "b")]
+        let bindings = [a: RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "a"),
+                        b: RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "b")]
         var closed: [SurfaceProjection] = []
         var layouts: [UUID: SurfaceProjectionLayout] = [:]
-        let coordinator = CloudWorkspaceProjectionCoordinator(environment: .init(
+        let coordinator = TuiWorkspaceProjectionCoordinator(environment: .init(
             bindings: { bindings }, close: { closed.append($0) }, applyLayout: { id, layout, _ in layouts[id] = layout }
         ))
-        let catalog = SurfaceCatalog(live: live, cloudPlacementCoordinator: CloudPlacementCoordinator(binding: { bindings[$0] }),
-                                     cloudWorkspaceProjectionCoordinator: coordinator)
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let catalog = SurfaceCatalog(live: live, tuiPlacementCoordinator: TuiPlacementCoordinator(binding: { bindings[$0] }),
+                                     tuiWorkspaceProjectionCoordinator: coordinator)
+        let provider = TuiPlacementTestProvider(machine: machine)
         catalog.register(provider)
         let initial = try graph(["first": "a", "second": "a"], revision: 1)
         install(initial, catalog: catalog)
@@ -219,11 +219,11 @@ struct CloudWorkspaceLiveProjectionTests {
     @Test("Local create intent prevents duplicate materialization while an event arrives")
     func localCreationOwnsItsDestinationUntilItFinishes() async throws {
         let local = UUID()
-        let coordinator = CloudWorkspaceProjectionCoordinator(environment: .init(bindings: {
-            [local: WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "a")]
+        let coordinator = TuiWorkspaceProjectionCoordinator(environment: .init(bindings: {
+            [local: RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "a")]
         }))
-        let catalog = SurfaceCatalog(cloudWorkspaceProjectionCoordinator: coordinator)
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        let catalog = SurfaceCatalog(tuiWorkspaceProjectionCoordinator: coordinator)
+        catalog.register(TuiPlacementTestProvider(machine: machine))
         let token = coordinator.beginLocalMutation(on: machine)
         install(try graph(["first": "a"], revision: 1), catalog: catalog)
         await coordinator.waitForIdle()
@@ -244,17 +244,17 @@ struct CloudWorkspaceLiveProjectionTests {
         let pane = try #require(workspace.bonsplitController.allPaneIds.first)
         let firstPanel = try #require(workspace.focusedPanelId)
         let missingPanel = try #require(workspace.newTerminalSurface(inPane: pane, focus: false)?.id)
-        let binding = WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "a")
+        let binding = RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "a")
         var closed: [SurfaceProjection] = []
-        let coordinator = CloudWorkspaceProjectionCoordinator(environment: .init(
+        let coordinator = TuiWorkspaceProjectionCoordinator(environment: .init(
             bindings: { [workspace.id: binding] }, close: { closed.append($0) }
         ))
         let catalog = SurfaceCatalog(
             live: live,
-            cloudPlacementCoordinator: CloudPlacementCoordinator(binding: { _ in binding }),
-            cloudWorkspaceProjectionCoordinator: coordinator
+            tuiPlacementCoordinator: TuiPlacementCoordinator(binding: { _ in binding }),
+            tuiWorkspaceProjectionCoordinator: coordinator
         )
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        catalog.register(TuiPlacementTestProvider(machine: machine))
         let firstResource = SurfaceResourceID(machine: machine, kind: .terminal, key: "term_shared")
         let missingResource = SurfaceResourceID(machine: machine, kind: .terminal, key: "term_missing")
         catalog.record(SurfaceProjection(
@@ -298,19 +298,19 @@ struct CloudWorkspaceLiveProjectionTests {
         let source = live.add()
         let destination = live.add()
         let bindings = [
-            source.id: WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "a"),
-            destination.id: WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "b")
+            source.id: RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "a"),
+            destination.id: RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "b")
         ]
         var closed: [SurfaceProjection] = []
-        let coordinator = CloudWorkspaceProjectionCoordinator(environment: .init(
+        let coordinator = TuiWorkspaceProjectionCoordinator(environment: .init(
             bindings: { bindings }, close: { closed.append($0) }
         ))
         let catalog = SurfaceCatalog(
             live: live,
-            cloudPlacementCoordinator: CloudPlacementCoordinator(binding: { bindings[$0] }),
-            cloudWorkspaceProjectionCoordinator: coordinator
+            tuiPlacementCoordinator: TuiPlacementCoordinator(binding: { bindings[$0] }),
+            tuiWorkspaceProjectionCoordinator: coordinator
         )
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        catalog.register(TuiPlacementTestProvider(machine: machine))
 
         install(try graph(["first": "a"], revision: 1), catalog: catalog)
         await coordinator.waitForIdle()
@@ -354,7 +354,7 @@ struct CloudWorkspaceLiveProjectionTests {
             remoteViews: [remoteView], port: nil, url: nil
         )
         let catalog = SurfaceCatalog(live: live)
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        catalog.register(TuiPlacementTestProvider(machine: machine))
         catalog.upsert(resource)
 
         let first = try await catalog.project(
@@ -381,7 +381,7 @@ struct CloudWorkspaceLiveProjectionTests {
         let fixture = boundWorkspaceFixture()
         defer { fixture.workspace.teardownAllPanels() }
         let catalog = fixture.catalog
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        catalog.register(TuiPlacementTestProvider(machine: machine))
         install(try graph(["first": "a"], revision: 1), catalog: catalog)
         await fixture.coordinator.waitForIdle()
         let projection = try #require(catalog.projections.first { $0.workspaceID == fixture.workspace.id })
@@ -409,7 +409,7 @@ struct CloudWorkspaceLiveProjectionTests {
         let fixture = boundWorkspaceFixture(closed: { closed.append($0) })
         defer { fixture.workspace.teardownAllPanels() }
         let catalog = fixture.catalog
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let provider = TuiPlacementTestProvider(machine: machine)
         catalog.register(provider)
         install(try graph(["first": "a"], revision: 1), catalog: catalog)
         await fixture.coordinator.waitForIdle()
@@ -442,7 +442,7 @@ struct CloudWorkspaceLiveProjectionTests {
             passes += 1
             if passes < 1_000 { coordinator.request(machine: machine, catalog: catalog) }
         }
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        catalog.register(TuiPlacementTestProvider(machine: machine))
         install(try graph(["first": "a"], revision: 1), catalog: catalog)
         await coordinator.waitForIdle()
 
@@ -466,7 +466,7 @@ struct CloudWorkspaceLiveProjectionTests {
             catalog.projectionVersions[machine, default: 0] &+= 1
             if passes < 1_000 { coordinator.request(machine: machine, catalog: catalog) }
         }
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        catalog.register(TuiPlacementTestProvider(machine: machine))
         install(try graph(["first": "a"], revision: 1), catalog: catalog)
         await coordinator.waitForIdle()
 
@@ -491,11 +491,11 @@ struct CloudWorkspaceLiveProjectionTests {
         let live = LiveWorkspaceFixture()
         defer { live.tearDown() }
         let local = live.id()
-        let coordinator = CloudWorkspaceProjectionCoordinator(environment: .init(bindings: {
-            [local: WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "a")]
+        let coordinator = TuiWorkspaceProjectionCoordinator(environment: .init(bindings: {
+            [local: RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "a")]
         }))
-        let catalog = SurfaceCatalog(live: live, cloudWorkspaceProjectionCoordinator: coordinator)
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let catalog = SurfaceCatalog(live: live, tuiWorkspaceProjectionCoordinator: coordinator)
+        let provider = TuiPlacementTestProvider(machine: machine)
         provider.beforeMaterialization = { throw CancellationError() }
         catalog.register(provider)
         install(try graph(["first": "a"], revision: 1), catalog: catalog)
@@ -509,18 +509,18 @@ struct CloudWorkspaceLiveProjectionTests {
         let live = LiveWorkspaceFixture()
         defer { live.tearDown() }
         let local = live.id()
-        let binding = WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "a")
-        let coordinator = CloudWorkspaceProjectionCoordinator(environment: .init(bindings: { [local: binding] }))
-        let catalog = SurfaceCatalog(live: live, cloudPlacementCoordinator: CloudPlacementCoordinator(binding: { _ in binding }),
-                                     cloudWorkspaceProjectionCoordinator: coordinator)
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        let binding = RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "a")
+        let coordinator = TuiWorkspaceProjectionCoordinator(environment: .init(bindings: { [local: binding] }))
+        let catalog = SurfaceCatalog(live: live, tuiPlacementCoordinator: TuiPlacementCoordinator(binding: { _ in binding }),
+                                     tuiWorkspaceProjectionCoordinator: coordinator)
+        catalog.register(TuiPlacementTestProvider(machine: machine))
         install(try graph(["first": "a"], revision: 1), catalog: catalog)
         await coordinator.waitForIdle()
         let terminal = try #require(catalog.projections.first?.resource)
         let token = coordinator.beginLocalMutation(on: machine)
         install(try graph([:], revision: 2), catalog: catalog)
         var repaired = false
-        await catalog.cloudPlacementCoordinator.repairPlacement(for: terminal, catalog: catalog) { _ in
+        await catalog.tuiPlacementCoordinator.repairPlacement(for: terminal, catalog: catalog) { _ in
             repaired = true
             return SurfaceRemotePlacement(workspaceID: "a", tabID: "resurrected")
         }
@@ -535,17 +535,17 @@ struct CloudWorkspaceLiveProjectionTests {
         let live = LiveWorkspaceFixture()
         defer { live.tearDown() }
         let local = live.id()
-        let binding = WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "a")
-        let coordinator = CloudWorkspaceProjectionCoordinator(environment: .init(bindings: { [local: binding] }))
-        let catalog = SurfaceCatalog(live: live, cloudPlacementCoordinator: CloudPlacementCoordinator(binding: { _ in binding }),
-                                     cloudWorkspaceProjectionCoordinator: coordinator)
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let binding = RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "a")
+        let coordinator = TuiWorkspaceProjectionCoordinator(environment: .init(bindings: { [local: binding] }))
+        let catalog = SurfaceCatalog(live: live, tuiPlacementCoordinator: TuiPlacementCoordinator(binding: { _ in binding }),
+                                     tuiWorkspaceProjectionCoordinator: coordinator)
+        let provider = TuiPlacementTestProvider(machine: machine)
         catalog.register(provider)
         install(try graph(["first": "a", "second": "a"], revision: 1), catalog: catalog)
         await coordinator.waitForIdle()
         let first = try #require(catalog.projections.first { $0.remoteTabID == "first" })
         catalog.endProjections(panelID: first.panelID)
-        await catalog.cloudPlacementCoordinator.waitForPendingMutations()
+        await catalog.tuiPlacementCoordinator.waitForPendingMutations()
         await coordinator.waitForIdle()
         #expect(provider.closedTabs == ["first"])
         #expect(!catalog.projections.contains { $0.remoteTabID == "first" })
@@ -602,7 +602,7 @@ struct CloudWorkspaceLiveProjectionTests {
 
         catalog.moveProjections(panelID: panel, to: firstWorkspace)
         catalog.endProjections(panelID: panel)
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let provider = TuiPlacementTestProvider(machine: machine)
         catalog.register(provider)
         catalog.replaceResources([], on: machine, info: provider.info, from: provider)
         #expect(catalog.projectionRecords(forWorkspace: firstWorkspace).isEmpty)
@@ -611,20 +611,20 @@ struct CloudWorkspaceLiveProjectionTests {
     /// A bound workspace whose real `Workspace` answers ownership checks, so `project`
     /// and `restore` take the production validation path.
     private func boundWorkspaceFixture(closed: @escaping @MainActor (SurfaceProjection) -> Void = { _ in })
-        -> (workspace: Workspace, catalog: SurfaceCatalog, placement: CloudPlacementCoordinator, coordinator: CloudWorkspaceProjectionCoordinator) {
+        -> (workspace: Workspace, catalog: SurfaceCatalog, placement: TuiPlacementCoordinator, coordinator: TuiWorkspaceProjectionCoordinator) {
         let workspace = Workspace()
-        let binding = WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "a")
-        workspace.cloudVMBinding = binding
-        let coordinator = CloudWorkspaceProjectionCoordinator(environment: .init(
+        let binding = RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "a")
+        workspace.remoteWorkspaceBinding = binding
+        let coordinator = TuiWorkspaceProjectionCoordinator(environment: .init(
             bindings: { [workspace.id: binding] }, close: closed
         ))
-        let placement = CloudPlacementCoordinator(binding: { $0 == workspace.id ? binding : nil })
+        let placement = TuiPlacementCoordinator(binding: { $0 == workspace.id ? binding : nil })
         let catalog = SurfaceCatalog(
-            cloudWorkspaceRenameService: CloudWorkspaceRenameService(
-                environment: CloudWorkspaceRenameEnvironment(workspace: { $0 == workspace.id ? workspace : nil })
+            tuiWorkspaceRenameService: TuiWorkspaceRenameService(
+                environment: TuiWorkspaceRenameEnvironment(workspace: { $0 == workspace.id ? workspace : nil })
             ),
-            cloudPlacementCoordinator: placement,
-            cloudWorkspaceProjectionCoordinator: coordinator
+            tuiPlacementCoordinator: placement,
+            tuiWorkspaceProjectionCoordinator: coordinator
         )
         return (workspace, catalog, placement, coordinator)
     }
@@ -635,7 +635,7 @@ struct CloudWorkspaceLiveProjectionTests {
         let fixture = boundWorkspaceFixture(closed: { closed.append($0) })
         defer { fixture.workspace.teardownAllPanels() }
         let catalog = fixture.catalog
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let provider = TuiPlacementTestProvider(machine: machine)
         let desktop = CmuxTuiSnapshotParser.display(machine: machine)
         // Only the browser pane binds its resource while being configured; the
         // coordinator's own terminal materialization keeps its daemon tab.
@@ -667,7 +667,7 @@ struct CloudWorkspaceLiveProjectionTests {
         let sourceWorkspace = live.add()
         let destinationWorkspace = live.add()
         let catalog = SurfaceCatalog(live: live)
-        let provider = CloudPlacementTestProvider(machine: machine)
+        let provider = TuiPlacementTestProvider(machine: machine)
         catalog.register(provider)
 
         let remoteWorkspace = SurfaceRemoteWorkspace(id: "remote", name: "Cloud", index: 0, focused: true)
@@ -723,7 +723,7 @@ struct CloudWorkspaceLiveProjectionTests {
         let fixture = boundWorkspaceFixture()
         defer { fixture.workspace.teardownAllPanels() }
         let catalog = fixture.catalog
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        catalog.register(TuiPlacementTestProvider(machine: machine))
         let preview = isPort
             ? CmuxTuiSnapshotParser.portBrowser(machine: machine, port: 6969)
             : CmuxTuiSnapshotParser.display(machine: machine)
@@ -735,7 +735,7 @@ struct CloudWorkspaceLiveProjectionTests {
         #expect(restored.remoteWorkspaceID == "a")
         #expect(restored.remoteTabID == nil)
         let group = try catalog.remoteWorkspaceGroup(machine: machine, workspaceID: "a")
-        let plan = CloudWorkspaceProjectionPlan(
+        let plan = TuiWorkspaceProjectionPlan(
             desired: group.placements,
             existing: catalog.projections.filter { $0.workspaceID == fixture.workspace.id }
         )
@@ -748,12 +748,12 @@ struct CloudWorkspaceLiveProjectionTests {
         defer { live.tearDown() }
         let first = live.id()
         let second = live.id()
-        let binding = WorkspaceCloudVMBinding(vmID: machine.rawValue, isBase: false, remoteWorkspaceID: "a")
+        let binding = RemoteWorkspaceBinding(machineID: machine.rawValue, remoteWorkspaceID: "a")
         let bindings = [first: binding, second: binding]
-        let coordinator = CloudWorkspaceProjectionCoordinator(environment: .init(bindings: { bindings }))
-        let placement = CloudPlacementCoordinator(binding: { bindings[$0] })
-        let catalog = SurfaceCatalog(live: live, cloudPlacementCoordinator: placement, cloudWorkspaceProjectionCoordinator: coordinator)
-        catalog.register(CloudPlacementTestProvider(machine: machine))
+        let coordinator = TuiWorkspaceProjectionCoordinator(environment: .init(bindings: { bindings }))
+        let placement = TuiPlacementCoordinator(binding: { bindings[$0] })
+        let catalog = SurfaceCatalog(live: live, tuiPlacementCoordinator: placement, tuiWorkspaceProjectionCoordinator: coordinator)
+        catalog.register(TuiPlacementTestProvider(machine: machine))
         let preview = isPort
             ? CmuxTuiSnapshotParser.portBrowser(machine: machine, port: 6969)
             : CmuxTuiSnapshotParser.display(machine: machine)

@@ -13,8 +13,6 @@ extension ContentView {
             return CmuxSurfaceTabBarBuiltInAction.newBrowser.configID
         case "palette.newSimulatorPane":
             return CmuxSurfaceTabBarBuiltInAction.newSimulator.configID
-        case "palette.newAgentChat":
-            return CmuxSurfaceTabBarBuiltInAction.newAgentChat.configID
         case "palette.terminalSplitRight":
             return CmuxSurfaceTabBarBuiltInAction.splitRight.configID
         case "palette.terminalSplitDown":
@@ -36,62 +34,6 @@ extension ContentView {
         "palette." + action.configID.replacingOccurrences(of: "cmux.", with: "")
     }
 
-    /// Returns the built-in Agent Chat palette contribution when its rollout is enabled.
-    static func commandPaletteNewAgentChatContributions() -> [CommandPaletteCommandContribution] {
-        guard CmuxFeatureFlags.shared.isAgentChatUIEnabled else { return [] }
-        return [CommandPaletteCommandContribution(
-            commandId: "palette.newAgentChat",
-            title: { _ in String(localized: "command.newAgentChat.title", defaultValue: "New agent chat") },
-            subtitle: { _ in String(localized: "command.newAgentChat.subtitle", defaultValue: "Agent Chat") },
-            keywords: ["create", "new", "agent", "chat", "browser", "codex", "claude"],
-            when: { !$0.bool(CommandPaletteContextKeys.browserDisabled) }
-        ), CommandPaletteCommandContribution(
-            commandId: "palette.openTerminalChatView",
-            title: { _ in String(localized: "command.openTerminalChatView.title", defaultValue: "Open terminal as chat") },
-            subtitle: { _ in String(localized: "command.newAgentChat.subtitle", defaultValue: "Agent Chat") },
-            keywords: ["terminal", "chat", "view", "transcript", "gui", "agent", "claude", "codex"],
-            when: {
-                $0.bool(CommandPaletteContextKeys.panelIsTerminal)
-                    && !$0.bool(CommandPaletteContextKeys.browserDisabled)
-            }
-        )]
-    }
-
-    /// Registers the shared Agent Chat action path with the command palette.
-    func registerAgentChatCommandPaletteHandler(_ registry: inout CommandPaletteHandlerRegistry) {
-        registry.register(commandId: "palette.newAgentChat") {
-            guard CmuxFeatureFlags.shared.isAgentChatUIEnabled else {
-                NSSound.beep()
-                return
-            }
-            guard let appDelegate = AppDelegate.shared else {
-                NSSound.beep()
-                return
-            }
-            if !appDelegate.executeConfiguredCmuxAction(
-                id: CmuxSurfaceTabBarBuiltInAction.newAgentChat.configID,
-                tabManager: tabManager,
-                preferredWindow: appDelegate.mainWindow(for: windowId)
-            ) {
-                NSSound.beep()
-            }
-        }
-        registerTerminalChatViewCommandPaletteHandler(&registry)
-    }
-
-    /// Registers the read-only chat view for the focused terminal's agent.
-    func registerTerminalChatViewCommandPaletteHandler(_ registry: inout CommandPaletteHandlerRegistry) {
-        registry.register(commandId: "palette.openTerminalChatView") {
-            guard let context = focusedPanelContext, context.panel.panelType == .terminal else {
-                NSSound.beep()
-                return
-            }
-            context.workspace.openTerminalChatView(
-                terminalPanelId: context.panelId,
-                presentingWindow: AppDelegate.shared?.mainWindow(for: windowId)
-            )
-        }
-    }
 
     /// Palette context key indicating that the selected workspace is remotely managed.
     static let commandPaletteWorkspaceIsRemoteKey = CommandPaletteContextKeys(

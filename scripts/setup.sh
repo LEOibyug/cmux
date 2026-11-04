@@ -76,24 +76,12 @@ if ! command -v cargo &> /dev/null || ! cargo --version &> /dev/null; then
     exit 1
 fi
 
-# The Cloud tunnel system extension embeds wireguard-go, built by
-# scripts/build-wireguard-go.sh. Release builds require Go; a Debug build
-# without it gets a stub engine (the extension cannot load in a Debug build
-# anyway), so this is advisory rather than fatal.
-echo "==> Checking for Go (Cloud tunnel extension)..."
-export PATH="/usr/local/go/bin:${HOME}/go/bin:${PATH}"
-if command -v go &> /dev/null; then
-    go version
-else
-    echo "Note: go is not installed; Debug builds will use a stub WireGuard engine."
-    echo "Install via: brew install go (required for Release builds)"
-fi
-
 "$SCRIPT_DIR/ensure-ghosttykit.sh"
 
 "$SCRIPT_DIR/install-git-hooks.sh"
 
 echo "==> Setup complete!"
 echo ""
-echo "You can now build and run the app:"
-echo "  ./scripts/reload.sh --tag first-run"
+echo "Build the local SSH helper, then the app (Zig 0.16.0 must be on PATH):"
+echo "  (cd cmux-tui && cargo build --release --locked -p cmux-tui --bin cmux-tui)"
+echo "  ./scripts/reload.sh --release --tag first-run --no-global-cli-links"

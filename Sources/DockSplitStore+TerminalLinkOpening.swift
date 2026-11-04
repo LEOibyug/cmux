@@ -23,10 +23,10 @@ extension DockSplitStore: TerminalLinkOpenContainer {
         return machineOwningSurface(panelId)?.isLocal != true
     }
 
-    func cloudTerminalLinkTarget(url: URL, sourcePanelId: UUID) -> CloudTerminalLinkTarget? {
+    func tuiTerminalLinkTarget(url: URL, sourcePanelId: UUID) -> RemoteTerminalLinkTarget? {
         guard let resource = SurfaceCatalog.shared.resource(forPanel: sourcePanelId),
               let address = SurfaceCatalog.shared.machineInfo(for: resource.machine)?.privateAddress,
-              let target = CmuxTuiSurfaceProvider.cloudTerminalLinkTarget(url: url, resource: resource, privateAddress: address) else { return nil }
+              let target = CmuxTuiSurfaceProvider.tuiTerminalLinkTarget(url: url, resource: resource, privateAddress: address) else { return nil }
         return target
     }
 

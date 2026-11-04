@@ -6,7 +6,7 @@ extension CmuxTuiSurfaceProvider {
     /// A committed terminal retained until the canonical graph reaches its receipt.
     struct PendingRemoteCreation {
         var resource: SurfaceResource
-        var receipt: CloudVMCursor?
+        var receipt: TuiCursor?
         let tabID: String?
     }
 }

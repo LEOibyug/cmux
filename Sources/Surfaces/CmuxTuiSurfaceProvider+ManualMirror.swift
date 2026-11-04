@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import CmuxTerminal
 import CmuxRemoteSession
@@ -7,7 +7,7 @@ import Foundation
 
 @MainActor
 extension CmuxTuiSurfaceProvider {
-    nonisolated static func shouldShowRecoverableCloudFailure(observation: CloudVMStateObservation) -> Bool {
+    nonisolated static func shouldShowRecoverableTuiFailure(observation: TuiStateObservation) -> Bool {
         observation.freshness != .current
     }
 
@@ -21,8 +21,8 @@ extension CmuxTuiSurfaceProvider {
         remoteTabID: String? = nil,
         at destination: SurfaceDestination,
         focus: Bool,
-        adopting reservation: CloudTerminalPaneReservation? = nil
-    ) async throws -> CloudManualMirrorMaterialization {
+        adopting reservation: TuiTerminalPaneReservation? = nil
+    ) async throws -> TuiManualMirrorMaterialization {
         try catalog.validateOwnership(of: [resource.id], at: destination)
         let allowPlacementRepair = reservation?.attachmentPlacement.map { expected in
             remoteTabID == nil || remoteTabID == expected.remoteTabID
@@ -35,10 +35,10 @@ extension CmuxTuiSurfaceProvider {
         let preferredWorkspaceID = savedPlacement?.workspaceID
             ?? reservation?.attachmentPlacement?.remoteWorkspaceID
             ?? resource.remoteWorkspace?.id
-            ?? catalog.cloudPlacementCoordinator.boundRemoteWorkspaceID(forLocalWorkspace: destination.workspaceID, on: machine)
+            ?? catalog.tuiPlacementCoordinator.boundRemoteWorkspaceID(forLocalWorkspace: destination.workspaceID, on: machine)
         let connected = try await links.connected(machineID: machineID)
         guard let link = await links.link(machineID: machineID) else {
-            throw ProviderError.machineAsleep(machineID)
+            throw ProviderError.connectionUnavailable(machineID)
         }
         let correlationID = UUID().uuidString.lowercased()
         try catalog.validateOwnership(of: [resource.id], at: destination)
@@ -73,14 +73,13 @@ extension CmuxTuiSurfaceProvider {
         if allowPlacementRepair, resource.creationAttachment == nil, confirmedPlacement == nil {
             // A restored pane without a confirmed replacement would attach to a
             // live numeric surface while losing its remote tab identity.
-            throw CloudDiagnosticFailure.placement
+            throw TuiTransportError.placementMismatch
         }
-        try CloudMachineLoadingReservation.current?.validate(materializedPlacement: confirmedPlacement)
-        let session = CloudTuiManualMirrorSession(
+        try TuiMachineLoadingReservation.current?.validate(materializedPlacement: confirmedPlacement)
+        let session = TuiManualMirrorSession(
             machineID: machineID,
             terminalID: resource.id.key,
             remoteSurfaceID: resolved.surfaceID,
-            operations: links.operations,
             creationAttachment: resource.creationAttachment,
             resolveLegacySurfaceID: { [weak self] in
                 guard let self else { throw CancellationError() }
@@ -105,7 +104,7 @@ extension CmuxTuiSurfaceProvider {
                 // closed while the daemon created the terminal ends this request
                 // without a replacement pane, like closing any pending pane.
                 guard let workspace = Workspace.liveWorkspace(id: reservation.workspaceID),
-                      let adopted = workspace.adoptReservedCloudTerminalPane(
+                      let adopted = workspace.adoptReservedTuiTerminalPane(
                           reservation,
                           onResize: { [weak session] sample in session?.apply(size: sample) },
                           onRuntimeReady: { [weak session] in session?.runtimeReady() },
@@ -114,7 +113,7 @@ extension CmuxTuiSurfaceProvider {
                       ) else {
                     throw CancellationError()
                 }
-                workspace.updateCloudTerminalTabIcon(
+                workspace.updateTuiTerminalTabIcon(
                     panelID: adopted.panelID,
                     assetName: resource.terminalAgentIconAssetName
                 )
@@ -123,7 +122,7 @@ extension CmuxTuiSurfaceProvider {
                 // The card's grace counts from the moment the pane appeared.
                 session.startPresentationEpisode(elapsed: reservation.elapsed)
             } else {
-                created = try SurfacePaneFactory.makeCloudManualMirrorPane(
+                created = try SurfacePaneFactory.makeTuiManualMirrorPane(
                     at: destination,
                     focus: focus,
                     iconAssetName: resource.terminalAgentIconAssetName,
@@ -148,7 +147,7 @@ extension CmuxTuiSurfaceProvider {
             // rebinds the ordinary terminal callback, while this hook resolves
             // the panel's current owner after a move.
             if let createdPanel = Workspace.liveWorkspace(id: created.workspaceID)?.panels[created.panelID] as? TerminalPanel {
-                Workspace.bindCloudManualMirrorInputConvergence(
+                Workspace.bindTuiManualMirrorInputConvergence(
                     panel: createdPanel,
                     isActive: { [weak session, weak createdPanel] in
                         guard let session, let createdPanel else { return false }
@@ -159,7 +158,7 @@ extension CmuxTuiSurfaceProvider {
             }
             manualMirrorSessions[created.panelID] = session
             session.reconnect(socketPath: connected.socketPath, handshake: reservation?.takeAttachHandshake())
-            return CloudManualMirrorMaterialization(
+            return TuiManualMirrorMaterialization(
                 workspaceID: created.workspaceID,
                 panelID: created.panelID,
                 surface: created.surface,
@@ -175,8 +174,8 @@ extension CmuxTuiSurfaceProvider {
     /// Registers a new pane's attach stream while the machine creates its
     /// terminal, so the attachment needs only `attach-surface` once the
     /// terminal exists. The link is the machine's existing one.
-    func beginAttachHandshake(for reservation: CloudTerminalPaneReservation) {
-        let handshake = CloudTuiManualMirrorHandshake(identity: CloudTuiManualMirrorSession.localSharingIdentity)
+    func beginAttachHandshake(for reservation: TuiTerminalPaneReservation) {
+        let handshake = TuiManualMirrorHandshake(identity: TuiManualMirrorSession.localSharingIdentity)
         reservation.beginAttachHandshake(handshake)
         let links = links
         let machineID = machineID
@@ -200,15 +199,15 @@ extension CmuxTuiSurfaceProvider {
     private func resolveSurfaceIDForMaterialization(
         terminalID: String,
         socketPath: String,
-        link: CloudMachineLink,
+        link: RemoteMachineLink,
         requiresExistingView: Bool,
         correlationID: String,
         preferredWorkspaceID: String? = nil
     ) async throws -> (surfaceID: UInt64, placement: SurfaceRemotePlacement?) {
-        let resolver = CloudTerminalAttachmentResolver(machineID: machineID, commandRunner: link, socketPath: socketPath, correlationID: correlationID)
+        let resolver = TuiTerminalAttachmentResolver(machineID: machineID, commandRunner: link, socketPath: socketPath, correlationID: correlationID)
         var failures = 0
         var lastReason = ""
-        var lastFailure = CloudTuiSurfaceIDResolution.Failure.notReady
+        var lastFailure = TuiSurfaceIDResolution.Failure.notReady
         var projectedPlacement: SurfaceRemotePlacement?
         while true {
             try Task.checkCancellation()
@@ -242,7 +241,7 @@ extension CmuxTuiSurfaceProvider {
                 lastFailure = failure
             }
             failures += 1
-            guard let delay = CloudTerminalAttachmentRetryPolicy.materialize.boundedDelay(afterFailures: failures) else {
+            guard let delay = TuiTerminalAttachmentRetryPolicy.materialize.boundedDelay(afterFailures: failures) else {
                 attachmentLog.giveUp(machineID: machineID, terminalID: terminalID, attempts: failures, reason: lastReason)
                 throw ProviderError.terminalAttachTimedOut(terminalID: terminalID, failure: lastFailure)
             }
@@ -256,7 +255,7 @@ extension CmuxTuiSurfaceProvider {
     private func ensureRemoteTerminalView(
         terminalID: String,
         socketPath: String,
-        link: CloudMachineLink,
+        link: RemoteMachineLink,
         preferredWorkspaceID: String? = nil
     ) async throws -> SurfaceRemotePlacement {
         // Attachment needs one backing tab per terminal, irrespective of which local
@@ -266,7 +265,7 @@ extension CmuxTuiSurfaceProvider {
         if let task = remoteTerminalProjectionTasks[key] { return try await task.value }
         let task = Task<SurfaceRemotePlacement, Error> { @MainActor [weak self] in
             guard let self else { throw ProviderError.terminalNotCreated(terminalID) }
-            let snapshot = try await link.run(arguments: CloudTuiRequests.snapshotArguments(socketPath: socketPath))
+            let snapshot = try await link.run(arguments: TuiRequests.snapshotArguments(socketPath: socketPath))
             guard let destination = await CmuxTuiSnapshotParser.terminalProjectionTarget(from: snapshot, preferringWorkspace: preferredWorkspaceID) else {
                 throw ProviderError.noWorkspaceOnMachine(self.machineID)
             }
@@ -285,11 +284,11 @@ extension CmuxTuiSurfaceProvider {
     /// never reused after a failed resolution; the session is first fenced,
     /// then a fresh remote projection is created and resolved once more.
     func resolveManualMirrorSessions(
-        _ sessions: [CloudTuiManualMirrorSession],
+        _ sessions: [TuiManualMirrorSession],
         socketPath: String,
-        link: CloudMachineLink
-    ) async -> [String: CloudTuiSurfaceIDResolution] {
-        let resolver = CloudTerminalAttachmentResolver(machineID: machineID, commandRunner: link, socketPath: socketPath)
+        link: RemoteMachineLink
+    ) async -> [String: TuiSurfaceIDResolution] {
+        let resolver = TuiTerminalAttachmentResolver(machineID: machineID, commandRunner: link, socketPath: socketPath)
         let sessionsByTerminal = Dictionary(grouping: sessions, by: \.terminalID)
         var resolutions = await resolver.resolve(terminalIDs: Set(sessionsByTerminal.keys))
         let terminalsWithoutPlacement: Set<String> = Set(
@@ -300,16 +299,16 @@ extension CmuxTuiSurfaceProvider {
         )
         for terminalID in terminalsWithoutPlacement {
             guard !Task.isCancelled else { break }
-            if let state = cloudState {
+            if let state = tuiState {
                 let resourceID = SurfaceResourceID(machine: machine, kind: .terminal, key: terminalID)
                 guard catalog.projections(of: resourceID).contains(where: {
-                    catalog.cloudWorkspaceProjectionCoordinator.retainsProjection($0, in: state, catalog: catalog)
+                    catalog.tuiWorkspaceProjectionCoordinator.retainsProjection($0, in: state)
                 }) else { continue }
             }
             for session in sessionsByTerminal[terminalID] ?? [] {
                 session.markSurfaceResolutionUnavailable()
             }
-            await catalog.cloudPlacementCoordinator.repairPlacement(
+            await catalog.tuiPlacementCoordinator.repairPlacement(
                 for: SurfaceResourceID(machine: machine, kind: .terminal, key: terminalID),
                 catalog: catalog
             ) { preferredWorkspaceID in
@@ -336,7 +335,7 @@ extension CmuxTuiSurfaceProvider {
     /// does the pane show Reconnect, which restarts the loop at once. Closing
     /// the pane cancels the loop; a terminal that exited is reported as such.
     func attachReservedTerminalPane(
-        _ reservation: CloudTerminalPaneReservation,
+        _ reservation: TuiTerminalPaneReservation,
         resource: SurfaceResource,
         remoteTabID: String?
     ) {
@@ -347,7 +346,7 @@ extension CmuxTuiSurfaceProvider {
         reservation.retry = { [weak self] in
             guard let self else { return }
             self.restoredAttachTasks[panelID]?.cancel()
-            Workspace.liveWorkspace(id: reservation.workspaceID)?.restartReservedCloudTerminalPane(reservation)
+            Workspace.liveWorkspace(id: reservation.workspaceID)?.restartReservedTuiTerminalPane(reservation)
             self.attachReservedTerminalPane(reservation, resource: resource, remoteTabID: remoteTabID)
         }
         reservation.cancel = { [weak self] in
@@ -355,15 +354,15 @@ extension CmuxTuiSurfaceProvider {
             self.restoredAttachTasks.removeValue(forKey: panelID)?.cancel()
             self.materializedPanels.remove(panelID)
         }
-        if Self.shouldShowRecoverableCloudFailure(
-            observation: catalog.cloudStateObservations[machine] ?? .stale(reason: "missing")
+        if Self.shouldShowRecoverableTuiFailure(
+            observation: catalog.tuiStateObservations[machine] ?? .stale(reason: "missing")
         ),
            let workspace = Workspace.liveWorkspace(id: reservation.workspaceID) {
             restoredAttachTasks[panelID] = nil
             materializedPanels.remove(panelID)
-            workspace.failReservedCloudTerminalPane(
+            workspace.failReservedTuiTerminalPane(
                 reservation,
-                error: CloudDiagnosticFailure.network
+                error: TuiTransportError.connectionClosed
             )
             return
         }
@@ -372,7 +371,7 @@ extension CmuxTuiSurfaceProvider {
             while !Task.isCancelled {
                 guard let self, self.isCurrentLifecycleGeneration(generation), self.isRegisteredInCatalog(),
                       let workspace = Workspace.liveWorkspace(id: reservation.workspaceID),
-                      workspace.cloudPendingCreations[panelID] === reservation else { return }
+                      workspace.tuiPendingCreations[panelID] === reservation else { return }
                 let destination = SurfaceDestination.tab(
                     workspaceID: reservation.workspaceID,
                     paneID: SurfacePaneFactory.paneID(ofPanel: panelID, in: reservation.workspaceID) ?? "",
@@ -404,21 +403,21 @@ extension CmuxTuiSurfaceProvider {
                         throw error
                     }
                     if let placement = materialized.remotePlacement {
-                        self.catalog.cloudPlacementCoordinator.confirmPlacement(placement, on: self.machine)
+                        self.catalog.tuiPlacementCoordinator.confirmPlacement(placement, on: self.machine)
                         if let current = self.catalog.projection(forPanel: panelID) {
                             self.catalog.setRemotePlacement(for: current, placement: placement)
                         }
                     }
-                    workspace.completeReservedCloudTerminalPane(reservation, adoptedPanelID: materialized.panelID)
+                    workspace.completeReservedTuiTerminalPane(reservation, adoptedPanelID: materialized.panelID)
                     self.restoredAttachTasks[panelID] = nil
                     return
                 } catch is CancellationError {
                     return
                 } catch {
                     guard !Task.isCancelled else { return }
-                    if error as? CloudDiagnosticFailure == .placement {
+                    if error as? TuiTransportError == .placementMismatch {
                         self.restoredAttachTasks[panelID] = nil
-                        workspace.failReservedCloudTerminalPane(reservation, error: error)
+                        workspace.failReservedTuiTerminalPane(reservation, error: error)
                         return
                     }
                     if let providerError = error as? CmuxTuiSurfaceProvider.ProviderError,
@@ -426,28 +425,28 @@ extension CmuxTuiSurfaceProvider {
                         // The shell ended while the pane was waiting: the pane
                         // closes the way an exited local terminal does.
                         self.restoredAttachTasks[panelID] = nil
-                        workspace.cancelReservedCloudTerminalPane(panelID: panelID)
+                        workspace.cancelReservedTuiTerminalPane(panelID: panelID)
                         SurfacePaneFactory.closeExited(panelID: panelID, in: reservation.workspaceID)
                         return
                     }
-                    let inventoryIsStale = Self.shouldShowRecoverableCloudFailure(
-                        observation: self.catalog.cloudStateObservations[self.machine] ?? .stale(reason: "missing")
+                    let inventoryIsStale = Self.shouldShowRecoverableTuiFailure(
+                        observation: self.catalog.tuiStateObservations[self.machine] ?? .stale(reason: "missing")
                     )
                     if inventoryIsStale {
                         self.restoredAttachTasks[panelID] = nil
                         self.materializedPanels.remove(panelID)
-                        workspace.failReservedCloudTerminalPane(reservation, error: error)
+                        workspace.failReservedTuiTerminalPane(reservation, error: error)
                         return
                     }
                     failures += 1
                     self.attachmentLog.giveUp(
                         machineID: self.machineID, terminalID: resource.id.key,
-                        attempts: failures, reason: CloudMachineLink.errorText(error)
+                        attempts: failures, reason: RemoteMachineLink.errorText(error)
                     )
                     if failures >= Self.reservedAttachFailuresBeforeReporting {
-                        workspace.failReservedCloudTerminalPane(reservation, error: error)
+                        workspace.failReservedTuiTerminalPane(reservation, error: error)
                     }
-                    let delay = CloudTerminalAttachmentRetryPolicy.background.cappedDelay(afterFailures: failures)
+                    let delay = TuiTerminalAttachmentRetryPolicy.background.cappedDelay(afterFailures: failures)
                     do { try await self.attachmentClock.sleep(for: delay) } catch { return }
                 }
             }

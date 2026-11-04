@@ -4,16 +4,15 @@ import Foundation
 extension SurfaceCatalog {
     /// Persists the machine and remote workspace identity behind a local workspace.
     @MainActor
-    func bindCloudWorkspace(
+    func bindRemoteWorkspace(
         localWorkspaceID: UUID,
         machine: SurfaceMachineID,
         remoteWorkspaceID: String?,
-        isBase: Bool? = nil,
         generatedTitle: String? = nil,
         remoteWorkspaceName: String? = nil
     ) {
-        let workspaceBeforeBind = cloudWorkspaceRenameService.environment.workspace(localWorkspaceID)
-        let wasUnbound = workspaceBeforeBind?.cloudVMBinding?.remoteWorkspaceID?.isEmpty != false
+        let workspaceBeforeBind = tuiWorkspaceRenameService.environment.workspace(localWorkspaceID)
+        let wasUnbound = workspaceBeforeBind?.remoteWorkspaceBinding?.remoteWorkspaceID?.isEmpty != false
         let titleBeforeBind = workspaceBeforeBind?.customTitle
         let sourceBeforeBind = workspaceBeforeBind?.effectiveCustomTitleSource
         let isLegacyGeneratedTitle = generatedTitle.map {
@@ -21,11 +20,10 @@ extension SurfaceCatalog {
                 $0.trimmingCharacters(in: .whitespacesAndNewlines)
                 && workspaceBeforeBind?.customTitleSource == nil
         } ?? false
-        cloudWorkspaceRenameService.bind(
+        tuiWorkspaceRenameService.bind(
             localWorkspaceID: localWorkspaceID,
             machine: machine,
             remoteWorkspaceID: remoteWorkspaceID,
-            isBase: isBase,
             generatedTitle: generatedTitle,
             remoteWorkspaceName: remoteWorkspaceName
         )
@@ -38,27 +36,26 @@ extension SurfaceCatalog {
            !isLegacyGeneratedTitle,
            let titleBeforeBind,
            let workspace = workspaceBeforeBind {
-            propagateCloudWorkspaceRename(
+            propagateRemoteWorkspaceRename(
                 workspace: workspace,
                 localTitle: titleBeforeBind,
                 previousCustomTitle: titleBeforeBind,
                 previousCustomTitleSource: sourceBeforeBind
             )
         }
-        if let workspace = cloudWorkspaceRenameService.environment.workspace(localWorkspaceID),
-           let state = cloudStates[machine],
-           (cloudStateObservations[machine] ?? .current).freshness == .current {
-            cloudWorkspaceRenameService.reconcileRemoteWorkspaceName(
+        if let workspace = tuiWorkspaceRenameService.environment.workspace(localWorkspaceID),
+           let state = tuiStates[machine],
+           (tuiStateObservations[machine] ?? .current).freshness == .current {
+            tuiWorkspaceRenameService.reconcileRemoteWorkspaceName(
                 workspace: workspace,
                 machine: machine,
                 state: state,
                 catalog: self,
-                observation: cloudStateObservations[machine] ?? .current
+                observation: tuiStateObservations[machine] ?? .current
             )
         }
-        reconcileDeviceNames(on: machine)
-        requestCloudWorkspaceProjection(localWorkspaceID)
-        cloudWorkspaceRenameService.updateCloudDirectories(localWorkspaceID: localWorkspaceID, catalog: self)
+        requestTuiWorkspaceProjection(localWorkspaceID)
+        tuiWorkspaceRenameService.updateTuiDirectories(localWorkspaceID: localWorkspaceID, catalog: self)
 }
 
 }

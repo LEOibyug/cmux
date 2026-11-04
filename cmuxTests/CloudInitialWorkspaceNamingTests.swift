@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -15,11 +15,11 @@ import Testing
 struct CloudInitialWorkspaceNamingTests {
     @Test("Plain attachment keeps the original loading surface without running a placeholder shell")
     func deferredAttachmentNeverRunsATemporaryLocalCommand() throws {
-        let workspace = Workspace(title: "New Machine", initialSurface: .cloudVMLoading)
+        let workspace = Workspace(title: "New Machine", initialSurface: .remoteLoading)
         defer { workspace.teardownAllPanels() }
         let loadingID = try #require(workspace.focusedPanelId)
         let original = try #require(workspace.panels[loadingID])
-        let returned = workspace.prepareCloudTerminalAttachment(command: "sleep 60", deferTerminal: true, focus: false)
+        let returned = workspace.prepareRemoteTerminalAttachment(command: "sleep 60", deferTerminal: true, focus: false)
         #expect(returned == loadingID)
         #expect(workspace.panels.count == 1)
         #expect(workspace.panels[loadingID] === original)
@@ -30,11 +30,11 @@ struct CloudInitialWorkspaceNamingTests {
     @Test("Binding after discovery immediately gives both sidebars the daemon workspace name")
     func bindingReconcilesAlreadyDiscoveredName() async throws {
         try await withUnboundFixture { fixture in
-            fixture.catalog.bindCloudWorkspace(localWorkspaceID: fixture.workspace.id,
+            fixture.catalog.bindRemoteWorkspace(localWorkspaceID: fixture.workspace.id,
                 machine: fixture.provider.machine, remoteWorkspaceID: "a", generatedTitle: "Cloud VM")
 
             try fixture.expectParity("terminal", workspaceName: "Same workspace")
-            #expect(fixture.workspace.cloudVMBinding?.remoteWorkspaceID == "a")
+            #expect(fixture.workspace.remoteWorkspaceBinding?.remoteWorkspaceID == "a")
             #expect(fixture.provider.writes.isEmpty)
             #expect(fixture.manager.tabs.count == 1)
         }
@@ -46,8 +46,8 @@ struct CloudInitialWorkspaceNamingTests {
             // The create receipt arrives before discovery. A current snapshot
             // that already names the workspace is newer than the receipt and
             // wins; that case is covered by bindingReconcilesAlreadyDiscoveredName.
-            fixture.catalog.clearCloudState(on: fixture.provider.machine)
-            fixture.catalog.bindCloudWorkspace(
+            fixture.catalog.clearTuiState(on: fixture.provider.machine)
+            fixture.catalog.bindRemoteWorkspace(
                 localWorkspaceID: fixture.workspace.id,
                 machine: fixture.provider.machine,
                 remoteWorkspaceID: "a",
@@ -56,12 +56,12 @@ struct CloudInitialWorkspaceNamingTests {
             )
 
             #expect(fixture.workspace.title == "workspace-1")
-            #expect(fixture.workspace.cloudVMBinding?.remoteWorkspaceID == "a")
+            #expect(fixture.workspace.remoteWorkspaceBinding?.remoteWorkspaceID == "a")
             #expect(fixture.provider.writes.isEmpty, "adoption acknowledges the daemon name; it does not rename it back")
 
             // A duplicate receipt is idempotent and cannot create another local
             // workspace or replay a remote rename.
-            fixture.catalog.bindCloudWorkspace(
+            fixture.catalog.bindRemoteWorkspace(
                 localWorkspaceID: fixture.workspace.id,
                 machine: fixture.provider.machine,
                 remoteWorkspaceID: "a",
@@ -77,12 +77,12 @@ struct CloudInitialWorkspaceNamingTests {
     @Test("Discovery after binding replaces the placeholder without a second create")
     func discoveryReconcilesAlreadyBoundWorkspace() async throws {
         try await withUnboundFixture { fixture in
-            fixture.catalog.clearCloudState(on: fixture.provider.machine)
-            fixture.catalog.bindCloudWorkspace(localWorkspaceID: fixture.workspace.id,
+            fixture.catalog.clearTuiState(on: fixture.provider.machine)
+            fixture.catalog.bindRemoteWorkspace(localWorkspaceID: fixture.workspace.id,
                 machine: fixture.provider.machine, remoteWorkspaceID: "a", generatedTitle: "Cloud VM")
             #expect(fixture.workspace.title == "Cloud VM")
 
-            fixture.catalog.replaceCloudState(
+            fixture.catalog.replaceTuiState(
                 fixture.provider.graph,
                 resources: CmuxTuiSnapshotParser.resources(from: fixture.provider.graph),
                 info: fixture.provider.info
@@ -102,7 +102,7 @@ struct CloudInitialWorkspaceNamingTests {
     @Test("Projection discovery submits a creation-time user rename before reconciling the old graph")
     func projectionBindingPreservesCreationRename() async throws {
         try await withUnboundFixture { fixture in
-            fixture.catalog.bindCloudWorkspace(localWorkspaceID: fixture.workspace.id,
+            fixture.catalog.bindRemoteWorkspace(localWorkspaceID: fixture.workspace.id,
                 machine: fixture.provider.machine, remoteWorkspaceID: nil, generatedTitle: "Cloud VM")
             #expect(fixture.workspace.setCustomTitle("Chosen during creation", source: .user))
             fixture.catalog.record(SurfaceProjection(
@@ -122,7 +122,7 @@ struct CloudInitialWorkspaceNamingTests {
     func explicitPlaceholderTextHasUserPrecedence() async throws {
         try await withUnboundFixture { fixture in
             #expect(fixture.workspace.setCustomTitle("Cloud VM", source: .user))
-            fixture.catalog.bindCloudWorkspace(localWorkspaceID: fixture.workspace.id,
+            fixture.catalog.bindRemoteWorkspace(localWorkspaceID: fixture.workspace.id,
                 machine: fixture.provider.machine, remoteWorkspaceID: "a", generatedTitle: "Cloud VM",
                 remoteWorkspaceName: "workspace-1")
             try await fixture.settle()
@@ -137,7 +137,7 @@ struct CloudInitialWorkspaceNamingTests {
         try await withUnboundFixture { fixture in
             fixture.workspace.customTitleSource = nil
             #expect(fixture.workspace.customTitle == "Cloud VM")
-            fixture.catalog.bindCloudWorkspace(localWorkspaceID: fixture.workspace.id,
+            fixture.catalog.bindRemoteWorkspace(localWorkspaceID: fixture.workspace.id,
                 machine: fixture.provider.machine, remoteWorkspaceID: "a", generatedTitle: "Cloud VM")
             try await fixture.settle()
             try fixture.expectParity("terminal", workspaceName: "Same workspace")
@@ -149,23 +149,23 @@ struct CloudInitialWorkspaceNamingTests {
     func lateReceiptsKeepIdentityAndName() async throws {
         try await withUnboundFixture { fixture in
             let oldGraph = fixture.provider.graph
-            fixture.catalog.bindCloudWorkspace(localWorkspaceID: fixture.workspace.id,
+            fixture.catalog.bindRemoteWorkspace(localWorkspaceID: fixture.workspace.id,
                 machine: fixture.provider.machine, remoteWorkspaceID: "a", generatedTitle: "Cloud VM")
             try await fixture.provider.renameRemoteWorkspace(id: "a", name: "workspace-1")
-            fixture.catalog.bindCloudWorkspace(localWorkspaceID: fixture.workspace.id,
+            fixture.catalog.bindRemoteWorkspace(localWorkspaceID: fixture.workspace.id,
                 machine: fixture.provider.machine, remoteWorkspaceID: nil, generatedTitle: "Cloud VM")
             #expect(!fixture.provider.install(oldGraph))
             fixture.renameService.reconcileRemoteState(machine: fixture.provider.machine, state: oldGraph,
                 catalog: fixture.catalog, observation: .current)
             try fixture.expectParity("terminal", workspaceName: "workspace-1")
-            #expect(fixture.workspace.cloudVMBinding?.remoteWorkspaceID == "a")
+            #expect(fixture.workspace.remoteWorkspaceBinding?.remoteWorkspaceID == "a")
             #expect(fixture.provider.graph.lookupIndex.workspace(id: "b")?.name == "Same workspace")
         }
     }
 
     @Test("Generated creation titles carry provenance before a user can rename them")
     func workspaceCreateRecordsGeneratedTitleOwnership() throws {
-        let manager = TabManager(autoWelcomeIfNeeded: false)
+        let manager = TabManager()
         defer { for workspace in manager.tabs { for panel in workspace.panels.values { panel.close() } } }
         let previousIDs = Set(manager.tabs.map(\.id))
         _ = TerminalController.shared.v2WorkspaceCreate(params: [
@@ -183,8 +183,8 @@ struct CloudInitialWorkspaceNamingTests {
     func completionSelectionStaysInInitiatingWindow() async throws {
         try await AppContextSerialGate.withExclusiveAppContext {
             let app = try #require(AppDelegate.shared)
-            let first = TabManager(autoWelcomeIfNeeded: false)
-            let second = TabManager(autoWelcomeIfNeeded: false)
+            let first = TabManager()
+            let second = TabManager()
             let firstWindowID = app.registerMainWindowContextForTesting(tabManager: first)
             let secondWindowID = app.registerMainWindowContextForTesting(tabManager: second)
             defer {
@@ -212,12 +212,12 @@ struct CloudInitialWorkspaceNamingTests {
                 },
                 notificationCenter: NotificationCenter()
             )
-            var completion: (@MainActor (CloudVMActionLauncher.Completion) -> Void)?
+            var completion: (@MainActor (TuiActionLauncher.Completion) -> Void)?
             #expect(coordinator.start(request, cancellableLaunch: { _, _, _, handler in
                 completion = handler
-                return CloudVMActionLauncher.CancellationHandle { }
+                return TuiActionLauncher.CancellationHandle { }
             }))
-            completion?(CloudVMActionLauncher.Completion(
+            completion?(TuiActionLauncher.Completion(
                 terminationStatus: 0,
                 output: "OK workspace=\(target.id.uuidString)",
                 workspaceId: target.id
@@ -229,32 +229,32 @@ struct CloudInitialWorkspaceNamingTests {
 
     private func withUnboundFixture(_ body: (CloudNameAuthorityFixture) async throws -> Void) async throws {
         let fixture = try CloudNameAuthorityFixture()
-        let previous = fixture.catalog.cloudWorkspaceRenameService
-        fixture.catalog.installCloudWorkspaceRenameService(fixture.renameService)
+        let previous = fixture.catalog.tuiWorkspaceRenameService
+        fixture.catalog.installTuiWorkspaceRenameService(fixture.renameService)
         fixture.catalog.endProjections(panelID: fixture.panelID, reason: .replaced)
-        fixture.workspace.cloudVMBinding = nil
+        fixture.workspace.remoteWorkspaceBinding = nil
         fixture.workspace.setCustomTitle(nil)
         fixture.workspace.setCustomTitle("Cloud VM", source: .auto)
         do { try await body(fixture) }
         catch {
-            fixture.catalog.installCloudWorkspaceRenameService(previous)
+            fixture.catalog.installTuiWorkspaceRenameService(previous)
             await fixture.close()
             throw error
         }
-        fixture.catalog.installCloudWorkspaceRenameService(previous)
+        fixture.catalog.installTuiWorkspaceRenameService(previous)
         await fixture.close()
     }
 
     @Test("A creation-time rename survives delayed binding and the old remote snapshot")
     func creationRenameIsPreservedAcrossBinding() async throws {
         let fixture = try CloudNameAuthorityFixture()
-        let originalService = fixture.catalog.cloudWorkspaceRenameService
-        fixture.catalog.installCloudWorkspaceRenameService(fixture.renameService)
+        let originalService = fixture.catalog.tuiWorkspaceRenameService
+        fixture.catalog.installTuiWorkspaceRenameService(fixture.renameService)
         do {
-            fixture.workspace.cloudVMBinding = nil
+            fixture.workspace.remoteWorkspaceBinding = nil
             #expect(fixture.workspace.setCustomTitle("Chosen during creation", source: .user))
 
-            fixture.catalog.bindCloudWorkspace(
+            fixture.catalog.bindRemoteWorkspace(
                 localWorkspaceID: fixture.workspace.id,
                 machine: fixture.provider.machine,
                 remoteWorkspaceID: "a",
@@ -267,24 +267,24 @@ struct CloudInitialWorkspaceNamingTests {
             // submit the local intent before that snapshot can overwrite it:
             // the title is protected by the unacknowledged intent, not by its
             // user provenance (#12986).
-            let key = CloudRenameCoordinator.Key.workspace(machine: fixture.provider.machine, id: "a")
-            #expect(fixture.catalog.pendingCloudRenameName(for: key) == "Chosen during creation")
+            let key = TuiRenameCoordinator.Key.workspace(machine: fixture.provider.machine, id: "a")
+            #expect(fixture.catalog.pendingTuiRenameName(for: key) == "Chosen during creation")
             fixture.renameService.reconcileRemoteState(
                 machine: fixture.provider.machine, state: fixture.provider.graph,
                 catalog: fixture.catalog, observation: .current
             )
             #expect(fixture.workspace.title == "Chosen during creation")
             try await fixture.settle()
-            #expect(fixture.catalog.pendingCloudRenameName(for: key) == nil)
+            #expect(fixture.catalog.pendingTuiRenameName(for: key) == nil)
             #expect(fixture.provider.writes.map { $0.0 } == ["a"])
             #expect(fixture.provider.writes.map { $0.1 } == ["Chosen during creation"])
             try fixture.expectParity("terminal", workspaceName: "Chosen during creation")
         } catch {
-            fixture.catalog.installCloudWorkspaceRenameService(originalService)
+            fixture.catalog.installTuiWorkspaceRenameService(originalService)
             await fixture.close()
             throw error
         }
-        fixture.catalog.installCloudWorkspaceRenameService(originalService)
+        fixture.catalog.installTuiWorkspaceRenameService(originalService)
         await fixture.close()
     }
 }

@@ -1,5 +1,5 @@
 import CmuxCore
-import CmuxCloud
+import CmuxRemoteSession
 import AppKit
 import CmuxBrowser
 import WebKit
@@ -205,11 +205,11 @@ extension BrowserPanel {
         websiteDataStore: WKWebsiteDataStore
     ) -> CmuxWebView {
         let replacementStore: WKWebsiteDataStore
-        if cloudAccess.model?.usesBrowserProxy == true {
-            if let endpoint = cloudAccess.model?.browserProxy,
-               let address = cloudAccess.model?.target.host {
+        if remoteAccess.model?.usesBrowserProxy == true {
+            if let endpoint = remoteAccess.model?.browserProxy,
+               let address = remoteAccess.model?.target.host {
                 websiteDataStore.proxyConfigurations = [
-                    CloudBrowserRouting.configuration(endpoint: endpoint, address: address, remoteNetwork: cloudAccess.model?.usesRemoteNetwork == true)
+                    RemoteBrowserRouting.configuration(endpoint: endpoint, address: address, remoteNetwork: remoteAccess.model?.usesRemoteNetwork == true)
                 ]
                 replacementStore = websiteDataStore
             } else {
@@ -228,16 +228,16 @@ extension BrowserPanel {
             replacement.configuration.userContentController.addUserScript(userScript)
         }
         browserEmulation.install(on: replacement)
-        if cloudAccess.model?.usesBrowserProxy == true, let host = cloudAccess.model?.target.host {
+        if remoteAccess.model?.usesBrowserProxy == true, let host = remoteAccess.model?.target.host {
             replacement.configuration.userContentController.addUserScript(WKUserScript(
                 source: RemoteLoopbackRuntimeBridge.scriptSource(
-                    aliasHost: cloudAccess.model?.usesRemoteNetwork == true ? RemoteLoopbackProxyAlias.aliasHost : host,
-                    preservesSubdomains: false, allOrigins: cloudAccess.model?.usesRemoteNetwork == true
+                    aliasHost: remoteAccess.model?.usesRemoteNetwork == true ? RemoteLoopbackProxyAlias.aliasHost : host,
+                    preservesSubdomains: false, allOrigins: remoteAccess.model?.usesRemoteNetwork == true
                 ),
                 injectionTime: .atDocumentStart, forMainFrameOnly: false
             ))
-            if let endpoint = cloudAccess.model?.browserProxy {
-                CloudBrowserRouting.installWebSocketBridge(endpoint: endpoint, address: host, on: replacement, remoteNetwork: cloudAccess.model?.usesRemoteNetwork == true)
+            if let endpoint = remoteAccess.model?.browserProxy {
+                RemoteBrowserRouting.installWebSocketBridge(endpoint: endpoint, address: host, on: replacement, remoteNetwork: remoteAccess.model?.usesRemoteNetwork == true)
             }
         }
         return replacement
@@ -246,7 +246,7 @@ extension BrowserPanel {
     var canRecoverFromAutomationTimeout: Bool {
         !isClosingWebViewLifecycle &&
             activeInteractiveBrowserPromptIDs.isEmpty &&
-            mobileBrowserDialogBroker.pendingDialogs.isEmpty &&
+            browserDialogBroker.pendingDialogs.isEmpty &&
             activeVisualAutomationCaptureCount == 0
     }
 

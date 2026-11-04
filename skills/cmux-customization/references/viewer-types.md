@@ -2,7 +2,7 @@
 
 Identify the surface first, then use only the settings or command documented for
 that surface. `cmux-settings list-supported` and
-`web/data/cmux.schema.json` are the authority for JSON paths. A viewer name that
+`schemas/cmux.schema.json` are the authority for JSON paths. A viewer name that
 does not appear in the schema is not a license to add a guessed
 `templates.<viewer>` object.
 

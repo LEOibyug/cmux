@@ -8,11 +8,11 @@ extension SurfaceCatalog {
     /// A stale graph is useful display state, but a resource row can also contain an optimistic
     /// requested cwd. Read the cached value from the accepted graph so that a request, a retired
     /// provider, or a resource whose identity disappeared cannot become a displayed path.
-    private func acceptedStaleCloudDirectory(for resource: SurfaceResource) -> String? {
+    private func acceptedStaleTuiDirectory(for resource: SurfaceResource) -> String? {
         guard resource.kind == .terminal,
               resource.machine.tuiMachineID != nil,
-              cloudStateObservations[resource.machine]?.freshness == .stale,
-              let directory = cloudStates[resource.machine]?.lookupIndex.terminal(id: resource.id.key)?.cwd else {
+              tuiStateObservations[resource.machine]?.freshness == .stale,
+              let directory = tuiStates[resource.machine]?.lookupIndex.terminal(id: resource.id.key)?.cwd else {
             return nil
         }
         let trimmed = directory.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -23,20 +23,18 @@ extension SurfaceCatalog {
     /// cached value. A requested launch directory or a stale graph with no accepted cwd remains
     /// unavailable.
     func resourceForPresentation(_ resource: SurfaceResource) -> SurfaceResource {
-        if resource.kind == .browser { return resourceWithCloudBrowserDocument(resource) }
-        // Cloud VM freshness is tracked in `cloudStateObservations`; device
-        // mirrors receive their directory from the synced workspace record and
-        // intentionally have no CloudVM observation to consult.
+        if resource.kind == .browser { return resourceWithTuiBrowserDocument(resource) }
+        // SSH graph freshness determines whether an accepted cwd is current or cached.
         guard resource.kind == .terminal, resource.machine.tuiMachineID != nil else { return resource }
-        guard cloudStateObservations[resource.machine]?.freshness != .current else { return resource }
+        guard tuiStateObservations[resource.machine]?.freshness != .current else { return resource }
         var result = resource
-        result.detail = acceptedStaleCloudDirectory(for: resource)
+        result.detail = acceptedStaleTuiDirectory(for: resource)
         return result
     }
 
     /// Projects accepted directory and machine metadata independently from name reconciliation.
     /// The catalog remains authoritative; Workspace owns only the UI-facing projection.
-    func updateCloudDirectoryMetadata(on machine: SurfaceMachineID, affectedResourceIDs: Set<SurfaceResourceID>? = nil) {
+    func updateTuiDirectoryMetadata(on machine: SurfaceMachineID, affectedResourceIDs: Set<SurfaceResourceID>? = nil) {
         guard !machine.isLocal else { return }
         let machineProjections = projections.filter {
             $0.resource.machine == machine && (affectedResourceIDs?.contains($0.resource) ?? true)
@@ -60,8 +58,8 @@ extension SurfaceCatalog {
                 }
             }
             for id in projectedWorkspaceIDs {
-                guard let workspace = cloudWorkspaceRenameService.environment.workspace(id) else { continue }
-                updateCloudDirectoryMetadata(
+                guard let workspace = tuiWorkspaceRenameService.environment.workspace(id) else { continue }
+                updateTuiDirectoryMetadata(
                     in: workspace,
                     affectedResourceIDs: affectedResourceIDs,
                     projected: recordsByWorkspace[id] ?? []
@@ -69,19 +67,19 @@ extension SurfaceCatalog {
             }
             return
         }
-        for workspace in cloudWorkspaceRenameService.environment.workspaces()
-            where (machine.tuiMachineID != nil && workspace.cloudVMBinding?.vmID == machine.tuiMachineID) || projectedWorkspaceIDs.contains(workspace.id)
-                || workspace.cloudBindingState.projectedResources.values.contains(where: { $0.machine == machine }) {
-            updateCloudDirectoryMetadata(in: workspace)
+        for workspace in tuiWorkspaceRenameService.environment.workspaces()
+            where (machine.tuiMachineID != nil && workspace.remoteWorkspaceBinding?.machineID == machine.tuiMachineID) || projectedWorkspaceIDs.contains(workspace.id)
+                || workspace.remoteBindingState.projectedResources.values.contains(where: { $0.machine == machine }) {
+            updateTuiDirectoryMetadata(in: workspace)
         }
     }
 
-    func updateCloudDirectoryMetadata(localWorkspaceID: UUID) {
-        guard let workspace = cloudWorkspaceRenameService.environment.workspace(localWorkspaceID) else { return }
-        updateCloudDirectoryMetadata(in: workspace)
+    func updateTuiDirectoryMetadata(localWorkspaceID: UUID) {
+        guard let workspace = tuiWorkspaceRenameService.environment.workspace(localWorkspaceID) else { return }
+        updateTuiDirectoryMetadata(in: workspace)
     }
 
-    private func updateCloudDirectoryMetadata(
+    private func updateTuiDirectoryMetadata(
         in workspace: Workspace,
         affectedResourceIDs: Set<SurfaceResourceID>? = nil,
         projected suppliedProjections: [SurfaceProjectionRecord]? = nil
@@ -91,11 +89,11 @@ extension SurfaceCatalog {
             .filter { !$0.resource.machine.isLocal }
         let resourcesByPanel = Dictionary(projected.map { ($0.panelID, $0.resource) }, uniquingKeysWith: { first, _ in first })
         var machineIDs = Set(projected.map { $0.resource.machine.rawValue })
-        if let id = workspace.cloudVMID { machineIDs.insert(id) }
+        if let id = workspace.remoteWorkspaceBinding?.machineID { machineIDs.insert(id) }
         let names = Dictionary(uniqueKeysWithValues: machineIDs.map { id in
-            (id, machines[SurfaceMachineID(rawValue: id)]?.name ?? id)
+            (id, SurfaceMachineID(rawValue: id).flatMap { machines[$0]?.name } ?? id)
         })
-        let previous = workspace.cloudBindingState.projectedResources
+        let previous = workspace.remoteBindingState.projectedResources
         let previousHostLabel = workspace.hostLabel
         // The sidebar hides a panel whose terminal row is missing or still launching, so the row's
         // arrival and readiness are presentation inputs even when the projection, names and cwd
@@ -104,7 +102,7 @@ extension SurfaceCatalog {
             guard let resource = resources[projection.resource], resource.kind == .terminal else { return nil }
             return (projection.panelID, resource.lifecycle)
         }, uniquingKeysWith: { first, _ in first })
-        workspace.cloudBindingState.updateCatalogMetadata(
+        workspace.remoteBindingState.updateCatalogMetadata(
             resources: resourcesByPanel, machineNames: names, terminalLifecycles: terminalLifecycles
         )
         if workspace.hostLabel != previousHostLabel {
@@ -117,19 +115,17 @@ extension SurfaceCatalog {
             if let affectedResourceIDs, !affectedResourceIDs.contains(projection.resource) { continue }
             let machine = projection.resource.machine
             let resource = resources[projection.resource]
-            let current = cloudStateObservations[machine]?.freshness == .current
+            let current = tuiStateObservations[machine]?.freshness == .current
             let directory: String?
-            if machine.deviceInstance != nil {
-                directory = resource?.kind == .terminal ? resource?.detail : nil
-            } else if let resource, resource.kind == .terminal {
+            if let resource, resource.kind == .terminal {
                 directory = current
-                    ? cloudStates[machine]?.lookupIndex.terminal(id: projection.resource.key)?.cwd
-                    : acceptedStaleCloudDirectory(for: resource)
+                    ? tuiStates[machine]?.lookupIndex.terminal(id: projection.resource.key)?.cwd
+                    : acceptedStaleTuiDirectory(for: resource)
             } else {
                 directory = nil
             }
             if let directory, workspace.reportedPanelDirectory(panelId: projection.panelID) == directory { continue }
-            workspace.updateCloudPanelDirectory(panelId: projection.panelID, directory: directory)
+            workspace.updateTuiPanelDirectory(panelId: projection.panelID, directory: directory)
         }
     }
 }

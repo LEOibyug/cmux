@@ -33,38 +33,11 @@ struct ControlRequestLineTests {
         #expect(decoded.isEqual(to: request))
     }
 
-    @Test func largeRequestIsClassifiedAsOrdinaryWithinTheRouteWindow() throws {
-        for extraKey in ["a", "focus", "zz", "params_hint", "method_hint"] {
-            let line = try ControlRequestLine.encode(Self.largeRequest(extraKey: extraKey))
-            let prefix = Array(line.utf8.prefix(4_097))
-            #expect(ControlClientLineReader.classifyTopLevelMethod(in: prefix) == false, "extra key \(extraKey)")
-        }
-    }
+    
 
-    @Test func largeRequestPassesTheAsyncReaderHandshakeCap() async throws {
-        let line = try ControlRequestLine.encode(Self.largeRequest(extraKey: "focus"))
-        #expect(line.utf8.count > 4_096)
-        let pair = try UnixSocketFixture.makeSocketPair()
-        defer { close(pair.reader); close(pair.writer) }
-        try Self.writeAll(line + "\n", to: pair.writer)
+    
 
-        let reader = ControlClientAsyncLineReader(socket: pair.reader, codeRouterHandshakeMaximumBytes: 4_096)
-        let received = await reader.nextLine(shouldContinueReading: { true })
-        await reader.cancelAndWait()
-
-        #expect(received == line)
-    }
-
-    @Test func largeRequestPassesTheBlockingReaderHandshakeCap() throws {
-        let line = try ControlRequestLine.encode(Self.largeRequest(extraKey: "focus"))
-        let pair = try UnixSocketFixture.makeSocketPair()
-        defer { close(pair.reader); close(pair.writer) }
-        try Self.writeAll(line + "\n", to: pair.writer)
-
-        let reader = ControlClientLineReader(socket: pair.reader, codeRouterHandshakeMaximumBytes: 4_096)
-
-        #expect(reader.nextLine(shouldContinueReading: { true }) == line)
-    }
+    
 
     @Test func requestWithOnlyAMethodIsOneKeyObject() throws {
         #expect(try ControlRequestLine.encode(["method": "system.ping"]) == #"{"method":"system.ping"}"#)

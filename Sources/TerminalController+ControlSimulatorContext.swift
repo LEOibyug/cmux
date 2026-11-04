@@ -15,7 +15,7 @@ extension TerminalController: ControlSimulatorContext {
         routing: ControlRoutingSelectors,
         text: String
     ) -> ControlSimulatorTypeStartResolution {
-        guard CmuxFeatureFlags.shared.isSimulatorEnabled else { return .inputUnavailable }
+        
         switch resolveSimulatorPanel(routing: routing) {
         case .unavailable:
             return .inputUnavailable

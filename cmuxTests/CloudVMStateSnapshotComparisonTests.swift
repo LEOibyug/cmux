@@ -8,7 +8,7 @@ import Testing
 @testable import cmux
 #endif
 
-struct CloudVMStateSnapshotComparisonTests {
+struct TuiStateSnapshotComparisonTests {
     private func snapshot() -> [String: Any] {
         [
             "cursor": ["generation": "daemon-1", "revision": "2"],
@@ -18,8 +18,8 @@ struct CloudVMStateSnapshotComparisonTests {
         ]
     }
 
-    private func state(_ object: [String: Any]) throws -> CloudVMState {
-        try #require(CmuxTuiSnapshotParser.state(fromSnapshot: object, machine: .cloud("vm-test")))
+    private func state(_ object: [String: Any]) throws -> TuiState {
+        try #require(CmuxTuiSnapshotParser.state(fromSnapshot: object, machine: .ssh("ce9838328c606074cb8f439b842f3a9bf0a598717d07dbb18597d2c07af2c13e")))
     }
 
     @Test("Connection age and request-client churn do not invalidate a session revision")
@@ -161,8 +161,8 @@ struct CloudVMStateSnapshotComparisonTests {
     func deltaAdvancesBothRevisionRepresentations(legacyNumeric: Bool) throws {
         var object = snapshot()
         object["session"] = ["id": "session-1", "revision": legacyNumeric ? (2 as Any) : "2", "name": "Kept"]
-        var document = CloudVMStateDocument(snapshot: object)
-        let advanced = document.setCursor(CloudVMCursor(generation: "daemon-1", revision: 3))
+        var document = TuiStateDocument(snapshot: object)
+        let advanced = document.setCursor(TuiCursor(generation: "daemon-1", revision: 3))
         #expect(advanced)
         let session = try #require(document.value(forKey: "session") as? [String: Any])
         #expect(CloudWireNumber.unsigned(session["revision"]) == 3)
@@ -172,8 +172,8 @@ struct CloudVMStateSnapshotComparisonTests {
 
     @Test("A legacy document without a session object does not gain one")
     func deltaDoesNotInventASessionRecord() {
-        var document = CloudVMStateDocument(snapshot: snapshot())
-        let advanced = document.setCursor(CloudVMCursor(generation: "daemon-1", revision: 3))
+        var document = TuiStateDocument(snapshot: snapshot())
+        let advanced = document.setCursor(TuiCursor(generation: "daemon-1", revision: 3))
         #expect(advanced)
         #expect(document.value(forKey: "session") == nil)
     }

@@ -28,7 +28,7 @@ struct SidebarRowSnapshotCacheTests {
         let suiteName = "SidebarRowSnapshotCacheTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let workspace = Workspace(title: "Color provenance", initialSurface: .cloudVMLoading)
+        let workspace = Workspace(title: "Color provenance", initialSurface: .terminal)
         defer { workspace.teardownAllPanels() }
         let originColor = "#B1A2FA"
         let disabledFactory = SidebarWorkspaceSnapshotFactory(

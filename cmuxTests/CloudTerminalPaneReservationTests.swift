@@ -1,5 +1,5 @@
-import CmuxCloud
-import CmuxCloudTui
+import CmuxRemoteSession
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import Foundation
 import Testing
@@ -13,7 +13,7 @@ import Testing
 /// Optimistic Cloud pane creation: the pane exists before the terminal, input
 /// typed meanwhile reaches the terminal, and one request id owns retry and cancel.
 @Suite("Cloud terminal pane reservation")
-struct CloudTerminalPaneReservationTests {
+struct TuiTerminalPaneReservationTests {
     @Test
     func relayQueuesInputUntilARouterIsAttachedThenForwardsInOrder() async throws {
         let relay = CloudOptimisticInputRelay()
@@ -21,15 +21,15 @@ struct CloudTerminalPaneReservationTests {
         relay.send(.namedKey("enter"))
 
         let queue = DispatchQueue(label: "reservation-test")
-        let router = CloudTuiManualIOInputRouter(surfaceID: 17, queue: queue)
-        let connection = try CloudManualMirrorSocketFixture()
+        let router = TuiManualIOInputRouter(surfaceID: 17, queue: queue)
+        let connection = try TuiManualMirrorSocketFixture()
         defer { connection.close() }
         // Attaching flushes the queue into the router (which itself holds the
         // lines until a transport exists) and forwards later input directly.
         relay.attach(router)
         relay.send(.bytes(Data("pwd\n".utf8)))
 
-        let transport = CloudTuiManualIOConnection(socketPath: connection.socketPath)
+        let transport = TuiManualIOConnection(socketPath: connection.socketPath)
         defer { transport.close() }
         try await transport.start()
         router.setConnection(transport)
@@ -52,8 +52,8 @@ struct CloudTerminalPaneReservationTests {
         relay.bindRemoteTerminal(terminalID: "term_created", sender: sender, token: bindingToken)
 
         let queue = DispatchQueue(label: "reservation-early-input-test")
-        let router = CloudTuiManualIOInputRouter(surfaceID: 17, queue: queue)
-        let connection = try CloudManualMirrorSocketFixture()
+        let router = TuiManualIOInputRouter(surfaceID: 17, queue: queue)
+        let connection = try TuiManualMirrorSocketFixture()
         defer { connection.close() }
         relay.attach(router)
 
@@ -64,7 +64,7 @@ struct CloudTerminalPaneReservationTests {
         #expect(requests[1].params["terminal"] as? String == "term_created")
         #expect((requests[1].params["keys"] as? [String]) == ["enter"])
 
-        let transport = CloudTuiManualIOConnection(socketPath: connection.socketPath)
+        let transport = TuiManualIOConnection(socketPath: connection.socketPath)
         defer { transport.close() }
         try await transport.start()
         router.setConnection(transport)
@@ -80,7 +80,7 @@ struct CloudTerminalPaneReservationTests {
         relay.send(.bytes(Data("typed too early".utf8)))
         relay.discard()
         relay.send(.bytes(Data("still discarded".utf8)))
-        let router = CloudTuiManualIOInputRouter(surfaceID: 17)
+        let router = TuiManualIOInputRouter(surfaceID: 17)
         relay.attach(router)
         relay.send(.bytes(Data("after retry".utf8)))
     }
@@ -125,12 +125,12 @@ struct CloudTerminalPaneReservationTests {
         // device reservation would silently drop Enter, arrows and Tab.
         let device = SurfaceMachineID.device(SurfaceDeviceInstanceID(deviceID: "other-mac", tag: "default"))
         #expect(Workspace.reservationKeyNameResolver(for: device) == nil)
-        #expect(Workspace.reservationKeyNameResolver(for: .cloud("reservation-fixture")) != nil)
+        #expect(Workspace.reservationKeyNameResolver(for: .ssh("88935eb8b946c9be0b93e083cbb0c1f87e77015c87dbeaee62c459fe5db0d167")) != nil)
     }
 
     @Test @MainActor
     func storeRoutesFailureToTheReservedPaneAndReplaysTheSameRequestOnRetry() async throws {
-        let store = CloudPaneCreationFailureStore()
+        let store = TuiPaneCreationFailureStore()
         let requestID = store.beginRequest()
         let resource = Self.resource()
         let completions = AsyncStream<Void>.makeStream()
@@ -145,7 +145,7 @@ struct CloudTerminalPaneReservationTests {
             create: { creates += 1; return resource },
             project: { resource in
                 projections += 1
-                if projections == 1 { throw CloudDiagnosticFailure.network }
+                if projections == 1 { throw TuiTransportError.connectionClosed }
                 return (SurfaceProjection(resource: resource.id, workspaceID: UUID(), panelID: UUID()), false)
             },
             onStart: { starts += 1 },
@@ -169,10 +169,10 @@ struct CloudTerminalPaneReservationTests {
 
     @Test @MainActor
     func closingTheReservedPaneCancelsOnlyItsRequest() async throws {
-        let store = CloudPaneCreationFailureStore()
+        let store = TuiPaneCreationFailureStore()
         let resource = Self.resource()
-        let started = CloudLinkFirstValue<Bool>()
-        let release = CloudLinkFirstValue<Bool>()
+        let started = RemoteLinkFirstValue<Bool>()
+        let release = RemoteLinkFirstValue<Bool>()
         var finishes = 0
         var projections = 0
         let cancelledID = store.beginRequest()
@@ -194,7 +194,7 @@ struct CloudTerminalPaneReservationTests {
             discardProjection: { _ in }
         )
         let survivingID = store.beginRequest()
-        let survivingDone = CloudLinkFirstValue<Bool>()
+        let survivingDone = RemoteLinkFirstValue<Bool>()
         store.run(
             machine: resource.machine,
             requestID: survivingID,
@@ -230,10 +230,10 @@ struct CloudTerminalPaneReservationTests {
                 panelID: sourceID, resource: Self.resource().id,
                 remoteWorkspaceID: "saved-workspace", remoteTabID: "saved-tab"
             )
-            let panelID = try #require(workspace.reserveRestoredCloudTerminalPane(
+            let panelID = try #require(workspace.reserveRestoredTuiTerminalPane(
                 snapshot: snapshot, projection: record, inPane: pane
             ))
-            let reservation = try #require(workspace.cloudPendingCreations[panelID])
+            let reservation = try #require(workspace.tuiPendingCreations[panelID])
             #expect(reservation.attachmentPlacement == SurfaceResourcePlacement(
                 resource: record.resource, remoteWorkspaceID: record.remoteWorkspaceID,
                 remoteTabID: record.remoteTabID
@@ -263,7 +263,7 @@ struct CloudTerminalPaneReservationTests {
         ]
         catalog.upsert(resource, from: provider)
         try #require(catalog.resources[resource.id] == resource)
-        let reservation = CloudTerminalPaneReservation(
+        let reservation = TuiTerminalPaneReservation(
             workspaceID: UUID(), panelID: UUID(), machine: resource.machine,
             attachmentPlacement: SurfaceResourcePlacement(
                 resource: resource.id, remoteWorkspaceID: saved.id, remoteTabID: "saved-tab"
@@ -283,7 +283,7 @@ struct CloudTerminalPaneReservationTests {
         case "wrongTabReceipt": returnedPlacement = SurfaceRemotePlacement(workspaceID: saved.id, tabID: "sibling-tab")
         case "wrongWorkspaceReceipt": returnedPlacement = SurfaceRemotePlacement(workspaceID: other.id, tabID: "saved-tab")
         case "wrongResource": returnedResourceID = SurfaceResourceID(machine: resource.machine, kind: .terminal, key: "other-terminal")
-        case "wrongMachine": returnedResourceID = SurfaceResourceID(machine: .cloud("other-machine"), kind: .terminal, key: resource.id.key)
+        case "wrongMachine": returnedResourceID = SurfaceResourceID(machine: .ssh("65671af74978de89e7a09c31eb6292bd8affd84dd07479d8f8e73f9dab9a2c98"), kind: .terminal, key: resource.id.key)
         default: Issue.record("Unknown placement change")
         }
         catalog.upsert(resource, from: provider)
@@ -299,9 +299,9 @@ struct CloudTerminalPaneReservationTests {
     @Test @MainActor
     func aNewCreationDoesNotMistakeItsSourceTabForTheAttachmentTarget() throws {
         let resource = Self.resource()
-        let reservation = CloudTerminalPaneReservation(
+        let reservation = TuiTerminalPaneReservation(
             workspaceID: UUID(), panelID: UUID(), machine: resource.machine,
-            sourcePlacement: CloudTerminalSourcePlacement(
+            sourcePlacement: TuiTerminalSourcePlacement(
                 machine: resource.machine, remoteWorkspaceID: "workspace", remoteTabID: "source-tab"
             )
         )
@@ -345,7 +345,7 @@ struct CloudTerminalPaneReservationTests {
 
     private static func resource() -> SurfaceResource {
         SurfaceResource(
-            id: SurfaceResourceID(machine: .cloud("reservation-fixture"), kind: .terminal, key: "term_created"),
+            id: SurfaceResourceID(machine: .ssh("88935eb8b946c9be0b93e083cbb0c1f87e77015c87dbeaee62c459fe5db0d167"), kind: .terminal, key: "term_created"),
             title: "", detail: nil, lifecycle: .launching, agent: nil,
             remoteWorkspace: nil, remoteViews: [], port: nil, url: nil
         )
@@ -377,16 +377,16 @@ struct CloudTerminalPaneReservationTests {
     }
 }
 
-private actor RecordingUntrackedSender: CloudTuiUntrackedCommandSending {
-    private(set) var requests: [CloudTuiRequest] = []
+private actor RecordingUntrackedSender: TuiUntrackedCommandSending {
+    private(set) var requests: [TuiRequest] = []
 
     var count: Int { requests.count }
 
-    func sendUntrackedTuiCommand(arguments: CloudTuiRequest) async throws {
+    func sendUntrackedTuiCommand(arguments: TuiRequest) async throws {
         requests.append(arguments)
     }
 
-    func sendTuiCommandAndAwaitAck(arguments: CloudTuiRequest) async throws {
+    func sendTuiCommandAndAwaitAck(arguments: TuiRequest) async throws {
         requests.append(arguments)
     }
 }

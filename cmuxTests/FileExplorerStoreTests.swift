@@ -120,7 +120,7 @@ private final class MockSSHFileExplorerTransport: SSHFileExplorerTransport {
     }
 }
 
-/// Records removals for a provider without Trash support (SSH/Cloud shape).
+/// Records removals for a provider without Trash support (SSH shape).
 private final class RecordingRemovalFileExplorerProvider: FileExplorerProvider {
     var homePath = "/home/dev"
     var isAvailable = true

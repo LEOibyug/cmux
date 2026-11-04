@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The cmux.json schema must describe every key the app reads from cmux.json.
 
-`web/data/cmux.schema.json` is embedded in the app and drives
-`cmux config validate`, the editor schema, the docs page, and the settings
+`schemas/cmux.schema.json` is embedded in the app and drives
+`cmux config validate`, the editor schema, and the settings
 skill. A key the app honors but the schema omits validates as "unknown", so a
 user who follows the Settings "Edit in cmux.json" button gets a warning for a
 setting that works. Four declarations have to agree:
@@ -31,7 +31,7 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCHEMA = REPO_ROOT / "web" / "data" / "cmux.schema.json"
+SCHEMA = REPO_ROOT / "schemas" / "cmux.schema.json"
 SUPPORTED = REPO_ROOT / "Sources" / "CmuxSettingsFileStore+SupportedPaths.swift"
 CATALOG_KEYS = REPO_ROOT / "Packages" / "macOS" / "CmuxSettings" / "Sources" / "CmuxSettings" / "Keys"
 SHORTCUT_ACTION = (
@@ -223,7 +223,7 @@ class SchemaParityTests(unittest.TestCase):
         self.assertEqual(
             missing,
             [],
-            "cmux.json accepts these paths but web/data/cmux.schema.json does not "
+            "cmux.json accepts these paths but schemas/cmux.schema.json does not "
             "describe them, so `cmux config validate` reports them as unknown. Add "
             "each to the schema (then run scripts/generate-cmux-config-schema.py and "
             "update skills/cmux-settings/references/all-keys.md).",

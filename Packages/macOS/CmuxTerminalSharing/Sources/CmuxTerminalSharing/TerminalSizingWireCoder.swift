@@ -2,7 +2,7 @@ import CmuxTerminalSizing
 import Foundation
 
 /// Converts sizing wire values between `Codable` types and the
-/// `[String: Any]` dictionaries the mobile RPC and cmux-tui protocol use.
+/// `[String: Any]` dictionaries the local socket and cmux-tui protocol use.
 public struct TerminalSizingWireCoder: Sendable {
     /// Creates a coder.
     public init() {}
@@ -31,10 +31,10 @@ public struct TerminalSizingWireCoder: Sendable {
         jsonObject(encodable: actor) ?? [:]
     }
 
-    /// The `mobile.terminal.detached` payload.
+    /// The terminal-view detachment payload.
     ///
     /// - Parameters:
-    ///   - surfaceID: the surface the phone was detached from.
+    ///   - surfaceID: the surface the view was detached from.
     ///   - detachment: the detach record.
     /// - Returns: `{surface_id, reason, by, at}` with `at` in ISO 8601.
     public func detachedPayload(surfaceID: String, detachment: TerminalSharingDetachment) -> [String: Any] {
@@ -52,7 +52,7 @@ public struct TerminalSizingWireCoder: Sendable {
     /// - Parameters:
     ///   - surfaceID: the terminal.
     ///   - snapshot: this Mac's latest snapshot, or `nil` when not shared.
-    /// - Returns: `{surface_id, size_state, self_participant_id, is_cloud,
+    /// - Returns: `{surface_id, size_state, self_participant_id,
     ///   detachment}`. `detachment` is `{reason, by, at}` while this Mac view
     ///   is detached (its `size_state` is then the last one seen before the
     ///   detach), else `null`.
@@ -65,7 +65,6 @@ public struct TerminalSizingWireCoder: Sendable {
         }
         payload["size_state"] = jsonObject(snapshot.state)
         payload["self_participant_id"] = snapshot.selfParticipantID ?? NSNull()
-        payload["is_cloud"] = snapshot.isCloud
         if let detachment = snapshot.detachment {
             var detached = detachedPayload(surfaceID: surfaceID, detachment: detachment)
             detached["surface_id"] = nil

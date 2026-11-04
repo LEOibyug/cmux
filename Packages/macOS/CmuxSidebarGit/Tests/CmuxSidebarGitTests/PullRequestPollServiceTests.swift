@@ -370,10 +370,8 @@ import CmuxGit
         #expect(!host.events.contains(.clearAllPullRequestMetadata))
         #expect(service.workspacePullRequestTrackedPanelIds(workspaceId: workspaceId).isEmpty)
 
-        host.mobileHostActive = true
         service.refreshTrackedWorkspacePullRequestsIfNeeded(reason: "hidden")
         #expect(service.workspacePullRequestPollTask == nil)
-        host.mobileHostActive = false
 
         service.handleWorkspacePullRequestCommandHint(
             workspaceId: workspaceId,

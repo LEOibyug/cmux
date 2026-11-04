@@ -33,10 +33,6 @@ struct ComputerUseOnboardingIntentTests {
         _ = await fixture.runtime.refreshHelperStatusAfterPermissionChange()
         fixture.runtime.onboarding.statusChanged()
         await actions.refreshComputerUsePermissions()
-        fixture.featureEnabled = false
-        await actions.refreshComputerUsePermissions()
-        fixture.featureEnabled = true
-        await actions.refreshComputerUsePermissions()
 
         #expect(actions.computerUsePermissionStatusIsKnown())
         #expect(actions.computerUseAccessibilityGranted() == accessibility)

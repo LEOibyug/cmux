@@ -1,4 +1,5 @@
-import CmuxCloud
+import CmuxSettings
+import CmuxRemoteSession
 import Foundation
 import CmuxControlSocket
 import os
@@ -15,8 +16,8 @@ extension TerminalController {
     /// Params: `host` (required SSH destination/alias), optional `port` (Int),
     /// optional `identity_file` (String).
     nonisolated func v2RemoteTmuxSessions(id: Any?, params: [String: Any]) -> String {
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
-            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy.disabledMessage)
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
+            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy().disabledMessage)
         }
         guard RemoteTmuxController.isEnabled else {
             return v2Error(id: id, code: "disabled", message: String(localized: "socket.remoteTmux.disabled", defaultValue: "remote tmux beta is disabled"))
@@ -27,7 +28,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostRequired", defaultValue: "host is required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 30) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: 30) {
             guard let controller = await MainActor.run(body: { AppDelegate.shared?.remoteTmuxController })
             else {
                 throw RemoteTmuxError.unreachable("app not ready")
@@ -238,8 +239,8 @@ extension TerminalController {
     /// Params: `host` (required), `session` (required tmux session name),
     /// optional `create` (Bool — attach-or-create). Returns the control surface id.
     nonisolated func v2RemoteTmuxAttach(id: Any?, params: [String: Any]) -> String {
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
-            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy.disabledMessage)
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
+            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy().disabledMessage)
         }
         guard RemoteTmuxController.isEnabled else {
             return v2Error(id: id, code: "disabled", message: String(localized: "socket.remoteTmux.disabled", defaultValue: "remote tmux beta is disabled"))
@@ -258,7 +259,7 @@ extension TerminalController {
         ) else {
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.sessionRequired", defaultValue: "session is required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 60) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: 60) {
             guard let controller = await MainActor.run(body: { AppDelegate.shared?.remoteTmuxController }) else {
                 throw RemoteTmuxError.unreachable("app not ready")
             }
@@ -287,8 +288,8 @@ extension TerminalController {
     /// one exact session, `port`, `identity_file`, `activate`, `workspace_name`,
     /// and routing selectors.
     nonisolated func v2RemoteTmuxMirror(id: Any?, params: [String: Any]) -> String {
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
-            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy.disabledMessage)
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
+            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy().disabledMessage)
         }
         guard RemoteTmuxController.isEnabled else {
             return v2Error(id: id, code: "disabled", message: String(localized: "socket.remoteTmux.disabled", defaultValue: "remote tmux beta is disabled"))
@@ -306,7 +307,7 @@ extension TerminalController {
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.sessionRequired", defaultValue: "session is required"))
         }
         let routing = remoteTmuxRouting(from: params)
-        return v2VmCall(id: id, timeoutSeconds: RemoteTmuxController.attachSocketTimeoutSeconds) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: RemoteTmuxController.attachSocketTimeoutSeconds) {
             guard let controller = await MainActor.run(body: { AppDelegate.shared?.remoteTmuxController })
             else {
                 throw RemoteTmuxError.unreachable("app not ready")
@@ -343,8 +344,8 @@ extension TerminalController {
     /// dedicated new window. Params: `host` (required), optional `port`,
     /// `identity_file`, `activate`, and `workspace_name`.
     nonisolated func v2RemoteTmuxWindow(id: Any?, params: [String: Any]) -> String {
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
-            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy.disabledMessage)
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
+            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy().disabledMessage)
         }
         guard RemoteTmuxController.isEnabled else {
             return v2Error(id: id, code: "disabled", message: String(localized: "socket.remoteTmux.disabled", defaultValue: "remote tmux beta is disabled"))
@@ -361,7 +362,7 @@ extension TerminalController {
         if params["session"] != nil, sessionName == nil {
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.sessionRequired", defaultValue: "session is required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: RemoteTmuxController.attachSocketTimeoutSeconds) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: RemoteTmuxController.attachSocketTimeoutSeconds) {
             guard let controller = await MainActor.run(body: { AppDelegate.shared?.remoteTmuxController })
             else {
                 throw RemoteTmuxError.unreachable("app not ready")
@@ -434,8 +435,8 @@ extension TerminalController {
     /// `remote.tmux.detach` — detach a control client and remove its mirror workspace;
     /// leaves the remote session alive.
     nonisolated func v2RemoteTmuxDetach(id: Any?, params: [String: Any]) -> String {
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
-            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy.disabledMessage)
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
+            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy().disabledMessage)
         }
         guard RemoteTmuxController.isEnabled else {
             return v2Error(id: id, code: "disabled", message: String(localized: "socket.remoteTmux.disabled", defaultValue: "remote tmux beta is disabled"))
@@ -448,7 +449,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostAndSessionRequired", defaultValue: "host and session are required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 10) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: 10) {
             try await MainActor.run {
                 guard let controller = AppDelegate.shared?.remoteTmuxController else {
                     throw RemoteTmuxError.unreachable("app not ready")
@@ -463,8 +464,8 @@ extension TerminalController {
     ///
     /// Diagnostics surface for verifying the ghostty → cmux event pipe end to end.
     nonisolated func v2RemoteTmuxState(id: Any?, params: [String: Any]) -> String {
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
-            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy.disabledMessage)
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
+            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy().disabledMessage)
         }
         guard RemoteTmuxController.isEnabled else {
             return v2Error(id: id, code: "disabled", message: String(localized: "socket.remoteTmux.disabled", defaultValue: "remote tmux beta is disabled"))
@@ -477,7 +478,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostAndSessionRequired", defaultValue: "host and session are required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 10) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: 10) {
             let snapshot: RemoteTmuxControlConnection.Snapshot? = await MainActor.run {
                 AppDelegate.shared?.remoteTmuxController
                     .connection(host: host, sessionName: session)?
@@ -519,8 +520,8 @@ extension TerminalController {
     /// Result: `attaching` false when the host has no attach in progress, else `phase`
     /// (`logging_in` or `in_tmux`), `quiet_seconds` and `quiet_limit_seconds`.
     nonisolated func v2RemoteTmuxAttachProgress(id: Any?, params: [String: Any]) -> String {
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
-            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy.disabledMessage)
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
+            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy().disabledMessage)
         }
         guard RemoteTmuxController.isEnabled else {
             return v2Error(id: id, code: "disabled", message: String(localized: "socket.remoteTmux.disabled", defaultValue: "remote tmux beta is disabled"))
@@ -531,7 +532,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostRequired", defaultValue: "host is required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 10) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: 10) {
             let report: (progress: RemoteTmuxAttachProgress, limits: RemoteTmuxAttachProgress.QuietLimits)? =
                 await MainActor.run {
                     guard let view = AppDelegate.shared?.remoteTmuxController
@@ -569,8 +570,8 @@ extension TerminalController {
     ///
     /// Params: `host` (required), `session` (required).
     nonisolated func v2RemoteTmuxPaneSurfaces(id: Any?, params: [String: Any]) -> String {
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
-            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy.disabledMessage)
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
+            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy().disabledMessage)
         }
         guard RemoteTmuxController.isEnabled else {
             return v2Error(id: id, code: "disabled", message: String(localized: "socket.remoteTmux.disabled", defaultValue: "remote tmux beta is disabled"))
@@ -583,7 +584,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostAndSessionRequired", defaultValue: "host and session are required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 10) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: 10) {
             let entries: [[String: Any]]? = await MainActor.run {
                 guard let mirror = AppDelegate.shared?.remoteTmuxController
                     .sessionMirror(host: host, sessionName: session) else { return nil }
@@ -611,8 +612,8 @@ extension TerminalController {
     /// this instead of reading pixels off screenshots. Params: `host`
     /// (required), `session` (required).
     nonisolated func v2RemoteTmuxPaneGrids(id: Any?, params: [String: Any]) -> String {
-        guard ManagedRemoteConnectionsPolicy.isEnabled else {
-            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy.disabledMessage)
+        guard ManagedRemoteConnectionsPolicy().isEnabled else {
+            return v2Error(id: id, code: "remote_connections_disabled", message: ManagedRemoteConnectionsPolicy().disabledMessage)
         }
         guard RemoteTmuxController.isEnabled else {
             return v2Error(id: id, code: "disabled", message: String(localized: "socket.remoteTmux.disabled", defaultValue: "remote tmux beta is disabled"))
@@ -625,7 +626,7 @@ extension TerminalController {
             }
             return v2Error(id: id, code: "invalid_params", message: String(localized: "socket.remoteTmux.hostAndSessionRequired", defaultValue: "host and session are required"))
         }
-        return v2VmCall(id: id, timeoutSeconds: 10) {
+        return v2ThrowingResultCall(id: id, timeoutSeconds: 10) {
             let snapshots: [RemoteTmuxWindowMirror.SizingSnapshot]? = await MainActor.run {
                 AppDelegate.shared?.remoteTmuxController
                     .sessionMirror(host: host, sessionName: session)?

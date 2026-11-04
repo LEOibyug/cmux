@@ -69,7 +69,6 @@ struct CmuxConfigFile: Codable, Sendable {
     var settingPresets: [String: CmuxSettingValue]
     var ui: CmuxConfigUIDefinition?
     var notifications: CmuxNotificationConfigDefinition?
-    var agentChat: CmuxAgentChatConfigDefinition?
     var newWorkspaceCommand: String?
     var surfaceTabBarButtons: [CmuxSurfaceTabBarButton]?
     var commands: [CmuxCommandDefinition]
@@ -80,7 +79,7 @@ struct CmuxConfigFile: Codable, Sendable {
     var remoteTmux: CmuxRemoteTmuxConfigDefinition?
 
     private enum CodingKeys: String, CodingKey {
-        case packs, actions, settingPresets, ui, notifications, agentChat, newWorkspaceCommand, surfaceTabBarButtons, commands, vault, workspaceGroups, remoteTmux
+        case packs, actions, settingPresets, ui, notifications, newWorkspaceCommand, surfaceTabBarButtons, commands, vault, workspaceGroups, remoteTmux
     }
 
     init(
@@ -89,7 +88,6 @@ struct CmuxConfigFile: Codable, Sendable {
         settingPresets: [String: CmuxSettingValue] = [:],
         ui: CmuxConfigUIDefinition? = nil,
         notifications: CmuxNotificationConfigDefinition? = nil,
-        agentChat: CmuxAgentChatConfigDefinition? = nil,
         newWorkspaceCommand: String? = nil,
         surfaceTabBarButtons: [CmuxSurfaceTabBarButton]? = nil,
         commands: [CmuxCommandDefinition] = [],
@@ -102,7 +100,6 @@ struct CmuxConfigFile: Codable, Sendable {
         self.settingPresets = settingPresets
         self.ui = ui
         self.notifications = notifications
-        self.agentChat = agentChat
         self.newWorkspaceCommand = newWorkspaceCommand
         self.surfaceTabBarButtons = surfaceTabBarButtons
         self.commands = commands
@@ -128,7 +125,6 @@ struct CmuxConfigFile: Codable, Sendable {
         ) ?? [:]
         ui = try container.decodeIfPresent(CmuxConfigUIDefinition.self, forKey: .ui)
         notifications = try container.decodeIfPresent(CmuxNotificationConfigDefinition.self, forKey: .notifications)
-        agentChat = try container.decodeIfPresent(CmuxAgentChatConfigDefinition.self, forKey: .agentChat)
 
         if let rawNewWorkspaceCommand = try container.decodeIfPresent(String.self, forKey: .newWorkspaceCommand) {
             let trimmed = rawNewWorkspaceCommand.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1042,7 +1038,6 @@ struct CmuxSurfaceTabBarButton: Codable, Sendable, Hashable, Identifiable {
     static let splitRight = actionReference(CmuxSurfaceTabBarBuiltInAction.splitRight.configID)
     static let splitDown = actionReference(CmuxSurfaceTabBarBuiltInAction.splitDown.configID)
 
-    static let mobileConnect = actionReference(CmuxSurfaceTabBarBuiltInAction.mobileConnect.configID)
 
     static let defaults: [CmuxSurfaceTabBarButton] = [
         .newTerminal,
@@ -1850,13 +1845,9 @@ struct CmuxConfigIssue: Identifiable, Equatable, Sendable {
 @MainActor
 final class CmuxConfigStore: ObservableObject {
     /// Plus-menu rows when `ui.newWorkspace.contextMenu` is not configured.
-    /// Feature-gated rows (Cloud, browser) are filtered at menu-build time by
-    /// `AppDelegate.isBuiltInActionAvailableInNewWorkspaceMenu` so a flag flip
-    /// takes effect without a config reload.
+    /// Browser availability is applied when the menu is built.
     static let defaultNewWorkspaceContextMenu: [CmuxConfigContextMenuItem] = [
         .action(CmuxConfigContextMenuActionItem(action: CmuxSurfaceTabBarBuiltInAction.newWorkspace.configID)),
-        .action(CmuxConfigContextMenuActionItem(action: CmuxSurfaceTabBarBuiltInAction.newCloudWorkspace.configID)),
-        .action(CmuxConfigContextMenuActionItem(action: CmuxSurfaceTabBarBuiltInAction.newCloudMachine.configID)),
         .action(CmuxConfigContextMenuActionItem(action: CmuxSurfaceTabBarBuiltInAction.newTerminal.configID)),
         .action(CmuxConfigContextMenuActionItem(action: CmuxSurfaceTabBarBuiltInAction.newBrowser.configID)),
     ]
@@ -1867,7 +1858,6 @@ final class CmuxConfigStore: ObservableObject {
     @Published private(set) var newWorkspaceActionID: String?
     @Published private(set) var newWorkspaceContextMenuItems: [CmuxResolvedConfigContextMenuItem] = []
     @Published private(set) var newWorkspaceContextMenuIsConfigured = false
-    @Published private(set) var agentChat: CmuxAgentChatConfiguration = .default
     /// Resolved per-cwd workspace group customization, keyed by the JSON cwd key.
     /// Use `resolveWorkspaceGroupConfig(forCwd:)` to find the best match for an
     /// anchor workspace's cwd. Empty when no `workspaceGroups.byCwd` block is
@@ -2379,10 +2369,6 @@ final class CmuxConfigStore: ObservableObject {
         // Publish for the parsing path, which cannot reach this actor mid-parse.
         RemoteTmuxBrokerSnapshot.shared.update(
             registry: remoteTmuxBrokers, rejections: remoteTmuxBrokerRejections
-        )
-        agentChat = CmuxAgentChatConfiguration.resolved(
-            local: localConfig?.agentChat, global: globalConfig?.agentChat,
-            localSourcePath: localConfig?.agentChat == nil ? nil : localPath, globalSourcePath: globalConfig?.agentChat == nil ? nil : globalConfigPath
         )
         let resolvedGroupConfigs = resolveWorkspaceGroupConfigsFromLayers(
             localConfig: localConfig,

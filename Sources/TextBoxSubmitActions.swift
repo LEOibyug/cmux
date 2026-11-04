@@ -204,7 +204,7 @@ extension TextBoxInputContainer {
         shellActivityState == .promptIdle
     }
 
-    static func shouldRejectCloudImageCommandTemplate(
+    static func shouldRejectTuiImageCommandTemplate(
         action: TextBoxSubmitAction,
         shouldForceTextEntrySubmit: Bool,
         imageTransferTarget: TerminalImageTransferTarget,
@@ -212,7 +212,7 @@ extension TextBoxInputContainer {
     ) -> Bool {
         guard action.kind == .commandTemplate,
               !shouldForceTextEntrySubmit,
-              imageTransferTarget == .cloud else {
+              imageTransferTarget == .tui else {
             return false
         }
         return parts.contains { part in

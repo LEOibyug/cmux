@@ -88,23 +88,23 @@ struct CommandPaletteNucleoFFITests {
         // Skipped: nucleo FFI dylib not built in this environment.
         let entries = [
             FixtureEntry(
-                id: "palette.checkForUpdates",
+                id: "palette.checkConfiguration",
                 rank: 0,
-                title: "Check for Updates",
-                searchableTexts: ["Check for Updates", "Global", "update", "upgrade", "release"]
+                title: "Check Configuration",
+                searchableTexts: ["Check Configuration", "Global", "config", "validate", "settings"]
             ),
             FixtureEntry(
-                id: "palette.attemptUpdate",
+                id: "palette.reloadConfiguration",
                 rank: 1,
-                title: "Attempt Update",
-                searchableTexts: ["Attempt Update", "Global", "attempt", "check", "update", "upgrade", "release"]
+                title: "Reload Configuration",
+                searchableTexts: ["Reload Configuration", "Global", "reload", "check", "config", "settings"]
             ),
         ]
         let index = try NucleoIndex(library: library, entries: entries)
 
         let resultIDs = try index.search(query: "check", limit: 5).map(\.id)
 
-        #expect(resultIDs.first == "palette.checkForUpdates")
+        #expect(resultIDs.first == "palette.checkConfiguration")
     }
 
     @Test func nucleoFFIPrefersVisibleTitlePrefixOverHiddenMetadataKeyword() throws {

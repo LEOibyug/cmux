@@ -86,18 +86,7 @@ extension TerminalController {
             )
         }
 
-        sentryBreadcrumb(
-            "socket.listener.configuration.reconciled",
-            category: "socket",
-            data: [
-                "previousMode": previousMode.rawValue,
-                "mode": configuration.accessMode.rawValue,
-                "path": configuration.preferredSocketPath,
-                "wasRunning": wasRunning ? 1 : 0,
-                "isRunning": socketServer.isRunning ? 1 : 0,
-                "source": source,
-            ]
-        )
+        
     }
 
     /// Starts listener transport now and attaches window routing only when one exists.

@@ -5,31 +5,13 @@ import SwiftUI
 /// (https://github.com/manaflow-ai/cmux/issues/12134): the one the window
 /// opens on in the first layout pass, the rest one per run-loop turn.
 extension SettingsWindowRoot {
-    /// Sections a window opening now mounts progressively. Cloud stays
-    /// eager while unavailable: it renders nothing, so a placeholder would
-    /// only advertise a section the sidebar hides.
-    static func mountOrder(cloudAvailable: Bool) -> [SettingsSectionID] {
-        SettingsSectionMountModel.displayOrder.filter { $0 != .cloudMachines || cloudAvailable }
-    }
-
     func anchorID(for section: SettingsSectionID) -> String {
         "section:\(section.rawValue)"
     }
 
     @ViewBuilder
     func sectionStack(proxy: ScrollViewProxy) -> some View {
-        // Top to bottom in ``SettingsSectionMountModel/displayOrder``, the
-        // order sections mount in: Account, App, Themes, Terminal, TextBox, Sleepy Mode, then Mobile,
-        // Cloud, Devices, Networking, the sidebar sections, Beta Features,
-        // Automation, Computer Use, Browser (with embedded Import), Global
-        // Hotkey, Keyboard Shortcuts, Workspace Colors, cmux.json, Reset.
-        slot(.account, proxy: proxy) {
-            AccountSection(
-                defaultsStore: defaultsStore,
-                catalog: catalog,
-                accountFlow: accountFlow
-            )
-        }
+        // Local settings sections mount in display order.
 
         slot(.app, proxy: proxy) {
             AppSection(
@@ -65,27 +47,6 @@ extension SettingsWindowRoot {
 
         slot(.sleepyMode, proxy: proxy) {
             SleepyModeSection(hostActions: hostActions, store: hostActions.sleepyModeStore())
-        }
-
-        slot(.mobile, proxy: proxy) {
-            MobileSection(defaultsStore: defaultsStore, catalog: catalog, hostActions: hostActions)
-        }
-
-        slot(.cloudMachines, proxy: proxy) {
-            // `DisableCloud` (MDM) controls administrator availability; the
-            // local first-use marker controls whether Cloud work may run.
-            if isCloudSectionAvailable {
-                CloudMachinesSection(hostActions: hostActions)
-                    .id(cloudSectionIdentity)
-            }
-        }
-
-        slot(.computers, proxy: proxy) {
-            ComputersSection(hostActions: hostActions, defaultsStore: defaultsStore, catalog: catalog)
-        }
-
-        slot(.networking, proxy: proxy) {
-            IrohNetworkingSection(hostActions: hostActions)
         }
 
         slot(.sidebarAppearance, proxy: proxy) {
@@ -188,7 +149,6 @@ extension SettingsWindowRoot {
             section: section,
             isActive: section == SettingsSectionMountModel.hostSection(for: activeSection),
             isMounted: mountModel.isMounted(section),
-            showsPlaceholder: section != .cloudMachines || isCloudSectionAvailable,
             onMountedAppear: { sectionContentDidAppear(section, proxy: proxy) },
             content: content
         )

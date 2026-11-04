@@ -1,4 +1,4 @@
-import CmuxCloudTui
+import CmuxTui
 import CmuxSurfaceCatalogModel
 import CmuxTerminalSizing
 import Foundation
@@ -13,12 +13,12 @@ import Testing
 /// A new Cloud split registers its attach stream while the machine creates the
 /// terminal, so the only request left after the create is `attach-surface`.
 @Suite
-struct CloudManualMirrorHandshakeTests {
+struct TuiManualMirrorHandshakeTests {
     private static let capabilities = ["attach-identity-v1", "view-attachment-lease-v1", "terminal-pending-sequence-v1"]
 
     @Test @MainActor
     func registrationRunsBeforeTheTerminalExistsAndTheAttachFollowsAlone() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         let handshake = Self.handshake()
         handshake.start { fixture.socketPath }
@@ -51,7 +51,7 @@ struct CloudManualMirrorHandshakeTests {
     /// adopted stream still waits for the registration's acknowledgement.
     @Test @MainActor
     func adoptionBeforeTheRegistrationIsAnsweredStillWaitsForIt() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         let handshake = Self.handshake()
         handshake.start { fixture.socketPath }
@@ -76,7 +76,7 @@ struct CloudManualMirrorHandshakeTests {
     /// releases the stream; a late acknowledgement sends nothing more.
     @Test @MainActor
     func stoppingWhileTheRegistrationIsPendingSendsNoAttach() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         let handshake = Self.handshake()
         handshake.start { fixture.socketPath }
@@ -98,9 +98,9 @@ struct CloudManualMirrorHandshakeTests {
     /// the stale registration is dropped and the session registers afresh.
     @Test @MainActor
     func aDifferentSocketFallsBackToTheSessionsOwnRegistration() async throws {
-        let stale = try CloudManualMirrorSocketFixture()
+        let stale = try TuiManualMirrorSocketFixture()
         defer { stale.close() }
-        let current = try CloudManualMirrorSocketFixture()
+        let current = try TuiManualMirrorSocketFixture()
         defer { current.close() }
         let handshake = Self.handshake()
         handshake.start { stale.socketPath }
@@ -120,7 +120,7 @@ struct CloudManualMirrorHandshakeTests {
     /// A failed registration never strands the pane: the session opens its own stream.
     @Test @MainActor
     func aClosedHandshakeLeavesTheOrdinaryPath() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         let handshake = Self.handshake()
         handshake.start { throw CancellationError() }
@@ -133,15 +133,15 @@ struct CloudManualMirrorHandshakeTests {
     }
 
     @MainActor
-    private static func handshake() -> CloudTuiManualMirrorHandshake {
-        CloudTuiManualMirrorHandshake(identity: {
+    private static func handshake() -> TuiManualMirrorHandshake {
+        TuiManualMirrorHandshake(identity: {
             TerminalSizingParticipant(id: "", deviceKind: .mac)
         })
     }
 
     @MainActor
-    private static func session(terminalID: String) -> CloudTuiManualMirrorSession {
-        CloudTuiManualMirrorSession(
+    private static func session(terminalID: String) -> TuiManualMirrorSession {
+        TuiManualMirrorSession(
             machineID: "machine",
             terminalID: terminalID,
             remoteSurfaceID: 0,

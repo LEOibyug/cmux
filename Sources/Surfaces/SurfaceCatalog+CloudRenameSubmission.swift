@@ -3,13 +3,13 @@ import Foundation
 
 extension SurfaceCatalog {
     /// Propagates a local workspace title through the catalog's ordered remote lane.
-    func propagateCloudWorkspaceRename(
+    func propagateRemoteWorkspaceRename(
         workspace: Workspace,
         localTitle: String?,
         previousCustomTitle: String?,
         previousCustomTitleSource: Workspace.CustomTitleSource? = .user
     ) {
-        cloudWorkspaceRenameService.propagate(
+        tuiWorkspaceRenameService.propagate(
             workspace: workspace,
             localTitle: localTitle,
             previousCustomTitle: previousCustomTitle,
@@ -19,7 +19,7 @@ extension SurfaceCatalog {
     }
 
     /// Propagates a local pane title through the exact remote tab placement.
-    func propagateCloudTerminalRename(
+    func propagateTuiTerminalRename(
         workspace: Workspace,
         panelID: UUID,
         resource: SurfaceResource,
@@ -27,7 +27,7 @@ extension SurfaceCatalog {
         previousCustomTitle: String?,
         previousCustomTitleSource: Workspace.CustomTitleSource? = .user
     ) {
-        cloudWorkspaceRenameService.propagateTerminalRename(
+        tuiWorkspaceRenameService.propagateTerminalRename(
             workspace: workspace,
             panelID: panelID,
             resource: resource,
@@ -46,7 +46,7 @@ extension SurfaceCatalog {
         onFailure: @escaping @MainActor (Error) -> Void = { _ in }
     ) -> Task<Void, Error> {
         let provider = provider(for: machine)
-        return cloudRenameCoordinator.enqueue(key: .workspace(machine: machine, id: id), pendingName: name, onFailure: onFailure, operation: { [weak self] in
+        return tuiRenameCoordinator.enqueue(key: .workspace(machine: machine, id: id), pendingName: name, onFailure: onFailure, operation: { [weak self] in
             guard let provider, self?.provider(for: machine) === provider else { throw SurfaceCatalogError.noProvider(machine) }
             try await provider.renameRemoteWorkspace(id: id, name: name)
         })
@@ -59,7 +59,7 @@ extension SurfaceCatalog {
         onFailure: @escaping @MainActor (Error) -> Void = { _ in }
     ) -> Task<Void, Error> {
         let provider = provider(for: machine)
-        return cloudRenameCoordinator.enqueue(key: .tab(machine: machine, id: id), pendingName: name, onFailure: onFailure, operation: { [weak self] in
+        return tuiRenameCoordinator.enqueue(key: .tab(machine: machine, id: id), pendingName: name, onFailure: onFailure, operation: { [weak self] in
             guard let provider, self?.provider(for: machine) === provider else { throw SurfaceCatalogError.noProvider(machine) }
             if let expectedName {
                 try await provider.renameRemoteTab(id: id, name: name, expectedName: expectedName)

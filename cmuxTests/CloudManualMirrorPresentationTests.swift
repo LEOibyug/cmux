@@ -1,4 +1,4 @@
-import CmuxCloud
+import CmuxRemoteSession
 import AppKit
 import Foundation
 import Testing
@@ -10,7 +10,7 @@ import Testing
 #endif
 
 @Suite("Cloud manual mirror presentation")
-struct CloudManualMirrorPresentationTests {
+struct RemoteManualMirrorPresentationTests {
     /// Every AppKit-backed view under `root`, in depth-first order.
     @MainActor
     private static func descendants(of root: NSView) -> [NSView] {
@@ -94,7 +94,7 @@ struct CloudManualMirrorPresentationTests {
     @MainActor
     func repeatedRecoveryDoesNotFlashOrReuseAnOldSurface(replayFirst: Bool) async throws {
         var recoveries = 0
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_recovery", remoteSurfaceID: 17,
             presentationPolicy: .immediate,
             onNeedsReconnect: { recoveries += 1 }
@@ -103,7 +103,7 @@ struct CloudManualMirrorPresentationTests {
         let frame = NSRect(x: 0, y: 0, width: 480, height: 320)
         let hosted = GhosttySurfaceScrollView(surfaceView: GhosttyNSView(frame: frame))
         let anchor = GhosttyTerminalView.HostContainerView(frame: frame)
-        let owner = hosted.cloudTerminalOverlay
+        let owner = hosted.tuiTerminalOverlay
         owner.session = session
         owner.updateAnchor(anchor, visible: true, ownershipGeneration: 1)
 
@@ -111,7 +111,7 @@ struct CloudManualMirrorPresentationTests {
         // No renderer callback is supplied: connection health must remain
         // independent of a hidden, occluded, or newly reparented native view.
         for cycle in 0..<8 {
-            let fixture = try CloudManualMirrorSocketFixture()
+            let fixture = try TuiManualMirrorSocketFixture()
             defer { fixture.close() }
             let surfaceID = UInt64(17 + cycle)
             session.updateRemoteSurfaceID(surfaceID)
@@ -183,18 +183,18 @@ struct CloudManualMirrorPresentationTests {
 
     @Test
     func attachmentAloneDoesNotHideTheConnectionState() {
-        #expect(CloudManualMirrorPresentation(phase: .idle, replayReceived: false).connectionState == nil)
-        #expect(CloudManualMirrorPresentation(phase: .attached, replayReceived: false).connectionState == .connecting)
-        #expect(CloudManualMirrorPresentation(phase: .attached, replayReceived: true).connectionState == .connected)
-        #expect(CloudManualMirrorPresentation(phase: .disconnected, replayReceived: true).connectionState == .error)
+        #expect(RemoteManualMirrorPresentation(phase: .idle, replayReceived: false).connectionState == nil)
+        #expect(RemoteManualMirrorPresentation(phase: .attached, replayReceived: false).connectionState == .connecting)
+        #expect(RemoteManualMirrorPresentation(phase: .attached, replayReceived: true).connectionState == .connected)
+        #expect(RemoteManualMirrorPresentation(phase: .disconnected, replayReceived: true).connectionState == .error)
     }
 
     @Test @MainActor
     func cancellingAnActiveConnectionSuppressesAutomaticRecovery() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         var refreshes = 0
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_cancel", remoteSurfaceID: 17,
             onNeedsReconnect: { refreshes += 1 }
         )
@@ -216,7 +216,7 @@ struct CloudManualMirrorPresentationTests {
     @Test @MainActor
     func explicitDisconnectCanPauseAndResumeALostSSHAttachment() {
         var refreshes = 0
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "ssh:fixture", terminalID: "term_persistent", remoteSurfaceID: 17,
             onNeedsReconnect: { refreshes += 1 }
         )
@@ -280,10 +280,10 @@ struct CloudManualMirrorPresentationTests {
 
     @Test @MainActor
     func usableAttachmentClearsTheCardWithoutRendererObservations() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         var reconnectRequests = 0
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_live", remoteSurfaceID: 17,
             presentationPolicy: .immediate,
             onNeedsReconnect: { reconnectRequests += 1 }
@@ -292,7 +292,7 @@ struct CloudManualMirrorPresentationTests {
         let frame = NSRect(x: 0, y: 0, width: 480, height: 320)
         let hosted = GhosttySurfaceScrollView(surfaceView: GhosttyNSView(frame: frame))
         let anchor = GhosttyTerminalView.HostContainerView(frame: frame)
-        let owner = hosted.cloudTerminalOverlay
+        let owner = hosted.tuiTerminalOverlay
         owner.session = session
         owner.updateAnchor(anchor, visible: true, ownershipGeneration: 1)
         func synchronize() {
@@ -363,11 +363,11 @@ struct CloudManualMirrorPresentationTests {
     @Test @MainActor
     func unavailableSurfaceResolutionLeavesRefreshToProviderAndRemainsRetryable() async throws {
         var reconnectRequests = 0
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine",
             terminalID: "term_0123456789abcdef0123456789abcdef",
             remoteSurfaceID: 17,
-            presentationPolicy: CloudTerminalConnectionPresentationPolicy(failureGrace: .milliseconds(80)),
+            presentationPolicy: RemoteTerminalConnectionPresentationPolicy(failureGrace: .milliseconds(80)),
             onNeedsReconnect: { reconnectRequests += 1 }
         )
         defer { session.stop() }
@@ -390,10 +390,10 @@ struct CloudManualMirrorPresentationTests {
 
     @Test @MainActor
     func reconnectFencesAnAttachedSocketBeforeRequestingFreshResolution() async throws {
-        let fixture = try CloudManualMirrorSocketFixture()
+        let fixture = try TuiManualMirrorSocketFixture()
         defer { fixture.close() }
         var refreshes = 0
-        let session = CloudTuiManualMirrorSession(
+        let session = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_0123456789abcdef0123456789abcdef",
             remoteSurfaceID: 17, onNeedsReconnect: { refreshes += 1 }
         )
@@ -422,10 +422,10 @@ struct CloudManualMirrorPresentationTests {
 
     @Test @MainActor
     func retiringAnOldSessionCannotRemoveItsReplacementsCard() {
-        let old = CloudTuiManualMirrorSession(
+        let old = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_old", remoteSurfaceID: 17, onNeedsReconnect: {}
         )
-        let replacement = CloudTuiManualMirrorSession(
+        let replacement = TuiManualMirrorSession(
             machineID: "machine", terminalID: "term_new", remoteSurfaceID: 18,
             presentationPolicy: .immediate, onNeedsReconnect: {}
         )

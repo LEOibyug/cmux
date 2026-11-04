@@ -49,6 +49,42 @@ struct CmuxSettingChangeTests {
         #expect(text.contains("\"scroll.cycle\""))
     }
 
+    @Test("Vault selection persists an explicit list, none, and the all-agents default")
+    func vaultSourceSelectionTransitions() async throws {
+        let file = try fixture("""
+        {
+          // keep registration and appearance settings
+          "vault": { "agents": [] },
+          "app": { "globalFontMagnification": 130 }
+        }
+        """)
+        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        let store = JSONConfigStore(fileURL: file)
+
+        _ = try await store.apply(.set(path: "vault.enabledAgents", value: .array([.string("omp")])))
+        #expect(try value("vault.enabledAgents", in: file) as? [String] == ["omp"])
+        _ = try await store.apply(.set(path: "vault.enabledAgents", value: .array([])))
+        #expect(try value("vault.enabledAgents", in: file) as? [String] == [])
+        _ = try await store.apply(.unset(path: "vault.enabledAgents"))
+        #expect(try value("vault.enabledAgents", in: file) == nil)
+        #expect(try value("vault.agents", in: file) as? [String] == [])
+        #expect((try value("app.globalFontMagnification", in: file) as? NSNumber)?.intValue == 130)
+        #expect(try String(contentsOf: file, encoding: .utf8).contains("// keep registration"))
+    }
+
+    @Test("Vault source selection does not permit structural Vault mutations", arguments: [
+        "vault", "vault.agents", "vault.enabledAgents.extra"
+    ])
+    func vaultRegistrationsRemainProtected(path: String) async throws {
+        let file = try fixture(baseConfig)
+        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        let before = try Data(contentsOf: file)
+        await #expect(throws: CmuxSettingChangeError.notASetting(path)) {
+            _ = try await JSONConfigStore(fileURL: file).apply(.set(path: path, value: .array([])))
+        }
+        #expect(try Data(contentsOf: file) == before)
+    }
+
     @Test("toggle flips a configured boolean, then the schema default when absent")
     func toggleUsesConfiguredValueOrDefault() async throws {
         let file = try fixture(baseConfig)

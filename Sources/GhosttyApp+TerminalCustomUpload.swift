@@ -1,4 +1,5 @@
-import CmuxCloud
+import CmuxRemoteSession
+import CmuxSettings
 import AppKit
 import CmuxTerminalCore
 
@@ -27,8 +28,8 @@ extension GhosttyApp {
                 // (the focused workspace) for a surface that has gone away, and
                 // the identity guard below only decides where TEXT may go.
                 if case .failure(let error) = result {
-                    if ManagedFileTransferPolicy.isRefusal(error) {
-                        ManagedFileTransferPolicy.presentRefusal()
+                    if ManagedFileTransferPolicy().isRefusal(error) {
+                        ManagedFileTransferPolicy().presentRefusal()
                     } else {
                         // surfaceId came from the callback context captured when the
                         // paste started, so it names the surface the user dropped on.

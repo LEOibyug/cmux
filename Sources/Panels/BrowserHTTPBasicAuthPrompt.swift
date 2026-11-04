@@ -1,6 +1,5 @@
 import AppKit
 import CmuxBrowser
-import CMUXMobileCore
 import Foundation
 import WebKit
 
@@ -161,16 +160,16 @@ func browserHandleHTTPBasicAuthenticationChallenge(
         if let browserPanel {
             let signInLabel = alert.buttons[0].title
             let cancelLabel = alert.buttons[1].title
-            let dialog = browserPanel.presentMobileBrowserDialog(
+            let dialog = browserPanel.presentNativeBrowserDialog(
                 kind: .httpBasicAuthentication,
                 title: alert.messageText,
                 message: accessoryMessage,
                 host: challenge.protectionSpace.host,
                 buttons: [
-                    MobileBrowserDialogButton(id: "sign_in", label: signInLabel, role: .default),
-                    MobileBrowserDialogButton(id: "cancel", label: cancelLabel, role: .cancel),
+                    BrowserDialogButton(id: "sign_in", label: signInLabel, role: .default),
+                    BrowserDialogButton(id: "cancel", label: cancelLabel, role: .cancel),
                 ],
-                textField: MobileBrowserDialogTextField(
+                textField: BrowserDialogTextField(
                     placeholder: passwordField.placeholderString,
                     initial: usernameField.stringValue,
                     secure: true
@@ -201,7 +200,7 @@ func browserHandleHTTPBasicAuthenticationChallenge(
                 cancelButtonID: "cancel"
             )
             registerCancelPrompt? {
-                _ = browserPanel.mobileBrowserDialogBroker.respond(MobileBrowserDialogRespondParameters(
+                _ = browserPanel.browserDialogBroker.respond(BrowserDialogRespondParameters(
                     panelID: dialog.panelID,
                     dialogID: dialog.dialogID,
                     buttonID: "cancel",

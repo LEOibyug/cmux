@@ -14,7 +14,7 @@ import CmuxSettings
 /// design: Sleepy Mode appearance is user *settings*, and CmuxSettingsUI is
 /// cmux's settings-model module — it already houses the other persisted settings
 /// models the app consumes (`DefaultsValueModel`, `JSONValueModel`,
-/// `SecretValueModel`, `MobilePairingStatusModel`, `SettingsErrorLog`). Splitting
+/// `SecretValueModel`, `SettingsErrorLog`). Splitting
 /// one screensaver's settings into a separate domain package would fragment that
 /// layer inconsistently.
 @Observable

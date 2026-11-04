@@ -100,7 +100,7 @@ class SupportedPathsTests(unittest.TestCase):
         self.assertNotIn("app.notARealSetting", result.stdout.splitlines())
 
     def test_list_supported_matches_schema_settings_paths(self):
-        schema = json.loads((REPO_ROOT / "web" / "data" / "cmux.schema.json").read_text())
+        schema = json.loads((REPO_ROOT / "schemas" / "cmux.schema.json").read_text())
         expected = {
             f"{section}.{key}"
             for section in SETTINGS_SECTIONS
@@ -155,7 +155,7 @@ class ShortcutActionReferenceTests(unittest.TestCase):
 
     def test_reference_lists_every_schema_action(self):
         schema = json.loads(
-            (REPO_ROOT / "web" / "data" / "cmux.schema.json").read_text()
+            (REPO_ROOT / "schemas" / "cmux.schema.json").read_text()
         )
         enum = schema["properties"]["shortcuts"]["properties"]["bindings"][
             "propertyNames"

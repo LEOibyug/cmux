@@ -9,13 +9,18 @@ struct VaultAllSessionsBar: View {
     /// Shared row-density preference. Default view shows repository/branch
     /// details; compact view hides that second line in every Vault grouping.
     @Binding var isCompactView: Bool
+    let agentSourceOptions: [SessionIndexFilterOption]
+    let enabledAgentIDs: Set<String>?
     /// Enter — peek the top search result.
     let onPeekTopResult: () -> Void
     /// Cmd+Enter — resume the top search result.
     let onResumeTopResult: () -> Void
+    let onSelectAgentSources: @MainActor (Set<String>?) async throws -> Void
 
     @Environment(\.cmuxGlobalFontMagnificationPercent) private var globalFontPercent
     @State private var viewMenuPresenter = VaultSessionViewMenuPresenter()
+    @State private var isSavingSources = false
+    @State private var sourceSaveError: String?
 
     private var searchFieldHeight: CGFloat {
         _ = globalFontPercent
@@ -36,6 +41,19 @@ struct VaultAllSessionsBar: View {
         .padding(.trailing, RightSidebarChromeMetrics.headerTrailingPadding)
         .padding(.top, SidebarSearchField.topPadding)
         .padding(.bottom, RightSidebarChromeMetrics.barVerticalPadding)
+        .alert(
+            String(localized: "settingAction.failed.title", defaultValue: "Couldn't Change Setting"),
+            isPresented: Binding(
+                get: { sourceSaveError != nil },
+                set: { if !$0 { sourceSaveError = nil } }
+            )
+        ) {
+            Button(String(localized: "common.ok", defaultValue: "OK"), role: .cancel) {
+                sourceSaveError = nil
+            }
+        } message: {
+            Text(sourceSaveError ?? "")
+        }
     }
 
     private var searchField: some View {
@@ -59,7 +77,23 @@ struct VaultAllSessionsBar: View {
     /// treatment. The Default / Compact picker opens as a native menu below it.
     private var viewMenuButton: some View {
         Button {
-            viewMenuPresenter.present(isCompactView: isCompactView) { isCompactView = $0 }
+            viewMenuPresenter.present(
+                isCompactView: isCompactView,
+                agentSourceOptions: agentSourceOptions,
+                enabledAgentIDs: enabledAgentIDs,
+                onSelectAgentSources: { selection in
+                    isSavingSources = true
+                    Task { @MainActor in
+                        defer { isSavingSources = false }
+                        do {
+                            try await onSelectAgentSources(selection)
+                        } catch {
+                            sourceSaveError = error.localizedDescription
+                        }
+                    }
+                },
+                onSelect: { isCompactView = $0 }
+            )
         } label: {
             HeaderChromeIconStyle.symbol("ellipsis")
         }
@@ -78,6 +112,7 @@ struct VaultAllSessionsBar: View {
         .accessibilityHint(Text(String(localized: "sessionIndex.view.tooltip", defaultValue: "Choose session view")))
         .accessibilityValue(VaultSessionViewOption(isCompact: isCompactView).label)
         .accessibilityIdentifier("VaultSessionOptionsMenu")
+        .disabled(isSavingSources)
         .titlebarInteractiveControl()
     }
 

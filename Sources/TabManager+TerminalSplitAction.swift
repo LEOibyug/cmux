@@ -1,7 +1,6 @@
 import AppKit
 import Bonsplit
 import CmuxPanes
-import CmuxProductAnalytics
 import Foundation
 
 /// Preserves asynchronous acceptance through the shared terminal split action.
@@ -28,7 +27,6 @@ extension TabManager {
         // container's currently active pane.
         if let remotePane = workspace.remoteTmuxControlPane(surfaceID: surfaceId) {
             workspace.clearSplitZoom()
-            sentryBreadcrumb("split.create", data: ["direction": String(describing: direction)])
             let accepted = remotePane.owner.requestSplit(
                 fromPane: remotePane.pane.tmuxPaneID,
                 vertical: direction.orientation == .vertical,
@@ -37,12 +35,10 @@ extension TabManager {
                 shellCommand: nil,
                 workingDirectory: nil
             )
-            if accepted { ProductAnalytics.app.featureUsed(.split) }
             return accepted ? .routedToRemote : .failed
         }
         guard workspace.panels[surfaceId] != nil else { return .failed }
         workspace.clearSplitZoom()
-        sentryBreadcrumb("split.create", data: ["direction": String(describing: direction)])
         let outcome = workspace.newTerminalSplitOutcome(
             from: surfaceId,
             orientation: direction.orientation,
@@ -52,9 +48,6 @@ extension TabManager {
         )
         if let panel = outcome.panel {
             workspace.equalizeSplitsAfterCreatingSplitIfEnabled(newPanelId: panel.id)
-            ProductAnalytics.app.featureUsed(.split)
-        } else if case .routedToRemote = outcome {
-            ProductAnalytics.app.featureUsed(.split)
         } else if case .noSpace = outcome {
             // Shortcut, menu, palette and Ghostty split actions all land here:
             // a split with no room for another pane beeps instead of doing
@@ -66,7 +59,7 @@ extension TabManager {
 
     /// Adds a terminal pane from the focused panel and arranges the
     /// workspace in Zellij's default tiling, the cmux-tui Alt-n behavior.
-    /// Remote tmux mirrors and Cloud panes keep their own layout owner, so
+    /// Remote tmux mirrors and SSH TUI panes keep their own layout owner, so
     /// they receive an ordinary split right.
     func createAutoLayoutPaneOutcome(
         tabId: UUID,
@@ -75,7 +68,6 @@ extension TabManager {
     ) -> TerminalPanelCreationOutcome {
         guard let workspace = tabs.first(where: { $0.id == tabId }),
               workspace.panels[surfaceId] != nil else { return .failed }
-        sentryBreadcrumb("split.create", data: ["direction": "autoLayout"])
         return workspace.newTerminalSplitOutcome(
             from: surfaceId,
             orientation: .horizontal,

@@ -159,26 +159,27 @@ extension TerminalController {
         return workspace.controlSocketTerminalInputTarget(for: panelID)
     }
 
-    /// Resolves a mobile terminal request to its structural workspace and
-    /// canonical live socket target in one main-actor hop.
-    func mobileCanonicalTerminalTarget(
-        params: [String: Any]
-    ) -> (
-        workspace: Workspace,
-        surfaceID: UUID,
-        target: ControlTerminalSocketTarget
+    /// Resolves a local control request to its structurally owned terminal target.
+    func canonicalTerminalTarget(params: [String: Any]) -> (
+        workspace: Workspace, surfaceID: UUID, target: ControlTerminalSocketTarget
     )? {
-        guard let resolved = mobileResolveWorkspaceAndSurface(
-            params: params,
-            requireTerminal: true
-        ), let surfaceID = resolved.surfaceId,
-              let target = resolved.workspace.controlSocketTerminalInputTarget(
-                  for: surfaceID
-              ) else {
-            return nil
+        guard let manager = v2ResolveTabManager(params: params),
+              let workspace = v2ResolveWorkspace(params: params, tabManager: manager) else { return nil }
+        if params["workspace_id"] != nil, v2UUID(params, "workspace_id") == nil { return nil }
+        let panelID: UUID
+        if let rawID = params["surface_id"] {
+            guard let string = rawID as? String, let id = UUID(uuidString: string) else { return nil }
+            panelID = id
+        } else {
+            guard let focused = workspace.focusedTerminalInputTarget() else { return nil }
+            panelID = focused.surfaceID
         }
-        return (resolved.workspace, surfaceID, target)
+        guard let owned = workspace.terminalInputTarget(forPanelID: panelID) else { return nil }
+        owned.panel.surface.requestBackgroundSurfaceStartIfNeeded()
+        guard let target = workspace.controlSocketTerminalInputTarget(for: owned.surfaceID) else { return nil }
+        return (workspace, owned.surfaceID, target)
     }
+
 }
 
 @MainActor
