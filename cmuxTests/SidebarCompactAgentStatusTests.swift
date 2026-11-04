@@ -714,9 +714,10 @@ struct SidebarCompactAgentStatusTests {
         #expect(on.compactStatusGlyph?.kind == .idle)
         #expect(on.compactStatusGlyph?.tooltip.contains("Needs input") == true)
 
-        // Off: both keys are rows and no glyph is built at all.
+        // Off: recognized agent status is pinned; custom metadata stays below it.
         let off = snapshot(compact: false)
-        #expect(Set(off.metadataEntries.map(\.key)) == ["claude_code", "deploy"])
+        #expect(off.agentStatusEntries.map(\.key) == ["claude_code"])
+        #expect(off.metadataEntries.map(\.key) == ["deploy"])
         #expect(off.compactStatusGlyph == nil)
     }
 }

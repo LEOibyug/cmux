@@ -1489,10 +1489,120 @@
           "default": false,
           "description": "Hide all per-workspace detail rows."
         },
+        "detailOrder": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["description", "notification", "branchDirectory", "pullRequests", "ports", "metadata", "log", "progress"]},
+          "uniqueItems": true,
+          "default": ["description", "notification", "branchDirectory", "pullRequests", "ports", "metadata", "log", "progress"],
+          "description": "Order of information sections below the fixed title and agent status. Missing sections are appended in default order."
+        },
+        "showAgentStatusInSidebar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show agent status immediately below the workspace title, independently of other metadata."
+        },
+        "titleFontSize": {
+          "type": "number",
+          "minimum": 8,
+          "maximum": 24,
+          "default": 14,
+          "description": "Workspace title font size before sidebar and global scaling."
+        },
+        "agentStatusFontSize": {
+          "type": "number",
+          "minimum": 8,
+          "maximum": 24,
+          "default": 12,
+          "description": "Agent status badge font size before sidebar and global scaling."
+        },
+        "descriptionFontSize": {
+          "type": "number",
+          "minimum": 8,
+          "maximum": 24,
+          "default": 11,
+          "description": "Description and notification font size before sidebar and global scaling."
+        },
+        "branchFontSize": {
+          "type": "number",
+          "minimum": 8,
+          "maximum": 24,
+          "default": 10.5,
+          "description": "Git branch font size before sidebar and global scaling."
+        },
+        "directoryFontSize": {
+          "type": "number",
+          "minimum": 8,
+          "maximum": 24,
+          "default": 10,
+          "description": "Working directory font size before sidebar and global scaling."
+        },
+        "auxiliaryFontSize": {
+          "type": "number",
+          "minimum": 8,
+          "maximum": 24,
+          "default": 9.5,
+          "description": "Pull request, port and log font size before sidebar and global scaling."
+        },
+        "informationLineLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6,
+          "default": 2,
+          "description": "Maximum lines for each workspace information field; excess text uses a trailing ellipsis."
+        },
+        "showInactiveAgentStatus": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show idle and completed agent status in workspace rows and terminal tabs."
+        },
+        "animateAgentStatus": {
+          "type": "boolean",
+          "default": true,
+          "description": "Animate working agent badges unless macOS Reduce Motion is enabled."
+        },
+        "showAgentStatusInTabs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show agent status badges in terminal tabs."
+        },
+        "codexpressEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the Codexpress panel and poll its local management API while visible."
+        },
+        "codexpressPollIntervalSeconds": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 60,
+          "default": 2,
+          "description": "Seconds between local Codexpress status reads; never refreshes upstream balances automatically."
+        },
+        "codexpressShowRequestCounts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show each Codexpress source active request count."
+        },
+        "codexpressShowResetTimes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show official account quota reset times."
+        },
+        "codexpressShowActions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Codexpress takeover, refresh and reset-card controls."
+        },
+        "codexpressFontSize": {
+          "type": "number",
+          "minimum": 8,
+          "maximum": 20,
+          "default": 11,
+          "description": "Base font size for the Codexpress panel before global scaling."
+        },
         "wrapWorkspaceTitles": {
           "type": "boolean",
           "default": true,
-          "description": "Wrap sidebar workspace titles to at most two lines, then truncate at the end."
+          "description": "Wrap sidebar workspace titles up to sidebar.informationLineLimit, then truncate at the end."
         },
         "showWorkspaceDescription": {
           "type": "boolean",

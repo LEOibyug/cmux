@@ -50,14 +50,17 @@ extension Workspace {
 
     /// Maps only this terminal's authoritative live report into generic tab chrome.
     func terminalTabAgentStatusBadge(forPanelId panelId: UUID) -> TabStatusBadge? {
-        guard let entry = terminalAgentStatusEntryVisibleForDisplay(panelId: panelId),
-              let presentation = AgentStatusPresentation(entry: entry) else { return nil }
+        let displaySettings = agentStatusDisplaySettings
+        guard displaySettings.showAgentStatusInTabs,
+              let entry = terminalAgentStatusEntryVisibleForDisplay(panelId: panelId),
+              let presentation = AgentStatusPresentation(entry: entry),
+              displaySettings.allows(presentation) else { return nil }
         return TabStatusBadge(
             text: presentation.text,
             symbolName: presentation.symbolName,
             foregroundHex: presentation.foregroundHex,
             backgroundHex: presentation.backgroundHex,
-            isAnimating: presentation.isAnimating
+            isAnimating: presentation.isAnimating && displaySettings.animateAgentStatus
         )
     }
 
@@ -68,6 +71,13 @@ extension Workspace {
         let badge = terminalTabAgentStatusBadge(forPanelId: panelId)
         guard tab.statusBadge != badge else { return }
         bonsplitController.updateTab(tabID, statusBadge: .some(badge))
+    }
+
+    /// Applies live display preferences without waiting for another agent report.
+    func refreshTerminalTabAgentStatusBadges() {
+        for panelId in panels.keys {
+            syncTerminalTabAgentStatusBadge(forPanelId: panelId)
+        }
     }
 
     /// Reconciles a terminal tab's provider mark after agent lifecycle state changes.

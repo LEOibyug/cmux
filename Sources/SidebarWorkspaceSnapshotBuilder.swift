@@ -12,6 +12,8 @@ struct SidebarWorkspaceSnapshotBuilder {
         let showsAgentActivity: Bool
         var compactsAgentStatus = false
         var compactStatusIcons: [String: String] = [:]
+        var showsInactiveAgentStatus = true
+        var showsAgentStatusInSidebar = true
         let visibleAuxiliaryDetails: SidebarWorkspaceAuxiliaryDetailVisibility
         // Effective row color (manual color, else resolved origin color). Part of
         // the key so the cached snapshot is rebuilt when the color changes — e.g.
@@ -64,6 +66,8 @@ struct SidebarWorkspaceSnapshotBuilder {
         let copyableSidebarSSHError: String?
         let latestConversationMessage: String?
         let metadataEntries: [SidebarStatusEntry]
+        /// Recognized agent reports pinned below the title, separate from custom metadata.
+        var agentStatusEntries: [SidebarStatusEntry] = []
         let metadataBlocks: [SidebarMetadataBlock]
         let latestLog: SidebarLogEntry?
         let progress: SidebarProgressState?
@@ -90,7 +94,7 @@ struct SidebarWorkspaceSnapshotBuilder {
         let checklistFirstUncheckedText: String?
         var taskStatusInput = SidebarWorkspaceTaskStatusSnapshot()
         /// The single leading status glyph when `sidebar.compactAgentStatus`
-        /// is on (agent status entries then leave `metadataEntries`).
+        /// is on (agent status entries then leave `agentStatusEntries`).
         var compactStatusGlyph: SidebarCompactStatusGlyph? = nil
 
 

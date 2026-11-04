@@ -81,8 +81,8 @@ final class SidebarAgentUsageCoordinator {
     ///
     /// - Parameters:
     ///   - sampler: Off-main transcript sampler.
-    ///   - defaults: Settings store for `sidebar.showAgentUsage`,
-    ///     `sidebar.showCustomMetadata` and `sidebar.hideAllDetails`.
+    ///   - defaults: Settings store for usage, sidebar status visibility,
+    ///     compact status, and the master hide-details switch.
     ///   - coalesceInterval: Delay that folds a burst of hook events (tool
     ///     storms) into one transcript read per session.
     ///   - clock: Clock driving the coalescing delay (tests inject their own).
@@ -127,16 +127,15 @@ final class SidebarAgentUsageCoordinator {
         Self.isEnabled(defaults: defaults)
     }
 
-    /// Reads only the three settings that gate usage (this runs on every
-    /// `UserDefaults` change notification). Usage renders inside the
-    /// metadata rows, so hidden rows mean no reads.
+    /// Samples only while usage can render in the pinned agent status rows.
     private static func isEnabled(defaults: UserDefaults) -> Bool {
         let settings = UserDefaultsSettingsClient(defaults: defaults)
         // Declaring a catalog section builds every key in it, and this runs on
         // every `UserDefaults` write anywhere in the app, so it is built once.
         let sidebar = sidebarSection
         return settings.value(for: sidebar.showAgentUsage)
-            && settings.value(for: sidebar.showCustomMetadata)
+            && settings.value(for: sidebar.showAgentStatusInSidebar)
+            && !settings.value(for: sidebar.compactAgentStatus)
             && !settings.value(for: sidebar.hideAllDetails)
     }
 

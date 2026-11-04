@@ -123,7 +123,7 @@ extension Workspace {
 
     private func projectProgramStatus(panelId: UUID) {
         guard let store = programStatusStoresByPanelId[panelId],
-              let record = store.mostUrgentRecord() else {
+              let record = store.mostUrgentRecord(includingIdle: true) else {
             programStatusUrgencyByPanelId.removeValue(forKey: panelId)
             removePanelStatusEntry(key: Self.programStatusKey, panelId: panelId)
             refreshProgramStatusWorkspaceEntry()
@@ -159,7 +159,10 @@ extension Workspace {
         case .error:
             icon = "exclamationmark.triangle.fill"
             fallback = String(localized: "programStatus.state.failed", defaultValue: "Failed")
-        case .idle, .clear:
+        case .idle:
+            icon = "pause.circle.fill"
+            fallback = String(localized: "agent.generic.notification.status.idle", defaultValue: "Idle")
+        case .clear:
             return
         }
         let detail = message ?? title ?? fallback

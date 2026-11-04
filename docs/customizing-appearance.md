@@ -48,6 +48,30 @@ settings are replaced or don't apply:
   libghostty, have no effect: for example `macos-titlebar-style`,
   `macos-icon`, `window-decoration`, and `window-width`/`window-height`.
 
+## Personal sidebar controls
+
+Settings > Sidebar applies changes live. Agent status stays directly beneath the workspace
+title; Workspace Information controls the visibility and order of descriptions, notification
+and conversation previews, Git branch/directory, pull requests, ports, custom metadata, logs,
+and progress. These controls reuse the existing visibility preferences. Turning off previews
+also hides the conversation-preview fallback; turning off custom metadata does not hide agents.
+
+`sidebar.detailOrder` stores those groups as `description`, `notification`, `branchDirectory`,
+`pullRequests`, `ports`, `metadata`, `log`, and `progress`. Missing groups follow in default order.
+`sidebar.showAgentStatusInSidebar` and `sidebar.showAgentStatusInTabs` are independent;
+`sidebar.showInactiveAgentStatus` controls Idle and Done together. Active, input-required, and
+error states are unaffected by the inactive toggle. `sidebar.animateAgentStatus` controls badge
+motion, with system Reduce Motion taking precedence.
+
+The title, agent status, description, branch, directory, and auxiliary font sizes are separate
+`sidebar.*FontSize` preferences, from 8–24 points before sidebar and global scaling.
+`sidebar.informationLineLimit` defaults to 2 and accepts 1–6; wrapping ends in a trailing ellipsis.
+
+The Codexpress controls in the same pane manage panel enablement, local status cadence,
+font size, request counts, quota reset times, and action buttons. Disabling the panel stops
+periodic reads; hiding actions never cancels or resubmits a pending operation. Credentials
+remain in Codexpress's private control configuration, not in cmux settings.
+
 ## Themes
 
 Pick a theme interactively, with a live preview across the running app:

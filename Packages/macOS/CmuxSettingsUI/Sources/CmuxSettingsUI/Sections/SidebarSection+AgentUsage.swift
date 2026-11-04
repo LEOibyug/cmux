@@ -2,9 +2,7 @@ import CmuxSettings
 import SwiftUI
 
 extension SidebarSection {
-    /// The opt-in `sidebar.showAgentUsage` toggle row. Usage renders inside
-    /// the custom metadata rows, so it is disabled while "Hide All Details"
-    /// is on or custom metadata is off.
+    /// Agent usage is independent of ordinary custom metadata visibility.
     @ViewBuilder
     var agentUsageRow: some View {
         SettingsCardRow(
@@ -16,7 +14,7 @@ extension SidebarSection {
                 .labelsHidden()
                 .controlSize(.small)
         }
-        .disabled(hideAll.current || !showMetadata.current)
+        .disabled(hideAll.current)
         SettingsCardDivider()
     }
 }

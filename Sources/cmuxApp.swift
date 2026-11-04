@@ -103,9 +103,9 @@ struct cmuxApp: App {
             configurationURL: codexpressStateDirectory.appendingPathComponent("control-access.json")
         )
         let codexpressRefreshClock = ContinuousClock()
-        let codexpressCoordinator = CodexpressCoordinator(service: codexpressClient) {
+        let codexpressCoordinator = CodexpressCoordinator(service: codexpressClient) { seconds in
             // This API exposes snapshots, not events; only visible sidebars sample local state.
-            try await codexpressRefreshClock.sleep(for: .seconds(2))
+            try await codexpressRefreshClock.sleep(for: .seconds(seconds))
         }
         self.codexpressCoordinator = codexpressCoordinator
         let browserDataImportCoordinator = BrowserDataImportCoordinator()

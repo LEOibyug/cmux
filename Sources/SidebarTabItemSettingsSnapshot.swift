@@ -18,6 +18,10 @@ struct SidebarTabItemSettingsSnapshot: Equatable {
     let sidebarShortcutHintYOffset: Double
     let alwaysShowShortcutHints: Bool
     let sidebarFontScale: CGFloat
+    let textSettings: SidebarWorkspaceTextSettings
+    let agentStatusDisplay: AgentStatusDisplaySettings
+    let codexpressSettings: CodexpressSettingsSnapshot
+    let detailOrder: [SidebarWorkspaceDetail]
     let showsGitBranch: Bool
     let branchDirectory: SidebarWorkspaceBranchDirectorySettings
     let details: SidebarWorkspaceDetailSettings
@@ -61,6 +65,10 @@ struct SidebarTabItemSettingsSnapshot: Equatable {
         sidebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultSidebarHintY
         alwaysShowShortcutHints = ShortcutHintDebugSettings(defaults: defaults).alwaysShowHints
         sidebarFontScale = SidebarTabItemFontScale.scale(for: sidebarFontSize)
+        textSettings = SidebarWorkspaceTextSettings(defaults: defaults)
+        agentStatusDisplay = AgentStatusDisplaySettings(defaults: defaults)
+        codexpressSettings = CodexpressSettingsSnapshot(defaults: defaults)
+        detailOrder = SidebarWorkspaceDetail.resolvedOrder(settings.value(for: sidebar.detailOrder))
         showsGitBranch = Self.bool(defaults: defaults, key: "sidebarShowGitBranch", defaultValue: true)
         showsGitBranchIcon = Self.bool(defaults: defaults, key: "sidebarShowGitBranchIcon", defaultValue: false)
         makesPullRequestsClickable = settings.value(for: sidebar.makePullRequestsClickable)

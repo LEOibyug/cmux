@@ -40,6 +40,8 @@ extension SidebarCompactStatusGlyph {
     static func resolve(_ input: Input) -> SidebarCompactStatusGlyph {
         let kind: Kind
         let workStates = input.agentEntries.compactMap(\.workState)
+        let nativeState = input.agentEntries.first { $0.key == Workspace.programStatusKey }
+            .flatMap { AgentStatusPresentation(entry: $0)?.state }
         // Waiting reports a running lifecycle on purpose (a pane with live
         // background work must not look hibernatable), so it has to be read
         // off the entries before the lifecycle branch below, and only when
@@ -58,15 +60,15 @@ extension SidebarCompactStatusGlyph {
             && workStates.count == input.agentEntries.count
             && workStates.allSatisfy { $0 == .waiting }
             && runningLifecycleCount <= workStates.count
-        if input.agentEntries.contains(where: Self.reportsError) {
+        if nativeState == .error || input.agentEntries.contains(where: Self.reportsError) {
             kind = .error
-        } else if input.lifecycleStates.contains(.needsInput) {
+        } else if nativeState == .needsInput || input.lifecycleStates.contains(.needsInput) {
             kind = .needsInput
         } else if workStates.contains(.subagents) {
             kind = .subagents
-        } else if everyAgentIsWaiting {
+        } else if nativeState == .waiting || everyAgentIsWaiting {
             kind = .waiting
-        } else if input.hasActiveAgent || input.lifecycleStates.contains(.running) || input.lifecycleStates.contains(.backgroundWorkPending) {
+        } else if nativeState == .running || input.hasActiveAgent || input.lifecycleStates.contains(.running) || input.lifecycleStates.contains(.backgroundWorkPending) {
             kind = .running
         } else if input.lifecycleStates.contains(.unknown) {
             kind = .pending

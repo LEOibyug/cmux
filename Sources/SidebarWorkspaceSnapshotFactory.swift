@@ -128,19 +128,31 @@ struct SidebarWorkspaceSnapshotFactory {
             )
         }
         let checklistProgress = workspace.checklistProgressSummary
-        let statusEntries = SidebarCompactStatusGlyph.partition(
-            detailVisibility.showsMetadata || settings.compactsAgentStatus
-                ? workspace.sidebarStatusEntriesInDisplayOrder()
-                : [],
-            compacts: settings.compactsAgentStatus
-        )
+        let showsAgentStatusRows = !settings.hidesAllDetails
+            && settings.agentStatusDisplay.showAgentStatusInSidebar
+            && !settings.compactsAgentStatus
+        var agentEntries: [SidebarStatusEntry] = []
+        var metadataEntries: [SidebarStatusEntry] = []
+        if detailVisibility.showsMetadata || showsAgentStatusRows || settings.compactsAgentStatus {
+            // The workspace projection already coalesces native and hook reports.
+            for entry in workspace.sidebarStatusEntriesInDisplayOrder() {
+                // Compact mode has always folded allowed hook keys, even when
+                // their custom icon does not identify a capsule presentation.
+                if AgentStatusPresentation(entry: entry) != nil
+                    || (settings.compactsAgentStatus && AgentHibernationLifecycleStatusKeys.isAllowed(entry.key)) {
+                    agentEntries.append(entry)
+                } else {
+                    metadataEntries.append(entry)
+                }
+            }
+        }
         let activeCodingAgentCount = SidebarAgentActivitySummary.visibleActiveCodingAgentCount(
             showsAgentActivity: showsAgentActivity,
             statesByPanelId: workspace.agentLifecycleStatesByPanelId
         )
         let compactStatusGlyph = settings.compactsAgentStatus
             ? SidebarCompactStatusGlyph.resolve(compactStatusInput(
-                agentEntries: statusEntries.agent,
+                agentEntries: agentEntries,
                 hasActiveAgent: activeCodingAgentCount > 0,
                 // The directory toggle itself, like the branch and PR ones, so
                 // the tooltip keeps it under Hide All Details.
@@ -167,19 +179,15 @@ struct SidebarWorkspaceSnapshotFactory {
                 || workspace.remoteConnectionState == .disconnected,
             copyableSidebarSSHError: copyableSidebarSSHError,
             latestConversationMessage: workspace.latestConversationMessage,
-            // `SidebarAgentUsageFormatter()` reads `Locale.current`, so it is
-            // built only when usage is actually shown; this runs for every row
-            // on every sidebar rebuild. Decorates `statusEntries.rows` rather
-            // than the unpartitioned list so compact status still folds the
-            // agent rows away: with compaction on, the folded agent entries
-            // carry no usage text because they are no longer rows.
-            metadataEntries: detailVisibility.showsMetadata
+            metadataEntries: detailVisibility.showsMetadata ? metadataEntries : [],
+            // Usage formatting is only needed for visible, noncompact agent rows.
+            agentStatusEntries: showsAgentStatusRows
                 ? (detailVisibility.showsAgentUsage
                     ? SidebarAgentUsageFormatter().decorate(
-                        statusEntries.rows,
+                        agentEntries,
                         usageByStatusKey: workspace.sidebarMetadata.agentUsageByStatusKey
                     )
-                    : statusEntries.rows)
+                    : agentEntries)
                 : [],
             metadataBlocks: detailVisibility.showsMetadata
                 ? workspace.sidebarMetadataBlocksInDisplayOrder()
@@ -235,6 +243,9 @@ struct SidebarWorkspaceSnapshotFactory {
             showsAgentActivity: showsAgentActivity,
             compactsAgentStatus: settings.compactsAgentStatus,
             compactStatusIcons: settings.compactStatusIcons,
+            showsInactiveAgentStatus: settings.agentStatusDisplay.showInactiveAgentStatus,
+            showsAgentStatusInSidebar: !settings.hidesAllDetails
+                && settings.agentStatusDisplay.showAgentStatusInSidebar,
             visibleAuxiliaryDetails: settings.visibleAuxiliaryDetails,
             customColorHex: customColorHex,
             hasManualCustomColor: hasManualCustomColor,
@@ -455,12 +466,13 @@ struct SidebarWorkspaceSnapshotFactory {
         directory: String?,
         orderedPanelIds: [UUID]
     ) -> SidebarCompactStatusGlyph.Input {
-        SidebarCompactStatusGlyph.Input(
+        let lifecycleStates = workspace.agentLifecycleStatesVisibleForDisplay()
+        return SidebarCompactStatusGlyph.Input(
             agentEntries: agentEntries,
-            lifecycleStates: workspace.agentLifecycleStatesByPanelId.values.flatMap { states in
-                states.filter { !AgentHibernationLifecycleStatusKeys.isManualKey($0.key) }.values
+            lifecycleStates: lifecycleStates,
+            hasActiveAgent: hasActiveAgent && lifecycleStates.contains {
+                $0 == .running || $0 == .backgroundWorkPending
             },
-            hasActiveAgent: hasActiveAgent,
             // Honor the user's branch and PR toggles themselves (not detail
             // visibility), so the glyph still works under Hide All Details.
             pullRequests: settings.details.showPullRequests

@@ -739,6 +739,28 @@ final class CmuxSettingsFileStore {
         if let value = jsonInt(section["notificationMessageLineLimit"]), SidebarCatalogSection.notificationMessageLineLimitRange.contains(value) {
             snapshot.managedUserDefaults[SidebarCatalogSection().notificationMessageLineLimit.userDefaultsKey] = .int(value)
         } else if section.keys.contains("notificationMessageLineLimit") { logInvalid("sidebar.notificationMessageLineLimit", sourcePath: sourcePath) }
+        for setting in SidebarSettingsFileMapping.numericSettings where section.keys.contains(setting.jsonKey) {
+            if let value = jsonDouble(section[setting.jsonKey]), value.isFinite, setting.range.contains(value) {
+                snapshot.managedUserDefaults[setting.key.userDefaultsKey] = .double(value)
+            } else {
+                logInvalid(setting.key.id, sourcePath: sourcePath)
+            }
+        }
+        let lineKey = SidebarCatalogSection().informationLineLimit
+        if let value = jsonInt(section["informationLineLimit"]), (1...6).contains(value) {
+            snapshot.managedUserDefaults[lineKey.userDefaultsKey] = .int(value)
+        } else if section.keys.contains("informationLineLimit") {
+            logInvalid(lineKey.id, sourcePath: sourcePath)
+        }
+        if section.keys.contains("detailOrder") {
+            if let values = section["detailOrder"] as? [String] {
+                snapshot.managedUserDefaults[SidebarCatalogSection().detailOrder.userDefaultsKey] = .stringArray(
+                    SidebarWorkspaceDetail.resolvedOrder(values).map(\.rawValue)
+                )
+            } else {
+                logInvalid("sidebar.detailOrder", sourcePath: sourcePath)
+            }
+        }
         parseSidebarIndicatorPositionSettings(section, sourcePath: sourcePath, snapshot: &snapshot)
         if let value = jsonDouble(section[RightSidebarWidthSettings.jsonKey]), value > 0 {
             snapshot.managedUserDefaults[RightSidebarWidthSettings.maxWidthKey] = .double(

@@ -245,10 +245,12 @@ public struct ProgramStatusRecordStore: Equatable, Sendable {
         return storage[""]?.app
     }
 
-    /// Returns the highest urgency record, excluding idle records.
-    public func mostUrgentRecord() -> ProgramStatusRecord? {
-        storage.values
-            .filter { $0.state != .idle }
+    /// Returns the highest urgency record, optionally including explicitly reported idle.
+    ///
+    /// - Parameter includingIdle: Include idle for display without changing active-work consumers.
+    public func mostUrgentRecord(includingIdle: Bool = false) -> ProgramStatusRecord? {
+        storage.values.lazy
+            .filter { includingIdle || $0.state != .idle }
             .max { lhs, rhs in
                 let left = Self.urgencyRank(lhs.state)
                 let right = Self.urgencyRank(rhs.state)

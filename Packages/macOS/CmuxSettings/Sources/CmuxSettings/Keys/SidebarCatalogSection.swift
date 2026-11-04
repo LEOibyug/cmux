@@ -21,6 +21,132 @@ public struct SidebarCatalogSection: SettingCatalogSection {
         userDefaultsKey: "sidebarHideAllDetails"
     )
 
+    /// Ordered information sections below the fixed workspace title and agent status.
+    public let detailOrder = DefaultsKey<[String]>(
+        id: "sidebar.detailOrder",
+        defaultValue: SidebarWorkspaceDetail.allCases.map(\.rawValue),
+        userDefaultsKey: "sidebarDetailOrder"
+    )
+
+    /// Show the agent status directly beneath the workspace title.
+    public let showAgentStatusInSidebar = DefaultsKey<Bool>(
+        id: "sidebar.showAgentStatusInSidebar",
+        defaultValue: true,
+        userDefaultsKey: "sidebarShowAgentStatusInSidebar"
+    )
+
+    /// Workspace title font size before sidebar and global scaling.
+    public let titleFontSize = DefaultsKey<Double>(
+        id: "sidebar.titleFontSize",
+        defaultValue: 14,
+        userDefaultsKey: "sidebarTitleFontSize"
+    )
+
+    /// Agent status badge font size before sidebar and global scaling.
+    public let agentStatusFontSize = DefaultsKey<Double>(
+        id: "sidebar.agentStatusFontSize",
+        defaultValue: 12,
+        userDefaultsKey: "sidebarAgentStatusFontSize"
+    )
+
+    /// Description and notification font size before sidebar and global scaling.
+    public let descriptionFontSize = DefaultsKey<Double>(
+        id: "sidebar.descriptionFontSize",
+        defaultValue: 11,
+        userDefaultsKey: "sidebarDescriptionFontSize"
+    )
+
+    /// Git branch font size before sidebar and global scaling.
+    public let branchFontSize = DefaultsKey<Double>(
+        id: "sidebar.branchFontSize",
+        defaultValue: 10.5,
+        userDefaultsKey: "sidebarBranchFontSize"
+    )
+
+    /// Working directory font size before sidebar and global scaling.
+    public let directoryFontSize = DefaultsKey<Double>(
+        id: "sidebar.directoryFontSize",
+        defaultValue: 10,
+        userDefaultsKey: "sidebarDirectoryFontSize"
+    )
+
+    /// Pull request, port and log font size before sidebar and global scaling.
+    public let auxiliaryFontSize = DefaultsKey<Double>(
+        id: "sidebar.auxiliaryFontSize",
+        defaultValue: 9.5,
+        userDefaultsKey: "sidebarAuxiliaryFontSize"
+    )
+
+    /// Maximum lines for each workspace information field; excess text uses a trailing ellipsis.
+    public let informationLineLimit = DefaultsKey<Int>(
+        id: "sidebar.informationLineLimit",
+        defaultValue: 2,
+        userDefaultsKey: "sidebarInformationLineLimit"
+    )
+
+    /// Show idle and completed agent status in workspace rows and terminal tabs.
+    public let showInactiveAgentStatus = DefaultsKey<Bool>(
+        id: "sidebar.showInactiveAgentStatus",
+        defaultValue: true,
+        userDefaultsKey: "sidebarShowInactiveAgentStatus"
+    )
+
+    /// Animate working agent badges unless macOS Reduce Motion is enabled.
+    public let animateAgentStatus = DefaultsKey<Bool>(
+        id: "sidebar.animateAgentStatus",
+        defaultValue: true,
+        userDefaultsKey: "sidebarAnimateAgentStatus"
+    )
+
+    /// Show agent status badges in terminal tabs.
+    public let showAgentStatusInTabs = DefaultsKey<Bool>(
+        id: "sidebar.showAgentStatusInTabs",
+        defaultValue: true,
+        userDefaultsKey: "sidebarShowAgentStatusInTabs"
+    )
+
+    /// Show the Codexpress panel and poll its local management API while visible.
+    public let codexpressEnabled = DefaultsKey<Bool>(
+        id: "sidebar.codexpressEnabled",
+        defaultValue: true,
+        userDefaultsKey: "sidebarCodexpressEnabled"
+    )
+
+    /// Seconds between local Codexpress status reads; never refreshes upstream balances automatically.
+    public let codexpressPollIntervalSeconds = DefaultsKey<Double>(
+        id: "sidebar.codexpressPollIntervalSeconds",
+        defaultValue: 2,
+        userDefaultsKey: "sidebarCodexpressPollIntervalSeconds"
+    )
+
+    /// Show each Codexpress source active request count.
+    public let codexpressShowRequestCounts = DefaultsKey<Bool>(
+        id: "sidebar.codexpressShowRequestCounts",
+        defaultValue: true,
+        userDefaultsKey: "sidebarCodexpressShowRequestCounts"
+    )
+
+    /// Show official account quota reset times.
+    public let codexpressShowResetTimes = DefaultsKey<Bool>(
+        id: "sidebar.codexpressShowResetTimes",
+        defaultValue: true,
+        userDefaultsKey: "sidebarCodexpressShowResetTimes"
+    )
+
+    /// Show Codexpress takeover, refresh and reset-card controls.
+    public let codexpressShowActions = DefaultsKey<Bool>(
+        id: "sidebar.codexpressShowActions",
+        defaultValue: true,
+        userDefaultsKey: "sidebarCodexpressShowActions"
+    )
+
+    /// Base font size for the Codexpress panel before global scaling.
+    public let codexpressFontSize = DefaultsKey<Double>(
+        id: "sidebar.codexpressFontSize",
+        defaultValue: 11,
+        userDefaultsKey: "sidebarCodexpressFontSize"
+    )
+
     public let wrapWorkspaceTitles = DefaultsKey<Bool>(
         id: "sidebar.wrapWorkspaceTitles",
         defaultValue: true,
