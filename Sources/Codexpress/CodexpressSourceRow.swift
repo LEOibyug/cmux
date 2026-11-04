@@ -4,6 +4,7 @@ import CmuxFoundation
 /// A read-only source snapshot; mutations are dispatched by the containing card.
 struct CodexpressSourceRow: View {
     let source: CodexpressSnapshot.Source
+    let settings: CodexpressSettingsSnapshot
     let isTakingOver: Bool
     let isBusy: Bool
     let canAct: Bool
@@ -28,56 +29,60 @@ struct CodexpressSourceRow: View {
                     .symbolEffect(.pulse, options: .repeating, isActive: source.activeRequests > 0 && !reduceMotion)
                     .accessibilityHidden(true)
                 Text(displayName)
-                    .cmuxFont(size: 12, weight: .semibold)
+                    .cmuxFont(size: CGFloat(settings.fontSize + 1), weight: .semibold)
                     .lineLimit(2)
                     .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 2)
-                HStack(spacing: 2) {
-                    Image(systemName: "arrow.left.arrow.right")
-                    Text(source.activeRequests, format: .number).monospacedDigit()
+                if settings.showRequestCounts {
+                    HStack(spacing: 2) {
+                        Image(systemName: "arrow.left.arrow.right")
+                        Text(source.activeRequests, format: .number).monospacedDigit()
+                    }
+                    .cmuxFont(size: CGFloat(settings.fontSize - 2))
+                    .foregroundStyle(.secondary)
+                    .help(strings.active)
                 }
-                .cmuxFont(size: 9)
-                .foregroundStyle(.secondary)
-                .help(strings.active)
                 if isStale {
                     Image(systemName: "clock.badge.exclamationmark")
-                        .cmuxFont(size: 9)
+                        .cmuxFont(size: CGFloat(settings.fontSize - 2))
                         .foregroundStyle(.orange)
                 }
-                Button(action: isTakingOver ? onCancelTakeover : onTakeOver) {
-                    Image(systemName: isTakingOver ? "bolt.circle.fill" : "bolt.fill")
-                        .foregroundStyle(isTakingOver ? Color.accentColor : Color.secondary)
-                        .frame(width: 14, height: 16)
-                }
-                .help(isTakingOver ? strings.cancel : strings.preempt)
-                .accessibilityLabel(Text(isTakingOver ? strings.cancel : strings.preempt))
-                .disabled(!actionsEnabled || (!isTakingOver && (source.health == "auth_required" || source.health == "exhausted")))
-                Button(action: onRefresh) {
-                    Image(systemName: isBusy ? "ellipsis" : "arrow.clockwise")
-                        .frame(width: 14, height: 16)
-                }
-                .help(strings.refresh)
-                .accessibilityLabel(Text(strings.refresh))
-                .disabled(!actionsEnabled)
-                if isOfficial {
-                    Button(action: onRequestReset) {
-                        HStack(spacing: 2) {
-                            Text(strings.reset)
-                            if let count = source.credits?.availableCount {
-                                Text(count, format: .number).monospacedDigit()
-                            }
-                        }
-                        .cmuxFont(size: 9.5)
+                if settings.showActions {
+                    Button(action: isTakingOver ? onCancelTakeover : onTakeOver) {
+                        Image(systemName: isTakingOver ? "bolt.circle.fill" : "bolt.fill")
+                            .foregroundStyle(isTakingOver ? Color.accentColor : Color.secondary)
+                            .frame(width: 14, height: 16)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .help(strings.resetHelp)
-                    .disabled(!actionsEnabled || resetBlocked || (source.credits?.availableCount ?? 0) <= 0)
+                    .help(isTakingOver ? strings.cancel : strings.preempt)
+                    .accessibilityLabel(Text(isTakingOver ? strings.cancel : strings.preempt))
+                    .disabled(!actionsEnabled || (!isTakingOver && (source.health == "auth_required" || source.health == "exhausted")))
+                    Button(action: onRefresh) {
+                        Image(systemName: isBusy ? "ellipsis" : "arrow.clockwise")
+                            .frame(width: 14, height: 16)
+                    }
+                    .help(strings.refresh)
+                    .accessibilityLabel(Text(strings.refresh))
+                    .disabled(!actionsEnabled)
+                    if isOfficial {
+                        Button(action: onRequestReset) {
+                            HStack(spacing: 2) {
+                                Text(strings.reset)
+                                if let count = source.credits?.availableCount {
+                                    Text(count, format: .number).monospacedDigit()
+                                }
+                            }
+                            .cmuxFont(size: CGFloat(settings.fontSize - 1.5))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .help(strings.resetHelp)
+                        .disabled(!actionsEnabled || resetBlocked || (source.credits?.availableCount ?? 0) <= 0)
+                    }
                 }
             }
             .buttonStyle(.plain)
-            .cmuxFont(size: 10)
+            .cmuxFont(size: CGFloat(settings.fontSize - 1))
             if isOfficial {
                 HStack(alignment: .top, spacing: 10) {
                     if windows.isEmpty {
@@ -91,9 +96,9 @@ struct CodexpressSourceRow: View {
                 }
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    Text(strings.balance).cmuxFont(size: 9.5).foregroundStyle(.secondary)
+                    Text(strings.balance).cmuxFont(size: CGFloat(settings.fontSize - 1.5)).foregroundStyle(.secondary)
                     Text(balanceLabel)
-                        .cmuxFont(size: 14, weight: .semibold)
+                        .cmuxFont(size: CGFloat(settings.fontSize + 3), weight: .semibold)
                         .foregroundStyle(isStale ? Color.orange : ((source.balance?.amount ?? 0) > 0 ? Color.green : Color.secondary))
                         .monospacedDigit()
                         .lineLimit(2)
@@ -102,19 +107,21 @@ struct CodexpressSourceRow: View {
             }
             if resetBlocked, let resetRequest {
                 Text(resetLabel(resetRequest.status))
-                    .cmuxFont(size: 9.5)
+                    .cmuxFont(size: CGFloat(settings.fontSize - 1.5))
                     .foregroundStyle(.orange)
                     .lineLimit(2)
             }
         }
-        .cmuxFont(size: 10)
+        .cmuxFont(size: CGFloat(settings.fontSize - 1))
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .help(detailsHelp)
         .contextMenu {
-            Button(strings.refresh, action: onRefresh).disabled(!actionsEnabled)
-            if needsRecovery {
-                Button(strings.recover, action: onRecover).disabled(!actionsEnabled)
+            if settings.showActions {
+                Button(strings.refresh, action: onRefresh).disabled(!actionsEnabled)
+                if needsRecovery {
+                    Button(strings.recover, action: onRecover).disabled(!actionsEnabled)
+                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -126,7 +133,7 @@ struct CodexpressSourceRow: View {
     }
 
     private var isOfficial: Bool { source.kind == "official" }
-    private var actionsEnabled: Bool { canAct && !isBusy && !isSnapshotStale }
+    private var actionsEnabled: Bool { settings.enabled && settings.showActions && canAct && !isBusy && !isSnapshotStale }
     private var needsRecovery: Bool {
         switch source.health {
         case "cooldown", "proxy_error": return true
@@ -194,11 +201,11 @@ struct CodexpressSourceRow: View {
     private func quotaCell(_ window: CodexpressSnapshot.QuotaWindow) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(quotaLabel(window)).cmuxFont(size: 9.5).foregroundStyle(.secondary)
+                Text(quotaLabel(window)).cmuxFont(size: CGFloat(settings.fontSize - 1.5)).foregroundStyle(.secondary)
                 if let used = window.usedPercent, used.isFinite {
                     let remaining = max(0, min(100, 100 - used))
                     Text((remaining / 100).formatted(.percent.precision(.fractionLength(0...1))))
-                        .cmuxFont(size: 14, weight: .semibold)
+                        .cmuxFont(size: CGFloat(settings.fontSize + 3), weight: .semibold)
                         .foregroundStyle(isStale ? Color.secondary : (remaining > 30 ? .green : (remaining > 10 ? .orange : .red)))
                         .monospacedDigit()
                         .help(strings.remaining)
@@ -206,9 +213,9 @@ struct CodexpressSourceRow: View {
                     Text(strings.unknown).foregroundStyle(.secondary)
                 }
             }
-            if let timestamp = window.resetAt, timestamp.isFinite {
+            if settings.showResetTimes, let timestamp = window.resetAt, timestamp.isFinite {
                 Text(Date(timeIntervalSince1970: timestamp), format: .dateTime.month(.twoDigits).day().hour().minute())
-                    .cmuxFont(size: 9)
+                    .cmuxFont(size: CGFloat(settings.fontSize - 2))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .lineLimit(1)

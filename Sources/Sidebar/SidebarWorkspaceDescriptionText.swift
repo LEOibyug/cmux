@@ -10,26 +10,28 @@ struct SidebarWorkspaceDescriptionText: View {
     let activeForegroundColor: Color
     let customForegroundColor: Color?
     let fontScale: CGFloat
+    let textSettings: SidebarWorkspaceTextSettings
 
     init(
         markdown: String,
         isActive: Bool,
         activeForegroundColor: Color,
         customForegroundColor: Color? = nil,
-        fontScale: CGFloat
+        fontScale: CGFloat,
+        textSettings: SidebarWorkspaceTextSettings = .init()
     ) {
         self.markdown = markdown
         self.isActive = isActive
         self.activeForegroundColor = activeForegroundColor
         self.customForegroundColor = customForegroundColor
         self.fontScale = fontScale
+        self.textSettings = textSettings
     }
-    private static let maxDisplayedLines = 2
     private static let maxDisplayedCharacters = 4096
 
     var renderedContent: (displayMarkdown: String, renderedMarkdown: AttributedString?) {
         let displayMarkdown = markdown.sidebarBoundedDisplayString(
-            maxDisplayedLines: Self.maxDisplayedLines,
+            maxDisplayedLines: textSettings.lineLimit,
             maxDisplayedCharacters: Self.maxDisplayedCharacters
         )
         guard let renderedMarkdown = SidebarMarkdownRenderer(markdown: displayMarkdown).workspaceDescription else {
@@ -50,10 +52,10 @@ struct SidebarWorkspaceDescriptionText: View {
             text = Text(content.displayMarkdown)
         }
         return text
-            .cmuxFont(size: SidebarWorkspaceTypography(scale: fontScale).description)
+            .cmuxFont(size: SidebarWorkspaceTypography(scale: fontScale, settings: textSettings).description)
             .foregroundColor(foregroundColor)
             .multilineTextAlignment(.leading)
-            .lineLimit(Self.maxDisplayedLines)
+            .lineLimit(textSettings.lineLimit)
             .truncationMode(.tail)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)

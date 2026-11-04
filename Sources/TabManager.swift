@@ -745,6 +745,7 @@ class TabManager: ObservableObject {
                 self?.refreshTabCloseButtonVisibility()
                 self?.refreshTabBarVisibility()
                 self?.refreshWindowTitle()
+                self?.refreshAgentStatusDisplaySettings()
             }
         })
 #if DEBUG
@@ -791,6 +792,17 @@ class TabManager: ObservableObject {
         sidebarGitMetadataService.sidebarGitMetadataWatchSettingsDidChange()
         pullRequestProbing.sidebarPullRequestPollingSettingsDidChange()
         refreshRemotePortScanningEnablement()
+    }
+
+    private var lastAgentStatusDisplaySettings: AgentStatusDisplaySettings?
+
+    private func refreshAgentStatusDisplaySettings() {
+        let next = AgentStatusDisplaySettings(settings: settings)
+        guard lastAgentStatusDisplaySettings != next else { return }
+        lastAgentStatusDisplaySettings = next
+        for workspace in tabs {
+            workspace.refreshTerminalTabAgentStatusBadges()
+        }
     }
 
     private func focusHistoryScopeSettingsDidChange() {

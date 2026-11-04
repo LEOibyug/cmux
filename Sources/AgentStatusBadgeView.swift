@@ -11,6 +11,7 @@ final class AgentStatusBadgeView: NSView {
     private let markdown = SidebarRowMarkdownTextView()
     private let arc = CAShapeLayer()
     private var presentation: AgentStatusPresentation?
+    private var animateAgentStatus = true
     private var pointSize: CGFloat = 12
     private var content: NSView { !markdown.isHidden ? markdown : (link.isHidden ? label : link) }
 
@@ -36,9 +37,14 @@ final class AgentStatusBadgeView: NSView {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
 
-    func configure(entry: SidebarStatusEntry, presentation: AgentStatusPresentation, fontScale: CGFloat, onOpenURL: @escaping (URL) -> Void) {
+    func configure(entry: SidebarStatusEntry, presentation: AgentStatusPresentation, pointSize: CGFloat, displaySettings: AgentStatusDisplaySettings, lineLimit: Int = 2, onOpenURL: @escaping (URL) -> Void) {
         self.presentation = presentation
-        pointSize = SidebarWorkspaceTypography(scale: fontScale).agentStatus
+        animateAgentStatus = displaySettings.animateAgentStatus
+        self.pointSize = pointSize
+        label.maximumNumberOfLines = lineLimit
+        label.lineBreakMode = lineLimit == 1 ? .byTruncatingTail : .byWordWrapping
+        markdown.textContainer?.maximumNumberOfLines = lineLimit
+        link.lineLimit = lineLimit
         let foreground = Self.color(presentation.foregroundHex)
         layer?.backgroundColor = Self.color(presentation.backgroundHex).cgColor
         let font = NSFont.systemFont(ofSize: pointSize, weight: .semibold)
@@ -145,7 +151,7 @@ final class AgentStatusBadgeView: NSView {
 
     @objc private func refreshAnimation() {
         let running = presentation?.isAnimating == true
-        let animate = running && window != nil && window?.occlusionState.contains(.visible) == true
+        let animate = running && animateAgentStatus && window != nil && window?.occlusionState.contains(.visible) == true
             && !isHiddenOrHasHiddenAncestor && !visibleRect.isEmpty
             && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         arc.isHidden = !animate

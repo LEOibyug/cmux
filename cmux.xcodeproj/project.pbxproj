@@ -238,6 +238,7 @@
 		A9F200000000000000000014 /* AgentSessionWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F100000000000000000014 /* AgentSessionWebView.swift */; };
 		D80E6AF6BF9D3D7B2FF6AD28 /* AgentStatusBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8F28346FFF8271CD7930F0B /* AgentStatusBadge.swift */; };
 		26941DC22BD52DEBF7F0A7EC /* AgentStatusBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC6F4F9BF05378FBD0B5BD6D /* AgentStatusBadgeView.swift */; };
+		5C6E18D57B23824C848E3C95 /* AgentStatusDisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC699EBD0ACDBA9BA4208665 /* AgentStatusDisplaySettings.swift */; };
 		C51FE387ADD17CC8BB4D5C39 /* AgentStatusPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FB36E306BB4921F173777BB /* AgentStatusPresentation.swift */; };
 		394139F275D94FB49356E9C7 /* AgentSurfaceResumeBindingClearOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A87C45F990549A8A0A6EE01 /* AgentSurfaceResumeBindingClearOutcome.swift */; };
 		2F9C29446E65820D941FA4DA /* AgentWakeFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 582CBC2A17C1808307BA9DD6 /* AgentWakeFailure.swift */; };
@@ -1388,6 +1389,7 @@
 		1D4701D61254EA10922F9A2B /* CodexpressPanelStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B66FC16D6699A27A36F76D6D /* CodexpressPanelStrings.swift */; };
 		02FEB421FBE0E06B713332F1 /* CodexpressResetRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2943AE8F23DB2FC9B2F5B16 /* CodexpressResetRequest.swift */; };
 		37D004923D497178B54CD6A8 /* CodexpressSessionDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FF41163B4A33EFC72D61625 /* CodexpressSessionDelegate.swift */; };
+		7EF625D88D55C10BD8B35A62 /* CodexpressSettingsSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA10F0F41573A8FFCFC2B37 /* CodexpressSettingsSnapshot.swift */; };
 		5EEB5CF3574C2D3FD544AD9C /* CodexpressSidebarCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E672FA7BA83D6BDAD8B064B /* CodexpressSidebarCard.swift */; };
 		1624BC0D8BDE985B97117150 /* CodexpressSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B340F480F4460ECDB081788 /* CodexpressSnapshot.swift */; };
 		BBF058CBFF1725596AE3819D /* CodexpressSourceRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0FA0A30E75B08112FC17C9 /* CodexpressSourceRow.swift */; };
@@ -2992,6 +2994,7 @@
 		B804A0170000000000000017 /* SidebarWorkspaceTableViewportAnchor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B804B0170000000000000017 /* SidebarWorkspaceTableViewportAnchor.swift */; };
 		603C12E917E3C4877809CAD9 /* SidebarWorkspaceTaskStatusGlyph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55E01DE5B078B38299582BB0 /* SidebarWorkspaceTaskStatusGlyph.swift */; };
 		A12481500000000000000001 /* SidebarWorkspaceTaskStatusSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12481500000000000000002 /* SidebarWorkspaceTaskStatusSnapshot.swift */; };
+		59AC64F6C7B0C59AE6EB3358 /* SidebarWorkspaceTextSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCD81D8B5E8A22E86D22FF89 /* SidebarWorkspaceTextSettings.swift */; };
 		ADA26B5F30224634707004CC /* SidebarWorkspaceTodoPopoverHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AEAD128139F57CB0E5BD39E /* SidebarWorkspaceTodoPopoverHost.swift */; };
 		C9A57601C9A57601C9A57601 /* SidebarWorkspaceTopDropIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9A57602C9A57602C9A57602 /* SidebarWorkspaceTopDropIndicator.swift */; };
 		A6AC73330000000000000001 /* SidebarWorkspaceTrailingStatusSlot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6AC73330000000000000002 /* SidebarWorkspaceTrailingStatusSlot.swift */; };
@@ -4390,6 +4393,7 @@
 		A9F100000000000000000014 /* AgentSessionWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/AgentSessionWebView.swift; sourceTree = "<group>"; };
 		B8F28346FFF8271CD7930F0B /* AgentStatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusBadge.swift; sourceTree = "<group>"; };
 		FC6F4F9BF05378FBD0B5BD6D /* AgentStatusBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusBadgeView.swift; sourceTree = "<group>"; };
+		BC699EBD0ACDBA9BA4208665 /* AgentStatusDisplaySettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusDisplaySettings.swift; sourceTree = "<group>"; };
 		0FB36E306BB4921F173777BB /* AgentStatusPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentStatusPresentation.swift; sourceTree = "<group>"; };
 		8A87C45F990549A8A0A6EE01 /* AgentSurfaceResumeBindingClearOutcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSurfaceResumeBindingClearOutcome.swift; sourceTree = "<group>"; };
 		582CBC2A17C1808307BA9DD6 /* AgentWakeFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHibernation/AgentWakeFailure.swift; sourceTree = "<group>"; };
@@ -5409,6 +5413,7 @@
 		B66FC16D6699A27A36F76D6D /* CodexpressPanelStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressPanelStrings.swift; sourceTree = "<group>"; };
 		B2943AE8F23DB2FC9B2F5B16 /* CodexpressResetRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressResetRequest.swift; sourceTree = "<group>"; };
 		0FF41163B4A33EFC72D61625 /* CodexpressSessionDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressSessionDelegate.swift; sourceTree = "<group>"; };
+		1EA10F0F41573A8FFCFC2B37 /* CodexpressSettingsSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressSettingsSnapshot.swift; sourceTree = "<group>"; };
 		1E672FA7BA83D6BDAD8B064B /* CodexpressSidebarCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressSidebarCard.swift; sourceTree = "<group>"; };
 		5B340F480F4460ECDB081788 /* CodexpressSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressSnapshot.swift; sourceTree = "<group>"; };
 		7B0FA0A30E75B08112FC17C9 /* CodexpressSourceRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Codexpress/CodexpressSourceRow.swift; sourceTree = "<group>"; };
@@ -6986,6 +6991,7 @@
 		B804B0170000000000000017 /* SidebarWorkspaceTableViewportAnchor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sidebar/AppKitList/SidebarWorkspaceTableViewportAnchor.swift; sourceTree = "<group>"; };
 		55E01DE5B078B38299582BB0 /* SidebarWorkspaceTaskStatusGlyph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarWorkspaceTaskStatusGlyph.swift; sourceTree = "<group>"; };
 		A12481500000000000000002 /* SidebarWorkspaceTaskStatusSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarWorkspaceTaskStatusSnapshot.swift; sourceTree = "<group>"; };
+		DCD81D8B5E8A22E86D22FF89 /* SidebarWorkspaceTextSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sidebar/SidebarWorkspaceTextSettings.swift; sourceTree = "<group>"; };
 		4AEAD128139F57CB0E5BD39E /* SidebarWorkspaceTodoPopoverHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SidebarWorkspaceTodoPopoverHost.swift"; sourceTree = "<group>"; };
 		C9A57602C9A57602C9A57602 /* SidebarWorkspaceTopDropIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarWorkspaceTopDropIndicator.swift; sourceTree = "<group>"; };
 		A6AC73330000000000000002 /* SidebarWorkspaceTrailingStatusSlot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sidebar/SidebarWorkspaceTrailingStatusSlot.swift; sourceTree = "<group>"; };
@@ -10823,6 +10829,9 @@
 				7B0FA0A30E75B08112FC17C9 /* CodexpressSourceRow.swift */,
 				B66FC16D6699A27A36F76D6D /* CodexpressPanelStrings.swift */,
 				73640706B29EEADD5A9A7F71 /* SidebarWorkspaceTypography.swift */,
+				BC699EBD0ACDBA9BA4208665 /* AgentStatusDisplaySettings.swift */,
+				1EA10F0F41573A8FFCFC2B37 /* CodexpressSettingsSnapshot.swift */,
+				DCD81D8B5E8A22E86D22FF89 /* SidebarWorkspaceTextSettings.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -13102,6 +13111,7 @@
 				A9F200000000000000000014 /* AgentSessionWebView.swift in Sources */,
 				D80E6AF6BF9D3D7B2FF6AD28 /* AgentStatusBadge.swift in Sources */,
 				26941DC22BD52DEBF7F0A7EC /* AgentStatusBadgeView.swift in Sources */,
+				5C6E18D57B23824C848E3C95 /* AgentStatusDisplaySettings.swift in Sources */,
 				C51FE387ADD17CC8BB4D5C39 /* AgentStatusPresentation.swift in Sources */,
 				2F9C29446E65820D941FA4DA /* AgentWakeFailure.swift in Sources */,
 				2A64B77D7128036F9D4F51FB /* AgentWakeFailureBanner.swift in Sources */,
@@ -13507,6 +13517,7 @@
 				1D4701D61254EA10922F9A2B /* CodexpressPanelStrings.swift in Sources */,
 				02FEB421FBE0E06B713332F1 /* CodexpressResetRequest.swift in Sources */,
 				37D004923D497178B54CD6A8 /* CodexpressSessionDelegate.swift in Sources */,
+				7EF625D88D55C10BD8B35A62 /* CodexpressSettingsSnapshot.swift in Sources */,
 				5EEB5CF3574C2D3FD544AD9C /* CodexpressSidebarCard.swift in Sources */,
 				1624BC0D8BDE985B97117150 /* CodexpressSnapshot.swift in Sources */,
 				BBF058CBFF1725596AE3819D /* CodexpressSourceRow.swift in Sources */,
@@ -14505,6 +14516,7 @@
 				B804A0170000000000000017 /* SidebarWorkspaceTableViewportAnchor.swift in Sources */,
 				603C12E917E3C4877809CAD9 /* SidebarWorkspaceTaskStatusGlyph.swift in Sources */,
 				A12481500000000000000001 /* SidebarWorkspaceTaskStatusSnapshot.swift in Sources */,
+				59AC64F6C7B0C59AE6EB3358 /* SidebarWorkspaceTextSettings.swift in Sources */,
 				ADA26B5F30224634707004CC /* SidebarWorkspaceTodoPopoverHost.swift in Sources */,
 				C9A57601C9A57601C9A57601 /* SidebarWorkspaceTopDropIndicator.swift in Sources */,
 				A6AC73330000000000000001 /* SidebarWorkspaceTrailingStatusSlot.swift in Sources */,

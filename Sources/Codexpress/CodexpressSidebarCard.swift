@@ -4,6 +4,7 @@ import CmuxFoundation
 /// Bounded native footer, observing only while a hosting sidebar is visible.
 struct CodexpressSidebarCard: View {
     let coordinator: CodexpressCoordinator
+    let settings: CodexpressSettingsSnapshot
     let openCodexpress: () -> Void
 
     @AppStorage("codexpressSidebarExpanded") private var isExpanded = true
@@ -11,8 +12,19 @@ struct CodexpressSidebarCard: View {
     private let strings = CodexpressPanelStrings()
 
     var body: some View {
+        Group {
+            if settings.enabled { card }
+        }
+        .onChange(of: settings) { _, next in coordinator.applySettings(next) }
+        .task {
+            coordinator.applySettings(settings)
+            await coordinator.observe()
+        }
+    }
+
+    private var card: some View {
         let sources = coordinator.snapshot.map { orderedSources($0.sources) } ?? []
-        VStack(alignment: .leading, spacing: 7) {
+        return VStack(alignment: .leading, spacing: 7) {
             header
             if isExpanded {
                 ScrollView {
@@ -48,6 +60,7 @@ struct CodexpressSidebarCard: View {
                                 if source.id != sources.first?.id { Divider() }
                                 CodexpressSourceRow(
                                     source: source,
+                                    settings: settings,
                                     isTakingOver: snapshot.manualRoute?.sourceID == source.id,
                                     isBusy: coordinator.activeSourceIDs.contains(source.id),
                                     canAct: snapshot.running,
@@ -69,7 +82,7 @@ struct CodexpressSidebarCard: View {
                 .frame(height: contentHeight(for: sources))
             }
         }
-        .cmuxFont(size: 10)
+        .cmuxFont(size: CGFloat(settings.fontSize - 1))
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(maxHeight: 280)
@@ -80,7 +93,6 @@ struct CodexpressSidebarCard: View {
                 .strokeBorder(.primary.opacity(0.1), lineWidth: 1)
         }
         .accessibilityIdentifier("CodexpressSidebarCard")
-        .task { await coordinator.observe() }
     }
 
     private var header: some View {
@@ -90,13 +102,13 @@ struct CodexpressSidebarCard: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .cmuxFont(size: 10, weight: .semibold)
+                        .cmuxFont(size: CGFloat(settings.fontSize - 1), weight: .semibold)
                     Circle()
                         .fill(statusColor)
                         .frame(width: 7, height: 7)
                         .accessibilityHidden(true)
                     Text(strings.title)
-                        .cmuxFont(size: 13, weight: .semibold)
+                        .cmuxFont(size: CGFloat(settings.fontSize + 2), weight: .semibold)
                         .lineLimit(1)
                     Spacer(minLength: 0)
                 }
@@ -106,25 +118,27 @@ struct CodexpressSidebarCard: View {
             .help(isExpanded ? strings.collapse : strings.expand)
             .accessibilityLabel(Text(isExpanded ? strings.collapse : strings.expand))
             .accessibilityValue(Text(statusLabel))
-            Button {
-                Task { await coordinator.refreshLocal() }
-            } label: {
-                Image(systemName: coordinator.connectionError != nil ? "exclamationmark.triangle" : (coordinator.isUpdating ? "ellipsis" : "arrow.clockwise"))
-                    .frame(width: 20, height: 20)
+            if settings.showActions {
+                Button {
+                    Task { await coordinator.refreshLocal() }
+                } label: {
+                    Image(systemName: coordinator.connectionError != nil ? "exclamationmark.triangle" : (coordinator.isUpdating ? "ellipsis" : "arrow.clockwise"))
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .disabled(coordinator.isUpdating)
+                .help(strings.refresh)
+                .accessibilityLabel(Text(strings.refresh))
+                Button(action: openCodexpress) {
+                    Image(systemName: "arrow.up.forward.app")
+                        .frame(width: 18, height: 18)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(strings.open)
+                .accessibilityLabel(Text(strings.open))
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .disabled(coordinator.isUpdating)
-            .help(strings.refresh)
-            .accessibilityLabel(Text(strings.refresh))
-            Button(action: openCodexpress) {
-                Image(systemName: "arrow.up.forward.app")
-                    .frame(width: 18, height: 18)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help(strings.open)
-            .accessibilityLabel(Text(strings.open))
         }
         .help(coordinator.snapshot.map { statusLabel + " · " + modeLabel($0) } ?? statusLabel)
     }
@@ -133,7 +147,8 @@ struct CodexpressSidebarCard: View {
         let rowHeight = sources.reduce(CGFloat.zero) { $0 + ($1.kind == "official" ? 56 : 40) }
         let separators = CGFloat(max(0, sources.count - 1)) * 7
         let errorHeight: CGFloat = coordinator.connectionError != nil || coordinator.actionError != nil ? 50 : 0
-        return min(230, max(36, (rowHeight + separators) * CGFloat(magnification) / 100 + errorHeight))
+        let fontScale = CGFloat(settings.fontSize) / 11
+        return min(230, max(36, (rowHeight + separators) * fontScale * CGFloat(magnification) / 100 + errorHeight))
     }
 
     private var statusLabel: String {

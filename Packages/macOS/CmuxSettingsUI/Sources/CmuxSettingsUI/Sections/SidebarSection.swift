@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 public struct SidebarSection: View {
     private let catalog: SettingCatalog
+    private let defaultsStore: UserDefaultsSettingsStore
     let hostActions: SettingsHostActions
     @State var rightSidebarTabs: [RightSidebarTabSettingsItem]
     private let rightSidebarWidthSettings = RightSidebarWidthSettings()
@@ -20,26 +21,22 @@ public struct SidebarSection: View {
     @State private var pathLastOnly: DefaultsValueModel<Bool>
     @State var showNotification: DefaultsValueModel<Bool>
     @State var notificationMessageLineLimit: DefaultsValueModel<Int>
-    @State private var showBranchDir: DefaultsValueModel<Bool>
     @State private var showPR: DefaultsValueModel<Bool>
     @State private var watchGit: DefaultsValueModel<Bool>
     @State private var prClickable: DefaultsValueModel<Bool>
     @State private var prLinks: DefaultsValueModel<Bool>
     @State private var portLinks: DefaultsValueModel<Bool>
     @State private var showSSH: DefaultsValueModel<Bool>
-    @State private var showPorts: DefaultsValueModel<Bool>
-    @State private var showLog: DefaultsValueModel<Bool>
-    @State private var showProgress: DefaultsValueModel<Bool>
     @State var showAgentActivity: DefaultsValueModel<Bool>
     @State var showAgentUsage: DefaultsValueModel<Bool>
     @State var loadingSpinnerPosition: DefaultsValueModel<SidebarIndicatorPosition>
     @State var notificationBadgePosition: DefaultsValueModel<SidebarIndicatorPosition>
-    @State var showMetadata: DefaultsValueModel<Bool>
     @State private var compactAgentStatus: DefaultsValueModel<Bool>
     @State private var rightMaxWidth: DefaultsValueModel<Double>
     @State private var rememberedRightMaxWidth: DefaultsValueModel<Double>
     public init(defaultsStore: UserDefaultsSettingsStore, catalog: SettingCatalog, hostActions: SettingsHostActions) {
         self.catalog = catalog
+        self.defaultsStore = defaultsStore
         self.hostActions = hostActions
         _rightSidebarTabs = State(initialValue: hostActions.rightSidebarTabs())
         _sidebarFont = State(initialValue: hostActions.sidebarFontSize())
@@ -53,21 +50,16 @@ public struct SidebarSection: View {
         _pathLastOnly = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.pathLastSegmentOnly))
         _showNotification = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.showNotificationMessage))
         _notificationMessageLineLimit = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.notificationMessageLineLimit))
-        _showBranchDir = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.showBranchDirectory))
         _showPR = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.showPullRequests))
         _watchGit = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.watchGitStatus))
         _prClickable = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.makePullRequestsClickable))
         _prLinks = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.openPullRequestLinksInCmuxBrowser))
         _portLinks = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.openPortLinksInCmuxBrowser))
         _showSSH = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.showSSH))
-        _showPorts = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.showPorts))
-        _showLog = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.showLog))
-        _showProgress = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.showProgress))
         _showAgentActivity = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.showAgentActivity))
         _showAgentUsage = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.showAgentUsage))
         _loadingSpinnerPosition = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.loadingSpinnerPosition))
         _notificationBadgePosition = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.notificationBadgePosition))
-        _showMetadata = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.showCustomMetadata))
         _compactAgentStatus = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.compactAgentStatus))
         _rightMaxWidth = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.rightMaxWidth))
         _rememberedRightMaxWidth = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.sidebar.rememberedRightMaxWidth))
@@ -77,6 +69,10 @@ public struct SidebarSection: View {
         Group {
             SettingsSectionHeader(String(localized: "settings.section.sidebarAppearance", defaultValue: "Sidebar"), section: .sidebarAppearance)
             mainCard
+            SidebarTextSettingsCard(defaultsStore: defaultsStore, catalog: catalog)
+            AgentStatusSettingsCard(defaultsStore: defaultsStore, catalog: catalog)
+            SidebarInformationSettingsCard(defaultsStore: defaultsStore, catalog: catalog)
+            CodexpressSettingsCard(defaultsStore: defaultsStore, catalog: catalog)
             rightSidebarTabsCard
         }
         .task { startObservingSettings() }
@@ -96,17 +92,15 @@ public struct SidebarSection: View {
             workspaceDescriptionHex,
             branchVerticalLayout,
             stackBranchDir,
-            pathLastOnly, showNotification, notificationMessageLineLimit, showBranchDir,
+            pathLastOnly, showNotification, notificationMessageLineLimit,
             showPR,
             watchGit,
             prClickable,
             prLinks,
             portLinks,
-            showSSH, showPorts, showLog,
-            showProgress, showAgentActivity, showAgentUsage,
+            showSSH, showAgentActivity, showAgentUsage,
             loadingSpinnerPosition,
             notificationBadgePosition,
-            showMetadata,
             compactAgentStatus,
             rightMaxWidth,
             rememberedRightMaxWidth,
@@ -279,17 +273,6 @@ public struct SidebarSection: View {
             }
             SettingsCardDivider()
 
-            SettingsCardRow(
-                configurationReview: .json("sidebar.showWorkspaceDescription"),
-                String(localized: "settings.app.showWorkspaceDescription", defaultValue: "Show Workspace Description in Sidebar"),
-                subtitle: String(localized: "settings.app.showWorkspaceDescription.subtitle", defaultValue: "Display custom workspace descriptions below the workspace title.")
-            ) {
-                Toggle("", isOn: Binding(get: { showDesc.current }, set: { showDesc.set($0) }))
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .disabled(hideAll.current)
-            SettingsCardDivider()
 
             SettingsCardRow(
                 configurationReview: .json("sidebar.workspaceDescriptionColor"),
@@ -364,44 +347,10 @@ public struct SidebarSection: View {
             .disabled(hideAll.current)
             SettingsCardDivider()
 
-            SettingsCardRow(
-                configurationReview: .json("sidebar.showNotificationMessage"),
-                String(localized: "settings.app.showNotificationMessage", defaultValue: "Show Notification Message in Sidebar"),
-                subtitle: String(localized: "settings.app.showNotificationMessage.subtitle", defaultValue: "Display the latest notification message below the workspace title.")
-            ) {
-                Toggle("", isOn: Binding(get: { showNotification.current }, set: { showNotification.set($0) }))
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .disabled(hideAll.current)
-            SettingsCardDivider()
 
             notificationMessageLineLimitRow
             SettingsCardDivider()
 
-            SettingsCardRow(
-                configurationReview: .json("sidebar.showBranchDirectory"),
-                String(localized: "settings.app.showBranchDirectory", defaultValue: "Show Branch + Directory in Sidebar"),
-                subtitle: String(localized: "settings.app.showBranchDirectory.subtitle", defaultValue: "Display git branches and working directories.")
-            ) {
-                Toggle("", isOn: Binding(get: { showBranchDir.current }, set: { showBranchDir.set($0) }))
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .disabled(hideAll.current)
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                configurationReview: .json("sidebar.showPullRequests"),
-                String(localized: "settings.app.showPullRequests", defaultValue: "Show Pull Requests in Sidebar"),
-                subtitle: String(localized: "settings.app.showPullRequests.subtitle", defaultValue: "Display review items (PR/MR/etc.) with status and number.")
-            ) {
-                Toggle("", isOn: Binding(get: { showPR.current }, set: { showPR.set($0) }))
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .disabled(hideAll.current)
-            SettingsCardDivider()
 
             SettingsCardRow(
                 configurationReview: .json("sidebar.watchGitStatus"),
@@ -464,55 +413,9 @@ public struct SidebarSection: View {
             .disabled(hideAll.current)
             SettingsCardDivider()
 
-            SettingsCardRow(
-                configurationReview: .json("sidebar.showPorts"),
-                String(localized: "settings.app.showPorts", defaultValue: "Show Listening Ports in Sidebar"),
-                subtitle: String(localized: "settings.app.showPorts.subtitle", defaultValue: "Display detected listening ports for the active workspace.")
-            ) {
-                Toggle("", isOn: Binding(get: { showPorts.current }, set: { showPorts.set($0) }))
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .disabled(hideAll.current)
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                configurationReview: .json("sidebar.showLog"),
-                String(localized: "settings.app.showLog", defaultValue: "Show Latest Log in Sidebar"),
-                subtitle: String(localized: "settings.app.showLog.subtitle", defaultValue: "Display the latest imperative log/status message.")
-            ) {
-                Toggle("", isOn: Binding(get: { showLog.current }, set: { showLog.set($0) }))
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .disabled(hideAll.current)
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                configurationReview: .json("sidebar.showProgress"),
-                String(localized: "settings.app.showProgress", defaultValue: "Show Progress in Sidebar"),
-                subtitle: String(localized: "settings.app.showProgress.subtitle", defaultValue: "Display the built-in progress bar from set_progress.")
-            ) {
-                Toggle("", isOn: Binding(get: { showProgress.current }, set: { showProgress.set($0) }))
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .disabled(hideAll.current)
-            SettingsCardDivider()
 
             agentActivityRows
 
-            SettingsCardRow(
-                configurationReview: .json("sidebar.showCustomMetadata"),
-                String(localized: "settings.app.showMetadata", defaultValue: "Show Custom Metadata in Sidebar"),
-                subtitle: String(localized: "settings.app.showMetadata.subtitle", defaultValue: "Display custom metadata from report_meta/set_status and report_meta_block.")
-            ) {
-                Toggle("", isOn: Binding(get: { showMetadata.current }, set: { showMetadata.set($0) }))
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            .disabled(hideAll.current)
-            SettingsCardDivider()
 
             SettingsCardRow(
                 configurationReview: .json("sidebar.compactAgentStatus"),

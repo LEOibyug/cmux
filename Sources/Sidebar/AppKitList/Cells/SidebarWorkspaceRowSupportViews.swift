@@ -308,6 +308,7 @@ final class SidebarRowIconTextLine: NSView {
         iconLabel.isHidden = true
         iconView.isHidden = true
         iconSize = 0
+        configureLineLimit(model.settings.textSettings.lineLimit)
         if let presentation = AgentStatusPresentation(entry: entry) {
             let badge = agentBadge ?? AgentStatusBadgeView()
             if agentBadge == nil {
@@ -315,7 +316,7 @@ final class SidebarRowIconTextLine: NSView {
                 addSubview(badge)
             }
             badge.isHidden = false
-            badge.configure(entry: entry, presentation: presentation, fontScale: model.typography.scale, onOpenURL: onOpenURL)
+            badge.configure(entry: entry, presentation: presentation, pointSize: model.typography.agentStatus, displaySettings: model.settings.agentStatusDisplay, lineLimit: model.settings.textSettings.lineLimit, onOpenURL: onOpenURL)
             needsLayout = true
             return
         }
@@ -379,6 +380,7 @@ final class SidebarRowIconTextLine: NSView {
         palette: SidebarRowPalette
     ) {
         resetPrimaryContent()
+        configureLineLimit(model.settings.textSettings.lineLimit)
         stacked = false
         textView.isHidden = false
         secondTextView.isHidden = true
@@ -417,6 +419,15 @@ final class SidebarRowIconTextLine: NSView {
         needsLayout = true
     }
 
+    private func configureLineLimit(_ value: Int) {
+        for field in [textView, secondTextView] {
+            field.maximumNumberOfLines = value
+            field.lineBreakMode = value == 1 ? .byTruncatingTail : .byWordWrapping
+        }
+        metadataButton.lineLimit = value
+        markdownTextView.textContainer?.maximumNumberOfLines = value
+    }
+
     /// Keeps the fullest alias/home-shortened directory candidate and wraps it.
     func configureBranchLine(
         _ content: BranchLineContent,
@@ -424,6 +435,7 @@ final class SidebarRowIconTextLine: NSView {
         palette: SidebarRowPalette
     ) {
         resetPrimaryContent()
+        configureLineLimit(model.settings.textSettings.lineLimit)
         textView.isHidden = false
         iconView.isHidden = true
         iconLabel.isHidden = true
@@ -553,6 +565,11 @@ final class SidebarRowPullRequestLine: NSView {
         onOpen: @escaping () -> Void
     ) {
         let color = palette.secondary(0.75)
+        titleButton.lineLimit = model.settings.textSettings.lineLimit
+        for field in [titleLabel, statusLabel] {
+            field.maximumNumberOfLines = model.settings.textSettings.lineLimit
+            field.lineBreakMode = model.settings.textSettings.lineLimit == 1 ? .byTruncatingTail : .byWordWrapping
+        }
         let font = NSFont.systemFont(ofSize: model.typography.auxiliary, weight: .semibold)
         iconView.configure(status: display.status, color: color, fontScale: model.fontScale)
         iconSize = SidebarRowPullRequestIconView.size(status: display.status, fontScale: model.fontScale)
@@ -627,6 +644,13 @@ final class SidebarRowPullRequestLine: NSView {
 final class SidebarRowLinkButton: NSButton {
     private var onClick: (() -> Void)?
     private var cachedTextLayout: SidebarRowTextLinkLayout?
+    var lineLimit: Int = 2 {
+        didSet {
+            guard lineLimit != oldValue else { return }
+            cachedTextLayout = nil
+            needsDisplay = true
+        }
+    }
 
     override var isFlipped: Bool { true }
 
@@ -655,7 +679,7 @@ final class SidebarRowLinkButton: NSButton {
         }
         let layout = SidebarRowTextLinkLayout(
             attributedString: attributedTitle, textRectSize: size,
-            lineBreakMode: .byTruncatingTail, maximumNumberOfLines: 2
+            lineBreakMode: .byTruncatingTail, maximumNumberOfLines: lineLimit
         )
         cachedTextLayout = layout
         return layout

@@ -11569,7 +11569,7 @@ struct VerticalTabsSidebar: View, Equatable {
             .frame(maxHeight: .infinity)
             if isPresented {
                 if let codexpressCoordinator {
-                    CodexpressSidebarCard(coordinator: codexpressCoordinator) {
+                    CodexpressSidebarCard(coordinator: codexpressCoordinator, settings: tabItemSettings.codexpressSettings) {
                         guard let applicationURL = NSWorkspace.shared.urlForApplication(
                             withBundleIdentifier: "local.codexpress.mac"
                         ) else { return }
@@ -11578,8 +11578,8 @@ struct VerticalTabsSidebar: View, Equatable {
                             configuration: NSWorkspace.OpenConfiguration()
                         )
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 6)
+                    .padding(.horizontal, tabItemSettings.codexpressSettings.enabled ? 8 : 0)
+                    .padding(.bottom, tabItemSettings.codexpressSettings.enabled ? 6 : 0)
                 }
                 SidebarFooter(
                     fileExplorerState: fileExplorerState,
@@ -15511,7 +15511,6 @@ struct TabItemView: View, Equatable {
     @State private var renameDraft = ""
     @State private var renameBaselineHadUserCustomTitle = false
 
-    private static let maxWrappedTitleLines = 2
     private static let maxDisplayedTitleCharacters = 2048
 
     var workspaceSnapshot: SidebarWorkspaceSnapshotBuilder.Snapshot { snapshot.workspace }
@@ -15629,7 +15628,7 @@ struct TabItemView: View, Equatable {
     }
 
     private var typography: SidebarWorkspaceTypography {
-        SidebarWorkspaceTypography(scale: fontScale)
+        SidebarWorkspaceTypography(scale: fontScale, settings: settings.textSettings)
     }
 
     private func scaledFontSize(_ baseSize: CGFloat) -> CGFloat {
@@ -15756,7 +15755,7 @@ struct TabItemView: View, Equatable {
                     Text(remoteWorkspaceSidebarText)
                         .font(magnifiedFont(typography.directory, design: .monospaced))
                         .foregroundColor(activeSecondaryColor(0.8))
-                        .lineLimit(2)
+                        .lineLimit(settings.textSettings.lineLimit)
                         .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -15765,7 +15764,7 @@ struct TabItemView: View, Equatable {
                     Text(workspaceSnapshot.remoteConnectionStatusText)
                         .font(magnifiedFont(typography.auxiliary, weight: .medium))
                         .foregroundColor(activeSecondaryColor(0.58))
-                        .lineLimit(2)
+                        .lineLimit(settings.textSettings.lineLimit)
                         .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -15827,12 +15826,12 @@ struct TabItemView: View, Equatable {
         let accessibilityHintText = String(localized: "sidebar.workspace.accessibilityHint", defaultValue: "Activate to focus this workspace. Drag to reorder, or use Move Up and Move Down actions.")
         let moveUpActionText = String(localized: "sidebar.workspace.moveUpAction", defaultValue: "Move Up")
         let moveDownActionText = String(localized: "sidebar.workspace.moveDownAction", defaultValue: "Move Down")
-        let latestNotificationSubtitle = latestNotificationText
-        let conversationMessageSubtitle = !settings.hidesAllDetails && settings.iMessageModeEnabled
+        let latestNotificationSubtitle = settings.showsNotificationMessage ? latestNotificationText : nil
+        let conversationMessageSubtitle = settings.showsNotificationMessage && settings.iMessageModeEnabled
             ? workspaceSnapshot.latestConversationMessage?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
             : nil
         let effectiveSubtitle = latestNotificationSubtitle ?? conversationMessageSubtitle
-        let subtitleLineLimit = latestNotificationSubtitle == nil ? 2 : min(2, settings.notificationMessageLineLimit)
+        let subtitleLineLimit = latestNotificationSubtitle == nil ? settings.textSettings.lineLimit : min(settings.textSettings.lineLimit, settings.notificationMessageLineLimit)
         // Bound notification payloads before shaping so pathological text stays cheap in lazy, Equatable rows.
         // Compact status keeps the notification in the glyph's tooltip instead.
         let displayedSubtitle = workspaceSnapshot.compactStatusGlyph != nil
@@ -15844,7 +15843,7 @@ struct TabItemView: View, Equatable {
                     : SidebarMarkdownRenderer(markdown: display).plainText
             }
         let detailVisibility = visibleAuxiliaryDetails
-        let titleLineLimit = settings.wrapsWorkspaceTitles ? Self.maxWrappedTitleLines : 1
+        let titleLineLimit = settings.wrapsWorkspaceTitles ? settings.textSettings.lineLimit : 1
         let displayedTitle = workspaceSnapshot.displayTitle.sidebarBoundedDisplayString(
             maxDisplayedLines: titleLineLimit,
             maxDisplayedCharacters: Self.maxDisplayedTitleCharacters
@@ -15981,241 +15980,277 @@ struct TabItemView: View, Equatable {
                 }
             }
 
-            if let description = workspaceSnapshot.customDescription {
-                SidebarWorkspaceDescriptionText(
-                    markdown: description,
-                    isActive: usesInvertedActiveForeground,
-                    activeForegroundColor: activeSecondaryColor(0.84),
-                    customForegroundColor: sidebarWorkspaceDescriptionColor,
-                    fontScale: fontScale
-                )
+            if !settings.hidesAllDetails,
+               settings.agentStatusDisplay.showAgentStatusInSidebar,
+               !settings.compactsAgentStatus {
+                ForEach(workspaceSnapshot.agentStatusEntries, id: \.key) { entry in
+                    if let presentation = AgentStatusPresentation(entry: entry) {
+                        AgentStatusBadge(
+                            entry: entry,
+                            presentation: presentation,
+                            pointSize: typography.agentStatus,
+                            displaySettings: settings.agentStatusDisplay,
+                            lineLimit: settings.textSettings.lineLimit
+                        ) { url in
+                            updateSelection()
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                }
             }
 
-            if let subtitle = displayedSubtitle {
-                Text(subtitle)
-                    .font(magnifiedFont(typography.description))
-                    .foregroundColor(activeSecondaryColor(0.8))
-                    .lineLimit(subtitleLineLimit)
-                    .truncationMode(.tail)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
+            ForEach(settings.detailOrder, id: \.rawValue) { detail in
+                switch detail {
+                case .description:
+
+                    if let description = workspaceSnapshot.customDescription {
+                        SidebarWorkspaceDescriptionText(
+                            markdown: description,
+                            isActive: usesInvertedActiveForeground,
+                            activeForegroundColor: activeSecondaryColor(0.84),
+                            customForegroundColor: sidebarWorkspaceDescriptionColor,
+                            fontScale: fontScale,
+                            textSettings: settings.textSettings
+                        )
+                    }
+
+                case .notification:
+                    if let subtitle = displayedSubtitle {
+                        Text(subtitle)
+                            .font(magnifiedFont(typography.description))
+                            .foregroundColor(activeSecondaryColor(0.8))
+                            .lineLimit(subtitleLineLimit)
+                            .truncationMode(.tail)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                case .metadata, .log:
+                    if selectionChromeTracksWindowActivation {
+                        SidebarSelectionWindowActivationReader { isEmphasized in
+                            metadataAndLogRows(snapshot: workspaceSnapshot, detail: detail, isEmphasized: isEmphasized)
+                        }
+                    } else {
+                        metadataAndLogRows(snapshot: workspaceSnapshot, detail: detail, isEmphasized: true)
+                    }
+                case .progress:
+
+                    if detailVisibility.showsProgress, let progress = workspaceSnapshot.progress {
+                        VStack(alignment: .leading, spacing: 2) {
+                            let progressFraction = CGFloat(max(0, min(progress.value, 1)))
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(activeProgressTrackColor)
+                                Capsule()
+                                    .fill(activeProgressFillColor)
+                                    .scaleEffect(x: progressFraction, y: 1, anchor: .leading)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: max(3, 3 * fontScale))
+
+                            if let label = progress.label {
+                                Text(label)
+                                    .font(magnifiedFont(typography.auxiliary))
+                                    .foregroundColor(activeSecondaryColor(0.6))
+                                    .lineLimit(settings.textSettings.lineLimit)
+                                    .truncationMode(.tail)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .transition(.opacity)
+                    }
+
+                case .branchDirectory:
+                    // Branch + directory row
+                    if detailVisibility.showsBranchDirectory {
+                        if sidebarBranchLayout == .vertical {
+                            if !workspaceSnapshot.branchDirectoryLines.isEmpty {
+                                HStack(alignment: .top, spacing: 3) {
+                                    if sidebarShowGitBranchIcon, workspaceSnapshot.branchLinesContainBranch {
+                                        CmuxSystemSymbolImage(magnified: "arrow.triangle.branch", pointSize: scaledFontSize(9), tint: activeSecondaryColor(0.6))
+                                    }
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        ForEach(Array(workspaceSnapshot.branchDirectoryLines.enumerated()), id: \.offset) { _, line in
+                                            if sidebarBranchDirectoryPlacement == .stacked {
+                                                if let branch = line.branch {
+                                                    Text(branch)
+                                                        .font(magnifiedFont(typography.branch, design: .monospaced))
+                                                        .foregroundColor(activeSecondaryColor(0.75))
+                                                        .lineLimit(settings.textSettings.lineLimit)
+                                                        .truncationMode(.tail)
+                                                        .fixedSize(horizontal: false, vertical: true)
+                                                }
+                                                if !line.directoryCandidates.isEmpty {
+                                                    SidebarDirectoryText(
+                                                        candidates: line.directoryCandidates,
+                                                        color: activeSecondaryColor(0.75),
+                                                        fontScale: fontScale,
+                                                        textSettings: settings.textSettings
+                                                    )
+                                                }
+                                            } else {
+                                                HStack(spacing: 3) {
+                                                    if let branch = line.branch {
+                                                        Text(branch)
+                                                            .font(magnifiedFont(typography.branch, design: .monospaced))
+                                                            .foregroundColor(activeSecondaryColor(0.75))
+                                                            .lineLimit(settings.textSettings.lineLimit)
+                                                            .truncationMode(.tail)
+                                                            .fixedSize(horizontal: false, vertical: true)
+                                                    }
+                                                    if line.branch != nil, !line.directoryCandidates.isEmpty {
+                                                        CmuxSystemSymbolImage(magnified: "circle.fill", pointSize: scaledFontSize(3), tint: activeSecondaryColor(0.6))
+                                                            .padding(.horizontal, 1)
+                                                    }
+                                                    if !line.directoryCandidates.isEmpty {
+                                                        SidebarDirectoryText(
+                                                            candidates: line.directoryCandidates,
+                                                            color: activeSecondaryColor(0.75),
+                                                            fontScale: fontScale,
+                                                            textSettings: settings.textSettings
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if sidebarBranchDirectoryPlacement == .stacked,
+                                  (workspaceSnapshot.compactGitBranchSummaryText != nil
+                                   || !workspaceSnapshot.compactDirectoryCandidates.isEmpty) {
+                            HStack(alignment: .top, spacing: 3) {
+                                if sidebarShowGitBranchIcon, workspaceSnapshot.compactGitBranchSummaryText != nil {
+                                    CmuxSystemSymbolImage(magnified: "arrow.triangle.branch", pointSize: scaledFontSize(9), tint: activeSecondaryColor(0.6))
+                                }
+                                VStack(alignment: .leading, spacing: 1) {
+                                    if let branchRow = workspaceSnapshot.compactGitBranchSummaryText {
+                                        Text(branchRow)
+                                            .font(magnifiedFont(typography.branch, design: .monospaced))
+                                            .foregroundColor(activeSecondaryColor(0.75))
+                                            .lineLimit(settings.textSettings.lineLimit)
+                                            .truncationMode(.tail)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    if !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
+                                        SidebarDirectoryText(
+                                            candidates: workspaceSnapshot.compactDirectoryCandidates,
+                                            color: activeSecondaryColor(0.75),
+                                            fontScale: fontScale,
+                                            textSettings: settings.textSettings
+                                        )
+                                    }
+                                }
+                            }
+                        } else if workspaceSnapshot.compactGitBranchSummaryText != nil || !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
+                            HStack(spacing: 3) {
+                                if sidebarShowGitBranchIcon, workspaceSnapshot.compactGitBranchSummaryText != nil {
+                                    CmuxSystemSymbolImage(magnified: "arrow.triangle.branch", pointSize: scaledFontSize(9), tint: activeSecondaryColor(0.6))
+                                }
+                                if let branchRow = workspaceSnapshot.compactGitBranchSummaryText {
+                                    Text(branchRow)
+                                        .font(magnifiedFont(typography.branch, design: .monospaced))
+                                        .foregroundColor(activeSecondaryColor(0.75))
+                                        .lineLimit(settings.textSettings.lineLimit)
+                                        .truncationMode(.tail)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                if workspaceSnapshot.compactGitBranchSummaryText != nil, !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
+                                    CmuxSystemSymbolImage(magnified: "circle.fill", pointSize: scaledFontSize(3), tint: activeSecondaryColor(0.6))
+                                        .padding(.horizontal, 1)
+                                }
+                                if !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
+                                    SidebarDirectoryText(
+                                        candidates: workspaceSnapshot.compactDirectoryCandidates,
+                                        color: activeSecondaryColor(0.75),
+                                        fontScale: fontScale,
+                                        textSettings: settings.textSettings
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                case .pullRequests:
+                    // Pull request rows
+                    if detailVisibility.showsPullRequests, !workspaceSnapshot.pullRequestRows.isEmpty {
+                        VStack(alignment: .leading, spacing: 1) {
+                            ForEach(workspaceSnapshot.pullRequestRows) { pullRequest in
+                                let pullRequestNumber = String(pullRequest.number)
+                                let pullRequestTitle = "\(pullRequest.label) #\(pullRequestNumber)"
+                                let rowContent = HStack(alignment: .center, spacing: 4) {
+                                    PullRequestStatusIcon(
+                                        status: pullRequest.status,
+                                        color: pullRequestForegroundColor,
+                                        fontScale: fontScale
+                                    )
+                                    Text(pullRequestTitle)
+                                        .underline(settings.makesPullRequestsClickable)
+                                        .lineLimit(settings.textSettings.lineLimit)
+                                        .truncationMode(.tail)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Text(pullRequestStatusLabel(pullRequest.status))
+                                        .lineLimit(settings.textSettings.lineLimit)
+                                        .truncationMode(.tail)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Spacer(minLength: 0)
+                                }
+                                .font(magnifiedFont(typography.auxiliary, weight: .semibold))
+                                .foregroundColor(pullRequestForegroundColor)
+                                .opacity(pullRequest.isStale ? 0.5 : 1)
+                                if settings.makesPullRequestsClickable {
+                                    Button(action: { openPullRequestLink(pullRequest.url) }) { rowContent }
+                                        .buttonStyle(.plain)
+                                        .tint(pullRequestForegroundColor)
+                                        .safeHelp(
+                                            String(
+                                                format: String(localized: "sidebar.pullRequest.openTooltip", defaultValue: "Open %1$@ #%2$lld"),
+                                                pullRequest.label,
+                                                Int64(pullRequest.number)
+                                            )
+                                        )
+                                        .accessibilityIdentifier("SidebarPullRequestRow")
+                                } else {
+                                    rowContent.accessibilityElement(children: .combine).accessibilityIdentifier("SidebarPullRequestRow")
+                                }
+                            }
+                        }
+                    }
+
+                case .ports:
+                    // Ports row
+                    if detailVisibility.showsPorts, !workspaceSnapshot.listeningPorts.isEmpty {
+                        HStack(spacing: 4) {
+                            ForEach(workspaceSnapshot.listeningPorts, id: \.self) { port in
+                                let portLabel = SidebarPortDisplayText.label(for: port)
+                                let portTooltip = SidebarPortDisplayText.openTooltip(for: port)
+                                Button(action: {
+                                    openPortLink(port)
+                                }) {
+                                    Text(portLabel)
+                                        .underline()
+                                        .lineLimit(settings.textSettings.lineLimit)
+                                        .truncationMode(.tail)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .buttonStyle(.plain)
+                                .safeHelp(portTooltip)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .font(magnifiedFont(typography.auxiliary, design: .monospaced))
+                        .foregroundColor(activeSecondaryColor(0.75))
+                    }
+                }
             }
 
+            remoteWorkspaceSection(snapshot: workspaceSnapshot)
             let minimalTodoVisibility = SidebarWorkspaceTodoMinimalVisibility(
                 itemCount: workspaceSnapshot.checklistItems.count,
                 addFieldActivationToken: checklistAddFieldActivationToken,
                 isPopoverPresented: isChecklistPopoverPresented,
                 canAddItems: todoControlsEnabled
             )
-            remoteWorkspaceSection(snapshot: workspaceSnapshot)
-
-            if selectionChromeTracksWindowActivation {
-                SidebarSelectionWindowActivationReader { isEmphasized in
-                    metadataAndLogRows(snapshot: workspaceSnapshot, isEmphasized: isEmphasized)
-                }
-            } else {
-                metadataAndLogRows(snapshot: workspaceSnapshot, isEmphasized: true)
-            }
-
-            if detailVisibility.showsProgress, let progress = workspaceSnapshot.progress {
-                VStack(alignment: .leading, spacing: 2) {
-                    let progressFraction = CGFloat(max(0, min(progress.value, 1)))
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(activeProgressTrackColor)
-                        Capsule()
-                            .fill(activeProgressFillColor)
-                            .scaleEffect(x: progressFraction, y: 1, anchor: .leading)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: max(3, 3 * fontScale))
-
-                    if let label = progress.label {
-                        Text(label)
-                            .font(magnifiedFont(typography.auxiliary))
-                            .foregroundColor(activeSecondaryColor(0.6))
-                            .lineLimit(2)
-                            .truncationMode(.tail)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .transition(.opacity)
-            }
-
-            // Branch + directory row
-            if detailVisibility.showsBranchDirectory {
-                if sidebarBranchLayout == .vertical {
-                    if !workspaceSnapshot.branchDirectoryLines.isEmpty {
-                        HStack(alignment: .top, spacing: 3) {
-                            if sidebarShowGitBranchIcon, workspaceSnapshot.branchLinesContainBranch {
-                                CmuxSystemSymbolImage(magnified: "arrow.triangle.branch", pointSize: scaledFontSize(9), tint: activeSecondaryColor(0.6))
-                            }
-                            VStack(alignment: .leading, spacing: 1) {
-                                ForEach(Array(workspaceSnapshot.branchDirectoryLines.enumerated()), id: \.offset) { _, line in
-                                    if sidebarBranchDirectoryPlacement == .stacked {
-                                        if let branch = line.branch {
-                                            Text(branch)
-                                                .font(magnifiedFont(typography.branch, design: .monospaced))
-                                                .foregroundColor(activeSecondaryColor(0.75))
-                                                .lineLimit(2)
-                                                .truncationMode(.tail)
-                                                .fixedSize(horizontal: false, vertical: true)
-                                        }
-                                        if !line.directoryCandidates.isEmpty {
-                                            SidebarDirectoryText(
-                                                candidates: line.directoryCandidates,
-                                                color: activeSecondaryColor(0.75),
-                                                fontScale: fontScale
-                                            )
-                                        }
-                                    } else {
-                                        HStack(spacing: 3) {
-                                            if let branch = line.branch {
-                                                Text(branch)
-                                                    .font(magnifiedFont(typography.branch, design: .monospaced))
-                                                    .foregroundColor(activeSecondaryColor(0.75))
-                                                    .lineLimit(2)
-                                                    .truncationMode(.tail)
-                                                    .fixedSize(horizontal: false, vertical: true)
-                                            }
-                                            if line.branch != nil, !line.directoryCandidates.isEmpty {
-                                                CmuxSystemSymbolImage(magnified: "circle.fill", pointSize: scaledFontSize(3), tint: activeSecondaryColor(0.6))
-                                                    .padding(.horizontal, 1)
-                                            }
-                                            if !line.directoryCandidates.isEmpty {
-                                                SidebarDirectoryText(
-                                                    candidates: line.directoryCandidates,
-                                                    color: activeSecondaryColor(0.75),
-                                                    fontScale: fontScale
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else if sidebarBranchDirectoryPlacement == .stacked,
-                          (workspaceSnapshot.compactGitBranchSummaryText != nil
-                           || !workspaceSnapshot.compactDirectoryCandidates.isEmpty) {
-                    HStack(alignment: .top, spacing: 3) {
-                        if sidebarShowGitBranchIcon, workspaceSnapshot.compactGitBranchSummaryText != nil {
-                            CmuxSystemSymbolImage(magnified: "arrow.triangle.branch", pointSize: scaledFontSize(9), tint: activeSecondaryColor(0.6))
-                        }
-                        VStack(alignment: .leading, spacing: 1) {
-                            if let branchRow = workspaceSnapshot.compactGitBranchSummaryText {
-                                Text(branchRow)
-                                    .font(magnifiedFont(typography.branch, design: .monospaced))
-                                    .foregroundColor(activeSecondaryColor(0.75))
-                                    .lineLimit(2)
-                                    .truncationMode(.tail)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            if !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
-                                SidebarDirectoryText(
-                                    candidates: workspaceSnapshot.compactDirectoryCandidates,
-                                    color: activeSecondaryColor(0.75),
-                                    fontScale: fontScale
-                                )
-                            }
-                        }
-                    }
-                } else if workspaceSnapshot.compactGitBranchSummaryText != nil || !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
-                    HStack(spacing: 3) {
-                        if sidebarShowGitBranchIcon, workspaceSnapshot.compactGitBranchSummaryText != nil {
-                            CmuxSystemSymbolImage(magnified: "arrow.triangle.branch", pointSize: scaledFontSize(9), tint: activeSecondaryColor(0.6))
-                        }
-                        if let branchRow = workspaceSnapshot.compactGitBranchSummaryText {
-                            Text(branchRow)
-                                .font(magnifiedFont(typography.branch, design: .monospaced))
-                                .foregroundColor(activeSecondaryColor(0.75))
-                                .lineLimit(2)
-                                .truncationMode(.tail)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        if workspaceSnapshot.compactGitBranchSummaryText != nil, !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
-                            CmuxSystemSymbolImage(magnified: "circle.fill", pointSize: scaledFontSize(3), tint: activeSecondaryColor(0.6))
-                                .padding(.horizontal, 1)
-                        }
-                        if !workspaceSnapshot.compactDirectoryCandidates.isEmpty {
-                            SidebarDirectoryText(
-                                candidates: workspaceSnapshot.compactDirectoryCandidates,
-                                color: activeSecondaryColor(0.75),
-                                fontScale: fontScale
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Pull request rows
-            if detailVisibility.showsPullRequests, !workspaceSnapshot.pullRequestRows.isEmpty {
-                VStack(alignment: .leading, spacing: 1) {
-                    ForEach(workspaceSnapshot.pullRequestRows) { pullRequest in
-                        let pullRequestNumber = String(pullRequest.number)
-                        let pullRequestTitle = "\(pullRequest.label) #\(pullRequestNumber)"
-                        let rowContent = HStack(alignment: .center, spacing: 4) {
-                            PullRequestStatusIcon(
-                                status: pullRequest.status,
-                                color: pullRequestForegroundColor,
-                                fontScale: fontScale
-                            )
-                            Text(pullRequestTitle)
-                                .underline(settings.makesPullRequestsClickable)
-                                .lineLimit(2)
-                                .truncationMode(.tail)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text(pullRequestStatusLabel(pullRequest.status))
-                                .lineLimit(2)
-                                .truncationMode(.tail)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 0)
-                        }
-                        .font(magnifiedFont(typography.auxiliary, weight: .semibold))
-                        .foregroundColor(pullRequestForegroundColor)
-                        .opacity(pullRequest.isStale ? 0.5 : 1)
-                        if settings.makesPullRequestsClickable {
-                            Button(action: { openPullRequestLink(pullRequest.url) }) { rowContent }
-                                .buttonStyle(.plain)
-                                .tint(pullRequestForegroundColor)
-                                .safeHelp(
-                                    String(
-                                        format: String(localized: "sidebar.pullRequest.openTooltip", defaultValue: "Open %1$@ #%2$lld"),
-                                        pullRequest.label,
-                                        Int64(pullRequest.number)
-                                    )
-                                )
-                                .accessibilityIdentifier("SidebarPullRequestRow")
-                        } else {
-                            rowContent.accessibilityElement(children: .combine).accessibilityIdentifier("SidebarPullRequestRow")
-                        }
-                    }
-                }
-            }
-
-            // Ports row
-            if detailVisibility.showsPorts, !workspaceSnapshot.listeningPorts.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(workspaceSnapshot.listeningPorts, id: \.self) { port in
-                        let portLabel = SidebarPortDisplayText.label(for: port)
-                        let portTooltip = SidebarPortDisplayText.openTooltip(for: port)
-                        Button(action: {
-                            openPortLink(port)
-                        }) {
-                            Text(portLabel)
-                                .underline()
-                                .lineLimit(2)
-                                .truncationMode(.tail)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .buttonStyle(.plain)
-                        .safeHelp(portTooltip)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .font(magnifiedFont(typography.auxiliary, design: .monospaced))
-                .foregroundColor(activeSecondaryColor(0.75))
-            }
 
             // Rendered whenever there is content, a pending add request, or an OPEN
             // popover — unmounting dismantles the popover's anchor mid-presentation.
@@ -16493,6 +16528,7 @@ struct TabItemView: View, Equatable {
     @ViewBuilder
     private func metadataAndLogRows(
         snapshot workspaceSnapshot: SidebarWorkspaceSnapshotBuilder.Snapshot,
+        detail: SidebarWorkspaceDetail,
         isEmphasized: Bool
     ) -> some View {
         let detailVisibility = visibleAuxiliaryDetails
@@ -16502,7 +16538,7 @@ struct TabItemView: View, Equatable {
             isEmphasized: isEmphasized
         )
 
-        if detailVisibility.showsMetadata {
+        if detail == .metadata, detailVisibility.showsMetadata {
             let metadataEntries = workspaceSnapshot.metadataEntries
             let metadataBlocks = workspaceSnapshot.metadataBlocks
             if !metadataEntries.isEmpty {
@@ -16516,6 +16552,8 @@ struct TabItemView: View, Equatable {
                         isEmphasized: isEmphasized
                     ),
                     fontScale: fontScale,
+                    textSettings: settings.textSettings,
+                    displaySettings: settings.agentStatusDisplay,
                     onFocus: { updateSelection() }
                 )
                 .transition(.opacity)
@@ -16533,13 +16571,14 @@ struct TabItemView: View, Equatable {
                         isEmphasized: isEmphasized
                     ),
                     fontScale: fontScale,
+                    textSettings: settings.textSettings,
                     onFocus: { updateSelection() }
                 )
                 .transition(.opacity)
             }
         }
 
-        if detailVisibility.showsLog, let latestLog = workspaceSnapshot.latestLog {
+        if detail == .log, detailVisibility.showsLog, let latestLog = workspaceSnapshot.latestLog {
             HStack(alignment: .center, spacing: 4) {
                 CmuxSystemSymbolImage(
                     magnified: logLevelIcon(latestLog.level),
@@ -16553,7 +16592,7 @@ struct TabItemView: View, Equatable {
                 Text(latestLog.message)
                     .font(magnifiedFont(typography.auxiliary))
                     .foregroundColor(activeSecondaryColor(0.8, isEmphasized: isEmphasized))
-                    .lineLimit(2)
+                    .lineLimit(settings.textSettings.lineLimit)
                     .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -16785,6 +16824,8 @@ private struct SidebarMetadataRows: View {
     let selectedForeground: NSColor
     let activeSecondaryForegroundColor: Color
     let fontScale: CGFloat
+    let textSettings: SidebarWorkspaceTextSettings
+    let displaySettings: AgentStatusDisplaySettings
     let onFocus: () -> Void
 
     @State private var isExpanded: Bool = false
@@ -16799,6 +16840,8 @@ private struct SidebarMetadataRows: View {
                     selectedBackground: selectedBackground,
                     selectedForeground: selectedForeground,
                     fontScale: fontScale,
+                    textSettings: textSettings,
+                    displaySettings: displaySettings,
                     onFocus: onFocus
                 )
             }
@@ -16840,6 +16883,8 @@ private struct SidebarMetadataEntryRow: View {
     let selectedBackground: NSColor
     let selectedForeground: NSColor
     let fontScale: CGFloat
+    let textSettings: SidebarWorkspaceTextSettings
+    let displaySettings: AgentStatusDisplaySettings
     let onFocus: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.cmuxAccentColor) private var cmuxAccent
@@ -16847,7 +16892,7 @@ private struct SidebarMetadataEntryRow: View {
     var body: some View {
         Group {
             if let presentation = AgentStatusPresentation(entry: entry) {
-                AgentStatusBadge(entry: entry, presentation: presentation, fontScale: fontScale) { url in
+                AgentStatusBadge(entry: entry, presentation: presentation, pointSize: SidebarWorkspaceTypography(scale: fontScale, settings: textSettings).agentStatus, displaySettings: displaySettings, lineLimit: textSettings.lineLimit) { url in
                     onFocus()
                     NSWorkspace.shared.open(url)
                 }
@@ -16881,12 +16926,12 @@ private struct SidebarMetadataEntryRow: View {
                     .foregroundColor(foregroundColor.opacity(0.95))
             }
             metadataText(underlined: underlined)
-                .lineLimit(2)
+                .lineLimit(textSettings.lineLimit)
                 .truncationMode(.tail)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
-        .cmuxFont(size: SidebarWorkspaceTypography(scale: fontScale).description)
+        .cmuxFont(size: SidebarWorkspaceTypography(scale: fontScale, settings: textSettings).description)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -16961,6 +17006,7 @@ private struct SidebarMetadataMarkdownBlocks: View {
     let activeForegroundColor: Color
     let activeSecondaryForegroundColor: Color
     let fontScale: CGFloat
+    let textSettings: SidebarWorkspaceTextSettings
     let onFocus: () -> Void
 
     @State private var isExpanded: Bool = false
@@ -16974,6 +17020,7 @@ private struct SidebarMetadataMarkdownBlocks: View {
                     isActive: isActive,
                     activeForegroundColor: activeForegroundColor,
                     fontScale: fontScale,
+                    textSettings: textSettings,
                     onFocus: onFocus
                 )
             }
@@ -17008,8 +17055,9 @@ private struct SidebarMetadataMarkdownBlockRow: View {
     let isActive: Bool
     let activeForegroundColor: Color
     let fontScale: CGFloat
+    let textSettings: SidebarWorkspaceTextSettings
     let onFocus: () -> Void
-    private static let maxDisplayedLines = 2
+    private var maxDisplayedLines: Int { textSettings.lineLimit }
     private static let maxDisplayedCharacters = 4096
 
     var body: some View {
@@ -17017,7 +17065,7 @@ private struct SidebarMetadataMarkdownBlockRow: View {
         // Parsing in onAppear into @State performed a guaranteed nil ->
         // attributed swap on every first appearance, changing the row's height
         // mid-scroll and re-feeding the sidebar-wide layout cycle (#5764).
-        let displayMarkdown = Self.displayMarkdown(from: block.markdown)
+        let displayMarkdown = displayMarkdown(from: block.markdown)
         let renderedMarkdown = SidebarMetadataMarkdownRenderer.rendered(displayMarkdown)?
             .applyingSidebarRowLinkPolicy(
                 activeForegroundColor: isActive ? activeForegroundColor : nil
@@ -17031,9 +17079,9 @@ private struct SidebarMetadataMarkdownBlockRow: View {
                     .foregroundColor(foregroundColor)
             }
         }
-        .cmuxFont(size: SidebarWorkspaceTypography(scale: fontScale).description)
+        .cmuxFont(size: SidebarWorkspaceTypography(scale: fontScale, settings: textSettings).description)
         .multilineTextAlignment(.leading)
-        .lineLimit(Self.maxDisplayedLines)
+        .lineLimit(maxDisplayedLines)
         .truncationMode(.tail)
         .fixedSize(horizontal: false, vertical: true)
         .contentShape(Rectangle())
@@ -17044,10 +17092,10 @@ private struct SidebarMetadataMarkdownBlockRow: View {
         isActive ? activeForegroundColor : .secondary
     }
 
-    private static func displayMarkdown(from markdown: String) -> String {
+    private func displayMarkdown(from markdown: String) -> String {
         markdown.sidebarBoundedDisplayString(
             maxDisplayedLines: maxDisplayedLines,
-            maxDisplayedCharacters: maxDisplayedCharacters
+            maxDisplayedCharacters: Self.maxDisplayedCharacters
         )
     }
 }

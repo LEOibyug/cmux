@@ -78,7 +78,8 @@ struct SidebarWorkspaceRowModel: Equatable {
 
     var typography: SidebarWorkspaceTypography {
         SidebarWorkspaceTypography(
-            scale: fontScale * CGFloat(globalFontMagnificationPercent) / CGFloat(GlobalFontMagnification.defaultPercent)
+            scale: fontScale * CGFloat(globalFontMagnificationPercent) / CGFloat(GlobalFontMagnification.defaultPercent),
+            settings: settings.textSettings
         )
     }
 

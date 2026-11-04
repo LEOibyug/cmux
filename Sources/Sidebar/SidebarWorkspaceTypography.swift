@@ -3,11 +3,12 @@ import CoreGraphics
 /// Shared semantic font hierarchy; callers supply their resolved sidebar scale.
 struct SidebarWorkspaceTypography {
     let scale: CGFloat
+    var settings = SidebarWorkspaceTextSettings()
 
-    var title: CGFloat { 14 * scale }
-    var agentStatus: CGFloat { 12 * scale }
-    var description: CGFloat { 11 * scale }
-    var branch: CGFloat { 10.5 * scale }
-    var directory: CGFloat { 10 * scale }
-    var auxiliary: CGFloat { 9.5 * scale }
+    var title: CGFloat { settings.title * scale }
+    var agentStatus: CGFloat { settings.agentStatus * scale }
+    var description: CGFloat { settings.description * scale }
+    var branch: CGFloat { settings.branch * scale }
+    var directory: CGFloat { settings.directory * scale }
+    var auxiliary: CGFloat { settings.auxiliary * scale }
 }

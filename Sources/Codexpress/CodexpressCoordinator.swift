@@ -13,48 +13,62 @@ final class CodexpressCoordinator {
     private(set) var actionError: CodexpressManagementError?
 
     @ObservationIgnored private let service: any CodexpressManagementServing
-    @ObservationIgnored private let waitForRefresh: @Sendable () async throws -> Void
+    @ObservationIgnored private let waitForRefresh: @Sendable (Double) async throws -> Void
     @ObservationIgnored private var observers: [UUID: AsyncStream<Void>.Continuation] = [:]
     @ObservationIgnored private var observationTask: Task<Void, Never>?
+    @ObservationIgnored private var settings = CodexpressSettingsSnapshot()
     @ObservationIgnored private var refreshOperations: [String: String] = [:]
     @ObservationIgnored private var resetRequestIDs: [String: UUID] = [:]
     @ObservationIgnored private var requestsInFlight: Set<String> = []
 
     init(
         service: any CodexpressManagementServing,
-        waitForRefresh: @escaping @Sendable () async throws -> Void
+        waitForRefresh: @escaping @Sendable (Double) async throws -> Void
     ) {
         self.service = service
         self.waitForRefresh = waitForRefresh
+    }
+
+    /// Applies live preferences without losing uncertain or pending operation IDs.
+    func applySettings(_ next: CodexpressSettingsSnapshot) {
+        let cadenceChanged = settings.enabled != next.enabled
+            || settings.pollIntervalSeconds != next.pollIntervalSeconds
+        settings = next
+        if cadenceChanged { restartObservation() }
     }
 
     /// Shares one local-status cadence across all visible sidebar instances.
     func observe() async {
         let id = UUID()
         let lease = AsyncStream<Void> { observers[id] = $0 }
-        if observationTask == nil {
-            observationTask = Task { [weak self] in
-                guard let self else { return }
-                while !Task.isCancelled {
-                    await refreshLocal()
-                    await reconcileActions()
-                    do { try await waitForRefresh() }
-                    catch { break }
-                }
-            }
-        }
+        if observers.count == 1 { restartObservation() }
         defer {
             observers.removeValue(forKey: id)
-            if observers.isEmpty {
-                observationTask?.cancel()
-                observationTask = nil
-            }
+            if observers.isEmpty { restartObservation() }
         }
         for await _ in lease {}
     }
 
+    private func restartObservation() {
+        let previous = observationTask
+        previous?.cancel()
+        // Await cancellation before starting another cadence, even if a service
+        // call does not return immediately. Multiple sidebar leases never poll twice.
+        observationTask = Task { [weak self] in
+            await previous?.value
+            guard let self, !Task.isCancelled, settings.enabled, !observers.isEmpty else { return }
+            while !Task.isCancelled && settings.enabled && !observers.isEmpty {
+                await refreshLocal()
+                guard !Task.isCancelled, settings.enabled else { return }
+                await reconcileActions()
+                do { try await waitForRefresh(settings.pollIntervalSeconds) }
+                catch { return }
+            }
+        }
+    }
+
     func refreshLocal() async {
-        guard !isUpdating else { return }
+        guard settings.enabled, !Task.isCancelled, !isUpdating else { return }
         isUpdating = true
         defer { isUpdating = false }
         do {
@@ -90,7 +104,8 @@ final class CodexpressCoordinator {
     }
 
     func requestReset(_ sourceID: String) async {
-        guard !activeSourceIDs.contains(sourceID), resetRequestIDs[sourceID] == nil,
+        guard settings.enabled, settings.showActions,
+              !activeSourceIDs.contains(sourceID), resetRequestIDs[sourceID] == nil,
               let source = snapshot?.sources.first(where: { $0.id == sourceID }),
               source.enabled, source.kind == "official" else { return }
         let id = UUID()
@@ -129,7 +144,7 @@ final class CodexpressCoordinator {
         sourceID: String,
         tracksRefresh: Bool = false
     ) async {
-        guard !activeSourceIDs.contains(sourceID),
+        guard settings.enabled, settings.showActions, !activeSourceIDs.contains(sourceID),
               snapshot?.sources.contains(where: { $0.id == sourceID }) == true else { return }
         activeSourceIDs.insert(sourceID)
         requestsInFlight.insert(sourceID)

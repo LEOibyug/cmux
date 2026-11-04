@@ -2884,6 +2884,7 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
     /// may inject a prepared snapshot.
     let restorableAgentIndexProvider: @MainActor () -> RestorableAgentSessionIndex?
     private let settings: any SettingsReading
+    var agentStatusDisplaySettings: AgentStatusDisplaySettings { .init(settings: settings) }
 
     /// Ordinal for CMUX_PORT range assignment (monotonically increasing per app session)
     var portOrdinal: Int = 0

@@ -5,7 +5,9 @@ import SwiftUI
 struct AgentStatusBadge: NSViewRepresentable {
     let entry: SidebarStatusEntry
     let presentation: AgentStatusPresentation
-    let fontScale: CGFloat
+    let pointSize: CGFloat
+    let displaySettings: AgentStatusDisplaySettings
+    var lineLimit: Int = 2
     let onOpenURL: (URL) -> Void
 
     func makeNSView(context: Context) -> AgentStatusBadgeView {
@@ -13,7 +15,7 @@ struct AgentStatusBadge: NSViewRepresentable {
     }
 
     func updateNSView(_ view: AgentStatusBadgeView, context: Context) {
-        view.configure(entry: entry, presentation: presentation, fontScale: fontScale, onOpenURL: onOpenURL)
+        view.configure(entry: entry, presentation: presentation, pointSize: pointSize, displaySettings: displaySettings, lineLimit: lineLimit, onOpenURL: onOpenURL)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: AgentStatusBadgeView, context: Context) -> CGSize? {

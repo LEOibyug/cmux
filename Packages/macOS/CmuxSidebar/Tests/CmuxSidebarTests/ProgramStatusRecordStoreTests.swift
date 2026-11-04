@@ -54,6 +54,22 @@ struct ProgramStatusRecordStoreTests {
         #expect(store.record(id: "done") != nil)
     }
 
+    @Test func idleDisplaySelectionDoesNotChangeActiveRecordSelection() {
+        var store = ProgramStatusRecordStore()
+        store.apply(ProgramStatusReport(state: .idle, app: "omp"))
+        #expect(store.mostUrgentRecord() == nil)
+        #expect(store.mostUrgentRecord(includingIdle: true)?.state == .idle)
+        store.apply(ProgramStatusReport(state: .working, id: "build"))
+        store.apply(ProgramStatusReport(state: .idle, id: "later"))
+        #expect(store.mostUrgentRecord(includingIdle: true)?.state == .working)
+        store.apply(ProgramStatusReport(state: .done, id: "build"))
+        #expect(store.mostUrgentRecord(includingIdle: true)?.state == .done)
+        store.dismissCompleted()
+        #expect(store.mostUrgentRecord(includingIdle: true)?.id == "later")
+        store.apply(ProgramStatusReport(state: .clear))
+        #expect(store.mostUrgentRecord(includingIdle: true) == nil)
+    }
+
     @Test func changedPayloadUsesSafeProtocolFields() {
         var store = ProgramStatusRecordStore()
         let report = ProgramStatusReport(

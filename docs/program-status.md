@@ -19,15 +19,17 @@ Programs can detect support with `printf '\e]7501;?\e\\'`; cmux answers with the
 ## What cmux shows
 
 cmux keeps each terminal pane's records separately and selects the most urgent status:
-`blocked`, then `error`, `working`, and `done`. Native `idle` records are kept but not shown.
-The sidebar and terminal tab use the same short state label. In Chinese, working is
-“工作中” and blocked is “等待输入”; hook-reported idle, completed, error and external
-waiting states also share their labels across both locations. The original app name,
-message, title and progress remain in the sidebar badge's hover help.
+`blocked`, then `error`, `working`, `done`, and explicitly reported `idle`. Idle means the
+program is ready; it is not relabeled as Done. A pane without a report has no badge.
+Native and hook idle states share the same display policy. The sidebar and terminal tab
+use the same short label: in Chinese, working is “工作中” and blocked is “等待输入”.
+The original app name, message, title and progress remain in the badge's hover help.
 
 The row uses the same prominent colored badges as hook-integrated agents: blue
 with a rotating indicator for working, amber for blocked, red for error, and green
-for done. Reduce Motion keeps the text and symbol static. Native OMP reports use
+for done or idle. Settings > Sidebar controls inactive badges, sidebar/tab visibility,
+and animation; Reduce Motion always keeps symbols static. The sidebar status sits directly
+below the workspace title, before configurable information rows. Native OMP reports use
 this path without a hook PID; conversation age does not affect the presentation.
 
 When the same terminal also has a hook report for that agent, its live native report

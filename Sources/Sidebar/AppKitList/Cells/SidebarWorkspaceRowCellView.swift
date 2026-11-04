@@ -45,6 +45,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
     private let remoteTargetView = SidebarRowTextView(lines: 2)
     private let remoteStatusView = SidebarRowTextView(lines: 2)
     private let remoteReconnectButton = NSButton()
+    private var agentStatusRows: [SidebarRowIconTextLine] = []
     private var metadataRows: [SidebarRowIconTextLine] = []
     private let metadataToggleButton = SidebarRowLinkButton()
     private var markdownBlocks: [SidebarRowTextView] = []
@@ -525,6 +526,10 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         let palette = palette(model)
         let snapshot = model.snapshot
         let settings = model.settings
+        for field in [descriptionView, subtitleView, remoteTargetView, remoteStatusView] {
+            field.maximumNumberOfLines = settings.textSettings.lineLimit
+            field.lineBreakMode = settings.textSettings.lineLimit == 1 ? .byTruncatingTail : .byWordWrapping
+        }
 
         // Chrome
         applySelectionChrome(model)
@@ -597,7 +602,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         reconcileStatusPopover(model: model, showsAnchor: showsStatusGlyph)
         configureCompactStatusGlyph(model: model, palette: palette)
 
-        let titleLineLimit = settings.wrapsWorkspaceTitles ? 2 : 1
+        let titleLineLimit = settings.wrapsWorkspaceTitles ? settings.textSettings.lineLimit : 1
         titleView.maximumNumberOfLines = titleLineLimit
         titleView.lineBreakMode = titleLineLimit == 1 ? .byTruncatingTail : .byWordWrapping
         let boundedTitle = snapshot.displayTitle.sidebarBoundedDisplayString(
@@ -643,7 +648,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         let description = snapshot.customDescription
         descriptionView.isHidden = description == nil
         if let description {
-            let display = description.sidebarBoundedDisplayString(maxDisplayedLines: 2, maxDisplayedCharacters: 4096)
+            let display = description.sidebarBoundedDisplayString(maxDisplayedLines: settings.textSettings.lineLimit, maxDisplayedCharacters: 4096)
             let customDescriptionColor = settings.workspaceDescriptionColorHex.flatMap(NSColor.init(hex:))
             let descriptionColor = customDescriptionColor ?? palette.secondary(0.84, inactiveOpacity: 0.95)
             if let rendered = SidebarMarkdownRenderer(markdown: display).workspaceDescription {
@@ -663,15 +668,17 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         }
 
         let conversationSubtitle: String? = {
-            guard !settings.hidesAllDetails, settings.iMessageModeEnabled else { return nil }
+            guard settings.showsNotificationMessage, settings.iMessageModeEnabled else { return nil }
             let trimmed = snapshot.latestConversationMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
             return (trimmed?.isEmpty == false) ? trimmed : nil
         }()
         // Compact status rows are one line; the notification leads the glyph's tooltip instead.
-        let effectiveSubtitle = snapshot.compactStatusGlyph != nil
+        let effectiveSubtitle = !settings.showsNotificationMessage || snapshot.compactStatusGlyph != nil
             ? nil
             : model.latestNotificationText ?? conversationSubtitle
-        let subtitleLineLimit = 2
+        let subtitleLineLimit = model.latestNotificationText == nil
+            ? settings.textSettings.lineLimit
+            : min(settings.textSettings.lineLimit, settings.notificationMessageLineLimit)
         subtitleView.isHidden = effectiveSubtitle == nil
         if let effectiveSubtitle {
             subtitleView.maximumNumberOfLines = subtitleLineLimit
@@ -711,6 +718,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
             }
         }
 
+        configureAgentStatus(model: model, palette: palette)
         configureMetadata(model: model, palette: palette)
         configureLogAndProgress(model: model, palette: palette)
         configureBranchDirectory(model: model, palette: palette)
@@ -899,6 +907,21 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         )
     }
 
+    private func configureAgentStatus(model: SidebarWorkspaceRowModel, palette: SidebarRowPalette) {
+        let settings = model.settings
+        let entries = !settings.hidesAllDetails
+            && settings.agentStatusDisplay.showAgentStatusInSidebar
+            && !settings.compactsAgentStatus
+            ? model.snapshot.agentStatusEntries : []
+        Self.pool(&agentStatusRows, count: entries.count, parent: contentContainer) { SidebarRowIconTextLine() }
+        for (index, entry) in entries.enumerated() {
+            agentStatusRows[index].configureMetadataEntry(entry, model: model, color: palette.secondary()) { [weak self] url in
+                self?.actions?.commands.updateSelection()
+                self?.actions?.onOpenStatusURL(url)
+            }
+        }
+    }
+
     private func configureMetadata(model: SidebarWorkspaceRowModel, palette: SidebarRowPalette) {
         let allEntries = model.settings.visibleAuxiliaryDetails.showsMetadata
             ? model.snapshot.metadataEntries : []
@@ -956,12 +979,14 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         Self.pool(&markdownBlocks, count: blocks.count, parent: contentContainer) { SidebarRowTextView(lines: 2) }
         for (index, block) in blocks.enumerated() {
             let view = markdownBlocks[index]
+            view.maximumNumberOfLines = model.settings.textSettings.lineLimit
+            view.lineBreakMode = model.settings.textSettings.lineLimit == 1 ? .byTruncatingTail : .byWordWrapping
             view.onOpenLink = { [weak self] url in
                 guard let self else { return }
                 self.actions?.commands.updateSelection()
                 self.actions?.onOpenStatusURL(url)
             }
-            let display = block.markdown.sidebarBoundedDisplayString(maxDisplayedLines: 2, maxDisplayedCharacters: 4096)
+            let display = block.markdown.sidebarBoundedDisplayString(maxDisplayedLines: model.settings.textSettings.lineLimit, maxDisplayedCharacters: 4096)
             if let rendered = SidebarMetadataMarkdownRenderer.rendered(display) {
                 view.configureAttributedText(
                     rendered,
@@ -988,6 +1013,8 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         let progress = model.settings.visibleAuxiliaryDetails.showsProgress ? model.snapshot.progress : nil
         progressView.isHidden = progress == nil
         if let progress {
+            progressView.label.maximumNumberOfLines = model.settings.textSettings.lineLimit
+            progressView.label.lineBreakMode = model.settings.textSettings.lineLimit == 1 ? .byTruncatingTail : .byWordWrapping
             let labelFont = NSFont.systemFont(ofSize: model.typography.auxiliary)
             progressView.configure(
                 fraction: CGFloat(progress.value),
@@ -1069,6 +1096,7 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
         let ports = settings.visibleAuxiliaryDetails.showsPorts ? snapshot.listeningPorts : []
         Self.pool(&portButtons, count: ports.count, parent: contentContainer) { SidebarRowLinkButton() }
         for (index, port) in ports.enumerated() {
+            portButtons[index].lineLimit = settings.textSettings.lineLimit
             portButtons[index].configure(
                 title: SidebarPortDisplayText.label(for: port),
                 font: .monospacedSystemFont(ofSize: model.typography.auxiliary, weight: .regular),
@@ -1367,8 +1395,128 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
             y += height
         }
 
-        placeBlock(descriptionView)
-        placeBlock(subtitleView)
+        for row in agentStatusRows where !row.isHidden {
+            y += spacing
+            let height = row.measuredHeight(width: contentWidth)
+            if apply { row.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
+            y += height
+        }
+
+        for detail in model.settings.detailOrder {
+            switch detail {
+            case .description:
+                placeBlock(descriptionView)
+            case .notification:
+                placeBlock(subtitleView)
+
+
+            case .metadata:
+                for row in metadataRows where !row.isHidden {
+                    y += 2
+                    let height = row.measuredHeight(width: contentWidth)
+                    if apply { row.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
+                    y += height
+                }
+                if !metadataToggleButton.isHidden {
+                    y += 2
+                    let size = NSSize(width: min(metadataToggleButton.intrinsicContentSize.width, contentWidth),
+                                      height: metadataToggleButton.measuredHeight(width: contentWidth))
+                    if apply {
+                        metadataToggleButton.frame = NSRect(
+                            x: leading, y: y, width: min(size.width, contentWidth), height: size.height
+                        )
+                    }
+                    y += size.height
+                }
+                for block in markdownBlocks where !block.isHidden {
+                    y += 3
+                    let height = block.measuredHeight(width: contentWidth)
+                    if apply { block.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
+                    y += height
+                }
+                if !markdownToggleButton.isHidden {
+                    y += 2
+                    let size = NSSize(width: min(markdownToggleButton.intrinsicContentSize.width, contentWidth),
+                                      height: markdownToggleButton.measuredHeight(width: contentWidth))
+                    if apply {
+                        markdownToggleButton.frame = NSRect(
+                            x: leading, y: y, width: min(size.width, contentWidth), height: size.height
+                        )
+                    }
+                    y += size.height
+                }
+            case .log:
+                if !logLine.isHidden {
+                    y += spacing
+                    let height = logLine.measuredHeight(width: contentWidth)
+                    if apply { logLine.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
+                    y += height
+                }
+            case .progress:
+                if !progressView.isHidden {
+                    y += spacing
+                    let height = progressView.measuredHeight(width: contentWidth)
+                    if apply { progressView.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
+                    y += height
+                }
+
+            case .branchDirectory:
+                let visibleBranchLines = branchLines.filter { !$0.isHidden }
+                if !visibleBranchLines.isEmpty {
+                    y += spacing
+                    var lineX = leading
+                    if !branchIconView.isHidden {
+                        let side = model.scaled(9) + 3
+                        if apply {
+                            branchIconView.frame = NSRect(x: leading, y: y, width: side, height: side)
+                        }
+                        lineX += side + 3
+                    }
+                    let lineWidth = max(10, trailing - lineX)
+                    for line in visibleBranchLines {
+                        let height = line.measuredHeight(width: lineWidth)
+                        if apply { line.frame = NSRect(x: lineX, y: y, width: lineWidth, height: height) }
+                        y += height + 1
+                    }
+                    y -= 1
+                }
+
+            case .pullRequests:
+                let visiblePRs = pullRequestRows.filter { !$0.isHidden }
+                if !visiblePRs.isEmpty {
+                    y += spacing
+                    for row in visiblePRs {
+                        let height = row.measuredHeight(width: contentWidth)
+                        if apply { row.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
+                        y += height + 1
+                    }
+                    y -= 1
+                }
+
+            case .ports:
+                let visiblePorts = portButtons.filter { !$0.isHidden }
+                if !visiblePorts.isEmpty {
+                    y += spacing
+                    var portX = leading
+                    var lineHeight: CGFloat = 0
+                    for button in visiblePorts {
+                        let buttonWidth = min(button.intrinsicContentSize.width, contentWidth)
+                        let size = NSSize(width: buttonWidth, height: button.measuredHeight(width: buttonWidth))
+                        if portX > leading, portX + size.width > trailing {
+                            // Wrap to a new line instead of laying ports past the
+                            // row's trailing edge (unbounded growth with many ports).
+                            y += lineHeight + 4
+                            portX = leading
+                            lineHeight = 0
+                        }
+                        if apply { button.frame = NSRect(x: portX, y: y, width: size.width, height: size.height) }
+                        portX += size.width + 4
+                        lineHeight = max(lineHeight, size.height)
+                    }
+                    y += lineHeight
+                }
+            }
+        }
 
         if !remoteTargetView.isHidden {
             y += model.latestNotificationText == nil ? 1 : 2
@@ -1395,107 +1543,6 @@ final class SidebarWorkspaceRowTableCellView: NSTableCellView {
             }
             y += lineHeight
         }
-
-        for row in metadataRows where !row.isHidden {
-            y += 2
-            let height = row.measuredHeight(width: contentWidth)
-            if apply { row.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
-            y += height
-        }
-        if !metadataToggleButton.isHidden {
-            y += 2
-            let size = NSSize(width: min(metadataToggleButton.intrinsicContentSize.width, contentWidth),
-                              height: metadataToggleButton.measuredHeight(width: contentWidth))
-            if apply {
-                metadataToggleButton.frame = NSRect(
-                    x: leading, y: y, width: min(size.width, contentWidth), height: size.height
-                )
-            }
-            y += size.height
-        }
-        for block in markdownBlocks where !block.isHidden {
-            y += 3
-            let height = block.measuredHeight(width: contentWidth)
-            if apply { block.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
-            y += height
-        }
-        if !markdownToggleButton.isHidden {
-            y += 2
-            let size = NSSize(width: min(markdownToggleButton.intrinsicContentSize.width, contentWidth),
-                              height: markdownToggleButton.measuredHeight(width: contentWidth))
-            if apply {
-                markdownToggleButton.frame = NSRect(
-                    x: leading, y: y, width: min(size.width, contentWidth), height: size.height
-                )
-            }
-            y += size.height
-        }
-        if !logLine.isHidden {
-            y += spacing
-            let height = logLine.measuredHeight(width: contentWidth)
-            if apply { logLine.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
-            y += height
-        }
-        if !progressView.isHidden {
-            y += spacing
-            let height = progressView.measuredHeight(width: contentWidth)
-            if apply { progressView.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
-            y += height
-        }
-
-        let visibleBranchLines = branchLines.filter { !$0.isHidden }
-        if !visibleBranchLines.isEmpty {
-            y += spacing
-            var lineX = leading
-            if !branchIconView.isHidden {
-                let side = model.scaled(9) + 3
-                if apply {
-                    branchIconView.frame = NSRect(x: leading, y: y, width: side, height: side)
-                }
-                lineX += side + 3
-            }
-            let lineWidth = max(10, trailing - lineX)
-            for line in visibleBranchLines {
-                let height = line.measuredHeight(width: lineWidth)
-                if apply { line.frame = NSRect(x: lineX, y: y, width: lineWidth, height: height) }
-                y += height + 1
-            }
-            y -= 1
-        }
-
-        let visiblePRs = pullRequestRows.filter { !$0.isHidden }
-        if !visiblePRs.isEmpty {
-            y += spacing
-            for row in visiblePRs {
-                let height = row.measuredHeight(width: contentWidth)
-                if apply { row.frame = NSRect(x: leading, y: y, width: contentWidth, height: height) }
-                y += height + 1
-            }
-            y -= 1
-        }
-
-        let visiblePorts = portButtons.filter { !$0.isHidden }
-        if !visiblePorts.isEmpty {
-            y += spacing
-            var portX = leading
-            var lineHeight: CGFloat = 0
-            for button in visiblePorts {
-                let buttonWidth = min(button.intrinsicContentSize.width, contentWidth)
-                let size = NSSize(width: buttonWidth, height: button.measuredHeight(width: buttonWidth))
-                if portX > leading, portX + size.width > trailing {
-                    // Wrap to a new line instead of laying ports past the
-                    // row's trailing edge (unbounded growth with many ports).
-                    y += lineHeight + 4
-                    portX = leading
-                    lineHeight = 0
-                }
-                if apply { button.frame = NSRect(x: portX, y: y, width: size.width, height: size.height) }
-                portX += size.width + 4
-                lineHeight = max(lineHeight, size.height)
-            }
-            y += lineHeight
-        }
-
         if !checklistSection.isHidden {
             let height = checklistSection.measuredHeight(width: contentWidth)
             if height > 0 {

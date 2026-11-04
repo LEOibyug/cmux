@@ -436,6 +436,25 @@ enum SidebarSettingsFileMapping {
             jsonKey: "compactAgentStatus",
             defaultsKey: SidebarWorkspaceDetailDefaults.compactAgentStatusKey
         ),
+        .init(jsonKey: "showInactiveAgentStatus", defaultsKey: sidebar.showInactiveAgentStatus.userDefaultsKey),
+        .init(jsonKey: "animateAgentStatus", defaultsKey: sidebar.animateAgentStatus.userDefaultsKey),
+        .init(jsonKey: "showAgentStatusInTabs", defaultsKey: sidebar.showAgentStatusInTabs.userDefaultsKey),
+        .init(jsonKey: "showAgentStatusInSidebar", defaultsKey: sidebar.showAgentStatusInSidebar.userDefaultsKey),
+        .init(jsonKey: "codexpressEnabled", defaultsKey: sidebar.codexpressEnabled.userDefaultsKey),
+        .init(jsonKey: "codexpressShowRequestCounts", defaultsKey: sidebar.codexpressShowRequestCounts.userDefaultsKey),
+        .init(jsonKey: "codexpressShowResetTimes", defaultsKey: sidebar.codexpressShowResetTimes.userDefaultsKey),
+        .init(jsonKey: "codexpressShowActions", defaultsKey: sidebar.codexpressShowActions.userDefaultsKey),
+    ]
+
+    static let numericSettings: [(jsonKey: String, key: DefaultsKey<Double>, range: ClosedRange<Double>)] = [
+        ("titleFontSize", sidebar.titleFontSize, 8...24),
+        ("agentStatusFontSize", sidebar.agentStatusFontSize, 8...24),
+        ("descriptionFontSize", sidebar.descriptionFontSize, 8...24),
+        ("branchFontSize", sidebar.branchFontSize, 8...24),
+        ("directoryFontSize", sidebar.directoryFontSize, 8...24),
+        ("auxiliaryFontSize", sidebar.auxiliaryFontSize, 8...24),
+        ("codexpressPollIntervalSeconds", sidebar.codexpressPollIntervalSeconds, 1...60),
+        ("codexpressFontSize", sidebar.codexpressFontSize, 8...20),
     ]
 
     static func branchLayoutStoredValue(_ rawValue: String) -> Bool? {
