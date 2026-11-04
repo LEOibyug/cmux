@@ -336,6 +336,9 @@ class TabManager: ObservableObject {
     /// chain, run synchronously after storage changed.
     func selectedWorkspaceIdDidChange(from oldValue: UUID?) {
             guard selectedTabId != oldValue else { return }
+            if !isRestoringSessionSnapshot, window?.isKeyWindow == true, let oldValue {
+                consumeCompletedAgentVisit(workspaceId: oldValue)
+            }
             defer {
                 workspaceSwitchCoordinator.selectionDidCommit(
                     from: oldValue,
@@ -4140,7 +4143,6 @@ class TabManager: ObservableObject {
         _ tabId: UUID,
         notificationDismissalContext: NotificationDismissalContext?
     ) {
-        workspacesById[tabId]?.dismissCompletedAgentStatus()
         guard selectedTabId != tabId else {
             // Selecting the workspace that is already selected (its sidebar row, ⌘1…9, the
             // palette, `cmux select-workspace`) still means "show this workspace": leave Chief

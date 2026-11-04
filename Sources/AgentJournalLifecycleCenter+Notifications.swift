@@ -84,9 +84,26 @@ extension AgentJournalLifecycleCenter {
     }
 
     @MainActor
+    private static func completionWasConsumed(
+        _ draft: AgentJournalEventDraft,
+        target: (tabId: UUID, surfaceId: UUID)
+    ) -> Bool {
+        guard let category = draft.attention?.notification?.category,
+              category == AgentNotifyCategory.turnComplete.rawValue
+                || category == AgentNotifyCategory.idleReminder.rawValue,
+              let workspace = AppDelegate.shared?.workspaceContainingPanel(
+                panelId: target.surfaceId,
+                preferredWorkspaceId: target.tabId
+              )?.workspace else { return false }
+        return workspace.dismissedAgentCompletionIdentitiesByPanelId[target.surfaceId]?
+            .contains(workspace.agentCompletionIdentity(for: draft.agentKey)) == true
+    }
+
+    @MainActor
     static func notificationAdmission(_ draft: AgentJournalEventDraft) -> AgentNotificationDelivery? {
         guard let notification = draft.attention?.notification,
-              notificationTarget(draft) != nil else { return nil }
+              let target = notificationTarget(draft),
+              !completionWasConsumed(draft, target: target) else { return nil }
         let delivery = AgentNotificationDelivery()
         guard delivery.allows(category: AgentNotifyCategory(rawValue: notification.category), pending: draft.pendingWork) else {
             notificationDiagnostic(draft, reason: "preference-filtered")
@@ -101,7 +118,8 @@ extension AgentJournalLifecycleCenter {
         let draft = event.draft
         guard let notification = draft.attention?.notification,
               let delivery = admission ?? notificationAdmission(draft),
-              let live = notificationTarget(draft) else { return }
+              let live = notificationTarget(draft),
+              !completionWasConsumed(draft, target: live) else { return }
         let liveSurfaceID = live.surfaceId
         let category = AgentNotifyCategory(rawValue: notification.category)
         let alert: NotificationSoundAlertType? = draft.kind == .errorReported ? .errorStalled : category?.soundAlertType

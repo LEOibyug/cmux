@@ -9,6 +9,12 @@ import Foundation
 /// so a gone workspace/panel makes every read `false`/`nil` and every
 /// mutation a no-op.
 extension TabManager: NotificationDismissalHosting {
+    /// A completed visit ends when its workspace or native window loses focus.
+    func consumeCompletedAgentVisit(workspaceId: UUID) {
+        workspacesById[workspaceId]?.dismissCompletedAgentStatus()
+        AppDelegate.shared?.notificationStore?.consumeCompletedAgentNotifications(forTabId: workspaceId)
+    }
+
     func isNotificationTargetSelected(workspaceId: UUID, surfaceId: UUID?) -> Bool {
         guard let surfaceId,
               let dock = DockSplitStore.liveStore(containingPanel: surfaceId) else {
@@ -116,7 +122,7 @@ extension TabManager: NotificationDismissalHosting {
     }
 
     func storeMarkRead(workspaceId: UUID, surfaceId: UUID?) {
-        AppDelegate.shared?.notificationStore?.markRead(forTabId: workspaceId, surfaceId: surfaceId)
+        AppDelegate.shared?.notificationStore?.markNotificationsReadOnVisit(forTabId: workspaceId, surfaceId: surfaceId)
     }
 
     func storeMarkWorkspaceLevelNotificationsRead(workspaceId: UUID) {
@@ -141,7 +147,7 @@ extension TabManager: NotificationDismissalHosting {
     }
 
     func storeClearFocusedReadIndicator(workspaceId: UUID, surfaceId: UUID?) {
-        AppDelegate.shared?.notificationStore?.clearFocusedReadIndicator(forTabId: workspaceId, surfaceId: surfaceId)
+        AppDelegate.shared?.notificationStore?.clearFocusedReadIndicatorOnVisit(forTabId: workspaceId, surfaceId: surfaceId)
     }
 
     /// Notification hashing for session autosave extracted because

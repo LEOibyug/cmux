@@ -286,6 +286,11 @@ extension AppDelegate {
     func handleCmuxWindowResignedKey(_ note: Notification) {
         guard let window = note.object as? NSWindow else { return }
         MainActor.assumeIsolated {
+            let manager = contextForMainTerminalWindow(window, reindex: false)?.tabManager
+                ?? recoverableMainWindowIdentity(forExactWindow: window)?.tabManager
+            if let manager, let workspaceId = manager.selectedTabId {
+                manager.consumeCompletedAgentVisit(workspaceId: workspaceId)
+            }
             if let windowId = mainWindowId(from: window) {
                 publishCmuxWindowLifecycle(
                     name: "window.unkeyed",

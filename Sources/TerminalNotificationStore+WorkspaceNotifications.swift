@@ -4,6 +4,21 @@ import Foundation
 extension TerminalNotificationStore {
     private static let workspaceContextMenuNotificationLimit = 50
 
+    static func isCompletedAgentNotification(
+        category: String?,
+        kind: String? = nil,
+        matchingKind: String? = nil
+    ) -> Bool {
+        guard category == "turn-complete" || category == "idle-reminder" else { return false }
+        guard let matchingKind else { return true }
+        guard let kind else { return false }
+        let resolver = TerminalTabAgentIconResolver()
+        let normalizedKind = kind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedTarget = matchingKind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return (resolver.agentID(forIdentity: normalizedKind) ?? normalizedKind)
+            == (resolver.agentID(forIdentity: normalizedTarget) ?? normalizedTarget)
+    }
+
     func dismissCompletedAgentStatus(forTabId tabId: UUID, surfaceId: UUID? = nil) {
         guard let appDelegate = AppDelegate.shared,
               let workspace = appDelegate.workspaceFor(tabId: tabId)
@@ -34,24 +49,12 @@ extension TerminalNotificationStore {
         return Array(sorted.prefix(Self.workspaceContextMenuNotificationLimit))
     }
 
-    /// Marks read only the notifications recorded against the workspace itself,
-    /// with no surface and no panel, such as cmux's own memory-pressure alert.
-    /// Surface-scoped notifications, every manual or restored unread indicator,
-    /// and in-flight policy work stay as they are, so reading the workspace's own
-    /// notifications cannot swallow another pane's unread state.
+    /// Visits read ordinary workspace-level alerts, such as cmux's own memory
+    /// pressure warning. Completion attention and every pane's indicators stay
+    /// intact until their own acknowledgment path runs.
     func markWorkspaceLevelNotificationsRead(forTabId tabId: UUID) {
-        // `.surface` with a nil surface covers exactly the workspace-level records.
-        defer { readTargetObserver?(.surface(workspaceID: tabId, surfaceID: nil)) }
-        // History keeps records the active list has already dropped, so the feed
-        // is marked by target while the active notifications are marked by id:
-        // that is the path which also withdraws their delivered Mac banners.
-        notificationFeedHistory.markRead(inWorkspace: tabId, surfaceId: nil)
-        let activeIDs = Set(
-            notifications.lazy
-                .filter { !$0.isRead && $0.matches(tabId: tabId, surfaceId: nil) }
-                .map(\.id)
-        )
-        guard !activeIDs.isEmpty else { return }
-        markNotificationFeedRead(ids: activeIDs)
+        // Visits retain completion attention until the user leaves. Exact reads
+        // also keep other identities' completion projections untouched.
+        markNotificationsReadOnVisit(forTabId: tabId, surfaceId: nil)
     }
 }

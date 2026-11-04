@@ -125,6 +125,13 @@ extension Workspace {
                let state = AgentStatusPresentation(entry: entry)?.state,
                state == .running || state == .waiting || state == .needsInput {
                 dismissedAgentCompletionIdentitiesByPanelId[panelId]?.remove(agentCompletionIdentity(for: key))
+                if state == .running {
+                    AppDelegate.shared?.notificationStore?.consumeCompletedAgentNotifications(
+                        forTabId: id,
+                        surfaceId: panelId,
+                        agentKind: key
+                    )
+                }
             }
             agentStatusEntriesByPanelId[panelId, default: [:]][key] = entry
             syncTerminalTabAgentStatusBadge(forPanelId: panelId)

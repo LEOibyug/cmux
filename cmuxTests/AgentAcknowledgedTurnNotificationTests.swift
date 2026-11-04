@@ -1,4 +1,5 @@
 import CmuxAgentJournal
+import CmuxCore
 import CmuxSettings
 import Foundation
 import Testing
@@ -201,5 +202,77 @@ extension AgentNotificationRegressionTests {
             draft(fixture, .turnCompleted, source: "codex", at: 8, turn: "turn-2", category: "turn-complete", nativeEvent: "Stop"),
         ])
         #expect(unreadCount(fixture) == 1)
+    }
+
+    @Test(arguments: [true, false])
+    func completedTurnRemainsUnreadThroughoutVisitUntilExit(alreadySelected: Bool) async throws {
+        let fixture = try makeFixture()
+        defer { fixture.restore() }
+        let harness = try makeJournalHarness(fixture, source: "claude")
+        defer { harness.close() }
+        AppFocusState.overrideIsFocused = true
+        if !alreadySelected {
+            fixture.manager.selectWorkspace(fixture.destination)
+        }
+
+        await settle(harness, fixture, [
+            draft(fixture, .sessionStarted, source: "claude", at: 1),
+            draft(fixture, .turnStarted, source: "claude", at: 2),
+            draft(fixture, .turnCompleted, source: "claude", at: 3, category: "turn-complete", nativeEvent: "Stop")
+        ])
+        let completion = try #require(fixture.store.notifications.first)
+        fixture.source.applyProgramStatus(ProgramStatusReport(state: .done, app: "claude"), panelId: fixture.panelId)
+        #expect(fixture.source.terminalTabAgentStatusBadge(forPanelId: fixture.panelId)?.symbolName == "checkmark.circle.fill")
+        #expect(!completion.isRead)
+        if alreadySelected {
+            #expect(fixture.store.focusedReadIndicatorSurfaceId(forTabId: fixture.source.id) == fixture.panelId)
+        } else {
+            fixture.manager.selectWorkspace(fixture.source)
+        }
+
+        fixture.manager.dismissNotificationOnVisiblePanel(tabId: fixture.source.id, panelId: fixture.panelId)
+        _ = fixture.manager.dismissNotificationOnTerminalInteraction(tabId: fixture.source.id, surfaceId: fixture.panelId)
+        #expect(fixture.store.notifications.first { $0.id == completion.id }?.isRead == false)
+        #expect(fixture.store.unreadNotificationCount == 1)
+        if alreadySelected {
+            #expect(fixture.store.focusedReadIndicatorSurfaceId(forTabId: fixture.source.id) == fixture.panelId)
+        }
+        #expect(fixture.source.terminalTabAgentStatusBadge(forPanelId: fixture.panelId)?.symbolName == "checkmark.circle.fill")
+
+        // A visit exit acknowledges only completion attention, not a newer
+        // question/error, another workspace, or a user's manual unread marker.
+        var preservedIDs: [UUID] = []
+        for category in ["needs-permission", "other"] {
+            let id = try #require(fixture.store.addNotification(
+                tabId: fixture.source.id,
+                surfaceId: fixture.panelId,
+                title: "Attention",
+                subtitle: "",
+                body: category,
+                correlationKey: category,
+                resolvedHooks: [],
+                agent: TerminalNotificationPolicyAgentContext(kind: "claude", category: category)
+            ))
+            preservedIDs.append(id)
+        }
+        let otherID = try #require(fixture.store.addNotification(
+            tabId: fixture.destination.id,
+            surfaceId: fixture.destination.focusedPanelId,
+            title: "Other completion",
+            subtitle: "",
+            body: "Done",
+            correlationKey: "other-workspace",
+            resolvedHooks: [],
+            agent: TerminalNotificationPolicyAgentContext(kind: "claude", category: "turn-complete")
+        ))
+        preservedIDs.append(otherID)
+        fixture.store.markUnread(forTabId: fixture.source.id)
+
+        fixture.manager.consumeCompletedAgentVisit(workspaceId: fixture.source.id)
+        #expect(fixture.source.terminalTabAgentStatusBadge(forPanelId: fixture.panelId) == nil)
+        #expect(fixture.store.notifications.first { $0.id == completion.id }?.isRead == true)
+        #expect(preservedIDs.allSatisfy { id in fixture.store.notifications.contains { $0.id == id && !$0.isRead } })
+        #expect(fixture.store.hasManualUnread(forTabId: fixture.source.id))
+        #expect(await !harness.center.admitNotification(idleReminder(fixture, at: 60_003)))
     }
 }

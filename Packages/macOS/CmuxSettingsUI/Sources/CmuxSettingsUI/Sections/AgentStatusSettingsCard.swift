@@ -33,7 +33,7 @@ struct AgentStatusSettingsCard: View {
             SettingsCardRow(
                 configurationReview: .json("sidebar.showInactiveAgentStatus"),
                 String(localized: "settings.sidebar.showInactiveAgentStatus", defaultValue: "Show Completed Agent Status", bundle: .module),
-                subtitle: String(localized: "settings.sidebar.showInactiveAgentStatus.subtitle", defaultValue: "Show Done badges until the workspace is opened or marked as read. Running, waiting for input, and error badges are always shown.", bundle: .module)
+                subtitle: String(localized: "settings.sidebar.showInactiveAgentStatus.subtitle", defaultValue: "Keep Done badges and numeric indicators while viewing a workspace. Clear them when you leave after viewing, mark it as read, or the same pane starts a new task and Working replaces Done. Running, waiting for input, and error badges are unaffected.", bundle: .module)
             ) {
                 Toggle("", isOn: Binding(get: { showInactive.current }, set: { showInactive.set($0) }))
                     .labelsHidden()

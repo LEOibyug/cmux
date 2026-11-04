@@ -1670,6 +1670,88 @@ final class TerminalNotificationStore: ObservableObject {
         return marked
     }
 
+    /// Focus and typing read ordinary attention, but a completed turn stays
+    /// unread for the entire visit. They must not acknowledge a Done badge.
+    func markNotificationsReadOnVisit(forTabId tabId: UUID, surfaceId: UUID?) {
+        inFlightPolicyRequests.discard(forTabId: tabId, surfaceId: surfaceId) { request in
+            (surfaceId != nil || (request.surfaceId == nil && request.panelId == nil))
+                && !Self.isCompletedAgentNotification(category: request.agent?.category)
+        }
+        let ids = Set(notifications.lazy.filter {
+            !$0.isRead && $0.matches(tabId: tabId, surfaceId: surfaceId)
+                && !Self.isCompletedAgentNotification(category: $0.agentCategory)
+        }.map(\.id))
+        markNotificationRecordsReadWithoutAcknowledgingStatus(ids: ids)
+    }
+
+    /// A visit ends, or this exact agent starts a new task. Never route this
+    /// through workspace-wide reads: permissions, errors and manual markers
+    /// belong to their own acknowledgment paths.
+    func consumeCompletedAgentNotifications(
+        forTabId tabId: UUID,
+        surfaceId: UUID? = nil,
+        agentKind: String? = nil
+    ) {
+        inFlightPolicyRequests.discard(forTabId: tabId, surfaceId: surfaceId) { request in
+            Self.isCompletedAgentNotification(
+                category: request.agent?.category,
+                kind: request.agent?.kind,
+                matchingKind: agentKind
+            )
+        }
+        TerminalMutationBus.shared.discardPendingCompletedAgentNotifications(
+            forTabId: tabId,
+            surfaceId: surfaceId,
+            agentKind: agentKind
+        )
+        let matches: (TerminalNotification) -> Bool = { notification in
+            notification.tabId == tabId
+                && (surfaceId == nil || notification.matches(tabId: tabId, surfaceId: surfaceId))
+                && Self.isCompletedAgentNotification(
+                    category: notification.agentCategory,
+                    kind: notification.agentKind,
+                    matchingKind: agentKind
+                )
+        }
+        let shouldClearIndicator = focusedReadIndicatorNotification(forTabId: tabId).map(matches) ?? false
+        let ids = Set(notifications.lazy.filter { !$0.isRead && matches($0) }.map(\.id))
+        markNotificationRecordsReadWithoutAcknowledgingStatus(ids: ids)
+        if shouldClearIndicator {
+            clearFocusedReadIndicator(forTabId: tabId)
+        }
+    }
+
+    private func markNotificationRecordsReadWithoutAcknowledgingStatus(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        notificationFeedHistory.markRead(ids: ids)
+        var updated = notifications
+        var readNotifications: [TerminalNotification] = []
+        for index in updated.indices where ids.contains(updated[index].id) && !updated[index].isRead {
+            updated[index].isRead = true
+            readNotifications.append(updated[index])
+        }
+        guard !readNotifications.isEmpty else { return }
+        notifications = updated
+        readNotificationObserver?(readNotifications)
+        removeNotificationRequestsAndReleaseSoundReferences(
+            withIdentifiers: readNotifications.map { $0.id.uuidString }
+        )
+    }
+
+    private func focusedReadIndicatorNotification(forTabId tabId: UUID) -> TerminalNotification? {
+        guard let surfaceId = focusedReadIndicatorByTabId[tabId] else { return nil }
+        return notifications.first { $0.matches(tabId: tabId, surfaceId: surfaceId) }
+    }
+
+    func clearFocusedReadIndicatorOnVisit(forTabId tabId: UUID, surfaceId: UUID?) {
+        if let notification = focusedReadIndicatorNotification(forTabId: tabId),
+           !notification.isRead,
+           Self.isCompletedAgentNotification(category: notification.agentCategory) {
+            return
+        }
+        clearFocusedReadIndicator(forTabId: tabId, surfaceId: surfaceId)
+    }
+
     func markRead(forTabId tabId: UUID) {
         defer { readTargetObserver?(.workspace(tabId)) }
         inFlightPolicyRequests.discard(forTabId: tabId, surfaceId: nil)

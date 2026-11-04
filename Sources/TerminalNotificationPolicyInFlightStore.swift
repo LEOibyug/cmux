@@ -120,10 +120,15 @@ final class TerminalNotificationPolicyInFlightStore {
 
     /// Discards requests by their current indexed owner and either canonical
     /// surface identifier, including panel/runtime-surface aliases.
-    func discard(forTabId tabId: UUID, surfaceId: UUID?, through generation: UInt64? = nil) {
+    func discard(
+        forTabId tabId: UUID,
+        surfaceId: UUID?,
+        through generation: UInt64? = nil,
+        matching predicate: (TerminalNotificationPolicyRequest) -> Bool = { _ in true }
+    ) {
         let idsToDiscard: [UUID] = requests.compactMap { id, entry in
             if let generation, entry.generation > generation { return nil }
-            guard entry.indexedTabId == tabId else { return nil }
+            guard entry.indexedTabId == tabId, predicate(entry.request) else { return nil }
             guard let surfaceId else { return id }
             return Self.matchesSurfaceAlias(entry.request, surfaceId: surfaceId) ? id : nil
         }

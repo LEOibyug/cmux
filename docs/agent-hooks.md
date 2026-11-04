@@ -23,9 +23,14 @@ needs-input states amber, and reported failures red. Idle reports use Done too, 
 than leaving a persistent Idle badge. Text and symbols remain visible with Reduce Motion.
 Tab captions use short localized state labels without repeating the provider name,
 leaving room for the conversation title.
-Opening the workspace or pane, or marking it read, clears completed badges in both
-locations. Late native or hook completion reports stay cleared until a new active turn.
-Working, waiting-for-input, and error reports are not cleared as completed work.
+Done badges and numeric completion indicators remain visible while you view the workspace.
+Leaving the workspace after viewing acknowledges completion in both locations; explicitly
+marking it read also acknowledges it. A completion received while already focused counts
+as viewed and clears on the first exit. A background completion stays visible on entry
+and clears only when you later leave. Starting a new task in the same pane replaces Done
+with Working and clears that pane's completion indicator. Late native or hook completion
+reports stay acknowledged until a new active turn. Working, waiting-for-input, and error
+reports are not cleared as completed work; other panes remain independent.
 
 OMP can report through its existing session extension or native OSC 7501 output.
 Both use the same badges; native reports do not require a hook or agent PID.

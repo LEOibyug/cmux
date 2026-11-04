@@ -60,10 +60,14 @@ also hides the conversation-preview fallback; turning off custom metadata does n
 `pullRequests`, `ports`, `metadata`, `log`, and `progress`. Missing groups follow in default order.
 `sidebar.showAgentStatusInSidebar` and `sidebar.showAgentStatusInTabs` are independent;
 `sidebar.showInactiveAgentStatus` controls completed badges. Native and hook idle reports
-are shown as Done, not Idle, until the workspace is opened or marked read. Acknowledged
-completion stays hidden until a new active turn; active, input-required, and error states
-are unaffected by the completion toggle. `sidebar.animateAgentStatus` controls badge motion,
-with system Reduce Motion taking precedence.
+are shown as Done, not Idle. Done and numeric completion indicators remain while viewing
+the workspace and clear when you leave after viewing, explicitly mark it read, or the same
+pane starts a new task and Working replaces Done. Completion received while already focused
+counts as viewed and clears on the first exit; background completion remains on entry and
+clears on the later exit. Acknowledged completion stays hidden until a new active turn;
+other panes remain independent. Active, input-required, and error states are unaffected by
+the completion toggle. `sidebar.animateAgentStatus` controls badge motion, with system
+Reduce Motion taking precedence.
 
 The title, agent status, description, branch, directory, and auxiliary font sizes are separate
 `sidebar.*FontSize` preferences, from 8–24 points before sidebar and global scaling.

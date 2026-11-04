@@ -1553,7 +1553,7 @@
         "showInactiveAgentStatus": {
           "type": "boolean",
           "default": true,
-          "description": "Show completed agent status in workspace rows and terminal tabs until the workspace is opened or marked as read."
+          "description": "Keep completed agent status and numeric indicators while viewing a workspace. Clear them when you leave after viewing, mark it as read, or the same pane starts a new task and Working replaces Done."
         },
         "animateAgentStatus": {
           "type": "boolean",

@@ -14425,7 +14425,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show Done badges until the workspace is opened or marked as read. Running, waiting for input, and error badges are always shown."
+            "value": "Keep Done badges and numeric indicators while viewing a workspace. Clear them when you leave after viewing, mark it as read, or the same pane starts a new task and Working replaces Done. Running, waiting for input, and error badges are unaffected."
           }
         },
         "ar": {
@@ -14467,13 +14467,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "显示“已完成”徽章，直到工作区被打开或标记为已读。运行中、等待输入和错误徽章始终显示。"
+            "value": "查看工作区时保留“已完成”徽章和数字指示；查看后离开、手动标记为已读，或同一窗格开始新任务并由“工作中”替代“已完成”时清除。运行中、等待输入和错误徽章不受影响。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "顯示「已完成」標章，直到工作區被開啟或標記為已讀。執行中、等待輸入和錯誤標章一律顯示。"
+            "value": "檢視工作區時保留「已完成」標章和數字指示；檢視後離開、手動標記為已讀，或同一窗格開始新任務並由「工作中」取代「已完成」時清除。執行中、等待輸入和錯誤標章不受影響。"
           }
         }
       }

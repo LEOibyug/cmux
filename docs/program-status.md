@@ -33,10 +33,14 @@ below the workspace title, before configurable information rows. Native OMP repo
 this path without a hook PID; conversation age does not affect the presentation.
 
 When the same terminal also has a hook report for that agent, its live native report
-owns both status displays, even if a delayed hook arrives later. Opening the workspace,
-focusing its pane, or marking it read acknowledges completion in both channels. A late
-completion report cannot restore the badge; a new working or blocked report makes the
-next completion eligible again. Unrelated programs and other panes remain independent.
+owns both status displays, even if a delayed hook arrives later. Done and numeric completion
+indicators remain visible while viewing the workspace; leaving after viewing acknowledges
+completion in both channels. Completion received while already focused counts as viewed
+and clears on the first exit. A background completion stays on entry and clears on the
+later exit. Explicitly marking the workspace read also acknowledges completion. A new task
+in the same pane replaces Done with Working and clears that pane's completion indicator.
+A late completion report cannot restore an acknowledged badge; a new working or blocked
+report makes the next completion eligible again. Unrelated programs and other panes remain independent.
 
 OMP 18.16 reports an `ask` prompt as `blocked:kind=question` and an approval prompt as
 `blocked:kind=permission`. cmux already handles both as needs-input; no text matching
@@ -44,9 +48,11 @@ or extra OMP extension is needed. Finishing a turn is distinct from a blocking q
 
 - `working` and `blocked` records are removed when a new shell prompt starts (OSC 133 A or cmux
   shell integration) and when the pane's process exits.
-- Completion badges stay until the workspace or pane is opened, or it is marked read.
-  This acknowledges presentation only; raw protocol records and agent activity remain
-  unchanged. Waiting-for-input and error reports are not completion acknowledgements.
+- Completion badges and numeric indicators stay while viewing the workspace and clear
+  when you leave after viewing, explicitly mark it read, or the same pane starts a new
+  task and Working replaces Done. This acknowledges presentation only; raw protocol
+  records and agent activity remain unchanged. Waiting-for-input and error reports
+  are not completion acknowledgements.
 - A full terminal reset (RIS) removes every record of the pane.
 - `msg` and `title` are plain text. cmux strips invisible formatting characters, such as text
   direction overrides, and shortens long text before display.

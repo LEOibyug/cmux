@@ -209,6 +209,39 @@ final class TerminalMutationBus: @unchecked Sendable {
         else { discardPendingNotificationsResolvingLiveOwner(forTabId: tabId) }
     }
 
+    /// Acknowledgment snapshots exact queue entries, so a genuinely new task's
+    /// later completion keeps its place even if it shares the same pane.
+    @MainActor
+    func discardPendingCompletedAgentNotifications(
+        forTabId tabId: UUID,
+        surfaceId: UUID?,
+        agentKind: String?
+    ) {
+        let candidates = lock.withLock {
+            pending.compactMap { entry -> (UInt64, UUID, UUID?)? in
+                guard case .deliverNotification(let notification) = entry.mutation,
+                      TerminalNotificationStore.isCompletedAgentNotification(
+                          category: notification.agent?.category,
+                          kind: notification.agent?.kind,
+                          matchingKind: agentKind
+                      ) else { return nil }
+                return (entry.sequence, notification.key.tabId, notification.key.surfaceId)
+            }
+        }
+        let sequences = Set(candidates.compactMap { sequence, claimedTabId, queuedSurfaceId -> UInt64? in
+            let live = AppDelegate.shared?.agentNotificationDeliveryTarget(
+                claimedTabId: claimedTabId,
+                surfaceId: queuedSurfaceId
+            )
+            guard (live?.tabId ?? claimedTabId) == tabId else { return nil }
+            if let surfaceId {
+                guard queuedSurfaceId == surfaceId || live?.surfaceId == surfaceId else { return nil }
+            }
+            return sequence
+        })
+        discardPendingNotifications(sequences: sequences)
+    }
+
     /// Phase 1 of the live-owner workspace clear (see
     /// `discardPendingNotificationsResolvingLiveOwner(forTabId:)`): the
     /// pending notification addresses, identified by their exact sequence.

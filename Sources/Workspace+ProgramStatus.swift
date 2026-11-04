@@ -20,6 +20,13 @@ extension Workspace {
                 dismissedAgentCompletionIdentitiesByPanelId[panelId]?.remove(
                     programStatusCompletionIdentity(for: record, store: store)
                 )
+                if report.state == .working, let app = store.effectiveApp(for: record) {
+                    AppDelegate.shared?.notificationStore?.consumeCompletedAgentNotifications(
+                        forTabId: id,
+                        surfaceId: panelId,
+                        agentKind: app
+                    )
+                }
             }
         }
         guard let store = updatedStore else { return }
