@@ -99,14 +99,32 @@ struct cmuxApp: App {
             .map { URL(fileURLWithPath: $0, isDirectory: true) }
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("Codexpress", isDirectory: true)
+        let codexpressSettings = UserDefaultsSettingsClient(defaults: .standard)
+        let codexpressCatalog = settingsCatalog.sidebar
         let codexpressClient = CodexpressManagementClient(
-            configurationURL: codexpressStateDirectory.appendingPathComponent("control-access.json")
+            configurationURL: codexpressStateDirectory.appendingPathComponent("control-access.json"),
+            connectionSelection: {
+                guard codexpressSettings.value(for: codexpressCatalog.codexpressManualConnection) else {
+                    return .automatic
+                }
+                let port = codexpressSettings.value(for: codexpressCatalog.codexpressManagementPort)
+                let key = try await secretStore.value(for: codexpressCatalog.codexpressManagementAPIKey)
+                guard codexpressSettings.value(for: codexpressCatalog.codexpressManualConnection),
+                      codexpressSettings.value(for: codexpressCatalog.codexpressManagementPort) == port else {
+                    throw CancellationError()
+                }
+                return .manual(port: port, key: key)
+            }
         )
         let codexpressRefreshClock = ContinuousClock()
         let codexpressCoordinator = CodexpressCoordinator(service: codexpressClient) { seconds in
             // This API exposes snapshots, not events; only visible sidebars sample local state.
             try await codexpressRefreshClock.sleep(for: .seconds(seconds))
         }
+        codexpressCoordinator.startObservingConnectionChanges(
+            secretStore: secretStore,
+            key: codexpressCatalog.codexpressManagementAPIKey
+        )
         self.codexpressCoordinator = codexpressCoordinator
         let browserDataImportCoordinator = BrowserDataImportCoordinator()
         let notificationStore = TerminalNotificationStore.shared

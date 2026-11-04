@@ -1,5 +1,7 @@
 enum CodexpressManagementError: Error, Sendable {
     case notConfigured
+    case missingManualKey
+    case connectionChanged
     case disabled
     case insecureConfiguration
     case invalidConfiguration
@@ -12,7 +14,8 @@ enum CodexpressManagementError: Error, Sendable {
 
     var isDefiniteRejection: Bool {
         switch self {
-        case .notConfigured, .disabled, .insecureConfiguration, .invalidConfiguration, .unauthorized:
+        case .notConfigured, .missingManualKey, .connectionChanged, .disabled,
+             .insecureConfiguration, .invalidConfiguration, .unauthorized:
             return true
         case .httpStatus(let status):
             return (400...499).contains(status)

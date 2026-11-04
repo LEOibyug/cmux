@@ -5,6 +5,8 @@ import SwiftUI
 public struct SidebarSection: View {
     private let catalog: SettingCatalog
     private let defaultsStore: UserDefaultsSettingsStore
+    private let secretStore: SecretFileStore
+    private let errorLog: SettingsErrorLog
     let hostActions: SettingsHostActions
     @State var rightSidebarTabs: [RightSidebarTabSettingsItem]
     private let rightSidebarWidthSettings = RightSidebarWidthSettings()
@@ -34,9 +36,11 @@ public struct SidebarSection: View {
     @State private var compactAgentStatus: DefaultsValueModel<Bool>
     @State private var rightMaxWidth: DefaultsValueModel<Double>
     @State private var rememberedRightMaxWidth: DefaultsValueModel<Double>
-    public init(defaultsStore: UserDefaultsSettingsStore, catalog: SettingCatalog, hostActions: SettingsHostActions) {
+    public init(defaultsStore: UserDefaultsSettingsStore, secretStore: SecretFileStore, catalog: SettingCatalog, errorLog: SettingsErrorLog, hostActions: SettingsHostActions) {
         self.catalog = catalog
         self.defaultsStore = defaultsStore
+        self.secretStore = secretStore
+        self.errorLog = errorLog
         self.hostActions = hostActions
         _rightSidebarTabs = State(initialValue: hostActions.rightSidebarTabs())
         _sidebarFont = State(initialValue: hostActions.sidebarFontSize())
@@ -72,7 +76,7 @@ public struct SidebarSection: View {
             SidebarTextSettingsCard(defaultsStore: defaultsStore, catalog: catalog)
             AgentStatusSettingsCard(defaultsStore: defaultsStore, catalog: catalog)
             SidebarInformationSettingsCard(defaultsStore: defaultsStore, catalog: catalog)
-            CodexpressSettingsCard(defaultsStore: defaultsStore, catalog: catalog)
+            CodexpressSettingsCard(defaultsStore: defaultsStore, secretStore: secretStore, catalog: catalog, errorLog: errorLog)
             rightSidebarTabsCard
         }
         .task { startObservingSettings() }
@@ -201,7 +205,7 @@ public struct SidebarSection: View {
                         .frame(width: 130)
                         .accessibilityIdentifier("SettingsSidebarFontSizeSlider")
 
-                        Text(String.localizedStringWithFormat(String(localized: "settings.fontSize.valuePoints", defaultValue: "%@ pt"), hostActions.formattedFontSize(sidebarFont.points)))
+                        Text(String.localizedStringWithFormat(String(localized: "settings.fontSize.valuePoints", defaultValue: "%@ pt", bundle: .module), hostActions.formattedFontSize(sidebarFont.points)))
                             .cmuxFont(size: 12, weight: .medium, design: .rounded)
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)

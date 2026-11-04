@@ -43,13 +43,15 @@ struct CodexpressSidebarCard: View {
                                     .foregroundStyle(.orange)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Spacer(minLength: 0)
-                                Button(action: coordinator.dismissActionError) {
-                                    Image(systemName: "xmark.circle.fill")
+                                if !coordinator.actionsBlockedAfterConnectionChange {
+                                    Button(action: coordinator.dismissActionError) {
+                                        Image(systemName: "xmark.circle.fill")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(.secondary)
+                                    .help(strings.dismiss)
+                                    .accessibilityLabel(Text(strings.dismiss))
                                 }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
-                                .help(strings.dismiss)
-                                .accessibilityLabel(Text(strings.dismiss))
                             }
                         }
                         if let snapshot = coordinator.snapshot {
@@ -63,7 +65,7 @@ struct CodexpressSidebarCard: View {
                                     settings: settings,
                                     isTakingOver: snapshot.manualRoute?.sourceID == source.id,
                                     isBusy: coordinator.activeSourceIDs.contains(source.id),
-                                    canAct: snapshot.running,
+                                    canAct: snapshot.running && !coordinator.actionsBlockedAfterConnectionChange,
                                     isSnapshotStale: coordinator.connectionError != nil,
                                     resetRequest: coordinator.resetRequests[source.id],
                                     onTakeOver: { Task { await coordinator.takeOver(source.id) } },

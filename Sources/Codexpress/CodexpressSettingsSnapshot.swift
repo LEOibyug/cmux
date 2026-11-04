@@ -1,7 +1,7 @@
 import CmuxSettings
 import Foundation
 
-/// Immutable presentation and cadence preferences shared by sidebar instances.
+/// Immutable presentation, cadence, and non-secret connection preferences.
 struct CodexpressSettingsSnapshot: Equatable, Sendable {
     let enabled: Bool
     let pollIntervalSeconds: Double
@@ -9,6 +9,8 @@ struct CodexpressSettingsSnapshot: Equatable, Sendable {
     let showResetTimes: Bool
     let showActions: Bool
     let fontSize: Double
+    let manualConnection: Bool
+    let managementPort: Int
 
     init(catalog: SidebarCatalogSection = .init()) {
         self.init(
@@ -17,7 +19,9 @@ struct CodexpressSettingsSnapshot: Equatable, Sendable {
             showRequestCounts: catalog.codexpressShowRequestCounts.defaultValue,
             showResetTimes: catalog.codexpressShowResetTimes.defaultValue,
             showActions: catalog.codexpressShowActions.defaultValue,
-            fontSize: catalog.codexpressFontSize.defaultValue
+            fontSize: catalog.codexpressFontSize.defaultValue,
+            manualConnection: catalog.codexpressManualConnection.defaultValue,
+            managementPort: catalog.codexpressManagementPort.defaultValue
         )
     }
 
@@ -29,7 +33,9 @@ struct CodexpressSettingsSnapshot: Equatable, Sendable {
             showRequestCounts: client.value(for: catalog.codexpressShowRequestCounts),
             showResetTimes: client.value(for: catalog.codexpressShowResetTimes),
             showActions: client.value(for: catalog.codexpressShowActions),
-            fontSize: client.value(for: catalog.codexpressFontSize)
+            fontSize: client.value(for: catalog.codexpressFontSize),
+            manualConnection: client.value(for: catalog.codexpressManualConnection),
+            managementPort: client.value(for: catalog.codexpressManagementPort)
         )
     }
 
@@ -39,7 +45,9 @@ struct CodexpressSettingsSnapshot: Equatable, Sendable {
         showRequestCounts: Bool,
         showResetTimes: Bool,
         showActions: Bool,
-        fontSize: Double
+        fontSize: Double,
+        manualConnection: Bool = false,
+        managementPort: Int = 17867
     ) {
         let catalog = SidebarCatalogSection()
         self.enabled = enabled
@@ -50,5 +58,7 @@ struct CodexpressSettingsSnapshot: Equatable, Sendable {
         self.showActions = showActions
         self.fontSize = fontSize.isFinite
             ? min(20, max(8, fontSize)) : catalog.codexpressFontSize.defaultValue
+        self.manualConnection = manualConnection
+        self.managementPort = managementPort
     }
 }

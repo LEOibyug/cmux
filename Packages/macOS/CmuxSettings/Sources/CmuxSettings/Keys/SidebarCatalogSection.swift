@@ -112,6 +112,26 @@ public struct SidebarCatalogSection: SettingCatalogSection {
         userDefaultsKey: "sidebarCodexpressEnabled"
     )
 
+    /// Uses the explicit port and private API key instead of Codexpress auto-discovery.
+    public let codexpressManualConnection = DefaultsKey<Bool>(
+        id: "sidebar.codexpressManualConnection",
+        defaultValue: false,
+        userDefaultsKey: "sidebarCodexpressManualConnection"
+    )
+
+    /// Local management API port used when manual connection is enabled.
+    public let codexpressManagementPort = DefaultsKey<Int>(
+        id: "sidebar.codexpressManagementPort",
+        defaultValue: 17867,
+        userDefaultsKey: "sidebarCodexpressManagementPort"
+    )
+
+    /// Management credential stored separately from cmux.json with owner-only permissions.
+    public let codexpressManagementAPIKey = SecretFileKey(
+        id: "sidebar.codexpressManagementAPIKey",
+        fileName: "codexpress-management-api-key"
+    )
+
     /// Seconds between local Codexpress status reads; never refreshes upstream balances automatically.
     public let codexpressPollIntervalSeconds = DefaultsKey<Double>(
         id: "sidebar.codexpressPollIntervalSeconds",

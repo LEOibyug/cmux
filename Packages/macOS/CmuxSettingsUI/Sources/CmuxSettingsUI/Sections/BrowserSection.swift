@@ -748,7 +748,7 @@ public struct BrowserSection: View {
     }
 
     private func formatZoomPercent(_ zoom: Double) -> String {
-        let format = String(localized: "settings.browser.defaultZoomLevel.percent", defaultValue: "%lld%%")
+        let format = String(localized: "settings.browser.defaultZoomLevel.percent", defaultValue: "%lld%%", bundle: .module)
         return String.localizedStringWithFormat(format, Int64((zoom * 100).rounded()))
     }
 }

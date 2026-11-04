@@ -68,9 +68,13 @@ The title, agent status, description, branch, directory, and auxiliary font size
 `sidebar.informationLineLimit` defaults to 2 and accepts 1–6; wrapping ends in a trailing ellipsis.
 
 The Codexpress controls in the same pane manage panel enablement, local status cadence,
-font size, request counts, quota reset times, and action buttons. Disabling the panel stops
-periodic reads; hiding actions never cancels or resubmits a pending operation. Credentials
-remain in Codexpress's private control configuration, not in cmux settings.
+font size, request counts, quota reset times, action buttons, and management connection.
+Automatic mode reads Codexpress's private local access file; manual mode uses
+`sidebar.codexpressManagementPort` (1–65535) and a masked API key saved separately in the
+existing owner-only secret store. `sidebar.codexpressManualConnection` selects manual mode;
+the key is never stored in cmux.json or UserDefaults. Missing manual credentials do not fall
+back to auto-discovery. Connection edits apply live, discard stale displayed data, and never
+send a pending operation ID to the new endpoint. Disabling the panel stops periodic reads.
 
 ## Themes
 

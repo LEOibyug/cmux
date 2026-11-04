@@ -54,6 +54,10 @@ struct CodexpressPanelStrings {
         switch error {
         case .notConfigured:
             return String(localized: "codexpress.error.notConfigured", defaultValue: "Enable Management API in Codexpress (updated gateway required).")
+        case .missingManualKey:
+            return String(localized: "codexpress.error.missingManualKey", defaultValue: "Save a Management API key in Settings > Sidebar to use a manual connection.")
+        case .connectionChanged:
+            return String(localized: "codexpress.error.connectionChanged", defaultValue: "Connection changed. Loading fresh local status; previous operations will not be sent to this connection.")
         case .disabled:
             return String(localized: "codexpress.error.disabled", defaultValue: "Codexpress local access is disabled.")
         case .insecureConfiguration, .invalidConfiguration:

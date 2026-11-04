@@ -441,6 +441,7 @@ enum SidebarSettingsFileMapping {
         .init(jsonKey: "showAgentStatusInTabs", defaultsKey: sidebar.showAgentStatusInTabs.userDefaultsKey),
         .init(jsonKey: "showAgentStatusInSidebar", defaultsKey: sidebar.showAgentStatusInSidebar.userDefaultsKey),
         .init(jsonKey: "codexpressEnabled", defaultsKey: sidebar.codexpressEnabled.userDefaultsKey),
+        .init(jsonKey: "codexpressManualConnection", defaultsKey: sidebar.codexpressManualConnection.userDefaultsKey),
         .init(jsonKey: "codexpressShowRequestCounts", defaultsKey: sidebar.codexpressShowRequestCounts.userDefaultsKey),
         .init(jsonKey: "codexpressShowResetTimes", defaultsKey: sidebar.codexpressShowResetTimes.userDefaultsKey),
         .init(jsonKey: "codexpressShowActions", defaultsKey: sidebar.codexpressShowActions.userDefaultsKey),

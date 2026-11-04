@@ -17,7 +17,7 @@
 
 ## Codexpress 来源面板
 
-需要支持管理 API 的 Codexpress。在 Codexpress「接入 → 管理 API」启用本机服务；cmux 从 `~/Library/Application Support/Codexpress/control-access.json` 读取独立端口与管理 Key，不复制密钥、不修改 Codex、供应商凭据或系统代理。自定义数据目录可通过启动 cmux 时的 `CODEXPRESS_STATE_DIR` 指定，配置文件和所属目录必须为当前用户私有，不能使用符号链接。
+需要支持管理 API 的 Codexpress。在 Codexpress「接入 → 管理 API」启用本机服务。cmux 的「设置 → 侧边栏 → 管理连接」可选择自动或手动：自动从 `~/Library/Application Support/Codexpress/control-access.json` 读取端口与管理 Key；手动使用界面保存的端口与 Key，默认端口为 17867，可设置为 1–65535。Key 输入遮蔽，点击保存后存入独立的 0600 私有文件，不写入 `cmux.json`、UserDefaults 或仓库；手动模式没有 Key 时明确提示，不回退自动模式。两种方式均只连接本机回环，不修改 Codex、供应商凭据或系统代理。自动发现支持启动时的 `CODEXPRESS_STATE_DIR`，其配置和目录必须私有且不能使用符号链接。
 
 面板固定在工作区列表下方，可折叠，来源多时内部滚动。官方来源并排显示实际存在的一种或两种限额（`5h`、`week`），第三方显示余额（如 `US$ 818.99`）；名称旁的数字直接使用 API 的 `active_requests`。按钮排在来源行内，完整状态、陈旧提示等次要信息放在悬浮说明中。设置 → 侧边栏可调整面板开关、字号、本机状态间隔（默认 2 秒，范围 1–60 秒）、请求数、重置时间与操作按钮；关闭面板也会停止轮询。周期读取不查询上游，只有来源行的刷新按钮主动刷新对应余额或额度和卡片。未知数值不显示为零，不汇总不同币种。
 
@@ -34,6 +34,7 @@
 保留日常构建、签名、本地化和工程合并工具；这些工具不依赖 CI 合并解析器或发布签名检查。
 Computer Use 随程序提供的技能资料保存在 `Resources/cmux-cua/`，不属于仓库开发规则。
 所有开发产物和过程文件仅放项目自身的 `cache/`、`tmp/`，不提交到 Git。使用 `./scripts/dev.sh <命令> [参数...]`，或先 `source scripts/project-env.sh`；构建脚本也会自动载入。Xcode DerivedData、SwiftPM、Rust、Zig、Go 和 UI 预览缓存不再写入用户目录，日志、截图和隔离应用 HOME 不再使用系统临时目录。显式指定项目外缓存/输出会被拒绝。清理 `cache/` 会丢失增量编译缓存，下次构建需重新下载或编译；安装程序和真实用户数据不在清理范围。macOS 自身维护的系统服务状态不受这些脚本控制。
+正式安装启动时不要继承开发隔离环境，尤其是 `CFFIXED_USER_HOME`；该变量会让自动发现和其他用户配置指向项目缓存。隔离环境只用于构建和 tagged 验证，安装后的日常应用使用真实用户 HOME。
 
 ## 更新方式
 

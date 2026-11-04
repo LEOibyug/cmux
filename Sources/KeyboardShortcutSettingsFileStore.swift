@@ -752,6 +752,14 @@ final class CmuxSettingsFileStore {
         } else if section.keys.contains("informationLineLimit") {
             logInvalid(lineKey.id, sourcePath: sourcePath)
         }
+        if section.keys.contains("codexpressManagementPort") {
+            let key = SidebarCatalogSection().codexpressManagementPort
+            if let value = jsonInt(section["codexpressManagementPort"]), (1...65535).contains(value) {
+                snapshot.managedUserDefaults[key.userDefaultsKey] = .int(value)
+            } else {
+                logInvalid(key.id, sourcePath: sourcePath)
+            }
+        }
         if section.keys.contains("detailOrder") {
             if let values = section["detailOrder"] as? [String] {
                 snapshot.managedUserDefaults[SidebarCatalogSection().detailOrder.userDefaultsKey] = .stringArray(

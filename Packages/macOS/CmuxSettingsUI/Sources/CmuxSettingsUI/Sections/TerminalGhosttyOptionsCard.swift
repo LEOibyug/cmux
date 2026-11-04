@@ -96,7 +96,7 @@ struct TerminalGhosttyOptionsCard: View {
                 step: 0.5
             ) {
                 Text(String.localizedStringWithFormat(
-                    String(localized: "settings.fontSize.valuePoints", defaultValue: "%@ pt"),
+                    String(localized: "settings.fontSize.valuePoints", defaultValue: "%@ pt", bundle: .module),
                     hostActions.formattedFontSize(options.fontSize)
                 ))
                 .monospacedDigit()
@@ -305,7 +305,7 @@ struct TerminalGhosttyOptionsCard: View {
     ) -> some View {
         Stepper(value: Binding(get: { points }, set: set), in: 0...200) {
             Text(String.localizedStringWithFormat(
-                String(localized: "settings.fontSize.valuePoints", defaultValue: "%@ pt"),
+                String(localized: "settings.fontSize.valuePoints", defaultValue: "%@ pt", bundle: .module),
                 String(points)
             ))
             .monospacedDigit()

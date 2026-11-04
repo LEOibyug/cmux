@@ -50,7 +50,7 @@ extension SettingsWindowRoot {
         }
 
         slot(.sidebarAppearance, proxy: proxy) {
-            SidebarSection(defaultsStore: defaultsStore, catalog: catalog, hostActions: hostActions)
+            SidebarSection(defaultsStore: defaultsStore, secretStore: secretStore, catalog: catalog, errorLog: runtime.errorLog, hostActions: hostActions)
         }
 
         slot(.customSidebars, proxy: proxy) {

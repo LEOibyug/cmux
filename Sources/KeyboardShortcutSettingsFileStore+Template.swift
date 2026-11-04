@@ -162,6 +162,8 @@ extension CmuxSettingsFileStore {
                     "animateAgentStatus": SettingCatalog().sidebar.animateAgentStatus.defaultValue,
                     "showAgentStatusInTabs": SettingCatalog().sidebar.showAgentStatusInTabs.defaultValue,
                     "codexpressEnabled": SettingCatalog().sidebar.codexpressEnabled.defaultValue,
+                    "codexpressManualConnection": SettingCatalog().sidebar.codexpressManualConnection.defaultValue,
+                    "codexpressManagementPort": SettingCatalog().sidebar.codexpressManagementPort.defaultValue,
                     "codexpressPollIntervalSeconds": SettingCatalog().sidebar.codexpressPollIntervalSeconds.defaultValue,
                     "codexpressShowRequestCounts": SettingCatalog().sidebar.codexpressShowRequestCounts.defaultValue,
                     "codexpressShowResetTimes": SettingCatalog().sidebar.codexpressShowResetTimes.defaultValue,

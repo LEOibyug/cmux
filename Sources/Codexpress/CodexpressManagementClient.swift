@@ -2,9 +2,14 @@ import CFNetwork
 import Darwin
 import Foundation
 
-/// Reads the native app's private control settings anew for every fixed-route request.
+/// Reads the selected loopback credentials anew for every fixed-route request.
 actor CodexpressManagementClient: CodexpressManagementServing {
-    private struct Configuration: Decodable, Sendable {
+    enum ConnectionSelection: Sendable {
+        case automatic
+        case manual(port: Int, key: String)
+    }
+
+    private struct Configuration: Decodable, Sendable, Equatable {
         let enabled: Bool
         let port: UInt16
         let key: String
@@ -25,12 +30,18 @@ actor CodexpressManagementClient: CodexpressManagementServing {
     }
 
     private let configurationURL: URL
+    private let connectionSelection: @Sendable () async throws -> ConnectionSelection
+    private var activeConfiguration: Configuration?
     private let session: URLSession
     private let configurationLimit = 16 * 1_024
     private let responseLimit = 8 * 1_024 * 1_024
 
-    init(configurationURL: URL) {
+    init(
+        configurationURL: URL,
+        connectionSelection: @escaping @Sendable () async throws -> ConnectionSelection = { .automatic }
+    ) {
         self.configurationURL = configurationURL
+        self.connectionSelection = connectionSelection
         let policy = URLSessionConfiguration.ephemeral
         policy.connectionProxyDictionary = [
             kCFNetworkProxiesHTTPEnable as String: 0,
@@ -142,7 +153,15 @@ actor CodexpressManagementClient: CodexpressManagementServing {
         as type: Response.Type
     ) async throws -> Response {
         try Task.checkCancellation()
-        let settings = try readConfiguration()
+        let settings = try await selectedConfiguration()
+        let isStatus = path == "/v1/status" && body == nil
+        if let activeConfiguration, activeConfiguration != settings {
+            self.activeConfiguration = nil
+            throw CodexpressManagementError.connectionChanged
+        }
+        guard isStatus || activeConfiguration == settings else {
+            throw CodexpressManagementError.connectionChanged
+        }
         var components = URLComponents()
         components.scheme = "http"
         components.host = "127.0.0.1"
@@ -188,7 +207,14 @@ actor CodexpressManagementClient: CodexpressManagementServing {
                 guard data.count < responseLimit else { throw CodexpressManagementError.invalidResponse }
                 data.append(byte)
             }
-            return try JSONDecoder().decode(type, from: data)
+            let decoded = try JSONDecoder().decode(type, from: data)
+            let currentSettings = try await selectedConfiguration()
+            guard currentSettings == settings else {
+                activeConfiguration = nil
+                throw body == nil ? CodexpressManagementError.connectionChanged : CodexpressManagementError.outcomeUnknown
+            }
+            if isStatus { activeConfiguration = settings }
+            return decoded
         } catch {
             if body != nil {
                 if let error = error as? CodexpressManagementError, error.isDefiniteRejection {
@@ -200,6 +226,21 @@ actor CodexpressManagementClient: CodexpressManagementServing {
             if let error = error as? CodexpressManagementError { throw error }
             if error is DecodingError { throw CodexpressManagementError.invalidResponse }
             throw CodexpressManagementError.unavailable
+        }
+    }
+
+    private func selectedConfiguration() async throws -> Configuration {
+        let selection = try await connectionSelection()
+        switch selection {
+        case .automatic:
+            return try readConfiguration()
+        case .manual(let port, let key):
+            guard !key.isEmpty else { throw CodexpressManagementError.missingManualKey }
+            guard (1...65_535).contains(port), (16...256).contains(key.utf8.count),
+                  key.utf8.allSatisfy({ (0x21...0x7E).contains($0) }) else {
+                throw CodexpressManagementError.invalidConfiguration
+            }
+            return Configuration(enabled: true, port: UInt16(port), key: key)
         }
     }
 

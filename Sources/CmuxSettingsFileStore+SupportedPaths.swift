@@ -131,6 +131,8 @@ extension CmuxSettingsFileStore {
         "sidebar.animateAgentStatus",
         "sidebar.showAgentStatusInTabs",
         "sidebar.codexpressEnabled",
+        "sidebar.codexpressManualConnection",
+        "sidebar.codexpressManagementPort",
         "sidebar.codexpressPollIntervalSeconds",
         "sidebar.codexpressShowRequestCounts",
         "sidebar.codexpressShowResetTimes",

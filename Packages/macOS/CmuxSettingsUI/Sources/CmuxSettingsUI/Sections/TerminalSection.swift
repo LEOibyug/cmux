@@ -262,7 +262,7 @@ public struct TerminalSection: View {
                         .frame(width: 130)
                         .accessibilityIdentifier("SettingsTabBarFontSizeSlider")
 
-                        Text(String.localizedStringWithFormat(String(localized: "settings.fontSize.valuePoints", defaultValue: "%@ pt"), hostActions.formattedFontSize(surfaceTabBarFont.points)))
+                        Text(String.localizedStringWithFormat(String(localized: "settings.fontSize.valuePoints", defaultValue: "%@ pt", bundle: .module), hostActions.formattedFontSize(surfaceTabBarFont.points)))
                             .cmuxFont(size: 12, weight: .medium, design: .rounded)
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
@@ -381,7 +381,7 @@ public struct TerminalSection: View {
                     .frame(width: 130)
                     .accessibilityIdentifier("SettingsTerminalScrollSpeedSlider")
 
-                    Text(String.localizedStringWithFormat(String(localized: "settings.terminal.scrollSpeed.value", defaultValue: "%.2f×"), displayedScrollSpeed))
+                    Text(String.localizedStringWithFormat(String(localized: "settings.terminal.scrollSpeed.value", defaultValue: "%.2f×", bundle: .module), displayedScrollSpeed))
                         .cmuxFont(size: 12, weight: .medium, design: .rounded)
                         .monospacedDigit()
                         .frame(width: 44, alignment: .trailing)
