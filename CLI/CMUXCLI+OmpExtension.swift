@@ -4,7 +4,7 @@ extension CMUXCLI {
     private static let ompExtensionMarker = "cmux-omp-session-extension-marker"
     private static let ompExtensionFilename = "cmux-omp-session.ts"
     private static let ompExtensionSource = #"""
-// cmux-omp-session-extension-marker v4
+// cmux-omp-session-extension-marker v5
 // Bridges OMP session lifecycle events into cmux's restorable session store.
 // Installed by `cmux hooks omp install` or `cmux hooks setup`.
 // DO NOT EDIT MANUALLY. cmux upgrades this file in place.
@@ -345,6 +345,8 @@ function sendHook(subcommand: string, ctx: ExtensionContext, extra: Record<strin
 // while the pane is per-process.
 interface CmuxOmpPaneOwnership {
   sessionId: string | null;
+  phase?: "starting" | "running" | "idle";
+  prompt?: string;
 }
 
 const cmuxOmpGlobals = globalThis as typeof globalThis & {
@@ -367,12 +369,13 @@ function isOwnerContext(ctx: ExtensionContext): boolean {
 
 export default function cmuxOmpSessionExtension(api: ExtensionAPI) {
   api.on("session_start", async (_event, ctx) => {
-    // The top-level session bootstraps before any subagent can exist in this
-    // process, so the first session_start pins ownership. Later session_start
-    // events with a different session id are subagent bootstraps.
+    // Only the first bootstrap owns the pane. OMP can replay session_start
+    // when loading extensions later; replaying it must not revive an idle pane.
     const ownership = paneOwnership();
-    if (ownership.sessionId === null) ownership.sessionId = contextSessionId(ctx);
+    if (ownership.sessionId !== null) return;
+    ownership.sessionId = contextSessionId(ctx);
     if (!isOwnerContext(ctx)) return;
+    ownership.phase = "starting";
     await sendHook("session-start", ctx);
   });
 
@@ -388,6 +391,8 @@ export default function cmuxOmpSessionExtension(api: ExtensionAPI) {
     // session-start would mark an idle pane running with no agent_end coming.
     if (ownership.sessionId === sessionId) return;
     ownership.sessionId = sessionId;
+    ownership.phase = "starting";
+    ownership.prompt = undefined;
     await sendHook("session-start", ctx);
   };
   api.on("session_switch", adoptSwitchedSession);
@@ -395,17 +400,30 @@ export default function cmuxOmpSessionExtension(api: ExtensionAPI) {
 
   api.on("before_agent_start", async (event, ctx) => {
     if (!isOwnerContext(ctx)) return;
-    await sendHook("prompt-submit", ctx, { prompt: boundedHookText(event.prompt) });
+    // OMP may prepare the same input repeatedly after system-prompt changes,
+    // or prepare queued input during an existing run. Neither starts a turn.
+    paneOwnership().prompt = boundedHookText(event.prompt);
+  });
+
+  api.on("agent_start", async (_event, ctx) => {
+    if (!isOwnerContext(ctx)) return;
+    const ownership = paneOwnership();
+    if (ownership.phase === "running") return;
+    ownership.phase = "running";
+    const prompt = ownership.prompt;
+    ownership.prompt = undefined;
+    await sendHook("prompt-submit", ctx, { prompt });
   });
 
   api.on("agent_end", async (event, ctx) => {
     if (!isOwnerContext(ctx)) return;
-    // OMP emits agent_end as the universal terminal settle. willContinue marks
-    // a scheduled automatic continuation (auto-retry, queued messages,
-    // session_stop continuations, background jobs), so the turn is still
-    // logically running and the pane must not report idle yet. Read it
-    // defensively: AgentEndEvent predates the field on older OMP versions.
+    // Automatic continuations belong to the same logical turn. In particular,
+    // their next agent_start must not increment cmux's active prompt depth.
     if ((event as { willContinue?: unknown }).willContinue === true) return;
+    const ownership = paneOwnership();
+    if (ownership.phase === "idle") return;
+    ownership.phase = "idle";
+    ownership.prompt = undefined;
     await sendHook("stop", ctx, { last_assistant_message: boundedHookText(lastAssistantMessage(event)) });
   });
 

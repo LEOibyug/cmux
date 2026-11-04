@@ -12,6 +12,9 @@ mid-turn, because Agent Hibernation SIGHUPs panes that read idle.
 Also covered:
 - agent_end with willContinue (a scheduled automatic continuation) must not
   emit a stop hook.
+- repeated input preparation and automatic continuation starts belong to one
+  logical turn, while the next real turn becomes running again.
+- reloading the extension for the same session must not revive an idle pane.
 - session_switch (/new, fork, resume, handoff on the top-level runtime) must
   re-pin ownership to the new session id and rebind it via a session-start
   hook, so post-switch sessions do not go dark.
@@ -185,23 +188,55 @@ function agentEndEvent(text, extra = {}) {
     ...extra
   };
 }
+async function waitForDeliveredHooks(expected) {
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) {
+    const delivered = fs.readFileSync(process.env.FAKE_CMUX_ARGS_LOG, "utf8")
+      .split("\\n").filter((line) => line.trim().length > 0).length;
+    if (delivered >= expected) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`timed out waiting for ${expected} delivered hooks`);
+}
 
 // Top-level session boots and starts a turn.
 await handlers.get("session_start")({}, mainCtx);
 await handlers.get("before_agent_start")({ prompt: "plan the trip" }, mainCtx);
+// Input preparation is repeatable; only the actual run starts the turn.
+await handlers.get("before_agent_start")({ prompt: "plan the trip" }, mainCtx);
+await handlers.get("agent_start")?.({}, mainCtx);
+await handlers.get("agent_start")?.({}, mainCtx);
 
 // A background task-tool subagent boots, runs, and finishes while the main
 // agent is still mid-turn. Its events arrive through its own freshly loaded
 // module instance, as in real OMP. None of this may reach cmux.
 await subagentHandlers.get("session_start")({}, subagentCtx);
 await subagentHandlers.get("before_agent_start")({ prompt: "scout the beaches" }, subagentCtx);
+await subagentHandlers.get("agent_start")?.({}, subagentCtx);
 await subagentHandlers.get("agent_end")(agentEndEvent("subagent done"), subagentCtx);
 
 // Main agent_end with a scheduled automatic continuation: still running.
 await handlers.get("agent_end")(agentEndEvent("continuing", { willContinue: true }), mainCtx);
+await handlers.get("before_agent_start")({ prompt: "continue the trip" }, mainCtx);
+await handlers.get("agent_start")?.({}, mainCtx);
+await handlers.get("before_agent_start")({ prompt: "queued input" }, mainCtx);
+await handlers.get("agent_end")(agentEndEvent("continuing again", { willContinue: true, awaitingAsyncWork: true }), mainCtx);
+await handlers.get("agent_start")?.({}, mainCtx);
 
 // Main agent's terminal settle: this is the pane's real idle transition.
 await handlers.get("agent_end")(agentEndEvent("main done"), mainCtx);
+await waitForDeliveredHooks(3);
+
+// Deferred extension loading replays session_start, even for an idle owner.
+const reloadedHandlers = await loadExtensionInstance("1003");
+await reloadedHandlers.get("session_start")({}, mainCtx);
+await reloadedHandlers.get("agent_end")(agentEndEvent("duplicate main done"), mainCtx);
+
+// A new genuine turn in the same session must still become running and stop.
+await handlers.get("before_agent_start")({ prompt: "book the trip" }, mainCtx);
+await handlers.get("agent_start")?.({}, mainCtx);
+await handlers.get("agent_end")(agentEndEvent("booking done"), mainCtx);
+await waitForDeliveredHooks(5);
 
 // /reload re-emits session_switch for the SAME session file and id. That is
 // not an ownership transition: it must emit nothing, or an idle pane's
@@ -231,15 +266,7 @@ await handlers.get("agent_end")(agentEndEvent("new done"), mainCtx);
 // Wait for the async hook queue to deliver before shutdown: session_shutdown
 // intentionally strips still-queued prompt-submit entries, so shutting down
 // immediately would race the queue worker and make delivery timing-dependent.
-const expectedDeliveredHooks = 5;
-const deliveryDeadline = Date.now() + 10000;
-while (Date.now() < deliveryDeadline) {
-  const delivered = fs.readFileSync(process.env.FAKE_CMUX_ARGS_LOG, "utf8")
-    .split("\\n")
-    .filter((line) => line.trim().length > 0).length;
-  if (delivered >= expectedDeliveredHooks) break;
-  await new Promise((resolve) => setTimeout(resolve, 20));
-}
+await waitForDeliveredHooks(7);
 
 await handlers.get("session_shutdown")({}, mainCtx);
 """
@@ -262,6 +289,8 @@ await handlers.get("session_shutdown")({}, mainCtx);
         args_lines = non_empty_lines(fake_args_log.read_text(encoding="utf-8"))
         expected_args = [
             "hooks enqueue omp session-start",
+            "hooks enqueue omp prompt-submit",
+            "hooks enqueue omp stop",
             "hooks enqueue omp prompt-submit",
             "hooks enqueue omp stop",
             "hooks enqueue omp session-start",
@@ -300,6 +329,8 @@ await handlers.get("session_shutdown")({}, mainCtx);
             "omp-main-session",
             "omp-main-session",
             "omp-main-session",
+            "omp-main-session",
+            "omp-main-session",
             "omp-new-session",
             "omp-new-session",
         ]
@@ -310,8 +341,8 @@ await handlers.get("session_shutdown")({}, mainCtx);
             return 1
 
         stops = [payload for payload in payloads if payload.get("hook_event_name") == "Stop"]
-        if len(stops) != 2:
-            print(f"FAIL: expected exactly 2 Stop payloads, got {payloads!r}")
+        if len(stops) != 3:
+            print(f"FAIL: expected exactly 3 Stop payloads, got {payloads!r}")
             return 1
         if stops[0].get("last_assistant_message") != "main done":
             print(
@@ -319,16 +350,22 @@ await handlers.get("session_shutdown")({}, mainCtx);
                 f"(willContinue agent_end must not stop the pane): {stops[0]!r}"
             )
             return 1
-        if stops[1].get("last_assistant_message") != "new done":
-            print(f"FAIL: post-switch session's stop payload was wrong: {stops[1]!r}")
+        if stops[1].get("last_assistant_message") != "booking done":
+            print(f"FAIL: next real turn's stop payload was wrong: {stops[1]!r}")
+            return 1
+        if stops[2].get("last_assistant_message") != "new done":
+            print(f"FAIL: post-switch session's stop payload was wrong: {stops[2]!r}")
             return 1
         if payloads[1].get("prompt") != "plan the trip":
             print(f"FAIL: prompt-submit payload was wrong: {payloads[1]!r}")
             return 1
+        if payloads[3].get("prompt") != "book the trip":
+            print(f"FAIL: next real turn did not deliver its own prompt: {payloads[3]!r}")
+            return 1
 
     print(
         "PASS: OMP lifecycle hooks are owned by the top-level session; subagent agent_end "
-        "cannot idle the pane, willContinue defers stop, and session_switch re-pins ownership"
+        "cannot idle the pane, preparation/continuation starts stay balanced, and session switches re-pin ownership"
     )
     return 0
 

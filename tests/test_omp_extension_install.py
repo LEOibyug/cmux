@@ -194,7 +194,7 @@ def verify_hook_persistence(cli_path: str, root: Path, base_env: dict[str, str])
     workspace_id = "11111111-1111-1111-1111-111111111111"
     surface_id = "22222222-2222-2222-2222-222222222222"
     session_id = "omp-hook-session-123"
-    socket_path = Path("/tmp") / f"cmux-omp-hook-{os.getpid()}-{time.monotonic_ns()}.sock"
+    socket_path = Path(os.environ.get("CMUX_SOCKET_DIR", tempfile.gettempdir())) / f"omp-h-{os.getpid()}-{time.monotonic_ns()}.sock"
     launch_argv = [
         "/Users/example/.bun/bin/omp",
         "--resume",
@@ -350,7 +350,7 @@ def verify_restore_rejects_legacy_downgrade(cli_path: str, root: Path) -> None:
             record["launch_command"] = {"launcher": "omp", "arguments": arguments}
             record["prepared_arguments"] = ["omp", "--session", session_id]
             record["fork_arguments"] = ["omp", "--session", session_id, "--fork"]
-        socket_path = Path("/tmp") / f"cmux-omp-restore-{os.getpid()}-{time.monotonic_ns()}.sock"
+        socket_path = Path(os.environ.get("CMUX_SOCKET_DIR", tempfile.gettempdir())) / f"omp-r-{os.getpid()}-{time.monotonic_ns()}.sock"
         env = os.environ.copy()
         env.update(CMUX_SOCKET_PATH=str(socket_path), CMUX_CLI_SENTRY_DISABLED="1",
                    HOME=str(root), CFFIXED_USER_HOME=str(root), SHELL="/bin/sh")
@@ -697,6 +697,7 @@ await expectHandlerCompletion(handlers.get("session_start")({}, parentCtx), "ses
 for (let index = 0; index < 40; index += 1) {
   await handlers.get("before_agent_start")({ prompt: `hello omp ${index}` }, parentCtx);
 }
+await handlers.get("agent_start")?.({}, parentCtx);
 await handlers.get("agent_end")({
   messages: [
     { role: "user", content: "hello omp" },
@@ -706,6 +707,7 @@ await handlers.get("agent_end")({
 }, parentCtx);
 await nestedHandlers.get("session_start")({}, nestedCtx);
 await nestedHandlers.get("before_agent_start")({ prompt: "review the storage race" }, nestedCtx);
+await nestedHandlers.get("agent_start")?.({}, nestedCtx);
 await nestedHandlers.get("agent_end")({
   messages: [
     { role: "user", content: "review the storage race" },
@@ -734,6 +736,7 @@ await handlers.get("agent_end")({ messages: [], stopReason: "completed" }, paren
 for (let index = 0; index < 10; index += 1) {
   await switchSession(`priority-prompt-${index}`, "new");
   await handlers.get("before_agent_start")({ prompt: `priority prompt ${index}` }, parentCtx);
+  await handlers.get("agent_start")?.({}, parentCtx);
 }
 // A finished task-tool subagent's session teardown (arriving through its own
 // module instance) must not drain or evict the owner session's queued hooks.
@@ -751,6 +754,7 @@ await switchSession("omp-session-test", "resume");
 for (let index = 0; index < 40; index += 1) {
   await handlers.get("before_agent_start")({ prompt: `hung omp ${index}` }, parentCtx);
 }
+await handlers.get("agent_start")?.({}, parentCtx);
 await handlers.get("agent_end")({ messages: [], stopReason: "completed" }, parentCtx);
 await handlers.get("session_shutdown")({}, parentCtx);
 const hungPidLines = nonEmptyLines(process.env.FAKE_CMUX_PID_LOG);
