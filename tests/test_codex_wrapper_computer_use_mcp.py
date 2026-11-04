@@ -19,8 +19,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_WRAPPER = ROOT / "Resources" / "bin" / "cmux-codex-wrapper"
 SOURCE_CLAUDE_WRAPPER = ROOT / "Resources" / "bin" / "cmux-claude-wrapper"
-SOURCE_LINK_POLICY = ROOT / "skills" / "cmux-cua" / "link-policy.sh"
-SOURCE_CLIENT_POLICY = ROOT / "skills" / "cmux-cua" / "client-policy.sh"
+SOURCE_LINK_POLICY = ROOT / "Resources" / "cmux-cua" / "link-policy.sh"
+SOURCE_CLIENT_POLICY = ROOT / "Resources" / "cmux-cua" / "client-policy.sh"
 
 # This is the public Codex compatibility roster. Keep the contract here in
 # the same order as Resources/cmux-cua/SKILL.md: a fresh Codex process must

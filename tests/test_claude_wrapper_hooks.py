@@ -23,7 +23,7 @@ from node_runtime import ensure_node_on_path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_WRAPPER = ROOT / "Resources" / "bin" / "cmux-claude-wrapper"
-CLIENT_POLICY = ROOT / "skills" / "cmux-cua" / "client-policy.sh"
+CLIENT_POLICY = ROOT / "Resources" / "cmux-cua" / "client-policy.sh"
 _RETAINED_SETTINGS_FIXTURES: list[Path] = []
 
 

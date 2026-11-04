@@ -18,8 +18,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WRAPPER = ROOT / "Resources" / "bin" / "cmux-claude-wrapper"
-LINK_POLICY = ROOT / "skills" / "cmux-cua" / "link-policy.sh"
-CLIENT_POLICY = ROOT / "skills" / "cmux-cua" / "client-policy.sh"
+LINK_POLICY = ROOT / "Resources" / "cmux-cua" / "link-policy.sh"
+CLIENT_POLICY = ROOT / "Resources" / "cmux-cua" / "client-policy.sh"
 
 SKILL_MD = (
     "---\n"
