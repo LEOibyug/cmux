@@ -26,7 +26,7 @@ import time
 
 DEFAULT_URL = "https://ci-cache.cmux.com"
 LOCKFILE = "cmux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
-SPM_CACHE_LAYOUT = "scripts/ci/swiftpm-cache-layout"
+SPM_CACHE_LAYOUT = "swiftpm-cache-layout-v2"
 MAX_ARCHIVE = 2 * 1024**3
 MAX_EXPANDED = 16 * 1024**3
 MAX_MEMBERS = 300_000
@@ -67,12 +67,12 @@ def run(command, deadline, *, env=None, cwd=None, pass_fds=()):
 
 
 def spm_key(repo):
-    # Actions hashFiles hashes the binary SHA256 digest of each matching file,
-    # in pattern order. The workflows' key names Package.resolved, then the
-    # cache layout version.
+    # Hash the binary SHA256 digest of Package.resolved, then the cache layout
+    # version salt. The salt is inlined; bump it when the archive layout
+    # changes (previously read from scripts/ci/swiftpm-cache-layout).
     digests = hashlib.sha256()
-    for name in (LOCKFILE, SPM_CACHE_LAYOUT):
-        digests.update(hashlib.sha256((repo / name).read_bytes()).digest())
+    digests.update(hashlib.sha256((repo / LOCKFILE).read_bytes()).digest())
+    digests.update(hashlib.sha256(SPM_CACHE_LAYOUT.encode()).digest())
     return "spm-" + digests.hexdigest()
 
 
