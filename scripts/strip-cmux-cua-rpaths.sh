@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 # Remove linker search paths that point at the build machine's toolchain.
 # The caller must re-sign the binary after this mutation.
 set -euo pipefail
@@ -99,6 +100,7 @@ strip_thin_binary() {
 
 strip_binary() {
   local binary="$1"
+  cmux_require_project_path "$binary" || return 1
   local archs
   local mode
   local scratch

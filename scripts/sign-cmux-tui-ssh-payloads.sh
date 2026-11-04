@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 # Developer ID sign the macOS cmux-tui SSH payloads in an app bundle and re-pin
 # their checksums in the bundled manifest.
 #
@@ -27,6 +28,7 @@ if [[ $# -ne 3 ]]; then
 fi
 
 APP_PATH="$1"
+cmux_require_project_path "$APP_PATH" || exit 1
 ENTITLEMENTS="$2"
 IDENTITY="$3"
 CODESIGN_TOOL="${CMUX_CODESIGN_TOOL:-/usr/bin/codesign}"

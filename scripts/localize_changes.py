@@ -13,6 +13,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+from project_paths import configure_project_paths, require_project_path
+configure_project_paths()
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent
@@ -812,6 +814,7 @@ def main(argv: list[str] | None = None) -> int:
     work_path = args.work_file or default_work_path(root)
     if not work_path.is_absolute():
         work_path = root / work_path
+    work_path = require_project_path(work_path)
     prior = load_work(work_path)
     omissions = CATALOG.load_metadata("localization-allowed-omissions.json")
     counts = CATALOG.load_metadata("localization-plurals.json")

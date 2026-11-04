@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+source "$(dirname "${BASH_SOURCE[0]}")/../project-env.sh" || return 1
 # Shared helpers for the iOS dev auto-pair flow: tag -> identity, enabling the
 # tagged Mac app's iOS pairing host, and headlessly minting a short-TTL attach
 # URL against the tagged debug socket. Sourced by scripts/dev-setup.sh,
@@ -134,7 +135,7 @@ PY
 
 # The tagged Mac app's debug socket path.
 cmux_attach_socket_path() {
-  printf '/tmp/cmux-debug-%s.sock' "$(cmux_attach__slug "$1")"
+  cmux_dev_socket_path "$(cmux_attach__slug "$1")"
 }
 
 # Remove a stale socket only for one validated tagged-build identity. Callers
@@ -164,8 +165,7 @@ cmux_attach_remove_stale_socket() {
 cmux_attach_mac_app_path() {
   local slug
   slug="$(cmux_attach__slug "$1")"
-  printf '%s/Library/Developer/Xcode/DerivedData/cmux-%s/Build/Products/Debug/cmux DEV %s.app' \
-    "$HOME" "$slug" "$slug"
+  printf '%s/Build/Products/Debug/cmux DEV %s.app' "$CMUX_DERIVED_DATA" "$slug"
 }
 
 # Enable the opt-in iOS pairing host on the tagged Mac bundle. Must be written

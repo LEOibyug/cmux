@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 
 if [[ -z "${CMUX_TAG:-}" ]]; then
@@ -47,7 +48,7 @@ sanitize_path() {
 tag_slug="$(sanitize_path "$CMUX_TAG")"
 tag_bundle_id="$(sanitize_bundle "$CMUX_TAG")"
 
-socket_path="/tmp/cmux-debug-${tag_slug}.sock"
+socket_path="$(cmux_dev_socket_path "$tag_slug")"
 if [[ ! -S "$socket_path" ]]; then
   cat >&2 <<EOF
 Tagged cmux socket not found:
@@ -60,7 +61,7 @@ EOF
 fi
 
 # Same default as reload.sh: a checkout that exports CMUX_DERIVED_DATA builds every tag there.
-derived_data="${CMUX_DERIVED_DATA:-${HOME}/Library/Developer/Xcode/DerivedData/cmux-${tag_slug}}"
+derived_data="$CMUX_DERIVED_DATA"
 if [[ "$derived_data" != /* ]]; then
   echo "error: CMUX_DERIVED_DATA must be an absolute path, got '$derived_data'" >&2
   exit 1
@@ -71,16 +72,10 @@ release_cli_path="${derived_data}/Build/Products/Release/cmux DEV ${tag_slug}.ap
 if [[ ! -x "$cli_path" && -x "$release_cli_path" ]]; then
   cli_path="$release_cli_path"
 fi
-# A fleet build restored with `cmux-ci publish-hq` lives in the HQ Tag Opener cache.
-cached_cli_path="${HOME}/Library/Application Support/cmux/tag-app-cache/cmux-${tag_slug}/cmux DEV ${tag_slug}.app/Contents/Resources/bin/cmux"
-if [[ ! -x "$cli_path" && -x "$cached_cli_path" ]]; then
-  cli_path="$cached_cli_path"
-fi
 if [[ ! -x "$cli_path" ]]; then
   cat >&2 <<EOF
 Tagged cmux CLI not found:
   $cli_path
-  $cached_cli_path
 
 Build the tagged app first:
   ./scripts/reload.sh --tag $CMUX_TAG
@@ -97,6 +92,7 @@ unset CMUX_PANEL_ID
 unset CMUXD_UNIX_PATH
 unset CMUX_DEBUG_LOG
 export CMUX_SOCKET_PATH="$socket_path"
+export CMUX_ALLOW_SOCKET_OVERRIDE=1
 export CMUX_TAG="$tag_slug"
 export CMUX_BUNDLE_ID="com.cmuxterm.app.debug.${tag_bundle_id}"
 export CMUX_BUNDLED_CLI_PATH="$cli_path"

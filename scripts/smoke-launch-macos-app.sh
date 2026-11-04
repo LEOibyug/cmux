@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
@@ -12,8 +13,11 @@ if [[ ! -d "$APP_PATH/Contents" ]]; then
   exit 1
 fi
 
+
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
 BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO_PLIST")"
+[[ "$BUNDLE_ID" == com.cmuxterm.app.debug.* ]] || { echo "Only isolated tagged bundles may be smoke-launched" >&2; exit 1; }
+cmux_require_project_path "$APP_PATH" || exit 1
 EXECUTABLE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$INFO_PLIST")"
 EXECUTABLE_PATH="$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME"
 # Nightly ships per-architecture bundles. An x86_64-only app can launch on an Apple
@@ -31,7 +35,7 @@ if command -v lipo >/dev/null 2>&1 && ! lipo "$EXECUTABLE_PATH" -verify_arch "$H
 fi
 STARTUP_TIMEOUT_SECONDS="${CMUX_SMOKE_STARTUP_TIMEOUT_SECONDS:-10}"
 STABLE_SECONDS="${CMUX_SMOKE_STABLE_SECONDS:-5}"
-OPEN_LOG="$(mktemp -t cmux-smoke-open.XXXXXX)"
+OPEN_LOG="$(mktemp "$CMUX_TMP_DIR/cmux-smoke-open.XXXXXX")"
 APP_PID=""
 PREEXISTING_PIDS="$(pgrep -f "$EXECUTABLE_PATH" 2>/dev/null || true)"
 DEBUG_LOGS="${CMUX_SMOKE_DEBUG_LOGS:-0}"

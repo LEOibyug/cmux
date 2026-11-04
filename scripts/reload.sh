@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,18 +20,10 @@ LAUNCH=0
 BUILD_ONLY=0
 CMUX_DEBUG_LOG=""
 CLI_PATH=""
-NO_GLOBAL_CLI_LINKS="${CMUX_RELOAD_NO_GLOBAL_CLI_LINKS:-0}"
-# Matches CmuxStateDirectory (non-TCC ~/.local/state/cmux) where the app/CLI now
-# read the last-socket-path markers (https://github.com/manaflow-ai/cmux/issues/5146).
-# Resolve the real account home via getpwuid (the same syscall
-# homeDirectoryForCurrentUser uses) rather than $HOME, which a shell can override.
-# perl ships with macOS and returns the full home path even when it contains spaces;
-# `dscl ... | awk` mis-parses such paths because dscl wraps a value with spaces onto
-# a second line. `|| true` keeps the lookup from aborting the script under
-# `set -euo pipefail`; an empty result falls back to $HOME.
-_cmux_account_home="$(perl -e 'print((getpwuid($<))[7])' 2>/dev/null || true)"
-LAST_SOCKET_PATH_DIR="${_cmux_account_home:-$HOME}/.local/state/cmux"
-LEGACY_SOCKET_PATH_DIR="${_cmux_account_home:-$HOME}/Library/Application Support/cmux"
+NO_GLOBAL_CLI_LINKS=1
+# Development discovery belongs to this checkout, never the user's installed app.
+LAST_SOCKET_PATH_DIR="$CMUX_RUNTIME_DIR/state"
+LEGACY_SOCKET_PATH_DIR="$CMUX_RUNTIME_DIR/legacy-state"
 SWIFT_FRONTEND_WORKAROUND=0
 XCODEBUILD_STARTED=0
 XCODEBUILD_OUTPUT_VALID=0
@@ -383,68 +376,68 @@ derive_socket_marker_names() {
   # uses the unscoped nightly/rc/staging/dev marker name.
   bundle_id="$(printf '%s' "$bundle_id" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
   CMUX_RELOAD_MARKER_NAME="last-socket-path"
-  CMUX_RELOAD_TMP_MARKER="/tmp/cmux-last-socket-path"
+  CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-last-socket-path"
   case "$bundle_id" in
     com.cmuxterm.app.nightly)
       CMUX_RELOAD_MARKER_NAME="nightly-last-socket-path"
-      CMUX_RELOAD_TMP_MARKER="/tmp/cmux-nightly-last-socket-path"
+      CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-nightly-last-socket-path"
       ;;
     com.cmuxterm.app.nightly.*)
       variant_slug="$(sanitize_path "${bundle_id#com.cmuxterm.app.nightly.}")"
       if [[ -n "$variant_slug" ]]; then
         CMUX_RELOAD_MARKER_NAME="nightly-${variant_slug}-last-socket-path"
-        CMUX_RELOAD_TMP_MARKER="/tmp/cmux-nightly-${variant_slug}-last-socket-path"
+        CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-nightly-${variant_slug}-last-socket-path"
       else
         CMUX_RELOAD_MARKER_NAME="nightly-last-socket-path"
-        CMUX_RELOAD_TMP_MARKER="/tmp/cmux-nightly-last-socket-path"
+        CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-nightly-last-socket-path"
       fi
       ;;
     com.cmuxterm.app.rc)
       CMUX_RELOAD_MARKER_NAME="rc-last-socket-path"
-      CMUX_RELOAD_TMP_MARKER="/tmp/cmux-rc-last-socket-path"
+      CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-rc-last-socket-path"
       ;;
     com.cmuxterm.app.rc.*)
       variant_slug="$(sanitize_path "${bundle_id#com.cmuxterm.app.rc.}")"
       if [[ -n "$variant_slug" ]]; then
         CMUX_RELOAD_MARKER_NAME="rc-${variant_slug}-last-socket-path"
-        CMUX_RELOAD_TMP_MARKER="/tmp/cmux-rc-${variant_slug}-last-socket-path"
+        CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-rc-${variant_slug}-last-socket-path"
       else
         CMUX_RELOAD_MARKER_NAME="rc-last-socket-path"
-        CMUX_RELOAD_TMP_MARKER="/tmp/cmux-rc-last-socket-path"
+        CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-rc-last-socket-path"
       fi
       ;;
     com.cmuxterm.app.staging)
       CMUX_RELOAD_MARKER_NAME="staging-last-socket-path"
-      CMUX_RELOAD_TMP_MARKER="/tmp/cmux-staging-last-socket-path"
+      CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-staging-last-socket-path"
       ;;
     com.cmuxterm.app.staging.*)
       variant_slug="$(sanitize_path "${bundle_id#com.cmuxterm.app.staging.}")"
       if [[ -n "$variant_slug" ]]; then
         CMUX_RELOAD_MARKER_NAME="staging-${variant_slug}-last-socket-path"
-        CMUX_RELOAD_TMP_MARKER="/tmp/cmux-staging-${variant_slug}-last-socket-path"
+        CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-staging-${variant_slug}-last-socket-path"
       else
         CMUX_RELOAD_MARKER_NAME="staging-last-socket-path"
-        CMUX_RELOAD_TMP_MARKER="/tmp/cmux-staging-last-socket-path"
+        CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-staging-last-socket-path"
       fi
       ;;
     com.cmuxterm.app.debug)
       variant_slug="$(sanitize_path "$tag_slug")"
       if [[ -n "$variant_slug" ]]; then
         CMUX_RELOAD_MARKER_NAME="dev-${variant_slug}-last-socket-path"
-        CMUX_RELOAD_TMP_MARKER="/tmp/cmux-dev-${variant_slug}-last-socket-path"
+        CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-dev-${variant_slug}-last-socket-path"
       else
         CMUX_RELOAD_MARKER_NAME="dev-last-socket-path"
-        CMUX_RELOAD_TMP_MARKER="/tmp/cmux-dev-last-socket-path"
+        CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-dev-last-socket-path"
       fi
       ;;
     com.cmuxterm.app.debug.*)
       variant_slug="$(sanitize_path "${bundle_id#com.cmuxterm.app.debug.}")"
       if [[ -n "$variant_slug" ]]; then
         CMUX_RELOAD_MARKER_NAME="dev-${variant_slug}-last-socket-path"
-        CMUX_RELOAD_TMP_MARKER="/tmp/cmux-dev-${variant_slug}-last-socket-path"
+        CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-dev-${variant_slug}-last-socket-path"
       else
         CMUX_RELOAD_MARKER_NAME="dev-last-socket-path"
-        CMUX_RELOAD_TMP_MARKER="/tmp/cmux-dev-last-socket-path"
+        CMUX_RELOAD_TMP_MARKER="$CMUX_RUNTIME_DIR/cmux-dev-last-socket-path"
       fi
       ;;
   esac
@@ -452,7 +445,7 @@ derive_socket_marker_names() {
 
 cleanup_stale_tag_state() {
   local slug="$1"
-  local socket_path="${2:-/tmp/cmux-debug-${slug}.sock}"
+  local socket_path="${2:-$(cmux_dev_socket_path "$slug")}"
   local publish_socket_path="${3:-}"
   local publish_cli_path="${4:-}"
   derive_socket_marker_names "${BUNDLE_ID:-}" "$slug"
@@ -463,7 +456,7 @@ cleanup_stale_tag_state() {
 
   # The Perl transaction performs the liveness probe after acquiring the tag
   # lock, so validation, stale-node removal, and publication share one owner.
-  local pointer_path="/tmp/cmux-last-cli-path"
+  local pointer_path="$CMUX_RUNTIME_DIR/cmux-last-cli-path"
   if [[ -n "$publish_socket_path" ]]; then
     mkdir -p "$LAST_SOCKET_PATH_DIR" || return 1
   fi
@@ -479,7 +472,7 @@ cleanup_stale_tag_state() {
 }
 
 cleanup_stale_cli_pointer_target() {
-  local pointer_path="/tmp/cmux-last-cli-path"
+  local pointer_path="$CMUX_RUNTIME_DIR/cmux-last-cli-path"
   [[ -f "$pointer_path" && ! -L "$pointer_path" ]] || return 0
   local cli_path=""
   cli_path="$(LC_ALL=C /usr/bin/head -c 4097 "$pointer_path" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true)"
@@ -504,7 +497,7 @@ cleanup_stale_cli_pointer_target() {
     socket_path="$(/usr/libexec/PlistBuddy -c 'Print :LSEnvironment:CMUX_SOCKET_PATH' "$bundle_path/Contents/Info.plist" 2>/dev/null || true)"
   fi
   socket_path="$(printf '%s' "$socket_path" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-  cleanup_stale_tag_state "$slug" "${socket_path:-/tmp/cmux-debug-${slug}.sock}"
+  cleanup_stale_tag_state "$slug" "${socket_path:-$(cmux_dev_socket_path "$slug")}"
 }
 
 wait_for_tag_socket_lock_release() {
@@ -556,7 +549,7 @@ should_skip_ghostty_cli_helper_zig_build() {
 write_dev_cli_shim() {
   local target="$1"
   local fallback_bin="$2"
-  local cli_path_file="${3:-/tmp/cmux-last-cli-path}"
+  local cli_path_file="${3:-$CMUX_RUNTIME_DIR/cmux-last-cli-path}"
   local cli_path_file_literal=""
   local fallback_bin_literal=""
   local socket_probe_function=""
@@ -564,6 +557,7 @@ write_dev_cli_shim() {
   printf -v fallback_bin_literal '%q' "$fallback_bin"
   socket_probe_function="$(declare -f reload_socket_is_live)"
   socket_probe_function="${socket_probe_function/reload_socket_is_live/socket_is_live}"
+  cmux_require_project_path "$target" || return 1
   mkdir -p "$(dirname "$target")"
   cat > "$target" <<EOF
 #!/usr/bin/env bash
@@ -700,57 +694,6 @@ EOF
   chmod +x "$target"
 }
 
-select_cmux_shim_target() {
-  local app_cli_dir="/Applications/cmux.app/Contents/Resources/bin"
-  local marker="cmux dev shim (managed by scripts/reload.sh)"
-  local target=""
-  local path_entry=""
-  local candidate=""
-
-  IFS=':' read -r -a path_entries <<< "${PATH:-}"
-  for path_entry in "${path_entries[@]}"; do
-    [[ -z "$path_entry" ]] && continue
-    # PATH may contain a literal ~/ prefix; expand that spelling deliberately.
-    # shellcheck disable=SC2088
-    if [[ "$path_entry" == "~/"* ]]; then
-      path_entry="$HOME/${path_entry:2}"
-    fi
-    if [[ "$path_entry" == "$app_cli_dir" ]]; then
-      break
-    fi
-    [[ -d "$path_entry" && -w "$path_entry" ]] || continue
-    candidate="$path_entry/cmux"
-    if [[ ! -e "$candidate" ]]; then
-      target="$candidate"
-      break
-    fi
-    if [[ -f "$candidate" ]] && grep -q "$marker" "$candidate" 2>/dev/null; then
-      target="$candidate"
-      break
-    fi
-  done
-
-  if [[ -n "$target" ]]; then
-    echo "$target"
-    return 0
-  fi
-
-  # Fallback for PATH layouts where app CLI isn't listed or no earlier entries were writable.
-  for path_entry in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin" "$HOME/bin"; do
-    [[ -d "$path_entry" && -w "$path_entry" ]] || continue
-    candidate="$path_entry/cmux"
-    if [[ ! -e "$candidate" ]]; then
-      echo "$candidate"
-      return 0
-    fi
-    if [[ -f "$candidate" ]] && grep -q "$marker" "$candidate" 2>/dev/null; then
-      echo "$candidate"
-      return 0
-    fi
-  done
-
-  return 1
-}
 
 publish_reload_cli_links() {
   local cli_path="$1"
@@ -761,16 +704,13 @@ publish_reload_cli_links() {
     return 0
   fi
 
-  ln -sfn "$cli_path" /tmp/cmux-cli || true
+  ln -sfn "$cli_path" "$CMUX_RUNTIME_DIR/cmux-cli" || true
 
   # Stable shim that always follows the last reload-selected dev CLI.
-  DEV_CLI_SHIM="$HOME/.local/bin/cmux-dev"
+  DEV_CLI_SHIM="$CMUX_RUNTIME_DIR/cmux-dev"
   write_dev_cli_shim "$DEV_CLI_SHIM" "/Applications/cmux.app/Contents/Resources/bin/cmux"
 
-  CMUX_SHIM_TARGET="$(select_cmux_shim_target || true)"
-  if [[ -n "${CMUX_SHIM_TARGET:-}" ]]; then
-    write_dev_cli_shim "$CMUX_SHIM_TARGET" "/Applications/cmux.app/Contents/Resources/bin/cmux"
-  fi
+  CMUX_SHIM_TARGET=""
 }
 
 publish_reload_cli_path() {
@@ -782,7 +722,7 @@ publish_reload_cli_path() {
     return 0
   fi
 
-  reload_write_cli_pointer "/tmp/cmux-last-cli-path" "$cli_path" || return 1
+  reload_write_cli_pointer "$CMUX_RUNTIME_DIR/cmux-last-cli-path" "$cli_path" || return 1
   publish_reload_cli_links "$cli_path"
 }
 
@@ -893,12 +833,9 @@ Options:
                          debug.* socket commands are compiled out.
   --name <app name>      Override app display/bundle name.
   --bundle-id <id>       Override bundle identifier.
-  --derived-data <path>  Override derived data path.
-                         Defaults to CMUX_DERIVED_DATA when set (an absolute
-                         path to a DerivedData kept warm for this checkout and
-                         shared by its tags), else one directory per tag.
-  --no-global-cli-links  Do not update /tmp/cmux-cli, /tmp/cmux-last-cli-path,
-                         or PATH cmux-dev shims. Useful for isolated dogfood.
+  --derived-data <path>  Override derived data within this project.
+                         Defaults to cache/xcode, shared by all tags.
+  --no-global-cli-links  Accepted for explicitness; global CLI links are always disabled.
   --swift-frontend-workaround
                          Work around Swift arm64 frontend spins for this reload
                          only by disabling batch mode, debug symbol emission,
@@ -960,7 +897,7 @@ reload_skips_app_module_emission() {
 
 tagged_derived_data_path() {
   local slug="$1"
-  echo "$HOME/Library/Developer/Xcode/DerivedData/cmux-${slug}"
+  echo "$CMUX_CACHE_DIR/xcode"
 }
 
 
@@ -1047,7 +984,7 @@ validate_app_bundle() {
 # that is not the tag's own may hold other tags, so only the tag's app is removed from it.
 tag_build_cleanup_paths() {
   local tag="$1" derived="${2:-}"
-  local own="" link="/tmp/cmux-${tag}"
+  local own="" link="$CMUX_RUNTIME_DIR/cmux-${tag}"
   own="$(tagged_derived_data_path "$tag")"
   if [[ -z "$derived" && -L "$link" ]]; then
     derived="$(readlink "$link" 2>/dev/null || true)"
@@ -1064,10 +1001,7 @@ tag_build_cleanup_paths() {
 # argument is escaped with %q instead of being wrapped in quotes.
 print_tag_cleanup_commands() {
   local tag="$1" derived="${2:-}"
-  printf '  pkill -f %q\n' "cmux DEV ${tag}.app/Contents/MacOS/cmux DEV"
-  printf '  rm -rf %s%q %q\n' "$(tag_build_cleanup_paths "$tag" "$derived")" "/tmp/cmux-${tag}" "/tmp/cmux-debug-${tag}.sock"
-  printf '  rm -f %q\n' "/tmp/cmux-debug-${tag}.log"
-  printf '  rm -f %q\n' "$HOME/Library/Application Support/cmux/cmuxd-dev-${tag}.sock"
+  printf '  scripts/cleanup-dev-builds.sh --apply --keep %q\n' "${TAG_SLUG:-}"
 }
 
 print_tag_cleanup_reminder() {
@@ -1079,10 +1013,8 @@ print_tag_cleanup_reminder() {
   local -a stale_tags=()
 
   while IFS= read -r -d '' path; do
-    if [[ "$path" == /tmp/cmux-* ]]; then
-      tag="${path#/tmp/cmux-}"
-    elif [[ "$path" == "$HOME/Library/Developer/Xcode/DerivedData/cmux-"* ]]; then
-      tag="${path#"$HOME"/Library/Developer/Xcode/DerivedData/cmux-}"
+    if [[ "$path" == "$CMUX_RUNTIME_DIR/cmux-"* ]]; then
+      tag="${path#"$CMUX_RUNTIME_DIR/cmux-"}"
     else
       continue
     fi
@@ -1103,9 +1035,7 @@ print_tag_cleanup_reminder() {
     seen="${seen}${tag} "
     stale_tags+=("$tag")
   done < <(
-    # The trailing slash makes find descend when /tmp is itself a symlink.
-    find /tmp/ -maxdepth 1 -name 'cmux-*' -print0 2>/dev/null
-    find "$HOME/Library/Developer/Xcode/DerivedData" -maxdepth 1 -type d -name 'cmux-*' -print0 2>/dev/null
+    find "$CMUX_RUNTIME_DIR" -maxdepth 1 -name 'cmux-*' -print0 2>/dev/null
   )
 
   echo
@@ -1260,6 +1190,7 @@ if [[ -n "$TAG" ]]; then
     BUNDLE_ID="com.cmuxterm.app.debug.${TAG_ID}"
   fi
   DERIVED_DATA="$(resolve_tagged_derived_data "$TAG_SLUG" "$DERIVED_SET" "${DERIVED_DATA:-}")"
+  cmux_require_project_path "$DERIVED_DATA" || exit 1
   if [[ "$BUILD_ONLY" -ne 1 ]]; then
     cleanup_stale_cli_pointer_target || true
     cleanup_stale_tag_state "$TAG_SLUG" || true
@@ -1276,7 +1207,7 @@ export CMUX_TUI_CLIENT_LOCAL
 # Quiet logging: capture all noisy build output (xcodebuild, zig, codesign,
 # plistbuddy, etc.) to a single log file. On success we print only a one-line
 # summary plus the App/CLI paths. On failure we dump the log.
-RELOAD_LOG="/tmp/cmux-reload-${TAG_SLUG}.log"
+RELOAD_LOG="$CMUX_RUNTIME_DIR/cmux-reload-${TAG_SLUG}.log"
 RELOAD_START_TIME="$(date +%s)"
 : > "$RELOAD_LOG"
 
@@ -1422,6 +1353,8 @@ XCODEBUILD_ARGS=(
   COMPILER_INDEX_STORE_ENABLE=NO
   DEBUG_INFORMATION_FORMAT=
   GCC_GENERATE_DEBUGGING_SYMBOLS=NO
+  "CLANG_MODULE_CACHE_PATH=$CLANG_MODULE_CACHE_PATH"
+  "SWIFT_MODULE_CACHE_PATH=$SWIFT_MODULECACHE_PATH"
 )
 if [[ -n "$DERIVED_DATA" ]]; then
   XCODEBUILD_ARGS+=(-derivedDataPath "$DERIVED_DATA")
@@ -1668,36 +1601,10 @@ if [[ -n "$TAG" ]]; then
   SEARCH_APP_NAME="$PRODUCT_APP_NAME"
   APP_EXECUTABLE_NAME="$PRODUCT_APP_NAME"
 fi
-if [[ -n "$DERIVED_DATA" ]]; then
-  APP_PATH="${DERIVED_DATA}/Build/Products/${BUILD_CONFIGURATION}/${SEARCH_APP_NAME}.app"
-  if [[ ! -d "${APP_PATH}" && "$SEARCH_APP_NAME" != "$FALLBACK_APP_NAME" ]]; then
-    APP_PATH="${DERIVED_DATA}/Build/Products/${BUILD_CONFIGURATION}/${FALLBACK_APP_NAME}.app"
-    APP_EXECUTABLE_NAME="$FALLBACK_APP_NAME"
-  fi
-else
-  APP_BINARY="$(
-    find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/${BUILD_CONFIGURATION}/${SEARCH_APP_NAME}.app/Contents/MacOS/${SEARCH_APP_NAME}" -print0 \
-    | xargs -0 /usr/bin/stat -f "%m %N" 2>/dev/null \
-    | sort -nr \
-    | head -n 1 \
-    | cut -d' ' -f2-
-  )"
-  if [[ -n "${APP_BINARY}" ]]; then
-    APP_PATH="$(dirname "$(dirname "$(dirname "$APP_BINARY")")")"
-  fi
-  if [[ -z "${APP_PATH}" && "$SEARCH_APP_NAME" != "$FALLBACK_APP_NAME" ]]; then
-    APP_BINARY="$(
-      find "$HOME/Library/Developer/Xcode/DerivedData" -path "*/Build/Products/${BUILD_CONFIGURATION}/${FALLBACK_APP_NAME}.app/Contents/MacOS/${FALLBACK_APP_NAME}" -print0 \
-      | xargs -0 /usr/bin/stat -f "%m %N" 2>/dev/null \
-      | sort -nr \
-      | head -n 1 \
-      | cut -d' ' -f2-
-    )"
-    if [[ -n "${APP_BINARY}" ]]; then
-      APP_PATH="$(dirname "$(dirname "$(dirname "$APP_BINARY")")")"
-      APP_EXECUTABLE_NAME="$FALLBACK_APP_NAME"
-    fi
-  fi
+APP_PATH="${DERIVED_DATA}/Build/Products/${BUILD_CONFIGURATION}/${SEARCH_APP_NAME}.app"
+if [[ ! -d "${APP_PATH}" && "$SEARCH_APP_NAME" != "$FALLBACK_APP_NAME" ]]; then
+  APP_PATH="${DERIVED_DATA}/Build/Products/${BUILD_CONFIGURATION}/${FALLBACK_APP_NAME}.app"
+  APP_EXECUTABLE_NAME="$FALLBACK_APP_NAME"
 fi
 if [[ -z "${APP_PATH}" || ! -d "${APP_PATH}" ]]; then
   echo "${APP_NAME}.app not found in DerivedData" >&2
@@ -1708,7 +1615,7 @@ XCODEBUILD_OUTPUT_VALID=1
 
 
 if [[ "$BUILD_ONLY" -ne 1 && -n "${TAG_SLUG:-}" ]]; then
-  TMP_COMPAT_DERIVED_LINK="/tmp/cmux-${TAG_SLUG}"
+  TMP_COMPAT_DERIVED_LINK="$CMUX_RUNTIME_DIR/cmux-${TAG_SLUG}"
   if [[ "$DERIVED_DATA" != "$TMP_COMPAT_DERIVED_LINK" ]]; then
     ABS_DERIVED_DATA="$(cd "$DERIVED_DATA" && pwd)"
     rm -rf "$TMP_COMPAT_DERIVED_LINK"
@@ -1731,18 +1638,24 @@ if [[ -n "$TAG" && "$APP_NAME" != "$SEARCH_APP_NAME" ]]; then
       || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string $BUNDLE_ID" "$INFO_PLIST"
     if [[ -n "${TAG_SLUG:-}" ]]; then
       /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:1:CFBundleURLSchemes:0 cmux-dev-${TAG_SLUG}" "$INFO_PLIST"
-      APP_SUPPORT_DIR="$HOME/Library/Application Support/cmux"
-      CMUXD_SOCKET="${APP_SUPPORT_DIR}/cmuxd-dev-${TAG_SLUG}.sock"
-      CMUX_SOCKET_PATH_VALUE="/tmp/cmux-debug-${TAG_SLUG}.sock"
-      CMUX_DEBUG_LOG="/tmp/cmux-debug-${TAG_SLUG}.log"
+      APP_SUPPORT_DIR="$CMUX_TMP_DIR/homes/${TAG_SLUG}/Library/Application Support/cmux"
+      CMUXD_SOCKET="$(cmux_dev_socket_path "daemon-${TAG_SLUG}")"
+      CMUX_SOCKET_PATH_VALUE="$(cmux_dev_socket_path "$TAG_SLUG")"
+      CMUX_DEBUG_LOG="$CMUX_RUNTIME_DIR/cmux-debug-${TAG_SLUG}.log"
       if [[ "$BUILD_ONLY" -ne 1 ]]; then
-        echo "$CMUX_DEBUG_LOG" > /tmp/cmux-last-debug-log-path || true
+        echo "$CMUX_DEBUG_LOG" > "$CMUX_RUNTIME_DIR/cmux-last-debug-log-path" || true
       fi
       /usr/libexec/PlistBuddy -c "Add :LSEnvironment dict" "$INFO_PLIST" 2>/dev/null || true
       set_plist_env "$INFO_PLIST" CMUX_BUNDLE_ID "$BUNDLE_ID"
       set_plist_env "$INFO_PLIST" CMUXD_UNIX_PATH "$CMUXD_SOCKET"
       set_plist_env "$INFO_PLIST" CMUX_SOCKET_PATH "$CMUX_SOCKET_PATH_VALUE"
       set_plist_env "$INFO_PLIST" CMUX_DEBUG_LOG "$CMUX_DEBUG_LOG"
+      mkdir -p "$CMUX_TMP_DIR/homes/${TAG_SLUG}"
+      set_plist_env "$INFO_PLIST" HOME "$CMUX_TMP_DIR/homes/${TAG_SLUG}"
+      set_plist_env "$INFO_PLIST" CFFIXED_USER_HOME "$CMUX_TMP_DIR/homes/${TAG_SLUG}"
+      set_plist_env "$INFO_PLIST" TMPDIR "$CMUX_TMP_DIR/"
+      set_plist_env "$INFO_PLIST" XDG_CACHE_HOME "$CMUX_CACHE_DIR/xdg"
+      set_plist_env "$INFO_PLIST" CMUX_ALLOW_SOCKET_OVERRIDE "1"
       set_plist_env "$INFO_PLIST" CMUX_TAG "$TAG_SLUG"
       set_plist_env "$INFO_PLIST" CMUX_SOCKET_ENABLE "1"
       set_plist_env "$INFO_PLIST" CMUX_SOCKET_MODE "allowAll"
@@ -1858,7 +1771,7 @@ CLI_PATH="$APP_PATH/Contents/Resources/bin/cmux"
 if [[ "$BUILD_ONLY" -eq 1 ]]; then
   CAN_PUBLISH_RELOAD_STATE=0
   RELOAD_PUBLICATION_SKIP_REASON="build-only mode left the running tagged app and tag state unchanged"
-elif [[ -n "$TAG" ]] && ! wait_for_tag_socket_lock_release "/tmp/cmux-debug-${TAG_SLUG}.sock"; then
+elif [[ -n "$TAG" ]] && ! wait_for_tag_socket_lock_release "$(cmux_dev_socket_path "$TAG_SLUG")"; then
   CAN_PUBLISH_RELOAD_STATE=0
 fi
 if [[ "$CAN_PUBLISH_RELOAD_STATE" -eq 1 && -n "${TAG_SLUG:-}" ]]; then
@@ -1873,8 +1786,8 @@ if [[ "$CAN_PUBLISH_RELOAD_STATE" -eq 1 && -n "${TAG_SLUG:-}" ]]; then
   fi
   if ! cleanup_stale_tag_state \
       "$TAG_SLUG" \
-      "/tmp/cmux-debug-${TAG_SLUG}.sock" \
-      "/tmp/cmux-debug-${TAG_SLUG}.sock" \
+      "$(cmux_dev_socket_path "$TAG_SLUG")" \
+      "$(cmux_dev_socket_path "$TAG_SLUG")" \
       "$RELOAD_PUBLISH_CLI_PATH"; then
     # A replacement process may have reclaimed this tag while the old app was
     # terminating. Do not overwrite its discovery marker or ambient CLI pointer.
@@ -1990,12 +1903,15 @@ if [[ "$LAUNCH" -eq 1 ]]; then
     TAG_LAUNCH_PROGRAM_ARGUMENTS=(
       /usr/bin/env
       -i
-      HOME="${HOME:-/Users/$(id -un)}"
+      HOME="$CMUX_TMP_DIR/homes/${TAG_SLUG}"
+      CFFIXED_USER_HOME="$CMUX_TMP_DIR/homes/${TAG_SLUG}"
+      XDG_CACHE_HOME="$CMUX_CACHE_DIR/xdg"
+      CMUX_ALLOW_SOCKET_OVERRIDE=1
       USER="$(id -un)"
       LOGNAME="$(id -un)"
       SHELL="${SHELL:-/bin/zsh}"
       PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-      TMPDIR="${TMPDIR:-/tmp}"
+      TMPDIR="$CMUX_TMP_DIR/"
     )
     if [[ -n "${SSH_AUTH_SOCK:-}" ]]; then
       TAG_LAUNCH_PROGRAM_ARGUMENTS+=(SSH_AUTH_SOCK="$SSH_AUTH_SOCK")
@@ -2018,8 +1934,8 @@ if [[ "$LAUNCH" -eq 1 ]]; then
       exit 1
     fi
   else
-    echo "/tmp/cmux-debug.sock" > /tmp/cmux-last-socket-path || true
-    echo "/tmp/cmux-debug.log" > /tmp/cmux-last-debug-log-path || true
+    echo "$CMUX_SOCKET_PATH_VALUE" > "$CMUX_RUNTIME_DIR/cmux-last-socket-path" || true
+    echo "$CMUX_DEBUG_LOG" > "$CMUX_RUNTIME_DIR/cmux-last-debug-log-path" || true
     if [[ -n "${CMUX_SOCKET_PATH_VALUE:-}" ]]; then
       # Ensure explicit socket paths win even if the caller has CMUX_* overrides.
       LAUNCH_CMD=("${OPEN_CLEAN_ENV[@]}" "${TAG_LAUNCH_ENV[@]}" CMUX_SOCKET_PATH="$CMUX_SOCKET_PATH_VALUE" CMUXD_UNIX_PATH="$CMUXD_SOCKET" open -g "$APP_PATH")

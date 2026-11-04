@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 
 # reload-extension.sh — build a CMUX sample sidebar extension scoped to a dev build tag.
@@ -110,7 +111,7 @@ build_install_example() {
 
   local tagged_app_name="${app_name} ${TAG}"
 
-  local derived="/tmp/cmux-ext-${which}-${TAG_ID}"
+  local derived="$CMUX_CACHE_DIR/extensions/${which}-${TAG_ID}"
   echo "==> building ${app_name} for tag ${TAG} (point ${TAGGED_POINT_ID})"
   rm -rf "$derived"
 
@@ -148,9 +149,10 @@ build_install_example() {
   built_app="$(find "$derived/Build/Products/Debug" -maxdepth 1 -name "*.app" | head -1)"
   [[ -z "$built_app" || ! -d "$built_app" ]] && { echo "error: no .app produced for $which" >&2; return 1; }
 
-  # Install to ~/Applications under the tagged name so multiple tags coexist.
-  local dest="$HOME/Applications/${tagged_app_name}.app"
+  # Keep tagged extension bundles beside the project's other retained artifacts.
+  local dest="$CMUX_CACHE_DIR/artifacts/extensions/${tagged_app_name}.app"
   pkill -f "${tagged_app_name}.app/Contents/MacOS" 2>/dev/null || true
+  mkdir -p "$(dirname "$dest")"
   rm -rf "$dest"
   ditto "$built_app" "$dest"
   echo "==> installed ${dest}"

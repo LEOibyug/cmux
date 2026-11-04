@@ -33,6 +33,7 @@
 
 保留日常构建、签名、本地化和工程合并工具；这些工具不依赖 CI 合并解析器或发布签名检查。
 Computer Use 随程序提供的技能资料保存在 `Resources/cmux-cua/`，不属于仓库开发规则。
+所有开发产物和过程文件仅放项目自身的 `cache/`、`tmp/`，不提交到 Git。使用 `./scripts/dev.sh <命令> [参数...]`，或先 `source scripts/project-env.sh`；构建脚本也会自动载入。Xcode DerivedData、SwiftPM、Rust、Zig、Go 和 UI 预览缓存不再写入用户目录，日志、截图和隔离应用 HOME 不再使用系统临时目录。显式指定项目外缓存/输出会被拒绝。清理 `cache/` 会丢失增量编译缓存，下次构建需重新下载或编译；安装程序和真实用户数据不在清理范围。macOS 自身维护的系统服务状态不受这些脚本控制。
 
 ## 更新方式
 

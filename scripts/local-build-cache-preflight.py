@@ -23,6 +23,8 @@ import sys
 import tarfile
 import tempfile
 import time
+from project_paths import configure_project_paths, require_project_path
+configure_project_paths()
 
 DEFAULT_URL = "https://ci-cache.cmux.com"
 LOCKFILE = "cmux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
@@ -454,7 +456,7 @@ def main(argv=None):
     parser.add_argument("--source-packages-dir", type=Path)
     parser.add_argument("--receipt", required=True, type=Path)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parents[1])
-    parser.add_argument("--cache-root", type=Path, default=Path.home() / "Projects/.cmux-build-cache")
+    parser.add_argument("--cache-root", type=Path, default=Path(os.environ["CMUX_CACHE_DIR"]) / "build-seeds")
     parser.add_argument("--timeout", type=float, default=120)
     args = parser.parse_args(argv)
     if args.warm and args.source_packages_dir is not None:
@@ -467,8 +469,9 @@ def main(argv=None):
     receipt = {"schema_version": 1, "mode": "warm" if args.warm else "local-only",
                "network_allowed": args.warm, "compiler_cache": "not_restored", "whole_app": "not_restored"}
     namespace = "macOS-" + {"arm64": "ARM64", "x86_64": "X64"}.get(platform.machine(), "unsupported")
-    repo, cache = args.repo.resolve(), args.cache_root.resolve()
-    destination = args.source_packages_dir.absolute() if args.source_packages_dir is not None else None
+    repo, cache = require_project_path(args.repo), require_project_path(args.cache_root)
+    args.receipt = require_project_path(args.receipt)
+    destination = require_project_path(args.source_packages_dir) if args.source_packages_dir is not None else None
     if destination is not None and (destination.resolve() == cache or cache in destination.resolve().parents):
         parser.error("the mutable source-packages directory must be outside the shared seed cache")
     url = os.environ.get("CI_CACHE_R2_PUBLIC_URL", DEFAULT_URL).rstrip("/")

@@ -30,6 +30,9 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+if __name__ == "__main__":
+    from project_paths import configure_project_paths
+    configure_project_paths()
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 MERGE_HELPERS = SCRIPT_DIR / "lib" / "pbxproj_merge.py"

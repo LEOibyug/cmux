@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -63,6 +64,9 @@ rustup toolchain install "$DIFF_RUST_TOOLCHAIN" --profile minimal --component cl
 rustup target add --toolchain "$DIFF_RUST_TOOLCHAIN" aarch64-apple-darwin x86_64-apple-darwin
 rustup run "$DIFF_RUST_TOOLCHAIN" cargo --version
 rustup run "$DIFF_RUST_TOOLCHAIN" rustc --version
+TUI_RUST_TOOLCHAIN="$(awk -F '\"' '/^[[:space:]]*channel[[:space:]]*=/{print $2; exit}' cmux-tui/rust-toolchain.toml)"
+rustup toolchain install "$TUI_RUST_TOOLCHAIN" --profile minimal
+rustup default "$TUI_RUST_TOOLCHAIN"
 
 # Every app build also runs scripts/build-cmux-cua.sh, which compiles the
 # bundled cmux-cua engine with Cargo (default toolchain). Verify a working

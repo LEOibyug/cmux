@@ -1,4 +1,5 @@
 #!/bin/bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 
 CMUX_CUA_REPO_URL="${CMUX_CUA_REPO_URL:-https://github.com/manaflow-ai/cmux-cua.git}"
@@ -26,7 +27,7 @@ OUTPUT=""
 HELPER_APP_OPTION=""
 ARCHS_RAW=""
 PRINT_HELPER_ID=""
-CACHE_DIR="${CMUX_CUA_CACHE_DIR:-${HOME:-/tmp}/Library/Caches/cmux/cmux-cua}"
+CACHE_DIR="$CMUX_CUA_CACHE_DIR"
 
 helper_bundle_id_for_host() {
   # cmux-cua owns one stable TCC identity. Tag isolation comes from the
@@ -88,7 +89,7 @@ Options:
   --helper-app <path>   package the engine as this cmux Computer Use.app
                          (default: Contents/Library/cmux Computer Use.app when
                          --output is <app>/Contents/Resources/bin/cmux-cua)
-  --cache-dir <path>    clone/build cache dir (default: ~/Library/Caches/cmux/cmux-cua)
+  --cache-dir <path>    clone/build cache inside this checkout (default: cache/cmux-cua)
   --print-helper-id <host-bundle-id>
                          Print the TCC-facing helper identity and exit
   -h, --help            show this help
@@ -167,6 +168,10 @@ command -v cargo >/dev/null 2>&1 || {
   exit 1
 }
 
+cmux_require_project_path "$CACHE_DIR" "$OUTPUT" || exit 1
+if [[ -n "$HELPER_APP_OPTION" ]]; then
+  cmux_require_project_path "$HELPER_APP_OPTION" || exit 1
+fi
 mkdir -p "$CACHE_DIR"
 
 # One trap handles both the source lock and the scratch build dir.
@@ -514,6 +519,7 @@ else
   fi
 fi
 if [ -n "$HELPER_APP" ]; then
+  cmux_require_project_path "$HELPER_APP" || exit 1
   HELPER_EXECUTABLE="cmux-cua"
   # This build phase runs before Xcode writes the processed host Info.plist.
   # Prefer exported build settings; reading a missing plist makes PlistBuddy

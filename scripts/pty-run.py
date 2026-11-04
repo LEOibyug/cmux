@@ -30,6 +30,8 @@ import select
 import signal
 import sys
 import time
+from project_paths import configure_project_paths
+configure_project_paths()
 
 
 def main() -> int:

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+source "$(dirname "${BASH_SOURCE[0]}")/project-env.sh" || exit 1
 set -euo pipefail
 
 usage() {
@@ -30,13 +31,7 @@ ZIG_REQUIRED="${ZIG_REQUIRED:-$(ghostty_minimum_zig_version "$REPO_ROOT")}"
 OUTPUT_PATH=""
 TARGET_TRIPLE=""
 UNIVERSAL="false"
-if [[ -n "${CMUX_GHOSTTY_HELPER_CACHE_DIR:-}" ]]; then
-  CACHE_ROOT="$CMUX_GHOSTTY_HELPER_CACHE_DIR"
-elif [[ -n "${HOME:-}" ]]; then
-  CACHE_ROOT="$HOME/Library/Caches/cmux/ghostty-cli-helper"
-else
-  CACHE_ROOT=""
-fi
+CACHE_ROOT="$CMUX_GHOSTTY_HELPER_CACHE_DIR"
 CACHE_SCHEMA="ghostty-cli-helper-cache-v1"
 
 zig_binary_arch() {
@@ -274,6 +269,8 @@ if [[ -z "$OUTPUT_PATH" ]]; then
   usage >&2
   exit 1
 fi
+
+cmux_require_project_path "$OUTPUT_PATH" "$CACHE_ROOT" || exit 1
 
 if [[ "$UNIVERSAL" == "true" && -n "$TARGET_TRIPLE" ]]; then
   echo "--universal and --target are mutually exclusive" >&2
