@@ -473,6 +473,10 @@ extension Workspace {
         preservesRemoteTerminalTracking: Bool = false
     ) -> WorkspaceRemoteConfiguration? {
         if closePanel, !preservesTerminalForTransfer {
+            if origin == "tab_close" || origin == "pane_close",
+               let sourceId = (panel as? FilePreviewPanel)?.terminalImageSourcePanelId {
+                restoreTerminalImageSourceAfterClose(sourceId)
+            }
             journalClosedAgentSessions(panelId: panelId)
         }
         clearTuiMaterializationFailure(surfaceID: panelId)

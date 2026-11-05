@@ -193,7 +193,12 @@ extension Workspace {
             hasUnreadIndicator: hasWorkspaceUnreadIndicator,
             notifications: workspaceNotificationSnapshots.isEmpty ? nil : workspaceNotificationSnapshots,
             currentDirectory: currentDirectory,
-            focusedPanelId: focusedPanelId,
+            focusedPanelId: focusedPanelId.flatMap { panelId in
+                if persistedPanelIds.contains(panelId) { return panelId }
+                return (panels[panelId] as? FilePreviewPanel)?.terminalImageSourcePanelId
+                    .flatMap { persistedPanelIds.contains($0) ? $0 : nil }
+                    ?? panelSnapshots.first?.id
+            },
             layout: layout,
             layoutMode: layoutMode.rawValue,
             canvasPanes: canvasSessionPaneSnapshots(),
@@ -745,11 +750,14 @@ extension Workspace {
             agentSessionSnapshot = nil
             projectSnapshot = nil
         case .filePreview:
-            guard let filePreviewPanel = panel as? FilePreviewPanel, filePreviewPanel.remotePreviewLease == nil, filePreviewPanel.remotePreviewPath == nil else { return nil }
+            guard let filePreviewPanel = panel as? FilePreviewPanel,
+                  let filePath = filePreviewPanel.filePath,
+                  filePreviewPanel.remotePreviewLease == nil,
+                  filePreviewPanel.remotePreviewPath == nil else { return nil }
             terminalSnapshot = nil
             browserSnapshot = nil
             markdownSnapshot = nil
-            filePreviewSnapshot = SessionFilePreviewPanelSnapshot(filePath: filePreviewPanel.filePath)
+            filePreviewSnapshot = SessionFilePreviewPanelSnapshot(filePath: filePath)
             rightSidebarToolSnapshot = nil
             agentSessionSnapshot = nil
             projectSnapshot = nil
@@ -10461,7 +10469,8 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
         let canonical = (filePath as NSString).resolvingSymlinksInPath
         let matches = panels.compactMap { existingId, panel -> (UUID, FilePreviewPanel)? in
             guard let preview = panel as? FilePreviewPanel,
-                  (preview.filePath as NSString).resolvingSymlinksInPath == canonical else {
+                  let path = preview.filePath,
+                  (path as NSString).resolvingSymlinksInPath == canonical else {
                 return nil
             }
             return (existingId, preview)
@@ -10493,8 +10502,8 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
         guard !isRetiredFromOwningTabManager else { return nil }
         let canonical = (filePath as NSString).resolvingSymlinksInPath
         for (existingId, panel) in panels {
-            guard let preview = panel as? FilePreviewPanel else { continue }
-            if (preview.filePath as NSString).resolvingSymlinksInPath == canonical {
+            guard let preview = panel as? FilePreviewPanel, let path = preview.filePath else { continue }
+            if (path as NSString).resolvingSymlinksInPath == canonical {
                 focusPanel(existingId)
                 return preview
             }
@@ -10520,6 +10529,16 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
         focus: Bool? = nil,
         targetIndex: Int? = nil
     ) -> FilePreviewPanel? {
+        newFilePreviewSurface(inPane: paneId, source: .file(filePath), focus: focus, targetIndex: targetIndex)
+    }
+
+    @discardableResult
+    func newFilePreviewSurface(
+        inPane paneId: PaneID,
+        source: FilePreviewSource,
+        focus: Bool? = nil,
+        targetIndex: Int? = nil
+    ) -> FilePreviewPanel? {
         guard !isRetiredFromOwningTabManager else { return nil }
         let shouldFocusNewTab = focus ?? (bonsplitController.focusedPaneId == paneId)
         let previousFocusedPanelId = focusedPanelId
@@ -10527,7 +10546,7 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
 
         let filePreviewPanel = FilePreviewPanel(
             workspaceId: id,
-            filePath: filePath,
+            source: source,
             fileContentChangeCoordinator: fileContentChangeCoordinator
         )
         panels[filePreviewPanel.id] = filePreviewPanel
@@ -10792,11 +10811,21 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
         insertFirst: Bool,
         filePath: String
     ) -> FilePreviewPanel? {
+        splitPaneWithFilePreview(targetPane: paneId, orientation: orientation, insertFirst: insertFirst, source: .file(filePath))
+    }
+
+    @discardableResult
+    func splitPaneWithFilePreview(
+        targetPane paneId: PaneID,
+        orientation: SplitOrientation,
+        insertFirst: Bool,
+        source: FilePreviewSource
+    ) -> FilePreviewPanel? {
         guard !isRetiredFromOwningTabManager,
               admitsSplitSpacePreflight(splitting: paneId, orientation: orientation) else { return nil }
         let filePreviewPanel = FilePreviewPanel(
             workspaceId: id,
-            filePath: filePath,
+            source: source,
             fileContentChangeCoordinator: fileContentChangeCoordinator
         )
         panels[filePreviewPanel.id] = filePreviewPanel

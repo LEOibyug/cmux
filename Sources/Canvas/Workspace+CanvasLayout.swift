@@ -92,15 +92,17 @@ extension Workspace {
     /// Canvas panes (frames, tabs, selection) in z-order for the session
     /// snapshot; `nil` when the workspace has never entered canvas mode.
     func canvasSessionPaneSnapshots() -> [SessionCanvasPaneSnapshot]? {
-        let snapshots: [SessionCanvasPaneSnapshot] = canvasModel.persistablePanes.map { pane in
-            SessionCanvasPaneSnapshot(
+        let snapshots: [SessionCanvasPaneSnapshot] = canvasModel.persistablePanes.compactMap { pane -> SessionCanvasPaneSnapshot? in
+            let panelIds = pane.panelIds.filter { (panels[$0] as? FilePreviewPanel)?.terminalImage == nil }
+            guard !panelIds.isEmpty else { return nil }
+            return SessionCanvasPaneSnapshot(
                 panelId: pane.paneId,
                 x: pane.frame.origin.x,
                 y: pane.frame.origin.y,
                 width: pane.frame.width,
                 height: pane.frame.height,
-                panelIds: pane.panelIds,
-                selectedPanelId: pane.selectedPanelId
+                panelIds: panelIds,
+                selectedPanelId: panelIds.contains(pane.selectedPanelId) ? pane.selectedPanelId : panelIds.first
             )
         }
         return snapshots.isEmpty ? nil : snapshots

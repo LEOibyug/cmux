@@ -6798,6 +6798,52 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         )
     }
 
+    func testTerminalImagePreviewReusesMemoryWithoutPersistingOrReplacingFiles() async throws {
+        let workspace = Workspace()
+        defer { workspace.teardownAllPanels() }
+        let sourceId = try XCTUnwrap(workspace.focusedPanelId)
+        let sourcePane = try XCTUnwrap(workspace.paneId(forPanelId: sourceId))
+        let ordinary = try XCTUnwrap(workspace.newFilePreviewSurface(
+            inPane: sourcePane, filePath: "/unavailable/user-document.png", focus: false
+        ))
+        let context = try XCTUnwrap(CGContext(
+            data: nil, width: 4, height: 2, bitsPerComponent: 8, bytesPerRow: 16,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        let image = try XCTUnwrap(context.makeImage())
+        func content(_ generation: UInt64) -> TerminalImagePreviewContent {
+            TerminalImagePreviewContent(
+                identity: TerminalImagePreviewIdentity(
+                    surfaceId: sourceId, runtimeGeneration: 1, imageId: 7, imageGeneration: generation
+                ), image: image
+            )
+        }
+        XCTAssertTrue(workspace.openOrFocusTerminalImagePreview(from: sourceId, content: content(1)))
+        let preview = try XCTUnwrap(workspace.panels.values.compactMap { $0 as? FilePreviewPanel }.first { $0.terminalImage != nil })
+        XCTAssertNotEqual(workspace.paneId(forPanelId: preview.id), sourcePane)
+        XCTAssertEqual(workspace.focusedPanelId, preview.id)
+        XCTAssertNil(preview.filePath)
+        XCTAssertNil(preview.fileContentObservationID)
+
+        XCTAssertTrue(workspace.openOrFocusTerminalImagePreview(from: sourceId, content: content(2)))
+        XCTAssertEqual(workspace.panels.values.compactMap { $0 as? FilePreviewPanel }.filter { $0.terminalImage != nil }.map(\.id), [preview.id])
+        XCTAssertEqual(preview.terminalImage?.identity.imageGeneration, 2)
+        XCTAssertEqual(ordinary.filePath, "/unavailable/user-document.png")
+        XCTAssertFalse(workspace.openOrFocusTerminalImagePreview(from: UUID(), content: content(3)))
+        XCTAssertEqual(preview.terminalImage?.identity.imageGeneration, 2)
+
+        let snapshot = workspace.sessionSnapshot(includeScrollback: false)
+        XCTAssertFalse(snapshot.panels.contains { $0.id == preview.id })
+        XCTAssertEqual(snapshot.focusedPanelId, sourceId)
+        XCTAssertTrue(workspace.closePanel(preview.id, force: true))
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        XCTAssertNil(preview.terminalImage)
+        XCTAssertEqual(workspace.focusedPanelId, sourceId)
+        XCTAssertNotNil(workspace.panels[ordinary.id])
+    }
+
     func testOpenOrFocusRightSidebarToolSurfaceReusesExistingMode() {
         let workspace = Workspace()
         guard let paneId = workspace.bonsplitController.focusedPaneId else {

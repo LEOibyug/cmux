@@ -112,10 +112,10 @@ final class FilePreviewQuickLookSession {
     ) {
         view.isHidden = !isVisibleInUI
         if let container = view as? FilePreviewQuickLookContainerView,
-           let previewView = container.livePreviewView() {
+           let previewView = container.livePreviewView(), let url = panel.fileURL {
             panel.attachPreviewFocus(root: container, primaryResponder: previewView, intent: .quickLook)
             updatePreviewItem(
-                for: panel.fileURL,
+                for: url,
                 title: panel.displayTitle,
                 revision: revision
             )

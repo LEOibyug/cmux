@@ -3896,6 +3896,8 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
     private var commandClickReleaseRuntimeOutcome: TerminalCommandClickReleaseRouter.RuntimeOutcome?
     private var commandClickReleaseCanOpenURL = false
     private var terminalPointerGesture = TerminalPointerGestureState()
+    var terminalImagePointerPress: TerminalImagePointerPress?
+    var terminalImageLastClick: TerminalImagePreviewIdentity?
     var codexActionCommandHovering = false
     private var pressedCodexActionCommand: CodexActionCommand?
     var codexActionCacheSurfaceID: UUID?
@@ -4895,6 +4897,8 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
 
     private func resetGhosttyMouseButtonTracking() {
         terminalPointerGesture.cancel()
+        terminalImagePointerPress = nil
+        terminalImageLastClick = nil
         commandClickReleaseCanOpenURL = false
         ghosttyMouseSessionLedger.invalidate()
         removeMouseUpEventMonitorIfUnused()
@@ -8531,12 +8535,13 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         let shouldForwardTerminalActivation = terminalPointerShouldForwardActivation()
         // Treat pointer-down as explicit focus intent before forwarding any terminal activation.
         focusFromPointerDown()
-        guard shouldForwardTerminalActivation else { return }
         guard let surface = surface else { return }
         // Focus activation can synchronously reparent or resize the portal.
         // Convert the event after that transaction so the press lands in the
         // current terminal geometry.
         let mouseState = rememberGhosttyMouseState(from: event)
+        if beginTerminalImagePress(with: event, surface: surface, point: mouseState.localPoint) { return }
+        guard shouldForwardTerminalActivation else { return }
         #if DEBUG
         let debugPoint = mouseState.localPoint
         cmuxDebugLog("terminal.mouseDown surface=\(terminalSurface?.id.uuidString.prefix(5) ?? "nil") mods=[\(debugModifierString(event.modifierFlags))] clickCount=\(event.clickCount) point=(\(String(format: "%.0f", debugPoint.x)),\(String(format: "%.0f", debugPoint.y)))")
@@ -8583,6 +8588,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
     @discardableResult
     func forwardPendingLeftMouseDrag(with event: NSEvent) -> Bool {
         if routeInputDuringClipboardRead(event) { return true }
+        if dragTerminalImagePress(with: event) { return true }
         pressedCodexActionCommand = nil
         terminalPointerGesture.invalidateLinkActivation()
         synchronizeGhosttyMouseSurfaceIdentity()
@@ -8604,6 +8610,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
     @discardableResult
     func completePendingLeftMouseRelease(with event: NSEvent) -> Bool {
         if routeInputDuringClipboardRead(event) { return true }
+        if completeTerminalImagePress(with: event) { return true }
         synchronizeGhosttyMouseSurfaceIdentity()
         guard let surfaceIdentity = currentGhosttyMouseSurfaceIdentity,
               let pendingSession = ghosttyMouseSessionLedger.session(
@@ -9977,6 +9984,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
 
     override func mouseDragged(with event: NSEvent) {
         if routeInputDuringClipboardRead(event) { return }
+        if dragTerminalImagePress(with: event) { return }
         pressedCodexActionCommand = nil
         synchronizeGhosttyMouseSurfaceIdentity()
         guard let surface = surface else { return }

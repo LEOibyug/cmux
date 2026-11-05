@@ -60,18 +60,18 @@ struct FileExplorerPreviewCoordinator {
         guard let existing = workspace.panels.values
             .compactMap({ $0 as? FilePreviewPanel })
             .first(where: {
-                !$0.isClosed &&
-                    $0.remotePreviewPath == path &&
+                guard !$0.isClosed, let localPath = $0.filePath else { return false }
+                return $0.remotePreviewPath == path &&
                     $0.remotePreviewProviderIdentity == providerIdentity &&
-                    FileManager.default.fileExists(atPath: $0.filePath)
-            }) else { return false }
+                    FileManager.default.fileExists(atPath: localPath)
+            }), let localPath = existing.filePath else { return false }
         guard let lease = existing.remotePreviewLease else { return false }
         guard !existing.isClosed else { return true }
         try await lease.refresh(using: provider)
         guard isCurrent(), store.resourceContextID == context, !existing.isClosed,
               workspace.panels[existing.id] != nil else { return true }
         _ = existing.reloadFromDisk()
-        _ = workspace.openOrFocusFilePreviewSurface(inPane: pane, filePath: existing.filePath, focus: true)
+        _ = workspace.openOrFocusFilePreviewSurface(inPane: pane, filePath: localPath, focus: true)
         workspace.handKeyboardFocusFromRightSidebarAfterFileOpen(to: existing)
         return true
     }

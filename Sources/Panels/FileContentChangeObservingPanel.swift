@@ -3,7 +3,7 @@ import Foundation
 /// Provides one shared observation lifecycle for file-backed panel surfaces.
 @MainActor
 protocol FileContentChangeObservingPanel: AnyObject {
-    var filePath: String { get }
+    var fileObservationPath: String? { get }
     var fileContentChangeCoordinator: FileContentChangeCoordinator { get set }
     var fileContentObservationID: UUID? { get set }
     var fileContentObservationLifetime: FileContentObservationLifetime? { get set }
@@ -26,8 +26,9 @@ extension FileContentChangeObservingPanel {
     /// Registers this panel with the shared canonical-path change pipeline.
     func startWatchingForFileChanges() {
         stopWatchingForFileChanges()
+        guard let path = fileObservationPath else { return }
         fileContentObservationID = fileContentChangeCoordinator.observe(
-            path: filePath
+            path: path
         ) { [weak self] in
             guard let self, !self.isClosed else { return }
             _ = self.handleObservedFileChange()
@@ -45,7 +46,8 @@ extension FileContentChangeObservingPanel {
     /// Reloads only after the observed file fingerprint advances.
     @discardableResult
     func handleObservedFileChange() -> Task<Void, Never>? {
-        let state = FilePreviewFileState.capture(path: filePath)
+        guard let path = fileObservationPath else { return nil }
+        let state = FilePreviewFileState.capture(path: path)
         guard state != lastObservedFileState, !isSaving else { return nil }
         lastObservedFileState = state
         return reloadFromObservedFileChange()

@@ -2892,8 +2892,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                     payload["lastCommandOpenedPath"] = openedPath
                     let canonicalOpenedPath = (openedPath as NSString).resolvingSymlinksInPath
                     let openedInFilePreview = workspace.panels.values.contains { panel in
-                        guard let filePreview = panel as? FilePreviewPanel else { return false }
-                        return (filePreview.filePath as NSString).resolvingSymlinksInPath == canonicalOpenedPath
+                        guard let filePreview = panel as? FilePreviewPanel, let path = filePreview.filePath else { return false }
+                        return (path as NSString).resolvingSymlinksInPath == canonicalOpenedPath
                     }
                     let openedInMarkdownViewer = workspace.panels.values.contains { panel in
                         guard let markdown = panel as? MarkdownPanel else { return false }

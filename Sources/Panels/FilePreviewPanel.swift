@@ -1249,7 +1249,8 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
     let id: UUID
     let stableSurfaceIdentity = PanelStableSurfaceIdentity()
     let panelType: PanelType = .filePreview
-    let filePath: String
+    @Published private(set) var source: FilePreviewSource?
+    var terminalImageSourcePanelId: UUID?
     private(set) var workspaceId: UUID
     @Published private(set) var displayTitle: String
     @Published private(set) var displayIcon: String?
@@ -1297,8 +1298,16 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
     private let textLoadCoordinator = FilePreviewLatestLoadCoordinator<FilePreviewTextLoader.Result>()
     private let modeLoadCoordinator = FilePreviewLatestLoadCoordinator<FilePreviewMode>()
 
-    var fileURL: URL {
-        URL(fileURLWithPath: filePath)
+    var filePath: String? {
+        guard case .file(let path)? = source else { return nil }
+        return path
+    }
+
+    var fileURL: URL? { filePath.map { URL(fileURLWithPath: $0) } }
+
+    var terminalImage: TerminalImagePreviewContent? {
+        guard case .terminalImage(let content)? = source else { return nil }
+        return content
     }
 
     var previewRevision: Int {
@@ -1309,7 +1318,7 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
         textContentRevisionState.value
     }
 
-    init(
+    convenience init(
         workspaceId: UUID,
         filePath: String,
         startFileWatcher: Bool = true,
@@ -1325,29 +1334,66 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
             await FilePreviewKindResolver.resolveMode(url: url)
         }
     ) {
+        self.init(
+            workspaceId: workspaceId, source: .file(filePath), startFileWatcher: startFileWatcher,
+            fileContentChangeCoordinator: fileContentChangeCoordinator,
+            textLoader: textLoader, textSaver: textSaver, modeResolver: modeResolver
+        )
+    }
+
+    init(
+        workspaceId: UUID,
+        source: FilePreviewSource,
+        startFileWatcher: Bool = true,
+        fileContentChangeCoordinator: FileContentChangeCoordinator? = nil,
+        textLoader: @escaping @Sendable (URL) async -> FilePreviewTextLoader.Result = { url in
+            await FilePreviewTextLoader.load(url: url)
+        },
+        textSaver: @escaping @Sendable (String, URL, String.Encoding) async -> FilePreviewTextSaveResult = {
+            content, url, encoding in
+            await FilePreviewTextSaver.save(content: content, to: url, encoding: encoding)
+        },
+        modeResolver: @escaping @Sendable (URL) async -> FilePreviewMode = { url in
+            await FilePreviewKindResolver.resolveMode(url: url)
+        }
+    ) {
         self.id = UUID()
         self.workspaceId = workspaceId
-        self.filePath = filePath
+        self.source = source
         self.fileContentChangeCoordinator =
             fileContentChangeCoordinator ?? FileContentChangeCoordinator()
-        self.displayTitle = URL(fileURLWithPath: filePath).lastPathComponent
+        switch source {
+        case .file(let path): self.displayTitle = URL(fileURLWithPath: path).lastPathComponent
+        case .terminalImage:
+            self.displayTitle = String(localized: "terminalImagePreview.title", defaultValue: "Terminal Image Preview")
+        }
         self.textLoader = textLoader
         self.textSaver = textSaver
         self.modeResolver = modeResolver
-        let fileURL = URL(fileURLWithPath: filePath)
-        let initialPreviewMode = FilePreviewKindResolver.initialMode(for: fileURL)
+        let initialPreviewMode: FilePreviewMode
+        switch source {
+        case .file(let path): initialPreviewMode = FilePreviewKindResolver.initialMode(for: URL(fileURLWithPath: path))
+        case .terminalImage: initialPreviewMode = .image
+        }
         self.previewMode = initialPreviewMode
         self.displayIcon = FilePreviewKindResolver.iconName(for: initialPreviewMode)
         self.focusCoordinator = FilePreviewFocusCoordinator(
             preferredIntent: Self.defaultFocusIntent(for: initialPreviewMode)
         )
-        self.lastObservedFileState = .capture(path: filePath)
-
-        prepareContentForPreviewMode()
-        resolvePreviewModeIfNeeded(for: fileURL)
-        if startFileWatcher {
-            startWatchingForFileChanges()
+        if let filePath, let fileURL {
+            self.lastObservedFileState = .capture(path: filePath)
+            prepareContentForPreviewMode()
+            resolvePreviewModeIfNeeded(for: fileURL)
+            if startFileWatcher { startWatchingForFileChanges() }
         }
+    }
+
+    func updateTerminalImage(_ content: TerminalImagePreviewContent, from sourcePanelId: UUID) {
+        guard !isClosed, let previous = terminalImage else { return }
+        terminalImageSourcePanelId = sourcePanelId
+        guard previous.identity != content.identity else { return }
+        source = .terminalImage(content)
+        previewRevisionState.increment()
     }
 
     func focus() {
@@ -1371,12 +1417,13 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
         nativeViewSessions.closeAll()
         textView = nil
         focusCoordinator.unregisterAll()
+        source = nil
     }
 
     func refreshRemotePreview() { if let remotePreviewRefresh { remotePreviewRefresh() } else { _ = reloadFromDisk() } }
 
     func readSurfaceSelection() async -> SurfaceSelectionReadResult {
-        guard previewMode == .text else { return .unsupported }
+        guard previewMode == .text, let filePath else { return .unsupported }
         return .snapshot(await selectionReader.read(
             textView: textView,
             kind: .filePreview,
@@ -1519,8 +1566,8 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
     /// events share this path so every renderer observes the same revision.
     @discardableResult
     func reloadFromDisk() -> Task<Void, Never> {
+        guard let filePath, let fileURL else { return Task {} }
         lastObservedFileState = .capture(path: filePath)
-        let fileURL = fileURL
         let modeResolver = modeResolver
 
         return modeLoadCoordinator.submit(load: {
@@ -1540,7 +1587,7 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
             if resolvedMode == .text {
                 await self.loadTextContent(replacingDirtyContent: false).value
             } else {
-                self.isFileUnavailable = !FileManager.default.fileExists(atPath: self.filePath)
+                self.isFileUnavailable = !FileManager.default.fileExists(atPath: fileURL.path)
                 if self.isFileUnavailable {
                     if self.previewMode == .media {
                         self.nativeViewSessions.media.close()
@@ -1554,6 +1601,7 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
 
     @discardableResult
     private func prepareContentForPreviewMode() -> Task<Void, Never>? {
+        guard let filePath else { return nil }
         if previewMode == .text {
             return loadTextContent(replacingDirtyContent: false)
         } else {
@@ -1592,10 +1640,9 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
 
     @discardableResult
     func loadTextContent(replacingDirtyContent: Bool = true) -> Task<Void, Never> {
-        guard previewMode == .text else {
+        guard previewMode == .text, let fileURL else {
             return Task {}
         }
-        let fileURL = fileURL
         let textLoader = textLoader
 
         return textLoadCoordinator.submit(load: {
@@ -1640,7 +1687,7 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
     @discardableResult
     func saveTextContent() -> Task<Void, Never>? {
         guard remotePreviewLease == nil else { return nil }
-        guard previewMode == .text else { return nil }
+        guard previewMode == .text, let fileURL else { return nil }
         guard !isSaving else { return nil }
         let currentContent = textView?.string ?? textContent
         guard currentContent != originalTextContent else {
@@ -1655,7 +1702,6 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
         _ = replaceTextContentIfChanged(currentContent)
         isSaving = true
         activeSaveGeneration = generation
-        let fileURL = fileURL
         let encoding = textEncoding
         let textSaver = textSaver
         let fileContentChangeCoordinator = fileContentChangeCoordinator
@@ -1726,7 +1772,9 @@ final class FilePreviewPanel: Panel, ObservableObject, FilePreviewTextEditingPan
     }
 }
 
-extension FilePreviewPanel: FileContentChangeObservingPanel {}
+extension FilePreviewPanel: FileContentChangeObservingPanel {
+    var fileObservationPath: String? { filePath }
+}
 
 struct FilePreviewPanelView: View {
     @ObservedObject var panel: FilePreviewPanel
@@ -1771,10 +1819,27 @@ struct FilePreviewPanelView: View {
         }
     }
 
+    @ViewBuilder
     private var header: some View {
+        if let path = panel.filePath, let url = panel.fileURL {
+            fileHeader(filePath: path, fileURL: url)
+        } else if let image = panel.terminalImage?.image {
+            HStack {
+                Image(systemName: "photo")
+                Text(panel.displayTitle)
+                Spacer()
+                Text("\(image.width) × \(image.height) px")
+                    .foregroundStyle(.secondary)
+            }
+            .cmuxFont(size: 12)
+            .padding(10)
+        }
+    }
+
+    private func fileHeader(filePath: String, fileURL: URL) -> some View {
         PanelFilePathHeader(
             iconSystemName: panel.displayIcon ?? "doc.viewfinder",
-            filePath: panel.filePath,
+            filePath: filePath,
             foregroundColor: themeForegroundColor
         ) {
             if panel.previewMode == .text {
@@ -1799,7 +1864,7 @@ struct FilePreviewPanelView: View {
                 action: { panel.refreshRemotePreview() }
             )
 
-            FileExternalOpenMenu(fileURL: panel.fileURL, isDisabled: panel.isFileUnavailable)
+            FileExternalOpenMenu(fileURL: fileURL, isDisabled: panel.isFileUnavailable)
         }
     }
 
@@ -1810,16 +1875,18 @@ struct FilePreviewPanelView: View {
         } else {
             switch panel.previewMode {
             case .text:
-                FilePreviewTextEditor(
-                    panel: panel,
-                    isVisibleInUI: isVisibleInUI,
-                    themeBackgroundColor: contentBackgroundColor,
-                    themeForegroundColor: themeForegroundColor,
-                    drawsBackground: appearance.drawsContentBackground,
-                    gutterBackgroundColor: appearance.backgroundColor,
-                    wordWrap: fileEditorWordWrap,
-                    filePath: panel.filePath
-                )
+                if let filePath = panel.filePath {
+                    FilePreviewTextEditor(
+                        panel: panel,
+                        isVisibleInUI: isVisibleInUI,
+                        themeBackgroundColor: contentBackgroundColor,
+                        themeForegroundColor: themeForegroundColor,
+                        drawsBackground: appearance.drawsContentBackground,
+                        gutterBackgroundColor: appearance.backgroundColor,
+                        wordWrap: fileEditorWordWrap,
+                        filePath: filePath
+                    )
+                }
             case .pdf:
                 FilePreviewPDFView(
                     panel: panel,
@@ -1863,13 +1930,15 @@ struct FilePreviewPanelView: View {
                 .foregroundStyle(.secondary)
             Text(String(localized: "filePreview.fileUnavailable.title", defaultValue: "File unavailable"))
                 .cmuxFont(.headline)
-            Text(panel.filePath)
-                .cmuxFont(size: 12, design: .monospaced)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .copyOnlyTextSelection(for: panel.filePath)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 24)
+            if let filePath = panel.filePath {
+                Text(filePath)
+                    .cmuxFont(size: 12, design: .monospaced)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .copyOnlyTextSelection(for: filePath)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
+            }
             Text(String(localized: "filePreview.fileUnavailable.message", defaultValue: "The file may have been moved or deleted."))
                 .cmuxFont(.caption)
                 .foregroundStyle(.secondary)
@@ -4060,6 +4129,8 @@ final class FilePreviewImageContainerView: NSView {
     private let chromeHost = FilePreviewPDFChromeHostingView(rootView: AnyView(EmptyView()))
     private weak var panel: FilePreviewPanel?
     private var currentURL: URL?
+    private var currentTerminalImageIdentity: TerminalImagePreviewIdentity?
+    private var isActualPixelMode = false
     private var currentRevision: Int?
     private var loadGeneration = 0
     private var pendingReloadAnchorRatio: CGPoint?
@@ -4090,6 +4161,11 @@ final class FilePreviewImageContainerView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         registerFocusEndpoint()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        if isActualPixelMode { setImageScale(actualPixelScale, preservingVisibleCenter: true) }
     }
 
     override func layout() {
@@ -4124,6 +4200,7 @@ final class FilePreviewImageContainerView: NSView {
         documentView.imageView.image = nil
         currentURL = nil
         currentRevision = nil
+        currentTerminalImageIdentity = nil
         loadGeneration &+= 1
         imageLoader.cancel()
         clearPendingReloadState()
@@ -4135,6 +4212,23 @@ final class FilePreviewImageContainerView: NSView {
         previewBackgroundColor = backgroundColor
         drawsPreviewBackground = drawsBackground
         applyBackgroundAppearance()
+    }
+
+    func setTerminalImage(_ content: TerminalImagePreviewContent) {
+        guard currentTerminalImageIdentity != content.identity else { return }
+        imageLoader.cancel()
+        loadGeneration &+= 1
+        currentURL = nil
+        currentRevision = nil
+        currentTerminalImageIdentity = content.identity
+        isActualPixelMode = false
+        clearPendingReloadState()
+        let size = NSSize(width: content.image.width, height: content.image.height)
+        applyLoadedImage(NSImage(cgImage: content.image, size: size))
+    }
+
+    private var actualPixelScale: CGFloat {
+        currentTerminalImageIdentity == nil ? 1 : 1 / (window?.backingScaleFactor ?? 1)
     }
 
     func setURL(_ url: URL, revision: Int) {
@@ -4315,23 +4409,27 @@ final class FilePreviewImageContainerView: NSView {
 
     @objc private func zoomOut() {
         isFitMode = false
+        isActualPixelMode = false
         setImageScale(scale / FilePreviewInteraction.zoomStep, preservingVisibleCenter: true)
     }
 
     @objc private func zoomIn() {
         isFitMode = false
+        isActualPixelMode = false
         setImageScale(scale * FilePreviewInteraction.zoomStep, preservingVisibleCenter: true)
     }
 
     @objc private func zoomToFit() {
         isFitMode = true
+        isActualPixelMode = false
         scale = fitScale()
         applyScale()
     }
 
     @objc private func actualSize() {
         isFitMode = false
-        setImageScale(1.0, preservingVisibleCenter: true)
+        isActualPixelMode = currentTerminalImageIdentity != nil
+        setImageScale(actualPixelScale, preservingVisibleCenter: true)
     }
 
     @objc private func rotateLeft() {
@@ -4436,6 +4534,7 @@ final class FilePreviewImageContainerView: NSView {
         )
 
         isFitMode = false
+        isActualPixelMode = false
         scale = clampedImageScale(scale * factor)
         applyScale()
         documentView.layoutSubtreeIfNeeded()
@@ -4452,7 +4551,8 @@ final class FilePreviewImageContainerView: NSView {
         guard documentView.imageView.image != nil else { return }
         if isFitMode {
             isFitMode = false
-            scale = 1.0
+            isActualPixelMode = currentTerminalImageIdentity != nil
+            scale = actualPixelScale
             applyScale()
             documentView.layoutSubtreeIfNeeded()
             let anchorInClip = scrollView.contentView.convert(event.locationInWindow, from: nil)
@@ -4508,7 +4608,7 @@ final class FilePreviewImageContainerView: NSView {
     }
 
     private func clampedImageScale(_ nextScale: CGFloat) -> CGFloat {
-        min(max(nextScale, 0.05), 16.0)
+        min(max(nextScale, 1 / max(imageSize.width, imageSize.height)), 16.0)
     }
 
     private func displayedImageSize() -> CGSize {

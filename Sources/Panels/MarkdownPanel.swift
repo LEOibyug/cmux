@@ -703,4 +703,6 @@ final class MarkdownPanel: Panel, ObservableObject, FilePreviewTextEditingPanel 
     }
 }
 
-extension MarkdownPanel: FileContentChangeObservingPanel {}
+extension MarkdownPanel: FileContentChangeObservingPanel {
+    var fileObservationPath: String? { filePath }
+}

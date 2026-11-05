@@ -1886,6 +1886,7 @@
 		C75100010000000000000001 /* GhosttyNSView+SelectionTranslation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C75100010000000000000002 /* GhosttyNSView+SelectionTranslation.swift */; };
 		35D59C2CE1241369A2E258AB /* GhosttyNSView+SSHClipboardTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EFEF79A3659BA68F264C1CF /* GhosttyNSView+SSHClipboardTrust.swift */; };
 		EC010E01 /* GhosttyNSView+TerminalCustomUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC010E02 /* GhosttyNSView+TerminalCustomUpload.swift */; };
+		675DEB12D7E283E81F037AEA /* GhosttyNSView+TerminalImagePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96B3F8EF343E338523F511E2 /* GhosttyNSView+TerminalImagePreview.swift */; };
 		C54860070000000000000001 /* GhosttyNSViewSurfaceLinkCopy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C54860070000000000000002 /* GhosttyNSViewSurfaceLinkCopy.swift */; };
 		C0DE12220000000000000003 /* GhosttyNumericLocaleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE12220000000000000004 /* GhosttyNumericLocaleController.swift */; };
 		C0DE12220000000000000001 /* GhosttyNumericLocaleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE12220000000000000002 /* GhosttyNumericLocaleTests.swift */; };
@@ -3394,6 +3395,7 @@
 		A5FB1303 /* TerminalForegroundCommandCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FB1304 /* TerminalForegroundCommandCapture.swift */; };
 		AAC15F5D7D0649C8B756A09D /* TerminalGeometryDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2A07192C2FF4C09B133C525 /* TerminalGeometryDiagnostics.swift */; };
 		C86270000000000000000001 /* TerminalHTMLFileBrowserAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = C86270000000000000000002 /* TerminalHTMLFileBrowserAction.swift */; };
+		F229E5A13DF394F41D2BB0A5 /* TerminalImagePreviewContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D13E6139F7DEC2368DFDA9C /* TerminalImagePreviewContent.swift */; };
 		A5001542 /* TerminalImageTransfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001544 /* TerminalImageTransfer.swift */; };
 		B12715000000000000000005 /* TerminalImageTransferConcurrencyTests+RepeatedPastes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B12715000000000000000006 /* TerminalImageTransferConcurrencyTests+RepeatedPastes.swift */; };
 		B8835A000000000000000005 /* TerminalImageTransferConcurrencyTests+Timeouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8835A000000000000000006 /* TerminalImageTransferConcurrencyTests+Timeouts.swift */; };
@@ -3890,6 +3892,7 @@
 		F9219DE12AF2E4D9CFFC66CF /* Workspace+SurfaceCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47BBA1A8703756FDDFD53CF3 /* Workspace+SurfaceCatalog.swift */; };
 		CA52B0170000000000000000 /* Workspace+SurfaceNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA52C0170000000000000000 /* Workspace+SurfaceNavigation.swift */; };
 		7DD5BF8AB5B84491BC89EEE9 /* Workspace+SurfaceOwnership.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7305B43543CF4AF29D9966C8 /* Workspace+SurfaceOwnership.swift */; };
+		610BB06D2B91A25A6C601FC0 /* Workspace+TerminalImagePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A32B5A5C2A5D049C1BD7A63 /* Workspace+TerminalImagePreview.swift */; };
 		85911000000000000000000B /* Workspace+TerminalLinkOpening.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85911000000000000000000C /* Workspace+TerminalLinkOpening.swift */; };
 		822900000000000000000001 /* Workspace+TerminalResizeInteraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 822900000000000000000002 /* Workspace+TerminalResizeInteraction.swift */; };
 		26EA95250C2D46BCAD9B5CE6 /* Workspace+TerminalRespawn.swift in Sources */ = {isa = PBXBuildFile; fileRef = F42B6D13319C42CFBF4628B5 /* Workspace+TerminalRespawn.swift */; };
@@ -5903,6 +5906,7 @@
 		C75100010000000000000002 /* GhosttyNSView+SelectionTranslation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyNSView+SelectionTranslation.swift"; sourceTree = "<group>"; };
 		6EFEF79A3659BA68F264C1CF /* GhosttyNSView+SSHClipboardTrust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyNSView+SSHClipboardTrust.swift"; sourceTree = "<group>"; };
 		EC010E02 /* GhosttyNSView+TerminalCustomUpload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyNSView+TerminalCustomUpload.swift"; sourceTree = "<group>"; };
+		96B3F8EF343E338523F511E2 /* GhosttyNSView+TerminalImagePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GhosttyNSView+TerminalImagePreview.swift"; sourceTree = "<group>"; };
 		C54860070000000000000002 /* GhosttyNSViewSurfaceLinkCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyNSViewSurfaceLinkCopy.swift; sourceTree = "<group>"; };
 		C0DE12220000000000000004 /* GhosttyNumericLocaleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyNumericLocaleController.swift; sourceTree = "<group>"; };
 		C0DE12220000000000000002 /* GhosttyNumericLocaleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyNumericLocaleTests.swift; sourceTree = "<group>"; };
@@ -7385,6 +7389,7 @@
 		A5FB1304 /* TerminalForegroundCommandCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalForegroundCommandCapture.swift; sourceTree = "<group>"; };
 		C2A07192C2FF4C09B133C525 /* TerminalGeometryDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalGeometryDiagnostics.swift; sourceTree = "<group>"; };
 		C86270000000000000000002 /* TerminalHTMLFileBrowserAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalHTMLFileBrowserAction.swift; sourceTree = "<group>"; };
+		5D13E6139F7DEC2368DFDA9C /* TerminalImagePreviewContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalImagePreviewContent.swift; sourceTree = "<group>"; };
 		A5001544 /* TerminalImageTransfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalImageTransfer.swift; sourceTree = "<group>"; };
 		B12715000000000000000006 /* TerminalImageTransferConcurrencyTests+RepeatedPastes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalImageTransferConcurrencyTests+RepeatedPastes.swift"; sourceTree = "<group>"; };
 		B8835A000000000000000006 /* TerminalImageTransferConcurrencyTests+Timeouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalImageTransferConcurrencyTests+Timeouts.swift"; sourceTree = "<group>"; };
@@ -7881,6 +7886,7 @@
 		47BBA1A8703756FDDFD53CF3 /* Workspace+SurfaceCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "Workspace+SurfaceCatalog.swift"; sourceTree = "<group>"; };
 		CA52C0170000000000000000 /* Workspace+SurfaceNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+SurfaceNavigation.swift"; sourceTree = "<group>"; };
 		7305B43543CF4AF29D9966C8 /* Workspace+SurfaceOwnership.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+SurfaceOwnership.swift"; sourceTree = "<group>"; };
+		4A32B5A5C2A5D049C1BD7A63 /* Workspace+TerminalImagePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+TerminalImagePreview.swift"; sourceTree = "<group>"; };
 		85911000000000000000000C /* Workspace+TerminalLinkOpening.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+TerminalLinkOpening.swift"; sourceTree = "<group>"; };
 		822900000000000000000002 /* Workspace+TerminalResizeInteraction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+TerminalResizeInteraction.swift"; sourceTree = "<group>"; };
 		F42B6D13319C42CFBF4628B5 /* Workspace+TerminalRespawn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+TerminalRespawn.swift"; sourceTree = "<group>"; };
@@ -10832,6 +10838,9 @@
 				BC699EBD0ACDBA9BA4208665 /* AgentStatusDisplaySettings.swift */,
 				1EA10F0F41573A8FFCFC2B37 /* CodexpressSettingsSnapshot.swift */,
 				DCD81D8B5E8A22E86D22FF89 /* SidebarWorkspaceTextSettings.swift */,
+				5D13E6139F7DEC2368DFDA9C /* TerminalImagePreviewContent.swift */,
+				96B3F8EF343E338523F511E2 /* GhosttyNSView+TerminalImagePreview.swift */,
+				4A32B5A5C2A5D049C1BD7A63 /* Workspace+TerminalImagePreview.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -13836,6 +13845,7 @@
 				C75100010000000000000001 /* GhosttyNSView+SelectionTranslation.swift in Sources */,
 				35D59C2CE1241369A2E258AB /* GhosttyNSView+SSHClipboardTrust.swift in Sources */,
 				EC010E01 /* GhosttyNSView+TerminalCustomUpload.swift in Sources */,
+				675DEB12D7E283E81F037AEA /* GhosttyNSView+TerminalImagePreview.swift in Sources */,
 				C54860070000000000000001 /* GhosttyNSViewSurfaceLinkCopy.swift in Sources */,
 				C0DE12220000000000000003 /* GhosttyNumericLocaleController.swift in Sources */,
 				816400000000000000000001 /* GhosttyScrollView.swift in Sources */,
@@ -14814,6 +14824,7 @@
 				A5FB1303 /* TerminalForegroundCommandCapture.swift in Sources */,
 				AAC15F5D7D0649C8B756A09D /* TerminalGeometryDiagnostics.swift in Sources */,
 				C86270000000000000000001 /* TerminalHTMLFileBrowserAction.swift in Sources */,
+				F229E5A13DF394F41D2BB0A5 /* TerminalImagePreviewContent.swift in Sources */,
 				A5001542 /* TerminalImageTransfer.swift in Sources */,
 				124760000000000000000029 /* TerminalImageTransferPlan.swift in Sources */,
 				B8835B000000000000000001 /* TerminalImageTransferPreparationOutcome.swift in Sources */,
@@ -15199,6 +15210,7 @@
 				F9219DE12AF2E4D9CFFC66CF /* Workspace+SurfaceCatalog.swift in Sources */,
 				CA52B0170000000000000000 /* Workspace+SurfaceNavigation.swift in Sources */,
 				7DD5BF8AB5B84491BC89EEE9 /* Workspace+SurfaceOwnership.swift in Sources */,
+				610BB06D2B91A25A6C601FC0 /* Workspace+TerminalImagePreview.swift in Sources */,
 				85911000000000000000000B /* Workspace+TerminalLinkOpening.swift in Sources */,
 				822900000000000000000001 /* Workspace+TerminalResizeInteraction.swift in Sources */,
 				26EA95250C2D46BCAD9B5CE6 /* Workspace+TerminalRespawn.swift in Sources */,

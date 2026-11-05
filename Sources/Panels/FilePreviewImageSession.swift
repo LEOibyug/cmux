@@ -65,6 +65,10 @@ final class FilePreviewImageSession {
         view.isHidden = !isVisibleInUI
         view.setBackgroundAppearance(backgroundColor: backgroundColor, drawsBackground: drawsBackground)
         view.setPanel(panel)
-        view.setURL(panel.fileURL, revision: revision)
+        if let image = panel.terminalImage {
+            view.setTerminalImage(image)
+        } else if let url = panel.fileURL {
+            view.setURL(url, revision: revision)
+        }
     }
 }
