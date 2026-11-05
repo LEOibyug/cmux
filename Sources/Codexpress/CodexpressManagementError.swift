@@ -9,13 +9,14 @@ enum CodexpressManagementError: Error, Sendable {
     case unavailable
     case invalidResponse
     case httpStatus(Int)
+    case refreshFailed(sourceID: String, code: String?, nextRetryAt: Double?)
     /// The POST may have been accepted. Reconcile with GET; never repeat it automatically.
     case outcomeUnknown
 
     var isDefiniteRejection: Bool {
         switch self {
         case .notConfigured, .missingManualKey, .connectionChanged, .disabled,
-             .insecureConfiguration, .invalidConfiguration, .unauthorized:
+             .insecureConfiguration, .invalidConfiguration, .unauthorized, .refreshFailed:
             return true
         case .httpStatus(let status):
             return (400...499).contains(status)

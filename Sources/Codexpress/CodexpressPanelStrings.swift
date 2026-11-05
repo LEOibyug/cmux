@@ -49,6 +49,12 @@ struct CodexpressPanelStrings {
     var manualMode: String { String(localized: "codexpress.mode.manual", defaultValue: "Manual preemption") }
     var unknownMode: String { String(localized: "codexpress.mode.unknown", defaultValue: "Routing unknown") }
     var dismiss: String { String(localized: "codexpress.action.dismiss", defaultValue: "Dismiss error") }
+    var refreshFailed: String { String(localized: "codexpress.refresh.failed", defaultValue: "Balance or quota refresh failed. Last known values are retained.") }
+
+    func nextRefresh(at timestamp: Double) -> String {
+        let time = Date(timeIntervalSince1970: timestamp).formatted(date: .abbreviated, time: .shortened)
+        return String(format: String(localized: "codexpress.refresh.nextQuery", defaultValue: "Next query available: %@"), time)
+    }
 
     func message(for error: CodexpressManagementError) -> String {
         switch error {
@@ -68,6 +74,11 @@ struct CodexpressPanelStrings {
             return String(localized: "codexpress.error.unavailable", defaultValue: "Codexpress is unavailable.")
         case .invalidResponse, .httpStatus:
             return String(localized: "codexpress.error.response", defaultValue: "Codexpress could not complete the request.")
+        case .refreshFailed(_, _, let nextRetryAt):
+            if let nextRetryAt, nextRetryAt.isFinite, nextRetryAt > Date().timeIntervalSince1970 {
+                return refreshFailed + "\n" + nextRefresh(at: nextRetryAt)
+            }
+            return refreshFailed
         case .outcomeUnknown:
             return String(localized: "codexpress.error.outcomeUnknown", defaultValue: "Outcome unknown. Check Codexpress before trying again.")
         }

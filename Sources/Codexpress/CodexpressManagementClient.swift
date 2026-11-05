@@ -66,7 +66,12 @@ actor CodexpressManagementClient: CodexpressManagementServing {
     deinit { session.invalidateAndCancel() }
 
     func status() async throws -> CodexpressSnapshot {
-        try await request(path: "/v1/status", body: nil, as: CodexpressSnapshot.self)
+        try await request(
+            path: "/v1/status",
+            queryItems: [URLQueryItem(name: "include_usage", value: "false")],
+            body: nil,
+            as: CodexpressSnapshot.self
+        )
     }
 
     func perform(_ action: CodexpressManagementAction) async throws -> CodexpressOperation {
@@ -149,6 +154,7 @@ actor CodexpressManagementClient: CodexpressManagementServing {
 
     private func request<Response: Decodable & Sendable>(
         path: String,
+        queryItems: [URLQueryItem] = [],
         body: Data?,
         as type: Response.Type
     ) async throws -> Response {
@@ -167,6 +173,7 @@ actor CodexpressManagementClient: CodexpressManagementServing {
         components.host = "127.0.0.1"
         components.port = Int(settings.port)
         components.path = path
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
         guard let url = components.url else { throw CodexpressManagementError.invalidConfiguration }
 
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)

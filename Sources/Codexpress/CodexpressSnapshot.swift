@@ -53,6 +53,23 @@ struct CodexpressSnapshot: Decodable, Sendable, Equatable {
             case maxActiveConversations = "max_active_conversations"
             case capacityActiveConversations = "capacity_active_conversations"
         }
+
+        var refreshRetryAt: Double? {
+            let first = (kind == "official" ? quota?.nextRetryAt : balance?.nextRetryAt)
+                .flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+            let second = (kind == "official" ? credits?.nextRetryAt : nil)
+                .flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+            if let first, let second { return min(first, second) }
+            return first ?? second
+        }
+
+        var hasRefreshFailure: Bool {
+            if kind == "official" {
+                return (quota?.failureCount ?? 0) > 0 || (credits?.failureCount ?? 0) > 0
+                    || quota?.error != nil || credits?.error != nil
+            }
+            return (balance?.failureCount ?? 0) > 0
+        }
     }
 
     struct Admission: Decodable, Sendable, Equatable {
@@ -80,10 +97,14 @@ struct CodexpressSnapshot: Decodable, Sendable, Equatable {
         let fetchedAt: Double?
         let stale: Bool?
         let error: String?
+        let failureCount: Int?
+        let nextRetryAt: Double?
 
         private enum CodingKeys: String, CodingKey {
             case windows, stale, error
             case fetchedAt = "fetched_at"
+            case failureCount = "failure_count"
+            case nextRetryAt = "next_retry_at"
         }
     }
 
@@ -106,11 +127,15 @@ struct CodexpressSnapshot: Decodable, Sendable, Equatable {
         let fetchedAt: Double?
         let stale: Bool?
         let error: String?
+        let failureCount: Int?
+        let nextRetryAt: Double?
 
         private enum CodingKeys: String, CodingKey {
             case stale, error
             case availableCount = "available_count"
             case fetchedAt = "fetched_at"
+            case failureCount = "failure_count"
+            case nextRetryAt = "next_retry_at"
         }
     }
 
@@ -122,11 +147,15 @@ struct CodexpressSnapshot: Decodable, Sendable, Equatable {
         let updatedAt: Double?
         let estimated: Bool?
         let unknownSpendRequests: Int?
+        let failureCount: Int?
+        let nextRetryAt: Double?
 
         private enum CodingKeys: String, CodingKey {
             case status, amount, currency, stale, estimated
             case updatedAt = "updated_at"
             case unknownSpendRequests = "unknown_spend_requests"
+            case failureCount = "failure_count"
+            case nextRetryAt = "next_retry_at"
         }
     }
 }

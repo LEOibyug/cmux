@@ -11,7 +11,11 @@ final class CodexpressCoordinator {
     private(set) var isUpdating = false
     private(set) var activeSourceIDs: Set<String> = []
     private(set) var resetRequests: [String: CodexpressResetRequest] = [:]
-    private(set) var actionError: CodexpressManagementError?
+    private var operationError: CodexpressManagementError?
+    private var refreshErrors: [String: CodexpressManagementError] = [:]
+    var actionError: CodexpressManagementError? {
+        operationError ?? refreshErrors.min(by: { $0.key < $1.key })?.value
+    }
 
     @ObservationIgnored private let service: any CodexpressManagementServing
     @ObservationIgnored private let waitForRefresh: @Sendable (Double) async throws -> Void
@@ -20,6 +24,7 @@ final class CodexpressCoordinator {
     @ObservationIgnored private var connectionChangesTask: Task<Void, Never>?
     @ObservationIgnored private var settings = CodexpressSettingsSnapshot()
     @ObservationIgnored private var refreshOperations: [String: String] = [:]
+    @ObservationIgnored private var refreshRetryTimes: [String: Double] = [:]
     @ObservationIgnored private var resetRequestIDs: [String: UUID] = [:]
     @ObservationIgnored private var requestsInFlight: Set<String> = []
     @ObservationIgnored private var connectionGeneration = UUID()
@@ -29,7 +34,7 @@ final class CodexpressCoordinator {
     /// Drops endpoint-specific state; uncertain old mutations remain blocked for this session.
     func connectionDidChange() {
         if !activeSourceIDs.isEmpty || !resetRequestIDs.isEmpty || !refreshOperations.isEmpty
-            || actionError?.isDefiniteRejection == false {
+            || operationError?.isDefiniteRejection == false {
             actionsBlockedAfterConnectionChange = true
         }
         connectionGeneration = UUID()
@@ -39,10 +44,12 @@ final class CodexpressCoordinator {
         activeSourceIDs.removeAll()
         resetRequests.removeAll()
         refreshOperations.removeAll()
+        refreshErrors.removeAll()
+        refreshRetryTimes.removeAll()
         resetRequestIDs.removeAll()
         requestsInFlight.removeAll()
         uncertainSourceIDs.removeAll()
-        actionError = actionsBlockedAfterConnectionChange ? .outcomeUnknown : nil
+        operationError = actionsBlockedAfterConnectionChange ? .outcomeUnknown : nil
         restartObservation()
     }
 
@@ -129,6 +136,12 @@ final class CodexpressCoordinator {
             let next = try await service.status()
             try Task.checkCancellation()
             guard connectionGeneration == generation else { return }
+            for source in next.sources where !source.hasRefreshFailure {
+                if snapshot?.sources.first(where: { $0.id == source.id })?.hasRefreshFailure == true {
+                    refreshErrors.removeValue(forKey: source.id)
+                    refreshRetryTimes.removeValue(forKey: source.id)
+                }
+            }
             if snapshot != next { snapshot = next }
             connectionError = nil
         } catch is CancellationError {
@@ -155,7 +168,11 @@ final class CodexpressCoordinator {
     }
 
     func refresh(_ source: CodexpressSnapshot.Source) async {
-        let action: CodexpressManagementAction = source.kind == "official"
+        guard let current = snapshot?.sources.first(where: { $0.id == source.id }) else { return }
+        let now = Date().timeIntervalSince1970
+        if let retryAt = current.refreshRetryAt, retryAt > now { return }
+        if let retryAt = refreshRetryTimes[source.id], retryAt > now { return }
+        let action: CodexpressManagementAction = current.kind == "official"
             ? .refreshQuota(sourceID: source.id)
             : .refreshBalance(sourceID: source.id)
         await perform(action, sourceID: source.id, tracksRefresh: true)
@@ -177,7 +194,7 @@ final class CodexpressCoordinator {
         )
         requestsInFlight.insert(sourceID)
         activeSourceIDs.insert(sourceID)
-        actionError = nil
+        operationError = nil
         defer {
             if connectionGeneration == generation {
                 requestsInFlight.remove(sourceID)
@@ -190,7 +207,7 @@ final class CodexpressCoordinator {
         } catch {
             guard connectionGeneration == generation else { return }
             let failure = managementError(error)
-            actionError = failure
+            operationError = failure
             // A definite local/HTTP rejection cannot have created a confirmation request.
             if failure.isDefiniteRejection {
                 resetRequestIDs.removeValue(forKey: sourceID)
@@ -208,7 +225,11 @@ final class CodexpressCoordinator {
 
     func dismissActionError() {
         guard !actionsBlockedAfterConnectionChange else { return }
-        actionError = nil
+        if operationError != nil {
+            operationError = nil
+        } else if let sourceID = refreshErrors.keys.min() {
+            refreshErrors.removeValue(forKey: sourceID)
+        }
     }
 
     private func perform(
@@ -222,7 +243,7 @@ final class CodexpressCoordinator {
         let generation = connectionGeneration
         activeSourceIDs.insert(sourceID)
         requestsInFlight.insert(sourceID)
-        actionError = nil
+        if !tracksRefresh { operationError = nil }
         defer {
             if connectionGeneration == generation {
                 requestsInFlight.remove(sourceID)
@@ -234,8 +255,12 @@ final class CodexpressCoordinator {
         do {
             let operation = try await service.perform(action)
             guard connectionGeneration == generation else { return }
-            if tracksRefresh, let id = operation.id, operation.status == "running" {
-                refreshOperations[sourceID] = id
+            if tracksRefresh {
+                if let id = operation.id, operation.status == "running" {
+                    refreshOperations[sourceID] = id
+                } else {
+                    finishRefresh(operation, sourceID: sourceID)
+                }
             }
         } catch {
             guard connectionGeneration == generation else { return }
@@ -246,7 +271,7 @@ final class CodexpressCoordinator {
                 activeSourceIDs.remove(sourceID)
                 connectionDidChange()
             }
-            actionError = actionsBlockedAfterConnectionChange ? .outcomeUnknown : failure
+            operationError = actionsBlockedAfterConnectionChange ? .outcomeUnknown : failure
         }
         await refreshLocal()
     }
@@ -261,9 +286,7 @@ final class CodexpressCoordinator {
                 if operation.status == "completed" || operation.status == "failed" {
                     refreshOperations.removeValue(forKey: sourceID)
                     if !requestsInFlight.contains(sourceID) { activeSourceIDs.remove(sourceID) }
-                    if operation.status == "failed" || operation.result?.sources.contains(where: { $0.status == "failed" }) == true {
-                        actionError = .httpStatus(409)
-                    }
+                    finishRefresh(operation, sourceID: sourceID)
                 }
             } catch is CancellationError {
                 return
@@ -277,15 +300,36 @@ final class CodexpressCoordinator {
                     refreshOperations.removeValue(forKey: sourceID)
                     if !requestsInFlight.contains(sourceID) { activeSourceIDs.remove(sourceID) }
                 }
-                actionError = failure
+                operationError = failure
             } catch {
                 guard connectionGeneration == generation else { return }
-                actionError = managementError(error)
+                operationError = managementError(error)
             }
         }
         for (sourceID, id) in resetRequestIDs {
             guard !Task.isCancelled, connectionGeneration == generation else { return }
             await reconcileReset(sourceID: sourceID, id: id)
+        }
+    }
+
+    private func finishRefresh(_ operation: CodexpressOperation, sourceID: String) {
+        let result = operation.result?.sources.first(where: { $0.sourceID == sourceID })
+        if operation.status == "failed" || result?.status == "failed" {
+            if let retryAt = result?.nextRetryAt, retryAt.isFinite {
+                refreshRetryTimes[sourceID] = retryAt
+            }
+            if result?.code == "source_changed" {
+                operationError = .invalidConfiguration
+            } else {
+                refreshErrors[sourceID] = .refreshFailed(
+                    sourceID: sourceID,
+                    code: result?.code,
+                    nextRetryAt: result?.nextRetryAt
+                )
+            }
+        } else if operation.status == "completed", result?.status == "completed" {
+            refreshErrors.removeValue(forKey: sourceID)
+            refreshRetryTimes.removeValue(forKey: sourceID)
         }
     }
 
@@ -297,7 +341,7 @@ final class CodexpressCoordinator {
             guard connectionGeneration == generation, resetRequestIDs[sourceID] == id else { return }
             guard request.id.caseInsensitiveCompare(id.uuidString) == .orderedSame,
                   request.sourceID == sourceID else {
-                actionError = .invalidResponse
+                operationError = .invalidResponse
                 return
             }
             resetRequests[sourceID] = request
@@ -314,7 +358,7 @@ final class CodexpressCoordinator {
                 return
             }
             // A 404 after an uncertain POST is not permission to submit a new UUID.
-            actionError = managementError(error)
+            operationError = managementError(error)
         }
     }
 

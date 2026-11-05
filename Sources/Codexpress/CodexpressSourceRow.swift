@@ -20,8 +20,16 @@ struct CodexpressSourceRow: View {
     private let strings = CodexpressPanelStrings()
 
     var body: some View {
+        TimelineView(.explicit(source.refreshRetryAt.map { [Date(timeIntervalSince1970: $0)] } ?? [])) { context in
+            row(at: context.date)
+        }
+    }
+
+    private func row(at date: Date) -> some View {
         let windows = quotaWindows
-        VStack(alignment: .leading, spacing: 4) {
+        let refreshCoolingDown = (source.refreshRetryAt ?? 0) > date.timeIntervalSince1970
+        let refreshHelp = refreshHelp(at: date)
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Circle()
                     .fill(healthColor)
@@ -61,9 +69,9 @@ struct CodexpressSourceRow: View {
                         Image(systemName: isBusy ? "ellipsis" : "arrow.clockwise")
                             .frame(width: 14, height: 16)
                     }
-                    .help(strings.refresh)
-                    .accessibilityLabel(Text(strings.refresh))
-                    .disabled(!actionsEnabled)
+                    .help(refreshHelp)
+                    .accessibilityLabel(Text(refreshHelp))
+                    .disabled(!actionsEnabled || refreshCoolingDown)
                     if isOfficial {
                         Button(action: onRequestReset) {
                             HStack(spacing: 2) {
@@ -115,10 +123,12 @@ struct CodexpressSourceRow: View {
         .cmuxFont(size: CGFloat(settings.fontSize - 1))
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .help(detailsHelp)
+        .help(detailsHelp(at: date))
         .contextMenu {
             if settings.showActions {
-                Button(strings.refresh, action: onRefresh).disabled(!actionsEnabled)
+                Button(strings.refresh, action: onRefresh)
+                    .help(refreshHelp)
+                    .disabled(!actionsEnabled || refreshCoolingDown)
                 if needsRecovery {
                     Button(strings.recover, action: onRecover).disabled(!actionsEnabled)
                 }
@@ -134,6 +144,13 @@ struct CodexpressSourceRow: View {
 
     private var isOfficial: Bool { source.kind == "official" }
     private var actionsEnabled: Bool { settings.enabled && settings.showActions && canAct && !isBusy && !isSnapshotStale }
+    private func refreshHelp(at date: Date) -> String {
+        var lines = [source.hasRefreshFailure ? strings.refreshFailed : strings.refresh]
+        if let retryAt = source.refreshRetryAt, retryAt > date.timeIntervalSince1970 {
+            lines.append(strings.nextRefresh(at: retryAt))
+        }
+        return lines.joined(separator: "\n")
+    }
     private var needsRecovery: Bool {
         switch source.health {
         case "cooldown", "proxy_error": return true
@@ -233,12 +250,15 @@ struct CodexpressSourceRow: View {
         return strings.remaining
     }
 
-    private var detailsHelp: String {
+    private func detailsHelp(at date: Date) -> String {
         var lines = [healthLabel]
         if isStale { lines.append(strings.stale) }
         if source.balance?.estimated == true { lines.append(strings.estimated) }
         if (source.balance?.unknownSpendRequests ?? 0) > 0 { lines.append(strings.spendPending) }
         if source.credits?.stale == true { lines.append(strings.cards + " · " + strings.stale) }
+        if source.hasRefreshFailure || (source.refreshRetryAt ?? 0) > date.timeIntervalSince1970 {
+            lines.append(refreshHelp(at: date))
+        }
         if let resetRequest { lines.append(resetLabel(resetRequest.status)) }
         return lines.joined(separator: "\n")
     }

@@ -541969,6 +541969,52 @@
         }
       }
     },
+    "codexpress.refresh.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Balance or quota refresh failed. Last known values are retained."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "余额或额度刷新失败，保留上次查询结果。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "餘額或額度重新整理失敗，保留上次查詢結果。"
+          }
+        }
+      }
+    },
+    "codexpress.refresh.nextQuery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next query available: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下次可查询时间：%@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下次可查詢時間：%@"
+          }
+        }
+      }
+    },
     "codexpress.error.response": {
       "extractionState": "manual",
       "localizations": {
