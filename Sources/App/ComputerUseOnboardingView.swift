@@ -297,11 +297,9 @@ struct ComputerUseOnboardingView: View {
                 detail: screenshotsCardDetail
             )
             if helperUnavailableInThisBuild {
-                // No Developer ID signed helper: this build installs nothing
-                // and offers nothing for a grant (ComputerUseHelperTrust).
                 Text(String(
                     localized: "computerUse.onboarding.helperUnavailable",
-                    defaultValue: "Computer Use is unavailable in this dev build. Install cmux NIGHTLY to use it."
+                    defaultValue: "Computer Use requires a bundled helper signed with the same certificate as cmux. Reinstall a locally signed build."
                 ))
                 .font(.system(size: 12.5))
                 .foregroundStyle(overviewSecondaryText)

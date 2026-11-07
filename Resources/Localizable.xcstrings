@@ -502980,55 +502980,55 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Computer Use is unavailable in this dev build. Install cmux NIGHTLY to use it."
+            "value": "Computer Use requires a bundled helper signed with the same certificate as cmux. Reinstall a locally signed build."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このdevビルドではComputer Useを使用できません。使用するにはcmux NIGHTLYをインストールしてください。"
+            "value": "Computer Use requires a bundled helper signed with the same certificate as cmux. Reinstall a locally signed build."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Computer Use ist in diesem Dev-Build nicht verfügbar. Installiere cmux NIGHTLY, um es zu nutzen."
+            "value": "Computer Use requires a bundled helper signed with the same certificate as cmux. Reinstall a locally signed build."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Computer Use no está disponible en esta compilación de desarrollo. Instala cmux NIGHTLY para usarlo."
+            "value": "Computer Use requires a bundled helper signed with the same certificate as cmux. Reinstall a locally signed build."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Computer Use n’est pas disponible dans cette version de développement. Installez cmux NIGHTLY pour l’utiliser."
+            "value": "Computer Use requires a bundled helper signed with the same certificate as cmux. Reinstall a locally signed build."
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이 개발 빌드에서는 Computer Use를 사용할 수 없습니다. 사용하려면 cmux NIGHTLY를 설치하세요."
+            "value": "Computer Use requires a bundled helper signed with the same certificate as cmux. Reinstall a locally signed build."
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "استخدام الكمبيوتر غير متاح في إصدار التطوير هذا. ثبّت cmux NIGHTLY لاستخدامه."
+            "value": "Computer Use requires a bundled helper signed with the same certificate as cmux. Reinstall a locally signed build."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "此开发版本无法使用 Computer Use。请安装 cmux NIGHTLY 后使用。"
+            "value": "Computer Use 需要随附的 helper 与 cmux 使用同一证书签名。请重新安装本地签名的版本。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "此開發版本無法使用 Computer Use。請安裝 cmux NIGHTLY 後使用。"
+            "value": "Computer Use 需要隨附的 helper 與 cmux 使用同一憑證簽署。請重新安裝本機簽署的版本。"
           }
         }
       }

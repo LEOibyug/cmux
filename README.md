@@ -79,7 +79,9 @@
 
 签名使用 [rcodesign](https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign_rcodesign_signing.html) 直接读取 `.cmux/signing/` 中的固定 PEM 证书与无密码私钥，不依赖钥匙串或 Apple 开发者账号。签名文件不提交仓库，应单独备份；文件缺失或身份不匹配时更新停止，不自动生成替代身份。
 
-本地证书签名不等同于 Apple 公证。从 ad-hoc 签名切换后，macOS 仍可能要求重新授予隐私权限。
+Computer Use 仅安装随应用提供、且与当前 cmux 使用同一证书签名的 helper，不依赖旧缓存或上游 NIGHTLY、RC 安装。复制后的 helper 仍会验证签名和完整性。
+
+本地证书签名不等同于 Apple 公证。首次从上游、ad-hoc 或其他证书切换时，cmux 及 Computer Use helper 可能需要重新授予隐私权限；后续更新保持同一证书身份。
 
 ## 文档
 

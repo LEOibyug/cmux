@@ -38,11 +38,8 @@ public final class ComputerUseRuntimeService {
     public let stateAuthenticationKey: Data
 
     private let bundledHelperAppURL: URL?
-    /// Which helper this build may install and launch (Developer ID only).
     private let helperTrust: ComputerUseHelperTrust
-    /// True after an install attempt found no Developer ID signed helper: a
-    /// dev build without an installed cmux NIGHTLY, RC or release. Computer Use
-    /// is unavailable; nothing is installed, launched or offered for a grant.
+    /// No bundled helper matches this application's signing certificate.
     public private(set) var helperUnavailableInThisBuild = false
     let transport: SocketTransport
     public let daemonAdmission: ComputerUseDaemonAdmissionService
@@ -904,10 +901,6 @@ public final class ComputerUseRuntimeService {
         }
         guard prepareRuntimeForLaunch() else { return nil }
         let destination = paths.installedHelperAppURL
-        // Only a Developer ID signed helper may be installed: this build's own
-        // nested helper in a release, else an installed NIGHTLY, RC or release
-        // helper. An ad-hoc copy cannot satisfy the TCC rows of
-        // com.cmuxterm.cua, and a grant to it replaces the release row.
         let trust = helperTrust
         let nested = bundledHelperAppURL
         let sourceTask = Task.detached(priority: .userInitiated) {
@@ -920,15 +913,6 @@ public final class ComputerUseRuntimeService {
         }
         guard acceptsNewLaunches, !Task.isCancelled else { return nil }
         guard let source = resolvedSource else {
-            // A Developer ID copy already installed here stays usable; an
-            // ad-hoc one is stopped and deleted.
-            if await keepTrustedOrRemoveInstalledHelper(at: destination) {
-                helperUnavailableInThisBuild = false
-                installed = true
-                installedHelperURL = destination
-                Self.registerHelperBundle(at: destination)
-                return destination
-            }
             helperUnavailableInThisBuild = true
             return nil
         }
@@ -991,29 +975,6 @@ public final class ComputerUseRuntimeService {
             helperBuildReplacedHandler?()
         }
         return result
-    }
-
-    /// With no install source: returns true when a Developer ID copy is
-    /// already at this build's helper path. Otherwise stops and deletes an
-    /// ad-hoc copy an earlier dev build installed there, so it is neither
-    /// launched nor offered in Privacy & Security, and returns false.
-    private func keepTrustedOrRemoveInstalledHelper(at destination: URL) async -> Bool {
-        installedHelperURL = nil
-        guard FileManager.default.fileExists(atPath: destination.path) else { return false }
-        let trust = helperTrust
-        let trustTask = Task.detached(priority: .userInitiated) { trust.isTrusted(destination) }
-        let trusted = await trustTask.value
-        guard acceptsNewLaunches, !Task.isCancelled else { return false }
-        if trusted { return true }
-        guard await stopDaemon(), acceptsNewLaunches, !Task.isCancelled else { return false }
-        let directory = paths.installedHelperDirectoryURL
-        let removal = Task.detached(priority: .userInitiated) {
-            ComputerUseHelperStaging().removeInstalled(destination: destination, directory: directory)
-        }
-        if await removal.value {
-            NSWorkspace.shared.noteFileSystemChanged(destination.path)
-        }
-        return false
     }
 
     func startIfNeededWithinLifecycle() async {
