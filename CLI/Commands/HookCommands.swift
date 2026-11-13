@@ -81,9 +81,9 @@ struct OMCCommand: AgentLauncherCommand {
     static let configuration = CommandConfiguration(commandName: "omc", helpNames: [])
 }
 
-/// Local agent-to-agent messaging and inbox operations.
+/// Local agent launch, messaging, inbox, and hibernation operations.
 struct AgentCommand: LegacyHookCommand {
-    @Argument(parsing: .allUnrecognized, completion: .list(["message", "inbox", "messages"]))
+    @Argument(parsing: .allUnrecognized, completion: .list(["dispatch", "message", "inbox", "messages", "hibernate", "wake"]))
     var arguments: [String] = []
     static let configuration = CommandConfiguration(commandName: "agent", helpNames: [])
 }

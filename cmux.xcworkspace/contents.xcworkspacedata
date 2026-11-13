@@ -17,15 +17,6 @@
          location = "group:CmuxGhosttyKit">
       </FileRef>
       <FileRef
-         location = "group:CmuxHomeCore">
-      </FileRef>
-      <FileRef
-         location = "group:CmuxHomeRender">
-      </FileRef>
-      <FileRef
-         location = "group:CmuxMessagesLab">
-      </FileRef>
-      <FileRef
          location = "group:CMUXMobileCore">
       </FileRef>
       <FileRef
@@ -67,9 +58,6 @@
       </FileRef>
       <FileRef
          location = "group:CmuxCanvasUI">
-      </FileRef>
-      <FileRef
-         location = "group:CmuxChief">
       </FileRef>
       <FileRef
          location = "group:CmuxCommandPalette">

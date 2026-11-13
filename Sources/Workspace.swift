@@ -595,7 +595,6 @@ extension Workspace {
         let agentSessionSnapshot: SessionAgentSessionPanelSnapshot?
         let projectSnapshot: SessionProjectPanelSnapshot?; var workspaceTodoSnapshot: SessionWorkspaceTodoPanelSnapshot? = nil
         var notificationsPanelSnapshot: SessionNotificationsPanelSnapshot? = nil
-        var chiefSnapshot: SessionChiefPanelSnapshot? = nil
         switch panel.panelType {
         case .terminal:
             guard let terminalPanel = panel as? TerminalPanel else { return nil }
@@ -814,14 +813,6 @@ extension Workspace {
             terminalSnapshot = nil; browserSnapshot = nil; markdownSnapshot = nil; filePreviewSnapshot = nil
             rightSidebarToolSnapshot = nil; agentSessionSnapshot = nil; projectSnapshot = nil
             notificationsPanelSnapshot = SessionNotificationsPanelSnapshot()
-        case .chief:
-            guard let chiefPanel = panel as? ChiefPanel else { return nil }
-            terminalSnapshot = nil; browserSnapshot = nil; markdownSnapshot = nil; filePreviewSnapshot = nil
-            rightSidebarToolSnapshot = nil; agentSessionSnapshot = nil; projectSnapshot = nil
-            chiefSnapshot = SessionChiefPanelSnapshot(
-                conversationID: chiefPanel.conversationID?.rawValue,
-                isHome: chiefPanel.isHome
-            )
         case .extensionBrowser:
             return nil
         case .remoteLoading:
@@ -856,8 +847,7 @@ extension Workspace {
             agentSession: agentSessionSnapshot,
             project: projectSnapshot,
             workspaceTodo: workspaceTodoSnapshot,
-            notificationsPanel: notificationsPanelSnapshot,
-            chief: chiefSnapshot
+            notificationsPanel: notificationsPanelSnapshot
         )
     }
     private func closedPanelHistoryEntry(panelId: UUID, tabId: TabID, pane: PaneID) -> ClosedPanelHistoryEntry? {
@@ -2379,11 +2369,6 @@ extension Workspace {
                   let notificationsPanel = newNotificationsSurface(inPane: paneId, focus: false) else { return nil }
             applySessionPanelMetadata(snapshot, toPanelId: notificationsPanel.id)
             return notificationsPanel.id
-        case .chief:
-            guard let chiefSnapshot = snapshot.chief,
-                  let chiefPanel = restoreChiefSurface(inPane: paneId, snapshot: chiefSnapshot) else { return nil }
-            applySessionPanelMetadata(snapshot, toPanelId: chiefPanel.id)
-            return chiefPanel.id
         case .extensionBrowser:
             return nil
         case .remoteLoading:
@@ -11007,13 +10992,6 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
     }
 
     func requestCloseTab(_ tabId: TabID, force: Bool) -> Bool {
-        // Chief Home is the workspace's canonical anchor. Its split tab is
-        // intentionally pinned (which hides Bonsplit's close affordance), but
-        // keep this guard for force/API paths that bypass the tab chrome.
-        if let panelId = panelIdFromSurfaceId(tabId),
-           (panels[panelId] as? ChiefPanel)?.isHome == true {
-            return false
-        }
         if force { forceCloseTabIds.insert(tabId) }
         let closed = bonsplitController.closeTab(tabId); if force && !closed { forceCloseTabIds.remove(tabId) }
         return closed
@@ -11253,9 +11231,6 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
     func moveSurface(panelId: UUID, toPane paneId: PaneID, atIndex index: Int? = nil, focus: Bool = true) -> Bool {
         guard let tabId = surfaceIdFromPanelId(panelId) else { return false }
         guard bonsplitController.allPaneIds.contains(paneId) else { return false }
-        if let home = panels[panelId] as? ChiefPanel, home.isHome {
-            return duplicateChiefSurface(home, inPane: paneId, atIndex: index, focus: focus)
-        }
         guard bonsplitController.moveTab(tabId, toPane: paneId, atIndex: index) else { return false }
 
         if focus {
@@ -11272,13 +11247,6 @@ final class Workspace: Identifiable, ObservableObject, FilePreviewTabMetadataHos
     func detachSurface(panelId: UUID) -> DetachedSurfaceTransfer? {
         guard let tabId = surfaceIdFromPanelId(panelId) else { return nil }
         guard let sourcePanel = panels[panelId] else { return nil }
-        if let home = sourcePanel as? ChiefPanel, home.isHome {
-            // Canonical Home cannot leave its owning workspace. Pane drags
-            // resolve it as a Chief conversation and create an ordinary copy
-            // at the destination instead of consuming this panel.
-            _ = home
-            return nil
-        }
         let surfaceMachine = machineOwningSurface(panelId)
         surfaceTransferringPanelIds.insert(panelId)
         defer { surfaceTransferringPanelIds.remove(panelId) }
@@ -14190,12 +14158,6 @@ extension Workspace: BonsplitDelegate {
     }
 
     func splitTabBar(_ controller: BonsplitController, shouldCloseTab tab: Bonsplit.Tab, inPane pane: PaneID) -> Bool {
-        // Pinned protects normal Bonsplit UI; this delegate guard covers
-        // callers that ask the controller to close directly.
-        if let panelId = panelIdFromSurfaceId(tab.id),
-           (panels[panelId] as? ChiefPanel)?.isHome == true {
-            return false
-        }
         func recordPostCloseState() {
             let tabs = controller.tabs(inPane: pane)
             // Only a close that takes the zoomed pane with it ends the zoom. While
@@ -14822,12 +14784,6 @@ extension Workspace: BonsplitDelegate {
 
     func splitTabBar(_ controller: BonsplitController, shouldClosePane pane: PaneID) -> Bool {
         let tabs = controller.tabs(inPane: pane)
-        if tabs.contains(where: { tab in
-            guard let panelId = panelIdFromSurfaceId(tab.id) else { return false }
-            return (panels[panelId] as? ChiefPanel)?.isHome == true
-        }) {
-            return false
-        }
         var promptTitles: [String] = []
         var needsPrompt = false
         for tab in tabs {

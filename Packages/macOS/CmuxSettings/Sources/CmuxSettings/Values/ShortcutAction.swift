@@ -31,7 +31,6 @@ public enum ShortcutAction: String, CaseIterable, Sendable, Hashable, SettingCod
     case reopenPreviousSession
     case goToWorkspace
     case commandPalette
-    case openChief
     case commandPaletteNext
     case commandPalettePrevious
     case showNotifications

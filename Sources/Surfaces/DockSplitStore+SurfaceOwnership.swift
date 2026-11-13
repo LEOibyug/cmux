@@ -24,7 +24,7 @@ extension DockSplitStore {
             if surfaceIdToPanelId[TabID(uuid: transfer.tabId)] != nil { return nil }
             guard let app = AppDelegate.shared else { return ownershipPolicy.rejection(for: nil) }
             return app.ownershipRejection(forBonsplitTab: transfer.tabId, policy: ownershipPolicy)
-        case .vaultSession, .filePreview, .rightSidebarTool, .chiefConversation:
+        case .vaultSession, .filePreview, .rightSidebarTool:
             return ownershipPolicy.rejection(for: .local)
         case .workspaceMerge:
             // The Dock declines a merged workspace quietly (no reason to show).

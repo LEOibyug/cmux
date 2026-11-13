@@ -36,8 +36,6 @@ struct cmuxApp: App {
     @AppStorage(BrowserToolbarAccessorySpacingDebugSettings.key) private var browserToolbarAccessorySpacingRaw = BrowserToolbarAccessorySpacingDebugSettings.defaultSpacing
     @AppStorage(SettingCatalog().betaFeatures.remoteTmuxNewWorkspaceOnHost.userDefaultsKey)
     private var remoteTmuxNewWorkspaceOnHostEnabled = SettingCatalog().betaFeatures.remoteTmuxNewWorkspaceOnHost.defaultValue
-    @AppStorage(ChiefCatalogSection().enabled.userDefaultsKey)
-    private var chiefEnabled = ChiefCatalogSection().enabled.defaultValue
     @State private var aboutWindowController: AboutWindowController?
     @State private var browserFocusModeMenuRevision = 0
     @State private var browserAvailabilityMenuRevision = 0
@@ -1241,11 +1239,6 @@ struct cmuxApp: App {
                 showNotificationsPopover()
             }
 
-            if chiefEnabled {
-                splitCommandButton(title: String(localized: "menu.view.chief", defaultValue: "Chief"), shortcut: menuShortcut(for: .openChief)) {
-                    AppDelegate.shared?.openChiefHome(toggle: true, source: "menu.view.chief")
-                }
-            }
         }
     }
 

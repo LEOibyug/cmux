@@ -73,7 +73,7 @@ final class RecoverableMainWindowRoute {
         _ rhs: SidebarSelection
     ) -> Bool {
         switch (lhs, rhs) {
-        case (.tabs, .tabs), (.notifications, .notifications), (.home, .home):
+        case (.tabs, .tabs), (.notifications, .notifications):
             return true
         default:
             return false

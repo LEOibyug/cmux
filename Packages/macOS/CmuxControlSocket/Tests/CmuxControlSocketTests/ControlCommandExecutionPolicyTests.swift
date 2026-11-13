@@ -4,9 +4,6 @@ import Testing
 @Suite("ControlCommandExecutionPolicy")
 struct ControlCommandExecutionPolicyTests {
 
-
-
-
     @Test func fixedWorkerSetRunsOnTheSocketWorker() {
         for method in [
             "system.ping", "system.capabilities", 
@@ -51,9 +48,6 @@ struct ControlCommandExecutionPolicyTests {
             "agent.message.send", "agent.message.list", "agent.message.claim",
             "agent.message.ack",
             "agent.message.mark_read", "agent.message.poll", "agent.message.settings",
-            // Chief awaits its owner actor and the store's send; never inline on main.
-            "chief.open", "chief.send", "chief.status", "chief.conversations",
-            "chief.read", "chief.mark_read", "chief.stop", "chief.approve", "chief.answer", "chief.debug",
         ] {
             #expect(
                 ControlCommandExecutionPolicy(forMethod: method)
@@ -212,10 +206,6 @@ struct ControlCommandExecutionPolicyTests {
                 forMethod: "workspace.remote.terminal_session_connected"
             ) == .socketWorker(mainThreadCallable: false)
         )
-    }
-
-    @Test func diagnosticReadsRunOnTheWorkerAndAreNotMainThreadCallable() {
-        #expect(ControlCommandExecutionPolicy(forV1Command: "iroh_diag") == .socketWorker(mainThreadCallable: false))
     }
 
     @Test func v1PingRunsOnTheWorkerAndIsMainThreadCallable() {

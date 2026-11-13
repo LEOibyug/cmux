@@ -1,6 +1,5 @@
 import AppKit
 import Bonsplit
-import CmuxHomeCore
 import Foundation
 
 /// Resolves the live in-process source behind an opaque pane-transfer payload.
@@ -13,8 +12,6 @@ struct PaneTransferSourceResolver {
         case surfaceResources(SurfaceResourceGroup)
         /// A sidebar workspace row: dropping it on a pane merges its tabs there.
         case workspaceMerge(UUID)
-        /// A Chief Home row: dropping it creates/focuses that conversation in a pane.
-        case chiefConversation(ConversationID?)
         case rightSidebarTool(RightSidebarMode)
         case surface
     }
@@ -25,9 +22,6 @@ struct PaneTransferSourceResolver {
     typealias SurfaceResourceLookup = @MainActor (UUID) -> SurfaceResourceGroup?
     typealias LivenessLookup = @MainActor (UUID) -> Bool
     typealias WorkspaceMergeLookup = @MainActor (UUID) -> UUID?
-    typealias ChiefConversationLookup = @MainActor (UUID) -> ConversationID?
-    /// Outer nil means ordinary source; inner nil means canonical default Chief.
-    typealias CanonicalChiefLookup = @MainActor (UUID) -> ConversationID??
 
     private let vaultSessionRegistry: VaultSessionRegistry
     private let tabTransferRegistry: TabTransferRegistry
@@ -35,8 +29,6 @@ struct PaneTransferSourceResolver {
     private let surfaceResource: SurfaceResourceLookup
     private let surfaceIsLive: LivenessLookup
     private let workspaceMerge: WorkspaceMergeLookup
-    private let chiefConversation: ChiefConversationLookup
-    private let canonicalChief: CanonicalChiefLookup
 
     init(
         vaultSessionRegistry: @escaping VaultSessionRegistry = {
@@ -56,24 +48,6 @@ struct PaneTransferSourceResolver {
         },
         workspaceMerge: @escaping WorkspaceMergeLookup = { id in
             WorkspaceMergeDragRegistry.shared.workspaceId(id: id)
-        },
-        chiefConversation: @escaping ChiefConversationLookup = { id in
-            guard ChiefPaneDragRegistry.shared.contains(id) else { return nil }
-            return ChiefPaneDragRegistry.shared.conversationID(for: id)
-        },
-        canonicalChief: @escaping CanonicalChiefLookup = { id in
-            guard let app = AppDelegate.shared else { return nil }
-            if let location = app.locateContainerSurface(tabId: id),
-               case .workspace(_, let workspace, let panelID, _) = location,
-               let chief = workspace.panels[panelID] as? ChiefPanel, chief.isHome {
-                return .some(chief.conversationID)
-            }
-            if let workspaceID = WorkspaceMergeDragRegistry.shared.workspaceId(id: id),
-               let workspace = app.workspaceFor(tabId: workspaceID),
-               let chief = workspace.panels.values.compactMap({ $0 as? ChiefPanel }).first(where: \.isHome) {
-                return .some(chief.conversationID)
-            }
-            return nil
         }
     ) {
         self.vaultSessionRegistry = vaultSessionRegistry
@@ -82,8 +56,6 @@ struct PaneTransferSourceResolver {
         self.surfaceResource = surfaceResource
         self.surfaceIsLive = surfaceIsLive
         self.workspaceMerge = workspaceMerge
-        self.chiefConversation = chiefConversation
-        self.canonicalChief = canonicalChief
     }
 
     /// Resolves only an opaque live Bonsplit capability into one transfer model.
@@ -131,11 +103,7 @@ struct PaneTransferSourceResolver {
         }
         if let entry = filePreview(id) { return .filePreview(entry) }
         if let group = surfaceResource(id) { return .surfaceResources(group) }
-        if let conversation = canonicalChief(id) { return .chiefConversation(conversation) }
         if let workspaceId = workspaceMerge(id) { return .workspaceMerge(workspaceId) }
-        if chiefConversation(id) != nil || ChiefPaneDragRegistry.shared.contains(id) {
-            return .chiefConversation(chiefConversation(id))
-        }
         return nil
     }
 
@@ -150,9 +118,6 @@ struct PaneTransferSourceResolver {
         case .surfaceResources:
             SurfaceResourceDragRegistry.shared.discard(id: id)
         case .workspaceMerge:
-            WorkspaceMergeDragRegistry.shared.discard(id: id)
-        case .chiefConversation:
-            ChiefPaneDragRegistry.shared.discard(id)
             WorkspaceMergeDragRegistry.shared.discard(id: id)
         case .surface, .rightSidebarTool:
             break
@@ -171,9 +136,6 @@ struct PaneTransferSourceResolver {
     ) {
         switch source {
         case .surface, .rightSidebarTool:
-            tabTransferRegistry()?.finish(from: pasteboard)
-        case .chiefConversation:
-            finish(source, id: id)
             tabTransferRegistry()?.finish(from: pasteboard)
         case .vaultSession, .filePreview, .surfaceResources, .workspaceMerge:
             finish(source, id: id)

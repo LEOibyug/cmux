@@ -36,6 +36,7 @@ extension CMUXCLI {
     /// use the `cmux agent` family text.
     static func agentSubcommandHelp(_ verb: String?) -> String? {
         switch verb?.lowercased() {
+        case "dispatch": return agentDispatchUsage
         case "message", "msg": return agentMessageHelp
         case "inbox": return agentInboxHelp
         case "messages": return agentMessagesHelp

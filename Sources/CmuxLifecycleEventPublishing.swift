@@ -231,8 +231,6 @@ extension Workspace {
             return "notifications"
         case .remoteLoading:
             return "remote_loading"
-        case .chief:
-            return "chief"
         }
     }
 }

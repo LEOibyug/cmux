@@ -123,8 +123,6 @@ extension ContentView {
             return .resizePaneDown
         case "palette.triggerFlash":
             return .triggerFlash
-        case "palette.openChief":
-            return .openChief
         default:
             return nil
         }

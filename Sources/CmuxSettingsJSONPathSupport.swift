@@ -500,17 +500,6 @@ enum AutomationSettingsFileMapping {
     ]
 }
 
-/// Boolean values persisted in the top-level `chief` cmux.json section.
-enum ChiefSettingsFileMapping {
-    private static let chief = ChiefCatalogSection()
-
-    static let booleanSettings: [SettingsFileBooleanMapping] = [
-        .init(
-            jsonKey: "dangerouslySkipPermissions",
-            defaultsKey: chief.dangerouslySkipPermissions.userDefaultsKey
-        ),
-    ]
-}
 
 enum BrowserSettingsFileMapping {
     static let booleanSettings: [SettingsFileBooleanMapping] = [

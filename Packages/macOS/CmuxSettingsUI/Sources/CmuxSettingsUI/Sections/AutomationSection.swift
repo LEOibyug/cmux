@@ -4,8 +4,6 @@ import SwiftUI
 /// Automation settings, including socket access, agent integrations, and port ranges.
 @MainActor
 public struct AutomationSection: View {
-    private let catalog: SettingCatalog
-    private let defaultsStore: UserDefaultsSettingsStore
     private let hostActions: any SettingsHostActions
     private let socketPolicyResolver: SocketControlPolicyResolver
     @State private var socketPasswordModel: SecretValueModel
@@ -49,8 +47,6 @@ public struct AutomationSection: View {
         hostActions: any SettingsHostActions,
         socketPolicyResolver: SocketControlPolicyResolver = SocketControlPolicyResolver()
     ) {
-        self.catalog = catalog
-        self.defaultsStore = defaultsStore
         self.hostActions = hostActions
         self.socketPolicyResolver = socketPolicyResolver
         _socketPolicyResolution = State(initialValue: socketPolicyResolver.resolve())
@@ -103,7 +99,6 @@ public struct AutomationSection: View {
             agentAutoResumeCard
             canonicalAgentScratchCard
             AgentMessagesSettingsCard(isEnabled: agentMessagesModel.current, setEnabled: { agentMessagesModel.set($0) })
-            ChiefSettingsCard(defaultsStore: defaultsStore, catalog: catalog, controlWidth: Self.columnWidth)
             ampCard
             cursorCard
             geminiCard

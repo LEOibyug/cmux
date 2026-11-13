@@ -214,8 +214,6 @@ extension Workspace {
             return SurfaceKind.notifications.rawValue
         case .remoteLoading:
             return SurfaceKind.remoteLoading.rawValue
-        case .chief:
-            return SurfaceKind.chief.rawValue
         }
     }
 

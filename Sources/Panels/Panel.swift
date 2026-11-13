@@ -18,7 +18,6 @@ public enum PanelType: String, Codable, CaseIterable, Sendable {
     case workspaceTodo
     case notifications
     case remoteLoading
-    case chief
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -49,10 +48,6 @@ public enum PanelType: String, Codable, CaseIterable, Sendable {
         }
         if rawValue.lowercased() == Self.notifications.rawValue.lowercased() {
             self = .notifications
-            return
-        }
-        if rawValue.lowercased() == Self.chief.rawValue.lowercased() {
-            self = .chief
             return
         }
         throw DecodingError.dataCorruptedError(

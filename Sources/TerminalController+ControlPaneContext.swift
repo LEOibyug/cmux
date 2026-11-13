@@ -349,14 +349,6 @@ extension TerminalController: ControlPaneContext {
                 focus: focus,
                 initialDividerPosition: initialDividerPosition.map { CGFloat($0) }
             )?.id
-        } else if panelType == .chief {
-            newPanelId = ws.newChiefSplit(
-                from: sourcePanelId,
-                orientation: orientation,
-                insertFirst: insertFirst,
-                focus: focus,
-                initialDividerPosition: initialDividerPosition.map { CGFloat($0) }
-            )?.id
         } else {
             switch ws.newTerminalSplitOutcome(
                 from: sourcePanelId,

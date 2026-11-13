@@ -7,7 +7,7 @@
 /// harness's own response shape (`AgentQuestionAnswer.permissionResponse`).
 public struct AgentQuestion: Hashable, Sendable, Codable, Identifiable {
     /// Stable id of the ask: the acpmux permission id, or the conversation
-    /// part id for a question posted in Home.
+    /// part id for a question posted in a conversation.
     public var id: String
     public var source: Source
     public var items: [Item]
@@ -35,13 +35,13 @@ extension AgentQuestion {
     /// Who asked, and where the answer goes.
     public struct Source: Hashable, Sendable, Codable {
         public var harness: Harness
-        /// acpmux session id (the agent tab or the Chief's session).
+        /// acpmux session id of the asking agent.
         public var session: String
         /// acpmux permission id; the answer goes to `_acpmux/permission_respond`.
         public var permission: String?
         /// The harness's tool call id, when it has one.
         public var toolCall: String?
-        /// The display name of the asking agent ("Claude Code", "Chief").
+        /// The display name of the asking agent ("Claude Code", "Codex").
         public var agentName: String?
         /// The permission option that submits answers (`allow_once`).
         public var answerOption: String?
@@ -65,8 +65,6 @@ extension AgentQuestion {
         case codex
         /// Any other ACP agent: the selected option id answers it.
         case acp
-        /// The Chief, asking in a Home conversation.
-        case chief
     }
 
     /// One question of an ask.

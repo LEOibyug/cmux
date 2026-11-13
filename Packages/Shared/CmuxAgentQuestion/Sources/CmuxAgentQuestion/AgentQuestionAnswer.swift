@@ -107,7 +107,7 @@ extension AgentQuestion {
             // One item; its option ids are the permission options.
             let optionId = answer.selections[items[0].id]?.optionIDs.first
             return AgentQuestionReply(session: source.session, permissionId: permission, optionId: optionId, answers: nil)
-        case .claude, .chief:
+        case .claude:
             // Claude Code reads `answers` keyed by question text; several
             // choices are one comma-separated string.
             var answers: [String: AgentQuestionJSON] = [:]

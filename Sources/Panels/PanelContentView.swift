@@ -206,17 +206,6 @@ struct PanelContentView: View {
             if let loadingPanel = panel as? RemoteLoadingPanel {
                 RemoteLoadingPanelView(panel: loadingPanel)
             }
-        case .chief:
-            if let chiefPanel = panel as? ChiefPanel {
-                ChiefPanelView(
-                    panel: chiefPanel,
-                    tabManager: customSidebarTabManager,
-                    isFocused: isFocused,
-                    isVisibleInUI: isVisibleInUI
-                )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .simultaneousGesture(TapGesture().onEnded { onRequestPanelFocus() })
-            }
 
         }
     }
@@ -235,7 +224,7 @@ struct PanelContentView: View {
     private var shouldInstallPaneDropTarget: Bool {
         guard isVisibleInUI else { return false }
         switch panel.panelType {
-        case .markdown, .filePreview, .rightSidebarTool, .customSidebar, .simulator, .agentSession, .project, .extensionBrowser, .workspaceTodo, .notifications, .remoteLoading, .chief:
+        case .markdown, .filePreview, .rightSidebarTool, .customSidebar, .simulator, .agentSession, .project, .extensionBrowser, .workspaceTodo, .notifications, .remoteLoading:
             return true
         case .terminal, .browser:
             return false

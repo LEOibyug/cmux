@@ -41,6 +41,4 @@ public struct SurfaceKind: RawRepresentable, Hashable, Sendable {
     public static let notifications = SurfaceKind(rawValue: "notifications")
     /// A transient SSH loading pane.
     public static let remoteLoading = SurfaceKind(rawValue: "remoteLoading")
-    /// A Chief conversation pane.
-    public static let chief = SurfaceKind(rawValue: "chief")
 }

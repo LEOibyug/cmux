@@ -22,7 +22,7 @@ extension AgentQuestion {
                         multiSelect: item["multi_select"]?.bool ?? false, allowsOther: item["allows_other"]?.bool ?? true)
         }
         guard !mapped.isEmpty else { return nil }
-        let harness = part["harness"]?.string.flatMap(Harness.init(rawValue:)) ?? .chief
+        let harness = part["harness"]?.string.flatMap(Harness.init(rawValue:)) ?? .acp
         let source = Source(harness: harness, session: session, permission: part["permission"]?.text,
                             agentName: part["agent"]?.text)
         self.init(id: "\(messageID)#\(partIndex)", source: source, items: mapped, state: Self.conversationState(part["state"]),

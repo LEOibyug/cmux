@@ -28,8 +28,6 @@ extension ContentView {
             return String(localized: "notifications.title", defaultValue: "Notifications")
         case .remoteLoading:
             return String(localized: "menu.help.ssh", defaultValue: "SSH")
-        case .chief:
-            return ChiefStrings.chiefName
         }
     }
     func commandPaletteSurfaceKeywords(for panelType: PanelType) -> [String] {
@@ -59,8 +57,6 @@ extension ContentView {
             return ["notifications", "alerts", "feed"]
         case .remoteLoading:
             return ["ssh", "remote", "loading"]
-        case .chief:
-            return ["chief", "home", "chat", "messages", "assistant", "agent"]
         }
     }
 }

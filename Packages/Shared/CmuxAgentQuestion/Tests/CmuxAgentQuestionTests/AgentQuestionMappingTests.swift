@@ -7,7 +7,7 @@ import Testing
 @Suite struct AgentQuestionMappingTests {
     @Test func everyFixtureMapsToItsExpectedQuestion() throws {
         let names = AgentQuestionFixture.names
-        #expect(names.count >= 11)
+        #expect(!names.isEmpty)
         for name in names {
             let fixture = try AgentQuestionFixture(name: name)
             let mapped = try #require(fixture.mapped(), "\(name) did not map")

@@ -4935,7 +4935,6 @@ struct CMUXCLI {
         if command == "help" { print(helpOutput(commandArgs: commandArgs)); return }
         if command == "socket-status" { try runSocketControlStatusCommand(commandArgs: commandArgs, jsonOutput: jsonOutput, environment: processEnv); return }
         if command == "docs" { try runDocsCommand(commandArgs: commandArgs, jsonOutput: jsonOutput); return }
-        if command == "chief", !chiefCommandNeedsSocket(commandArgs) { try runChiefCommand(commandArgs: commandArgs, jsonOutput: jsonOutput, environment: processEnv, bundleIdentifier: cliBundleIdentifier); return }
         if command == "welcome" { printWelcome(); return }
         if command == "sessions" || command == "session-debug" { try runSessionsCommand(commandArgs: command == "session-debug" ? ["debug"] + commandArgs : commandArgs, jsonOutput: jsonOutput, processEnv: processEnv); return }
         if command == "glaeda" { try runGlaedaCommand(commandArgs: commandArgs); return }
@@ -5397,11 +5396,15 @@ struct CMUXCLI {
             try runAgentHibernation(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput)
 
         case "agent":
-            if try !runAgentMessageCommandIfMatched(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput) {
+            if commandArgs.first?.lowercased() == "dispatch" {
+                try runAgentDispatchCommand(
+                    Array(commandArgs.dropFirst()), client: client, jsonOutput: jsonOutput, windowOverride: windowId
+                )
+            } else if try !runAgentMessageCommandIfMatched(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput) {
                 if let verb = commandArgs.first?.lowercased(), verb == "hibernate" || verb == "wake" {
                     try runAgentHibernation(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput)
                 } else {
-                    throw CLIError(message: "Usage: cmux agent <message|messages|inbox|hibernate|wake>", exitCode: 2)
+                    throw CLIError(message: "Usage: cmux agent <dispatch|message|messages|inbox|hibernate|wake>", exitCode: 2)
                 }
             }
         case "rpc":
@@ -5661,15 +5664,6 @@ struct CMUXCLI {
                 jsonOutput: jsonOutput,
                 idFormat: idFormat,
                 windowOverride: windowId
-            )
-
-        case "chief":
-            try runChiefSocketCommand(
-                commandArgs: commandArgs,
-                client: client,
-                jsonOutput: jsonOutput,
-                windowOverride: windowId,
-                environment: processEnv
             )
 
         case "comments":
@@ -10160,8 +10154,8 @@ struct CMUXCLI {
             method = "canvas.set_viewport"
         case "new-pane":
             if let type = optionValue(rest, name: "--type")?.lowercased() {
-                guard ["terminal", "browser", "simulator", "chief"].contains(type) else {
-                    throw CLIError(message: String(localized: "cli.canvas.error.newPaneTypeUsage", defaultValue: "Usage: cmux canvas new-pane [--type terminal|browser|simulator|chief]"))
+                guard ["terminal", "browser", "simulator"].contains(type) else {
+                    throw CLIError(message: String(localized: "cli.canvas.error.newPaneTypeUsage", defaultValue: "Usage: cmux canvas new-pane [--type terminal|browser|simulator]"))
                 }
                 params["type"] = type
             }
@@ -16260,11 +16254,9 @@ struct CMUXCLI {
         )
         switch command {
         case "agent":
-            return "Usage: cmux agent <message|reply|messages|inbox|hibernate|wake>\n\nLocal agent messages, inbox, and hibernation. See `cmux agent-hibernation --help`."
+            return "Usage: cmux agent <dispatch|message|reply|messages|inbox|hibernate|wake>\n\nLaunch coding agents, exchange local messages, manage inbox and hibernation. See `cmux agent dispatch --help` and `cmux agent-hibernation --help`."
         case "todo":
             return Self.todoUsage
-        case "chief":
-            return Self.chiefUsage
         case "comments":
             return Self.commentsUsage
         case "review":
@@ -16305,7 +16297,7 @@ struct CMUXCLI {
               set-viewport --x <n> --y <n> [--zoom <n>]
                                             Center the viewport on a canvas point
                                             (optionally set magnification)
-              new-pane [--type terminal|browser|simulator|chief]
+              new-pane [--type terminal|browser|simulator]
                                             Create a new free-floating canvas pane
               join <surface> <target>       Move a surface into the pane hosting target (tab)
               break <surface>               Tear a surface out of its multi-tab pane
@@ -17376,7 +17368,7 @@ struct CMUXCLI {
             Create a new pane in the workspace.
 
             Flags:
-              --type <terminal|browser|simulator|chief>
+              --type <terminal|browser|simulator>
                                                   Pane type (default: terminal)
               --direction <left|right|up|down>    Split direction (default: right)
               --placement <workspace|dock>        Target container (default: workspace).
@@ -17392,7 +17384,6 @@ struct CMUXCLI {
               cmux new-pane
               cmux new-pane --type browser --direction down --url https://example.com
               cmux new-pane --type simulator --direction right
-              cmux new-pane --type chief --direction right
               cmux new-pane --type browser --placement dock --url https://example.com
             """
         case "new-surface":
@@ -17402,7 +17393,7 @@ struct CMUXCLI {
             Create a new surface (tab) in a pane.
 
             Flags:
-              --type <terminal|browser|simulator|agent-session|chief>
+              --type <terminal|browser|simulator|agent-session>
                                           Surface type (default: terminal)
               --pane <id|ref|index>       Target pane
               --placement <workspace|dock>  Target container (default: workspace).
@@ -18372,10 +18363,6 @@ struct CMUXCLI {
         guard commandArgs.contains("--help") || commandArgs.contains("-h") else { return false }
         if command == "agent", let text = Self.agentSubcommandHelp(commandArgs.first) {
             print(text)
-            return true
-        }
-        if command == "chief", commandArgs.first?.lowercased() == "dispatch" {
-            print(Self.chiefDispatchUsage)
             return true
         }
         guard let text = subcommandUsage(command) else { return false }
@@ -24057,7 +24044,7 @@ struct CMUXCLI {
         try writeOpenCodeSessionPlugin(in: shadowDir)
 
         // The shadow opencode.json resolves relative refs such as
-        // {file:./prompts/chief.md} against the shadow dir, so expose the files
+        // {file:./prompts/task.md} against the shadow dir, so expose the files
         // they name there.
         omoLinkEntries(of: userDir, into: shadowDir, excluding: Self.omoShadowUnlinkedConfigEntries)
 

@@ -33,7 +33,7 @@ extension TerminalController {
             return .noSourceSurface
         }
         let focus = v2FocusAllowed(requested: inputs.requestedFocus)
-        let kind: DockSurfaceKind = panelType == .browser ? .browser : (panelType == .chief ? .chief : .terminal)
+        let kind: DockSurfaceKind = panelType == .browser ? .browser : .terminal
         if focus {
             // Creation is authoritative; revealing its secondary focus request
             // is best-effort when the Dock host is still mounting.
@@ -53,8 +53,7 @@ extension TerminalController {
             initialDividerPosition: initialDividerPosition,
             preferredProfileID: preferredProfileID,
             preloadInitialNavigationInBackground: kind == .browser,
-            focus: false,
-            conversationID: nil
+            focus: false
         )
         guard let newPanelId else {
             return .createFailed

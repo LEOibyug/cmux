@@ -13,7 +13,7 @@ public struct SurfaceTextChangeWaitRequest: Sendable, Equatable {
     /// Default wait when `timeout_ms` is absent.
     public static let defaultTimeoutMilliseconds: Int64 = 30_000
     /// Longest wait one call may ask for (ten minutes, the `--timeout` cap of
-    /// `cmux chief dispatch`).
+    /// `cmux agent dispatch`).
     public static let maximumTimeoutMilliseconds: Int64 = 600_000
     private static let hexDigits = Array("0123456789abcdef".utf8)
 

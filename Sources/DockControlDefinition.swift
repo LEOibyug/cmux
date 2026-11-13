@@ -70,7 +70,7 @@ struct DockControlDefinition: Codable, Equatable, Identifiable, Sendable {
             guard let parsed = DockSurfaceKind(rawValue: rawType) else {
                 throw Self.validationError(
                     code: 3,
-                    message: String(localized: "dock.error.unknownControlType", defaultValue: "Dock control type must be terminal, browser, or Chief.")
+                    message: String(localized: "dock.error.unknownControlType", defaultValue: "Dock control type must be terminal or browser.")
                 )
             }
             resolvedKind = parsed
@@ -105,9 +105,6 @@ struct DockControlDefinition: Codable, Equatable, Identifiable, Sendable {
             }
             url = normalizedURL
             command = nil
-        case .chief:
-            command = nil
-            url = nil
         }
 
         id = normalizedID
@@ -159,8 +156,6 @@ struct DockControlDefinition: Codable, Equatable, Identifiable, Sendable {
             if !showsBrowserChrome {
                 try container.encode(false, forKey: .chrome)
             }
-        case .chief:
-            try container.encode(DockSurfaceKind.chief.rawValue, forKey: .type)
         }
         try container.encodeIfPresent(cwd, forKey: .cwd)
         try container.encodeIfPresent(height, forKey: .height)

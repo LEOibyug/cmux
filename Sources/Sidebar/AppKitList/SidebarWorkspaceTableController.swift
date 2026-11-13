@@ -669,7 +669,6 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
         previewBailoutTask?.cancel()
         previewBailoutTask = nil
         self.actions = actions
-        // The Chief Home band comes and goes with `chief.enabled`.
         Self.applyListInsets(to: containerView.scrollView)
         actions.attachScrollView(containerView.scrollView)
         configureDropViews(in: containerView, actions: actions)
@@ -3076,7 +3075,7 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
 
 extension SidebarWorkspaceTableController {
     /// Sets the list's scroll insets from ``SidebarWorkspaceScrollInsets/workspaceList``
-    /// when they changed (the top follows the Chief Home band).
+    /// when they changed.
     static func applyListInsets(to scrollView: NSScrollView) {
         let insets = NSEdgeInsets(
             top: SidebarWorkspaceScrollInsets.workspaceList.top

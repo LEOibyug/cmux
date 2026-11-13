@@ -41,8 +41,6 @@ extension ClosedItemHistoryStore {
             return String(localized: "notifications.title", defaultValue: "Notifications")
         case .remoteLoading:
             return String(localized: "panel.remoteLoading.title", defaultValue: "SSH")
-        case .chief:
-            return ChiefStrings.chiefName
         }
     }
 }

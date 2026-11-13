@@ -27,6 +27,12 @@
 
 相关选项位于“设置 → 侧边栏”。代理状态条固定在工作区名称下一行，其余信息按配置排列。
 
+### 外部管理 agent 接口
+
+本机 CLI 与 Unix socket 提供工作区、窗格、终端、浏览器控制及 agent 消息收发，可供外部管理 agent 调用。
+
+`cmux agent dispatch` 可在独立工作区派发任务，支持工作目录、Git worktree、任务文件和启动状态确认；默认保留被启动 agent 的正常权限提示。接口说明见 [CLI 合约](docs/cli-contract.md)。
+
 ### 保险库来源选择
 
 保险库的“代理来源”菜单支持动态选择需要读取的 agent 对话历史，也可通过全局配置 `vault.enabledAgents` 设置。

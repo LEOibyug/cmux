@@ -14,7 +14,6 @@ extension AppDelegate {
         }
 
         _ = synchronizeActiveMainWindowContext(preferredWindow: shortcutRoutingActiveWindow)
-        leaveChiefHome(in: tabManager)
 
         if let workspace = tabManager?.selectedWorkspace, workspace.layoutMode == .canvas {
             guard let panelId = workspace.openNewCanvasPane(

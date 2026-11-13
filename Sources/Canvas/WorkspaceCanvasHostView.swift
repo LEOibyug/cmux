@@ -118,7 +118,6 @@ struct WorkspaceCanvasHostView: View {
         case .workspaceTodo: return "checklist"
         case .notifications: return "bell"
         case .remoteLoading: return "network"
-        case .chief: return ChiefPanel.iconSystemName
         }
     }
 

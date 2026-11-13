@@ -1,7 +1,6 @@
 import CmuxRemoteSession
 import AppKit
 import Bonsplit
-import CmuxHomeCore
 import Foundation
 
 /// The behavior boundary for a pane-level drop target. Main-area panes and Dock
@@ -62,13 +61,6 @@ protocol PaneDropContainer: AnyObject {
         destination: BonsplitController.ExternalTabDropRequest.Destination
     ) -> Bool
 
-    /// Whether a Chief conversation can be created in this container.
-    func canPerformChiefConversationDrop(_ conversationID: ConversationID?) -> Bool
-    /// Creates or focuses a Chief panel at the requested pane destination.
-    func performChiefConversationDrop(
-        _ conversationID: ConversationID?,
-        destination: BonsplitController.ExternalTabDropRequest.Destination
-    ) -> Bool
 
     func canPerformRightSidebarToolDrop(_ mode: RightSidebarMode) -> Bool
     func performRightSidebarToolDrop(
@@ -122,11 +114,6 @@ extension PaneDropContainer {
         destination: BonsplitController.ExternalTabDropRequest.Destination
     ) -> Bool { false }
 
-    func canPerformChiefConversationDrop(_: ConversationID?) -> Bool { false }
-    func performChiefConversationDrop(
-        _: ConversationID?,
-        destination _: BonsplitController.ExternalTabDropRequest.Destination
-    ) -> Bool { false }
 
     /// Handles synthetic capabilities before the caller's normal surface move.
     ///
@@ -168,9 +155,6 @@ extension PaneDropContainer {
         case .workspaceMerge(let workspaceId):
             handled = canPerformWorkspaceMergeDrop(workspaceId)
                 && performWorkspaceMergeDrop(workspaceId, destination: request.destination)
-        case .chiefConversation(let conversationID):
-            handled = canPerformChiefConversationDrop(conversationID)
-                && performChiefConversationDrop(conversationID, destination: request.destination)
         case .rightSidebarTool(let mode):
             handled = canPerformRightSidebarToolDrop(mode) && performRightSidebarToolDrop(mode, destination: request.destination)
         case .surface:
@@ -194,8 +178,6 @@ extension PaneDropContainer {
             return true
         case .workspaceMerge(let workspaceId):
             return canPerformWorkspaceMergeDrop(workspaceId)
-        case .chiefConversation(let conversationID):
-            return canPerformChiefConversationDrop(conversationID)
         case .rightSidebarTool(let mode):
             return canPerformRightSidebarToolDrop(mode)
         case .surface:
@@ -235,8 +217,6 @@ extension PaneDropContainer {
             return performPortalSurfaceResourceDrop(group: group, destination: destination)
         case .workspaceMerge(let workspaceId):
             return performWorkspaceMergeDrop(workspaceId, destination: destination)
-        case .chiefConversation(let conversationID):
-            return performChiefConversationDrop(conversationID, destination: destination)
         case .rightSidebarTool(let mode):
             return canPerformRightSidebarToolDrop(mode) && performRightSidebarToolDrop(mode, destination: destination)
         case .surface:
@@ -311,7 +291,7 @@ extension PaneDropContainer {
             return .editor
         case .browser, .markdown, .rightSidebarTool, .customSidebar, .simulator,
              .agentSession, .project, .extensionBrowser, .workspaceTodo,
-             .notifications, .remoteLoading, .chief:
+             .notifications, .remoteLoading:
             return nil
         }
     }
@@ -363,44 +343,6 @@ extension PaneDropContainer {
 }
 
 extension Workspace: PaneDropContainer {
-    func canPerformChiefConversationDrop(_: ConversationID?) -> Bool {
-        !isRetiredFromOwningTabManager
-    }
-
-    func performChiefConversationDrop(
-        _ conversationID: ConversationID?,
-        destination: BonsplitController.ExternalTabDropRequest.Destination
-    ) -> Bool {
-        guard canPerformChiefConversationDrop(conversationID) else { return false }
-        if let existing = panels.values.compactMap({ $0 as? ChiefPanel }).first(where: {
-            $0.conversationID == conversationID
-        }) {
-            focusPanel(existing.id)
-            return true
-        }
-        switch destination {
-        case .insert(let pane, let index):
-            guard let chief = newChiefSurface(
-                inPane: pane,
-                conversationID: conversationID,
-                focus: true,
-                targetIndex: index
-            ) else { return false }
-            return chief.conversationID == conversationID
-        case .split(let pane, let orientation, let insertFirst):
-            if let target = selectedPanelForPaneDrop(in: pane),
-               let chief = newChiefSplit(
-                   from: target.panelId,
-                   orientation: orientation,
-                   insertFirst: insertFirst,
-                   conversationID: conversationID,
-                   focus: true
-               ) {
-                return chief.conversationID == conversationID
-            }
-            return newChiefSurface(inPane: pane, conversationID: conversationID, focus: true) != nil
-        }
-    }
 
     func canPerformRightSidebarToolDrop(_ mode: RightSidebarMode) -> Bool {
         !isRetiredFromOwningTabManager && mode.canOpenAsPane && mode.isAvailable()
@@ -493,46 +435,6 @@ extension Workspace: PaneDropContainer {
 }
 
 extension DockSplitStore: PaneDropContainer {
-    func canPerformChiefConversationDrop(_: ConversationID?) -> Bool {
-        !isRetired && !bonsplitController.allPaneIds.isEmpty
-    }
-
-    func performChiefConversationDrop(
-        _ conversationID: ConversationID?,
-        destination: BonsplitController.ExternalTabDropRequest.Destination
-    ) -> Bool {
-        guard canPerformChiefConversationDrop(conversationID) else { return false }
-        if let existing = panels.values.compactMap({ $0 as? ChiefPanel }).first(where: {
-            $0.conversationID == conversationID
-        }) {
-            focusPanelFromDockInteraction(existing.id, window: NSApp.keyWindow ?? NSApp.mainWindow)
-            return true
-        }
-        switch destination {
-        case .insert(let pane, let index):
-            guard let panelID = openOrFocusChiefSurface(
-                conversationID: conversationID,
-                focus: true,
-                preferredPane: pane
-            ) else { return false }
-            if let index, let tabID = surfaceId(forPanelId: panelID) {
-                _ = bonsplitController.reorderTab(tabID, toIndex: index)
-            }
-            return true
-        case .split(let pane, let orientation, let insertFirst):
-            let sourcePanelID = selectedPanelForPaneDrop(in: pane)?.panelId
-            guard let panelID = newSplit(
-                kind: .chief,
-                orientation: orientation,
-                insertFirst: insertFirst,
-                sourcePanelId: sourcePanelID,
-                focus: true,
-                conversationID: conversationID
-            ) else { return false }
-            focusPanelFromDockInteraction(panelID, window: NSApp.keyWindow ?? NSApp.mainWindow)
-            return true
-        }
-    }
 
     /// Returns the Dock panel selected in the target pane.
     func selectedPanelForPaneDrop(

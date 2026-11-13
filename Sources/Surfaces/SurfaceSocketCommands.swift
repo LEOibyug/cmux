@@ -132,8 +132,7 @@ extension TerminalController {
 
     /// A machine workspace as a new local workspace bound to it: one pane per
     /// terminal and browser, mirroring the machine screen's layout when the
-    /// daemon reports one. The one path behind `cmux vm workspace open` and
-    /// the Chief's result card ("Open Workspace").
+    /// daemon reports one. The shared path behind `cmux vm workspace open`.
     nonisolated static func openRemoteWorkspaceAsNewLocalWorkspace(
         _ group: SurfaceResourceGroup,
         workspace: SurfaceRemoteWorkspace,
@@ -163,8 +162,7 @@ extension TerminalController {
     }
 
     /// Opens machine workspace `selector` (`ws_…` or its name) on `machine` as
-    /// a new local workspace, resolved like the sidebar row (the Chief's
-    /// result card).
+    /// a new local workspace, resolved like the sidebar row.
     @discardableResult
     nonisolated static func openRemoteWorkspace(
         _ selector: String,
