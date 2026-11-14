@@ -60,20 +60,47 @@ public struct ControlCenterTarget: Codable, Equatable, Identifiable, Sendable {
         case session, directory, file, url, newSession
     }
 
+    public struct SessionIdentity: Equatable, Hashable, Sendable {
+        public let agentID: String
+        public let sessionID: String
+    }
+
     public var id: UUID
     public var name: String
     public var kind: Kind
     public var path: String
     public var sessionID: String?
     public var sessionFile: String?
+    public var agentID: String
 
-    public init(id: UUID = UUID(), name: String, kind: Kind, path: String, sessionID: String? = nil, sessionFile: String? = nil) {
+    public var sessionIdentity: SessionIdentity? {
+        guard kind == .session, let sessionID, !sessionID.isEmpty else { return nil }
+        return SessionIdentity(agentID: agentID, sessionID: sessionID)
+    }
+
+    public init(id: UUID = UUID(), name: String, kind: Kind, path: String, sessionID: String? = nil, sessionFile: String? = nil, agentID: String = "omp") {
         self.id = id
         self.name = name
         self.kind = kind
         self.path = path
         self.sessionID = sessionID
         self.sessionFile = sessionFile
+        self.agentID = agentID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, kind, path, sessionID, sessionFile, agentID
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        kind = try container.decode(Kind.self, forKey: .kind)
+        path = try container.decode(String.self, forKey: .path)
+        sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
+        sessionFile = try container.decodeIfPresent(String.self, forKey: .sessionFile)
+        agentID = try container.decodeIfPresent(String.self, forKey: .agentID) ?? "omp"
     }
 }
 

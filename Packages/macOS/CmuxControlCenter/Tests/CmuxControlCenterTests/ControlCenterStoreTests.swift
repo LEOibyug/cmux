@@ -64,6 +64,47 @@ struct ControlCenterStoreTests {
         try await store.saveOperation(receipt)
     }
 
+    @Test func legacyCollectionSessionsDefaultToOMP() throws {
+        let json = """
+        {"id":"00112233-4455-6677-8899-AABBCCDDEEFF","name":"Daily","items":[{"id":"11223344-5566-7788-99AA-BBCCDDEEFF00","name":"Old session","kind":"session","path":"/project","sessionID":"shared-id","sessionFile":"/sessions/old.jsonl"}]}
+        """
+        let collection = try JSONDecoder().decode(ControlCenterCollection.self, from: Data(json.utf8))
+        let target = try #require(collection.items.first)
+        #expect(target.agentID == "omp")
+        let omp = ControlCenterTarget(name: "New search result", kind: .session, path: "/project", sessionID: "shared-id")
+        let claude = ControlCenterTarget(name: "Other agent", kind: .session, path: "/project", sessionID: "shared-id", agentID: "claude")
+        #expect(target.sessionIdentity == omp.sessionIdentity)
+        #expect(target.sessionIdentity != claude.sessionIdentity)
+    }
+
+    @Test func sessionBookmarksKeepSavedIdentityAcrossSearchesAndReopening() async throws {
+        let directory = controlCenterTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let omp = ControlCenterTarget(name: "Saved OMP name", kind: .session, path: "/project", sessionID: "shared-id", sessionFile: "/sessions/omp.jsonl")
+        let claude = ControlCenterTarget(name: "Claude", kind: .session, path: "/project", sessionID: "shared-id", agentID: "claude")
+        let store = try ControlCenterStore(directory: directory)
+        try await store.saveFavorite(omp)
+        try await store.saveFavorite(claude)
+        let newSearch = ControlCenterTarget(name: "New search title", kind: .session, path: "/project", sessionID: "shared-id")
+        let saved = try await store.saveFavorite(newSearch)
+        #expect(saved == omp)
+        let collection = ControlCenterCollection(name: "Both agents", items: [saved, claude])
+        try await store.saveCollection(collection)
+
+        let reopened = try ControlCenterStore(directory: directory)
+        let snapshot = try await reopened.snapshot()
+        #expect(snapshot.favorites == [omp, claude])
+        #expect(snapshot.collections == [collection])
+        var collidingEdit = claude
+        collidingEdit.agentID = "omp"
+        await #expect(throws: ControlCenterStoreError.duplicateFavorite) {
+            try await reopened.saveFavorite(collidingEdit)
+        }
+        #expect(try await reopened.snapshot().favorites == [omp, claude])
+        try await reopened.removeFavorite(saved.id)
+        #expect(try await ControlCenterStore(directory: directory).snapshot().favorites == [claude])
+    }
+
     @Test func connectionIsPrivateAndNeverWrittenIntoDatabase() async throws {
         let directory = controlCenterTestDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

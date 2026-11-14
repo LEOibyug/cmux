@@ -10,32 +10,55 @@ extension ControlCenterCoordinator {
         return index
     }
 
-    func searchSessions(_ query: String) async {
-        do { try await findSessions(query) }
-        catch { self.error = error.localizedDescription }
+    func refreshSessionSources() async {
+        let registry = await SessionIndexStore.vaultAgentRegistry(workingDirectory: nil)
+        sessionSources = SessionIndexStore.agentOrder(registry: registry).agents
     }
 
-    func findSessions(_ query: String) async throws {
-        let index = vaultIndex()
-        let result: SessionIndexStore.SearchOutcome
-        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            result = await index.loadRecentSessions(limitPerAgent: 200)
-        } else {
-            result = await index.searchAllSessions(rawQuery: "agent:omp \(query)")
-        }
+    func sessionSource(_ agentID: String) async throws -> SessionAgent {
+        await refreshSessionSources()
         try Task.checkCancellation()
-        let entries = result.entries.filter { $0.agent.rawValue == "omp" }
-        sessions = entries.map { entry in
-            let id = sessionTargetIDs[entry.id] ?? UUID()
-            sessionTargetIDs[entry.id] = id
-            return ControlCenterTarget(
-                id: id,
+        guard let agent = sessionSources.first(where: { $0.rawValue == agentID }) else {
+            throw ControlCenterHostError.blocked("Session history is disabled or unavailable for source \(agentID). Enable it in Vault settings before searching or opening its sessions.")
+        }
+        return agent
+    }
+
+    func searchSessions(_ query: String) async {
+        let source = sessionSourceID
+        let generation = sessionSearchGeneration + 1
+        do { try await findSessions(query, agentID: source) }
+        catch is CancellationError {}
+        catch {
+            if sessionSourceID == source, sessionSearchGeneration == generation { self.error = error.localizedDescription }
+        }
+    }
+
+    func findSessions(_ query: String, agentID: String) async throws {
+        sessionSearchGeneration += 1
+        let generation = sessionSearchGeneration
+        sessions = []
+        sessionResultsSourceID = agentID
+        let agent = try await sessionSource(agentID)
+        guard generation == sessionSearchGeneration else { throw CancellationError() }
+        let result = await vaultIndex().searchSessions(query: query, scope: .agent(agent), offset: 0, limit: 500)
+        try Task.checkCancellation()
+        guard generation == sessionSearchGeneration else { throw CancellationError() }
+        error = nil
+        sessions = result.entries.filter { $0.agent.rawValue == agentID }.map { entry in
+            var target = ControlCenterTarget(
                 name: entry.title,
                 kind: .session,
                 path: entry.cwd ?? "",
                 sessionID: entry.sessionId,
-                sessionFile: entry.fileURL?.path
+                sessionFile: entry.fileURL?.path,
+                agentID: entry.agent.rawValue
             )
+            if let identity = target.sessionIdentity {
+                target.id = sessionTargetIDs[identity] ?? target.id
+                sessionTargetIDs[identity] = target.id
+            }
+            return target
         }
         if !result.errors.isEmpty {
             throw ControlCenterHostError.blocked(result.errors.joined(separator: "\n"))
@@ -133,18 +156,24 @@ extension ControlCenterCoordinator {
 
     func indexedSession(_ target: ControlCenterTarget) async throws -> SessionEntry {
         guard let id = target.sessionID, !id.isEmpty else { throw ControlCenterHostError.blocked("Choose one exact indexed session.") }
-        let outcome = await vaultIndex().searchAllSessions(rawQuery: "agent:omp \(id)")
+        let agent = try await sessionSource(target.agentID)
+        let outcome = await vaultIndex().searchSessions(query: id, scope: .agent(agent), offset: 0, limit: 500)
         try checkCancellation()
-        var entries = outcome.entries.filter { $0.agent.rawValue == "omp" && $0.sessionId == id }
+        guard outcome.errors.isEmpty else { throw ControlCenterHostError.blocked(outcome.errors.joined(separator: "\n")) }
+        var entries = outcome.entries.filter { $0.agent.rawValue == target.agentID && $0.sessionId == id }
         if entries.isEmpty {
-            let recent = await vaultIndex().loadRecentSessions(limitPerAgent: 500)
-            entries = recent.entries.filter { $0.agent.rawValue == "omp" && $0.sessionId == id }
+            let recent = await vaultIndex().searchSessions(query: "", scope: .agent(agent), offset: 0, limit: 500)
+            try checkCancellation()
+            guard recent.errors.isEmpty else { throw ControlCenterHostError.blocked(recent.errors.joined(separator: "\n")) }
+            entries = recent.entries.filter { $0.agent.rawValue == target.agentID && $0.sessionId == id }
         }
-        guard entries.count == 1, let entry = entries.first, let file = entry.fileURL else {
+        guard entries.count == 1, let entry = entries.first else {
             throw ControlCenterHostError.blocked("Session is missing or ambiguous in the current Vault index. Search again; no session was started.")
         }
-        if let expected = target.sessionFile, canonicalPath(expected) != canonicalPath(file.path) {
-            throw ControlCenterHostError.blocked("The indexed session moved. Select its current search result before resuming.")
+        if target.agentID == "omp", let expected = target.sessionFile {
+            guard let file = entry.fileURL, canonicalPath(expected) == canonicalPath(file.path) else {
+                throw ControlCenterHostError.blocked("The indexed session moved. Select its current search result before resuming.")
+            }
         }
         return entry
     }
@@ -197,6 +226,37 @@ extension ControlCenterCoordinator {
                     return (dock?.scope == .workspace ? dock?.workspaceId : nil, "Focused the existing exact session in its Dock.")
                 }
             }
+        }
+        if entry.agent.rawValue != "omp" {
+            guard let launch = entry.resumeLaunch else {
+                throw ControlCenterHostError.blocked("This source does not provide a resumable launch for the indexed session.")
+            }
+            if let cwd = launch.workingDirectory { _ = try logicalDirectory(cwd) }
+            let manager = try currentManager()
+            let kind = entry.agent.rawValue
+            let claim: AgentResumeLaunchGuard.Claim?
+            switch launch.strategy {
+            case .restoreVerb:
+                claim = nil
+            case .legacyCommand:
+                guard let acquired = AgentResumeLaunchGuard.shared.claimResumeLaunchWithToken(kind: kind, sessionId: entry.sessionId) else {
+                    throw ControlCenterHostError.blocked("This session already has a pending resume. Wait for it rather than launching a copy.")
+                }
+                claim = acquired
+            }
+            guard let workspace = manager.addWorkspaceIfActive(
+                title: target.name,
+                workingDirectory: launch.workingDirectory,
+                initialTerminalInput: launch.initialInput,
+                initialTerminalStartupRestoreAgent: launch.startupRestoreAgent,
+                inheritWorkingDirectory: false
+            ) else {
+                if let claim {
+                    AgentResumeLaunchGuard.shared.releaseResumeLaunch(kind: kind, sessionId: entry.sessionId, claim: claim)
+                }
+                throw ControlCenterHostError.blocked("The workspace could not be created. No resume was launched.")
+            }
+            return (workspace.id, "Submitted the exact indexed \(entry.agent.displayName) session through its Vault resume adapter. Launch admission and completion are not yet observed.")
         }
         guard let cwd = entry.cwd, !cwd.isEmpty, let file = entry.fileURL else {
             throw ControlCenterHostError.blocked("The indexed session has no working directory or journal.")

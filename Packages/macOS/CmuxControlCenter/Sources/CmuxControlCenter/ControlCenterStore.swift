@@ -8,6 +8,7 @@ public enum ControlCenterStoreError: Error, LocalizedError, Equatable, Sendable 
     case privateConfiguration(Int32)
     case insecureConfiguration
     case invalidConfiguration
+    case duplicateFavorite
 
     public var errorDescription: String? {
         switch self {
@@ -17,6 +18,7 @@ public enum ControlCenterStoreError: Error, LocalizedError, Equatable, Sendable 
         case .privateConfiguration(let code): return "Private connection configuration failed (POSIX \(code))."
         case .insecureConfiguration: return "Connection configuration must be a regular, owner-only (0600) file."
         case .invalidConfiguration: return "Connection configuration is invalid."
+        case .duplicateFavorite: return "This session is already saved as another favorite. Edit that favorite instead."
         }
     }
 }
@@ -39,8 +41,19 @@ public actor ControlCenterStore {
         try database.snapshot()
     }
 
-    public func saveFavorite(_ target: ControlCenterTarget) throws {
+    @discardableResult
+    public func saveFavorite(_ target: ControlCenterTarget) throws -> ControlCenterTarget {
+        if let identity = target.sessionIdentity {
+            let favorites = try database.snapshot().favorites
+            if let existing = favorites.first(where: { $0.id != target.id && $0.sessionIdentity == identity }) {
+                guard !favorites.contains(where: { $0.id == target.id }) else {
+                    throw ControlCenterStoreError.duplicateFavorite
+                }
+                return existing
+            }
+        }
         try database.save(target, id: target.id, table: .favorites)
+        return target
     }
 
     public func removeFavorite(_ id: UUID) throws {

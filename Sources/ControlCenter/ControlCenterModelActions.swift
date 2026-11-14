@@ -14,6 +14,11 @@ extension ControlCenterCoordinator {
     var modelTools: [ControlCenterTool] {
         let string: ControlCenterJSON = .object(["type": .string("string")])
         let boolean: ControlCenterJSON = .object(["type": .string("boolean")])
+        let source: ControlCenterJSON = .object([
+            "type": .string("string"),
+            "description": .string("Exact history-enabled Vault agent ID, default omp. search_sessions returns available source IDs."),
+            "default": .string("omp")
+        ])
         let targetDefinition: ControlCenterJSON = .object(["anyOf": .array([
             .object([
                 "type": .string("object"),
@@ -27,6 +32,7 @@ extension ControlCenterCoordinator {
                     "name": string,
                     "kind": .object(["type": .string("string"), "enum": .array([.string("session")])]),
                     "session_id": string,
+                    "agent_id": source,
                     "path": string
                 ]),
                 "required": .array([.string("name"), .string("kind"), .string("session_id")]),
@@ -53,10 +59,10 @@ extension ControlCenterCoordinator {
             "maxItems": .number(32)
         ])
         return [
-            Self.tool("search_sessions", "Search real OMP Vault sessions. Return candidates; never choose a first result when ambiguous.", ["query": string], required: ["query"]),
+            Self.tool("search_sessions", "Search one history-enabled Vault source (default omp). Returns available source IDs and candidates; never choose a first result when ambiguous.", ["query": string, "agent_id": source], required: ["query"]),
             Self.tool("list_saved", "List exact favorites and collections with IDs and ordered targets.", [:]),
             Self.tool("current_state", "Read bounded metadata for the current cmux window: workspace IDs, titles, directories, selected workspace and native group membership. Does not read terminal contents, environment, credentials or other windows. Never infer a session ID from a workspace title.", [:]),
-            Self.tool("open_session", "Focus or resume one exact session ID returned by search_sessions. Held, unknown and moved sessions are blocked; never fork.", ["session_id": string], required: ["session_id"]),
+            Self.tool("open_session", "Focus or resume one exact agent_id + session_id returned by search_sessions. Source defaults to omp. OMP held, unknown and moved sessions are blocked; other sources use their Vault launch admission. Never fork.", ["session_id": string, "agent_id": source], required: ["session_id"]),
             Self.tool("open_favorite", "Open one exact saved favorite offline.", ["id": string], required: ["id"]),
             Self.tool("open_collection", "Launch a saved ordered collection, or only failed/blocked targets from its latest receipt. No implicit rollback.", ["id": string, "retry_failed_only": boolean], required: ["id"]),
             Self.tool("save_favorite", "Only on an explicit save/edit request: persist one favorite. Supply id only to edit an existing favorite. Inline sessions must be exact current search candidates; favorite_id resolves a saved target. Never accepts journal paths or commands.", ["id": string, "target": targetDefinition], required: ["target"]),
@@ -206,38 +212,35 @@ extension ControlCenterCoordinator {
             }
             if favorite.kind == .session {
                 let entry = try await indexedSession(favorite)
-                guard let cwd = entry.cwd, !cwd.isEmpty, let file = entry.fileURL else {
-                    throw ControlCenterHostError.blocked("The indexed favorite session has no authoritative cwd or journal.")
-                }
-                let logicalPath = canonicalPath(favorite.path) == canonicalPath(cwd) ? favorite.path : cwd
-                return ControlCenterTarget(id: favorite.id, name: favorite.name, kind: .session, path: logicalPath, sessionID: entry.sessionId, sessionFile: file.path)
+                let cwd = entry.cwd ?? entry.resumeLaunch?.workingDirectory ?? ""
+                let logicalPath = cwd.isEmpty ? "" : (canonicalPath(favorite.path) == canonicalPath(cwd) ? favorite.path : cwd)
+                return ControlCenterTarget(id: favorite.id, name: favorite.name, kind: .session, path: logicalPath, sessionID: entry.sessionId, sessionFile: entry.fileURL?.path, agentID: entry.agent.rawValue)
             }
             return favorite
         }
-        guard Set(fields.keys).isSubset(of: ["name", "kind", "path", "session_id"]),
+        guard Set(fields.keys).isSubset(of: ["name", "kind", "path", "session_id", "agent_id"]),
               let rawKind = fields["kind"]?.stringValue, let kind = ControlCenterTarget.Kind(rawValue: rawKind) else {
-            throw ControlCenterHostError.blocked("Use only an existing target kind and its name/path/session_id fields. Journal paths and commands are not accepted.")
+            throw ControlCenterHostError.blocked("Use only an existing target kind and its name/path/session_id/agent_id fields. Journal paths and commands are not accepted.")
         }
         let name = try modelTargetText(fields["name"], field: "Target name", maximum: 160)
         if kind == .session {
             let sessionID = try modelTargetText(fields["session_id"], field: "Session ID", maximum: 256)
-            let matches = sessions.filter { $0.sessionID == sessionID }
+            let agentID = try fields["agent_id"].map { try modelTargetText($0, field: "Agent ID", maximum: 128) } ?? "omp"
+            let matches = sessions.filter { $0.agentID == agentID && $0.sessionID == sessionID }
             guard matches.count == 1, let candidate = matches.first else {
                 throw ControlCenterHostError.blocked("Search sessions first, then choose one exact current candidate. Ambiguous or unknown sessions cannot be saved or opened.")
             }
             let entry = try await indexedSession(candidate)
-            guard let cwd = entry.cwd, !cwd.isEmpty, let file = entry.fileURL else {
-                throw ControlCenterHostError.blocked("The indexed session has no authoritative cwd or journal.")
-            }
+            let cwd = entry.cwd ?? entry.resumeLaunch?.workingDirectory ?? ""
             if let requestedPath = fields["path"] {
                 let path = try modelTargetText(requestedPath, field: "Session cwd", maximum: 4096)
                 guard canonicalPath(path) == canonicalPath(cwd) else {
                     throw ControlCenterHostError.blocked("Session cwd must match the current indexed candidate.")
                 }
             }
-            return ControlCenterTarget(name: name, kind: .session, path: candidate.path.isEmpty ? cwd : candidate.path, sessionID: entry.sessionId, sessionFile: file.path)
+            return ControlCenterTarget(name: name, kind: .session, path: candidate.path.isEmpty ? cwd : candidate.path, sessionID: entry.sessionId, sessionFile: entry.fileURL?.path, agentID: entry.agent.rawValue)
         }
-        guard fields["session_id"] == nil else { throw ControlCenterHostError.blocked("Only session targets accept session_id.") }
+        guard fields["session_id"] == nil, fields["agent_id"] == nil else { throw ControlCenterHostError.blocked("Only session targets accept session_id and agent_id.") }
         let path = try modelTargetText(fields["path"], field: "Target path", maximum: 4096)
         if kind == .url {
             guard let url = URL(string: path), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
@@ -263,7 +266,7 @@ extension ControlCenterCoordinator {
             var target = try await resolveModelTarget(definition)
             if let old = previous.first(where: { old in
                 guard !usedIDs.contains(old.id), old.kind == target.kind else { return false }
-                if target.kind == .session { return old.sessionID == target.sessionID }
+                if target.kind == .session { return old.sessionIdentity == target.sessionIdentity }
                 if target.kind == .url { return old.path == target.path }
                 return canonicalPath(old.path) == canonicalPath(target.path)
             }) {
@@ -289,8 +292,10 @@ extension ControlCenterCoordinator {
         do {
             switch call.name {
             case "search_sessions":
-                try await findSessions(string("query"))
-                return try toolJSON(sessions)
+                let agentID = try args["agent_id"].map { try modelTargetText($0, field: "Agent ID", maximum: 128) } ?? "omp"
+                try await findSessions(string("query"), agentID: agentID)
+                let sources = sessionSources.map { ControlCenterJSON.object(["agent_id": .string($0.rawValue), "name": .string($0.displayName)]) }
+                return .object(["sources": .array(sources), "agent_id": .string(agentID), "sessions": try toolJSON(sessions)])
             case "list_saved":
                 return .object(["favorites": try toolJSON(snapshot.favorites), "collections": try toolJSON(snapshot.collections)])
             case "current_state":
@@ -318,8 +323,10 @@ extension ControlCenterCoordinator {
                 ])
             case "open_session":
                 let sessionID = try string("session_id")
-                guard let target = sessions.first(where: { $0.sessionID == sessionID }) else {
-                    throw ControlCenterHostError.blocked("Search first and select one exact session from the current candidates.")
+                let agentID = try args["agent_id"].map { try modelTargetText($0, field: "Agent ID", maximum: 128) } ?? "omp"
+                let matches = sessions.filter { $0.agentID == agentID && $0.sessionID == sessionID }
+                guard matches.count == 1, let target = matches.first else {
+                    throw ControlCenterHostError.blocked("Search first and select one exact source and session from the current candidates.")
                 }
                 return try toolJSON(try await openTargetRecording(target))
             case "open_favorite":
@@ -348,9 +355,9 @@ extension ControlCenterCoordinator {
                 var target = try await resolveModelTarget(definition)
                 target.id = favoriteID
                 try checkCancellation()
-                try await localStore().saveFavorite(target)
+                target = try await localStore().saveFavorite(target)
                 try await refreshSnapshot()
-                try await record(ControlCenterStep(targetID: favoriteID, title: "Save favorite", status: .success, detail: "Saved the explicitly requested favorite: \(target.name). No target was launched."))
+                try await record(ControlCenterStep(targetID: target.id, title: "Save favorite", status: .success, detail: "Saved the explicitly requested favorite: \(target.name). No target was launched."))
                 return try toolJSON(target)
             case "delete_favorite":
                 let favoriteID = try id("id")

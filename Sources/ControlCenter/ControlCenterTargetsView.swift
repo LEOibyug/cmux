@@ -8,22 +8,44 @@ struct ControlCenterSessionsView: View {
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
+                Picker(ControlCenterStrings.text("sessionSource"), selection: $coordinator.sessionSourceID) {
+                    if !coordinator.sessionSources.contains(where: { $0.rawValue == "omp" }) {
+                        Text("OMP").tag("omp").disabled(true)
+                    }
+                    ForEach(coordinator.sessionSources) { source in
+                        Text(source.displayName).tag(source.rawValue)
+                    }
+                }
+                .frame(maxWidth: 220)
+                .disabled(coordinator.isRunning)
                 TextField(ControlCenterStrings.text("searchSessions"), text: $query)
                     .onSubmit { Task { await coordinator.searchSessions(query) } }
                 Button(ControlCenterStrings.text("search")) { Task { await coordinator.searchSessions(query) } }
             }
+            .disabled(coordinator.isRunning)
             Text(ControlCenterStrings.text("sessionHint")).font(.caption).foregroundStyle(.secondary)
+            if let source = coordinator.sessionResultsSourceID, source != coordinator.sessionSourceID {
+                Text("\(ControlCenterStrings.text("sessionResultsSource")): \(coordinator.sessionSources.first(where: { $0.rawValue == source })?.displayName ?? source)")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             List(coordinator.sessions) { target in
                 HStack {
                     ControlCenterTargetLabelView(target: target)
                     Spacer()
-                    Button(ControlCenterStrings.text("favorite")) { Task { await coordinator.saveFavorite(target) } }
+                    let saved = coordinator.savedFavorite(for: target) != nil
+                    Button {
+                        Task { await coordinator.toggleFavorite(target) }
+                    } label: {
+                        Label(ControlCenterStrings.text(saved ? "saved" : "favorite"), systemImage: saved ? "checkmark" : "bookmark")
+                    }
+                    .help(ControlCenterStrings.text(saved ? "removeSaved" : "favorite"))
+                    .disabled(coordinator.isRunning || coordinator.isSavingFavorites)
                     Button(ControlCenterStrings.text("open")) { Task { await coordinator.open(target) } }
                         .disabled(coordinator.isRunning)
                 }
             }
         }
-        .task { await coordinator.searchSessions(query) }
+        .task(id: coordinator.sessionSourceID) { await coordinator.searchSessions(query) }
     }
 }
 
@@ -33,7 +55,10 @@ struct ControlCenterTargetLabelView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(target.name).fontWeight(.medium)
             Text(target.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            if let session = target.sessionID { Text(session).font(.caption2).foregroundStyle(.secondary).textSelection(.enabled) }
+            if let session = target.sessionID {
+                Text("\(SessionAgent(rawValue: target.agentID)?.displayName ?? target.agentID) · \(session)")
+                    .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
+            }
         }
     }
 }
@@ -53,21 +78,25 @@ struct ControlCenterFavoritesView: View {
                     Spacer()
                     Button(ControlCenterStrings.text("open")) { Task { await coordinator.open(target) } }.disabled(coordinator.isRunning)
                     Button(ControlCenterStrings.text("edit")) { editing = target }
+                        .disabled(coordinator.isRunning || coordinator.isSavingFavorites)
                     Button(ControlCenterStrings.text("remove")) { Task { await coordinator.deleteFavorite(target.id) } }
+                        .disabled(coordinator.isRunning || coordinator.isSavingFavorites)
                 }
             }
         }
         .sheet(item: $editing) { target in
-            ControlCenterTargetEditorView(target: target) { updated in
+            ControlCenterTargetEditorView(target: target, sources: coordinator.sessionSources) { updated in
                 Task { await coordinator.saveFavorite(updated) }
             }
         }
+        .task { await coordinator.refreshSessionSources() }
     }
 }
 
 struct ControlCenterTargetEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @State var target: ControlCenterTarget
+    let sources: [SessionAgent]
     let save: (ControlCenterTarget) -> Void
 
     var body: some View {
@@ -82,15 +111,25 @@ struct ControlCenterTargetEditorView: View {
                 }
                 TextField(ControlCenterStrings.text("path"), text: $target.path)
                 if target.kind == .session {
+                    Picker(ControlCenterStrings.text("sessionSource"), selection: $target.agentID) {
+                        if !sources.contains(where: { $0.rawValue == target.agentID }) {
+                            Text(SessionAgent(rawValue: target.agentID)?.displayName ?? target.agentID).tag(target.agentID)
+                        }
+                        ForEach(sources) { source in Text(source.displayName).tag(source.rawValue) }
+                    }
+                    .onChange(of: target.agentID) { _, _ in
+                        target.sessionID = nil
+                        target.sessionFile = nil
+                    }
                     TextField(ControlCenterStrings.text("sessionID"), text: Binding(get: { target.sessionID ?? "" }, set: { target.sessionID = $0 }))
-                    TextField(ControlCenterStrings.text("sessionFile"), text: Binding(get: { target.sessionFile ?? "" }, set: { target.sessionFile = $0 }))
+                    Text(ControlCenterStrings.text("indexedSessionHint")).font(.caption).foregroundStyle(.secondary)
                 }
             }
             HStack {
                 Spacer()
                 Button(ControlCenterStrings.text("cancel")) { dismiss() }
                 Button(ControlCenterStrings.text("save")) { save(target); dismiss() }
-                    .disabled(target.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || target.path.isEmpty || (target.kind == .session && (target.sessionID ?? "").isEmpty && (target.sessionFile ?? "").isEmpty))
+                    .disabled(target.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (target.kind != .session && target.path.isEmpty) || (target.kind == .session && (target.sessionID ?? "").isEmpty))
             }
         }.padding(24).frame(width: 520)
     }

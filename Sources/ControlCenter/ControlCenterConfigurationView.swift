@@ -61,6 +61,18 @@ struct ControlCenterConnectionView: View {
         Form {
             Section {
                 Text(ControlCenterStrings.text("connectionHint")).foregroundStyle(.secondary)
+                Button(ControlCenterStrings.text("importCodexpress")) {
+                    Task { await coordinator.importCodexpressConnection() }
+                }
+                .accessibilityIdentifier("controlCenter.importCodexpress")
+                Text(ControlCenterStrings.text("codexpressImportHint")).font(.caption).foregroundStyle(.secondary)
+                if !coordinator.isRunning,
+                   coordinator.operation?.title == ControlCenterStrings.text("importCodexpress"),
+                   let step = coordinator.operation?.steps.first(where: { $0.status == .success }) {
+                    Label(step.detail, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .accessibilityIdentifier("controlCenter.codexpressImportSuccess")
+                }
                 TextField(ControlCenterStrings.text("baseURL"), text: $coordinator.connection.baseURL)
                 SecureField(ControlCenterStrings.text("apiKey"), text: $coordinator.connection.apiKey)
                     .accessibilityIdentifier("controlCenter.apiKey")
@@ -84,6 +96,7 @@ struct ControlCenterConnectionView: View {
             }
             Button(ControlCenterStrings.text("saveConnection")) { Task { await coordinator.saveConnection() } }
         }.formStyle(.grouped)
+            .disabled(coordinator.isRunning)
     }
 }
 

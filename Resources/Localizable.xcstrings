@@ -535108,6 +535108,397 @@
           }
         }
       }
+    },
+    "controlCenter.importCodexpress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import from Codexpress"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从 Codexpress 导入"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從 Codexpress 匯入"
+          }
+        }
+      }
+    },
+    "controlCenter.codexpressImportHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read and save the running Codexpress chat ingress address and client API key. Your model, OMP executable, and default directory stay unchanged. No model request is sent."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取并保存正在运行的 Codexpress 聊天入口地址和客户端 API Key。保留模型、OMP 可执行文件和默认目录，不发送模型请求。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讀取並儲存正在執行的 Codexpress 聊天入口位址和用戶端 API Key。保留模型、OMP 執行檔和預設目錄，不傳送模型請求。"
+          }
+        }
+      }
+    },
+    "controlCenter.codexpressImported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported and saved the Codexpress address and client API key. Model, OMP executable, and default directory were preserved."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已导入并保存 Codexpress 地址和客户端 API Key，保留了模型、OMP 可执行文件和默认目录。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已匯入並儲存 Codexpress 位址和用戶端 API Key，保留了模型、OMP 執行檔和預設目錄。"
+          }
+        }
+      }
+    },
+    "controlCenter.codexpressSaveFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not save the imported Codexpress connection privately. The previous connection was not changed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法安全保存导入的 Codexpress 连接，原连接未更改。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法安全儲存匯入的 Codexpress 連線，原連線未變更。"
+          }
+        }
+      }
+    },
+    "controlCenter.codexpressInvalidStateDirectory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Codexpress state directory cannot be used for its local control socket. The connection was not changed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 状态目录无法用于本地控制套接字，连接未更改。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 狀態目錄無法用於本機控制通訊端，連線未變更。"
+          }
+        }
+      }
+    },
+    "controlCenter.codexpressUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cannot reach Codexpress. Open Codexpress and enable its chat ingress, then import again. The connection was not changed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法连接 Codexpress。请打开 Codexpress 并启用聊天入口后重试导入。连接未更改。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法連線 Codexpress。請開啟 Codexpress 並啟用聊天入口後重試匯入。連線未變更。"
+          }
+        }
+      }
+    },
+    "controlCenter.codexpressTimedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress did not finish responding in time. The connection was not changed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 响应超时，连接未更改。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 回應逾時，連線未變更。"
+          }
+        }
+      }
+    },
+    "controlCenter.codexpressInvalidResponse": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress returned an invalid local control response. The connection was not changed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 返回了无效的本地控制响应，连接未更改。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 傳回了無效的本機控制回應，連線未變更。"
+          }
+        }
+      }
+    },
+    "controlCenter.codexpressRejected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress rejected the read-only import request. The connection was not changed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 拒绝了只读导入请求，连接未更改。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 拒絕了唯讀匯入請求，連線未變更。"
+          }
+        }
+      }
+    },
+    "controlCenter.codexpressIngressNotRunning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable and start the chat ingress in Codexpress before importing. The connection was not changed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请先在 Codexpress 中启用并启动聊天入口，再执行导入。连接未更改。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "請先在 Codexpress 中啟用並啟動聊天入口，再執行匯入。連線未變更。"
+          }
+        }
+      }
+    },
+    "controlCenter.codexpressInvalidPort": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress did not report a valid chat ingress port. The connection was not changed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 未返回有效的聊天入口端口，连接未更改。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 未傳回有效的聊天入口連接埠，連線未變更。"
+          }
+        }
+      }
+    },
+    "controlCenter.codexpressInvalidKey": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress did not report a valid client API key. The connection was not changed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 未返回有效的客户端 API Key，连接未更改。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexpress 未傳回有效的用戶端 API Key，連線未變更。"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionResultsSource": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Results from"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "结果来源"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "結果來源"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionSource": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent Source"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent 来源"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent 來源"
+          }
+        }
+      }
+    },
+    "controlCenter.saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已收藏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已收藏"
+          }
+        }
+      }
+    },
+    "controlCenter.removeSaved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove saved favorite"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消收藏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消收藏"
+          }
+        }
+      }
+    },
+    "controlCenter.indexedSessionHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uses this source’s exact current Vault record, never a supplied journal path or command."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用此来源当前准确的 Vault 记录，不接受自定义会话文件路径或命令。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用此來源目前確切的 Vault 記錄，不接受自訂工作階段檔案路徑或命令。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

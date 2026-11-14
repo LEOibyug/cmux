@@ -81,6 +81,23 @@ enum ControlCenterStrings {
         "apply": "Apply",
         "number": "Number",
         "boolean": "Boolean",
-        "settingsHint": "Open sessions, favorites, launch collections, and local operations."
+        "settingsHint": "Open sessions, favorites, launch collections, and local operations.",
+        "importCodexpress": "Import from Codexpress",
+        "codexpressImportHint": "Read and save the running Codexpress chat ingress address and client API key. Your model, OMP executable, and default directory stay unchanged. No model request is sent.",
+        "codexpressImported": "Imported and saved the Codexpress address and client API key. Model, OMP executable, and default directory were preserved.",
+        "codexpressSaveFailed": "Could not save the imported Codexpress connection privately. The previous connection was not changed.",
+        "codexpressInvalidStateDirectory": "The Codexpress state directory cannot be used for its local control socket. The connection was not changed.",
+        "codexpressUnavailable": "Cannot reach Codexpress. Open Codexpress and enable its chat ingress, then import again. The connection was not changed.",
+        "codexpressTimedOut": "Codexpress did not finish responding in time. The connection was not changed.",
+        "codexpressInvalidResponse": "Codexpress returned an invalid local control response. The connection was not changed.",
+        "codexpressRejected": "Codexpress rejected the read-only import request. The connection was not changed.",
+        "codexpressIngressNotRunning": "Enable and start the chat ingress in Codexpress before importing. The connection was not changed.",
+        "codexpressInvalidPort": "Codexpress did not report a valid chat ingress port. The connection was not changed.",
+        "codexpressInvalidKey": "Codexpress did not report a valid client API key. The connection was not changed.",
+        "sessionResultsSource": "Results from",
+        "sessionSource": "Agent Source",
+        "saved": "Saved",
+        "removeSaved": "Remove saved favorite",
+        "indexedSessionHint": "Uses this source’s exact current Vault record, never a supplied journal path or command."
     ]
 }

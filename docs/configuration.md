@@ -17,14 +17,22 @@ Keyboard Shortcuts or `shortcuts.bindings`. This is a native local controller,
 not an embedded coding-agent terminal or a permanently resumed model thread.
 
 Sessions, favorites, named launch collections, explicit preferences, settings
-and operation receipts work without a model. The installed OMP executable is a
-separate runtime dependency; Connection can select an absolute installed path
-and a default directory. Exact session opens use the indexed journal, never
-`--continue`: an already running session is focused, known-held/unknown ownership
-is blocked, and cmux serializes pending resumes. OMP does not expose an atomic
-lease-transfer/no-fork launch protocol; an external writer racing the final
-probe-to-launch gap remains an upstream boundary. The controller never steals a
-lease, deliberately forks, or automatically retries a failed resume.
+and operation receipts work without a model. Sessions default to OMP; the
+source picker lists agents whose history is enabled in Vault settings. Searches
+and exact opens stay within that source and never enable disabled histories.
+The Saved button toggles the persisted bookmark, identified by agent and session
+ID rather than a temporary search-result ID. Identical session IDs from different
+agents remain separate favorites, including after restart.
+
+The installed OMP executable is a separate runtime dependency; Connection can
+select an absolute installed path and a default directory. Exact OMP opens use
+the indexed journal, never `--continue`: an already running session is focused,
+known-held/unknown ownership is blocked, and cmux serializes pending resumes.
+OMP does not expose an atomic lease-transfer/no-fork launch protocol; an external
+writer racing the final probe-to-launch gap remains an upstream boundary. Other
+agents use their existing Vault resume adapters and installed runtime; their
+sessions are not passed through OMP's journal or lease checks. The controller
+never steals a lease, deliberately forks, or automatically retries a failed resume.
 
 Saved collections contain ordered target snapshots with stable item IDs.
 Opening a collection reuses existing targets where possible; independent failed
@@ -43,6 +51,15 @@ The model connection is configured in **Control Center → Connection**:
 - API Key: stored in the controller's private connection file, not `cmux.json`,
   UserDefaults, prompts, SQLite records, or operation history. No keychain/login
   integration is required.
+
+**Import from Codexpress** reads the running chat ingress address and client API
+key through the local read-only `chatbot.status` and `chatbot.key` control calls.
+The socket is `control.sock` under `CODEXPRESS_STATE_DIR`, or under
+`~/Library/Application Support/Codexpress` by default. Import saves the address
+and client key while preserving the model, OMP executable and default directory.
+It does not use the management Key, enable or restart the ingress, query models,
+or send a model request. An unavailable or disabled ingress leaves the saved
+connection unchanged.
 
 The production data directory is
 `~/Library/Application Support/com.cmuxterm.app/ControlCenter/`:

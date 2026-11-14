@@ -26,6 +26,18 @@ final class ControlCenterCoordinator: ObservableObject {
     @Published var snapshot = ControlCenterSnapshot()
     @Published var connection = ControlCenterConnection()
     @Published var sessions: [ControlCenterTarget] = []
+    @Published var sessionSources: [SessionAgent] = []
+    @Published var sessionResultsSourceID: String?
+    @Published var sessionSourceID = "omp" {
+        didSet {
+            if oldValue != sessionSourceID {
+                sessionSearchGeneration += 1
+                sessions = []
+                sessionResultsSourceID = nil
+            }
+        }
+    }
+    @Published var isSavingFavorites = false
     @Published var settings: [ControlCenterSetting] = []
     @Published var models: [String] = []
     @Published var operation: ControlCenterOperation?
@@ -43,7 +55,8 @@ final class ControlCenterCoordinator: ObservableObject {
     var lastContext: [ControlCenterJSON] = []
     var contextGeneration = 0
     var collectionResults: [UUID: [UUID: ControlCenterStep]] = [:]
-    var sessionTargetIDs: [String: UUID] = [:]
+    var sessionTargetIDs: [ControlCenterTarget.SessionIdentity: UUID] = [:]
+    var sessionSearchGeneration = 0
     var openedTargets: [String: UUID] = [:]
 
     func configure(settingsRuntime: SettingsRuntime) {
@@ -81,10 +94,36 @@ final class ControlCenterCoordinator: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
 
+    func savedFavorite(for target: ControlCenterTarget) -> ControlCenterTarget? {
+        if let identity = target.sessionIdentity {
+            return snapshot.favorites.first { $0.sessionIdentity == identity }
+        }
+        return snapshot.favorites.first { $0.id == target.id }
+    }
+
+    func toggleFavorite(_ target: ControlCenterTarget) async {
+        guard !isRunning, !isSavingFavorites else { return }
+        isSavingFavorites = true
+        defer { isSavingFavorites = false }
+        await mutate { store in
+            if let saved = self.savedFavorite(for: target) {
+                try await store.removeFavorite(saved.id)
+            } else {
+                try await store.saveFavorite(target)
+            }
+        }
+    }
+
     func saveFavorite(_ target: ControlCenterTarget) async {
-        await mutate { try await $0.saveFavorite(target) }
+        guard !isSavingFavorites else { return }
+        isSavingFavorites = true
+        defer { isSavingFavorites = false }
+        await mutate { _ = try await $0.saveFavorite(target) }
     }
     func deleteFavorite(_ id: UUID) async {
+        guard !isSavingFavorites else { return }
+        isSavingFavorites = true
+        defer { isSavingFavorites = false }
         await mutate { try await $0.removeFavorite(id) }
     }
     func saveCollection(_ collection: ControlCenterCollection) async {
