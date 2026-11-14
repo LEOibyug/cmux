@@ -44,6 +44,15 @@ final class ControlCenterCoordinator: ObservableObject {
     @Published var output = ""
     @Published var error: String?
     @Published var isRunning = false
+    @Published var chatTurns: [ControlCenterChatTurn] = []
+    @Published var chatDraft = ""
+    @Published var activeChatTurnID: UUID?
+    @Published var chatPresentationID = UUID()
+    @Published var streamingText = ""
+    @Published var pendingApproval: ControlCenterApproval?
+    @Published var accessMode = ControlCenterAccessMode.saved {
+        didSet { UserDefaults.standard.set(accessMode.rawValue, forKey: ControlCenterAccessMode.defaultsKey) }
+    }
 
     var settingsRuntime: SettingsRuntime?
     var hasLoadedConnection = false
@@ -58,6 +67,7 @@ final class ControlCenterCoordinator: ObservableObject {
     var sessionTargetIDs: [ControlCenterTarget.SessionIdentity: UUID] = [:]
     var sessionSearchGeneration = 0
     var openedTargets: [String: UUID] = [:]
+    var approvalContinuation: CheckedContinuation<Bool, Never>?
 
     func configure(settingsRuntime: SettingsRuntime) {
         self.settingsRuntime = settingsRuntime
@@ -158,6 +168,7 @@ final class ControlCenterCoordinator: ObservableObject {
         cancelled = false
         error = nil
         output = ""
+        streamingText = ""
         operation = ControlCenterOperation(title: title)
         let task = Task { @MainActor in
             do {
@@ -177,6 +188,7 @@ final class ControlCenterCoordinator: ObservableObject {
                 if let operation = self.operation { try await self.localStore().saveOperation(operation) }
                 try await self.refreshSnapshot()
             } catch { self.error = error.localizedDescription }
+            self.finishChatTurn()
             self.isRunning = false
             self.activeTask = nil
         }
@@ -202,12 +214,13 @@ final class ControlCenterCoordinator: ObservableObject {
         guard isRunning else { return }
         cancelled = true
         activeTask?.cancel()
+        resolveApproval(false)
     }
 
     func resetContext() {
         contextGeneration += 1
         lastContext = []
-        if !isRunning { output = "" }
+        if !isRunning { output = ""; streamingText = "" }
     }
 
     func loadModels() async {

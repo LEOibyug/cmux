@@ -468,19 +468,24 @@ extension SessionIndexStore {
         let roots = registeredSessionRoots(registration: registration, cwdFilter: cwdFilter)
         guard !roots.isEmpty else { return [] }
         let fm = FileManager.default
+        let ompSessionsRoot = registration.id == CmuxVaultAgentRegistration.builtInOmp.id
+            ? registration.sessionDirectory.map {
+                URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath).resolvingSymlinksInPath().standardizedFileURL.path
+            }
+            : nil
 
         var candidates: [(url: URL, modified: Date, prefilteredByRipgrep: Bool)] = []
         if !needle.isEmpty {
             for root in roots {
                 guard let rgPaths = await ripgrepMatchingPaths(needle: needle, root: root, fileGlob: "*.jsonl") else {
                     candidates.append(
-                        contentsOf: enumerateRegisteredJSONLCandidates(root: root).map {
+                        contentsOf: enumerateRegisteredJSONLCandidates(root: root, ompSessionsRoot: ompSessionsRoot).map {
                             (url: $0.0, modified: $0.1, prefilteredByRipgrep: false)
                         }
                     )
                     continue
                 }
-                for url in rgPaths {
+                for url in rgPaths where isRegisteredJSONLCandidate(url, ompSessionsRoot: ompSessionsRoot) {
                     guard let attrs = try? fm.attributesOfItem(atPath: url.path),
                           let modified = attrs[.modificationDate] as? Date else {
                         continue
@@ -491,7 +496,7 @@ extension SessionIndexStore {
         } else {
             for root in roots {
                 candidates.append(
-                    contentsOf: enumerateRegisteredJSONLCandidates(root: root).map {
+                    contentsOf: enumerateRegisteredJSONLCandidates(root: root, ompSessionsRoot: ompSessionsRoot).map {
                         (url: $0.0, modified: $0.1, prefilteredByRipgrep: false)
                     }
                 )
@@ -665,7 +670,19 @@ extension SessionIndexStore {
         return candidates
     }
 
-    nonisolated private static func enumerateRegisteredJSONLCandidates(root: String) -> [(URL, Date)] {
+    nonisolated private static func isRegisteredJSONLCandidate(_ url: URL, ompSessionsRoot: String?) -> Bool {
+        guard let ompSessionsRoot else { return true }
+        // OMP lists direct project-bucket journals, not the journals inside their artifact directories.
+        // Keep the existing flat sessions-root layout supported as well.
+        let directory = url.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.path
+        return directory == ompSessionsRoot
+            || (directory as NSString).deletingLastPathComponent == ompSessionsRoot
+    }
+
+    nonisolated private static func enumerateRegisteredJSONLCandidates(
+        root: String,
+        ompSessionsRoot: String?
+    ) -> [(URL, Date)] {
         let fm = FileManager.default
         var isDirectory: ObjCBool = false
         guard fm.fileExists(atPath: root, isDirectory: &isDirectory),
@@ -679,6 +696,7 @@ extension SessionIndexStore {
         }
         var candidates: [(URL, Date)] = []
         for case let url as URL in enumerator where url.pathExtension == "jsonl" {
+            guard isRegisteredJSONLCandidate(url, ompSessionsRoot: ompSessionsRoot) else { continue }
             let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
             guard values?.isRegularFile == true, let modified = values?.contentModificationDate else { continue }
             candidates.append((url, modified))

@@ -544,7 +544,7 @@ struct cmuxApp: App {
                     appDelegate.openPreferencesWindow(debugSource: "menu.cmdComma")
                 }
                 splitCommandButton(title: ControlCenterStrings.text("title"), shortcut: menuShortcut(for: .openControlCenter)) {
-                    ControlCenterWindowController.shared.show(activate: true)
+                    ControlCenterPresentation.show(activate: true, preferredWindow: NSApp.keyWindow ?? NSApp.mainWindow)
                 }
                 Button(AppDelegate.actionsAndLaunchersMenuTitle) {
                     appDelegate.presentActionsAndLaunchersCustomization(

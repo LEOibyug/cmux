@@ -290,9 +290,12 @@ struct SessionRectSnapshot: Codable, Equatable, Sendable {
 enum SessionSidebarSelection: String, Codable, Sendable, Equatable {
     case tabs
     case notifications
+    case controlCenter
 
     init(selection: SidebarSelection) {
         switch selection {
+        case .controlCenter:
+            self = .controlCenter
         case .tabs, .notifications:
             // Notifications moved from a window-level overlay to a pane tab.
             // Relaunch always lands on the workspace.
@@ -302,6 +305,8 @@ enum SessionSidebarSelection: String, Codable, Sendable, Equatable {
 
     var sidebarSelection: SidebarSelection {
         switch self {
+        case .controlCenter:
+            return .controlCenter
         case .tabs:
             return .tabs
         case .notifications:

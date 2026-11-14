@@ -113,6 +113,51 @@ private struct SidebarFooterIconButtonStyleBody: View {
     }
 }
 
+struct SidebarControlCenterButton: View {
+    @EnvironmentObject private var sidebarSelectionState: SidebarSelectionState
+    @State private var observedWindowReference = WeakWindowReference()
+    @State private var keyboardShortcutSettingsObserver = KeyboardShortcutSettingsObserver.shared
+
+    private var isSelected: Bool { sidebarSelectionState.selection == .controlCenter }
+
+    private var helpText: String {
+        let _ = keyboardShortcutSettingsObserver.revision
+        return KeyboardShortcutSettings.Action.openControlCenter.tooltip(ControlCenterStrings.text("launcherHelp"))
+    }
+
+    var body: some View {
+        Button(action: openChat) {
+            HStack(spacing: 7) {
+                CmuxSystemSymbolImage(systemName: "bubble.left.and.bubble.right", pointSize: 14, weight: .medium, tint: .accentColor)
+                Text(ControlCenterStrings.text("title"))
+                    .cmuxFont(size: 12, weight: .medium)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.clear)
+            )
+        }
+        .buttonStyle(SidebarFooterIconButtonStyle())
+        .safeHelp(helpText)
+        .background(WindowAccessor { window in observedWindowReference.window = window })
+        .accessibilityElement(children: .ignore)
+        .hintableAccessibilityLabel(ControlCenterStrings.text("title"))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAction { openChat() }
+        .accessibilityIdentifier("SidebarControlCenterButton")
+    }
+
+    private func openChat() {
+        ControlCenterPresentation.show(activate: true, preferredWindow: observedWindowReference.window)
+    }
+}
+
 #if DEBUG
 struct SidebarDevFooter: View {
     @ObservedObject var fileExplorerState: FileExplorerState

@@ -172,10 +172,17 @@ final class MainWindowFocusController {
         publishFeedFocusSnapshot()
     }
 
+    private var mainContentShowsWorkspace: Bool {
+        guard let window,
+              let context = AppDelegate.shared?.contextForMainTerminalWindow(window) else { return true }
+        return context.sidebarSelectionState.selection == .tabs
+    }
+
     func allowsTerminalFocus(workspaceId: UUID, panelId: UUID) -> Bool {
         if GhosttyApp.terminalSurfaceRegistry.isRightSidebarDockSurface(id: panelId) {
             return true
         }
+        guard mainContentShowsWorkspace else { return false }
         switch intent {
         case .rightSidebar:
             return false
@@ -192,6 +199,7 @@ final class MainWindowFocusController {
         containerPanelId: UUID,
         surfaceId: UUID
     ) -> Bool {
+        guard mainContentShowsWorkspace else { return false }
         if case .rightSidebar = intent {
             return false
         }
@@ -212,6 +220,7 @@ final class MainWindowFocusController {
     }
 
     func allowsBonsplitTabShortcutHints(workspaceId: UUID) -> Bool {
+        guard mainContentShowsWorkspace else { return false }
         guard ShortcutHintDebugSettings().modifierHoldHintsEnabled else { return false }
         guard tabManager?.selectedTabId == workspaceId else { return false }
         switch intent {
@@ -262,6 +271,7 @@ final class MainWindowFocusController {
 
     @discardableResult
     func restoreFocusedPanelFocusFromRightSidebarIfNeeded(currentResponder: NSResponder? = nil) -> Bool {
+        guard mainContentShowsWorkspace else { return false }
         let responder = currentResponder ?? window?.firstResponder
         let ownsResponder = responder.map(ownsRightSidebarFocus) ?? false
         let ownsIntent: Bool = {
@@ -331,6 +341,7 @@ final class MainWindowFocusController {
 
     @discardableResult
     private func restoreMainPanelTargetAfterWindowBecameKey() -> Bool {
+        guard mainContentShowsWorkspace else { return false }
         guard let window,
               let tabManager,
               let workspace = tabManager.selectedWorkspace,

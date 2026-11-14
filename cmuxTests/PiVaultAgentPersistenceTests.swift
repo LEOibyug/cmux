@@ -543,6 +543,101 @@ final class PiVaultAgentPersistenceTests: XCTestCase {
         XCTAssertEqual(entry.gitBranch, "issue-3575-vault-pi-agent-support")
     }
 
+    func testOMPConversationDiscoveryExcludesArtifactJournalsBeforeScanCapAndPagination() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cmux-omp-vault-conversations-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let cwd = "/tmp/omp conversation repo"
+        let projectDirectory = try XCTUnwrap(PiSessionLocator.projectDirectoryName(for: cwd))
+        let rootPath = tempDir.appendingPathComponent("\(projectDirectory)/root.jsonl").path
+        func writeJournal(_ relativePath: String, id: String, parentSession: String? = nil, modified: TimeInterval) throws {
+            let url = tempDir.appendingPathComponent(relativePath)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            var header: [String: Any] = ["type": "session", "version": 3, "id": id, "cwd": cwd]
+            header["parentSession"] = parentSession
+            let records: [[String: Any]] = [
+                ["type": "title", "title": "Conversation \(id)"],
+                header,
+                ["type": "message", "message": ["role": "user", "content": "artifact-discovery-probe \(id)"]]
+            ]
+            let jsonLines = try records.map { record in
+                String(decoding: try JSONSerialization.data(withJSONObject: record), as: UTF8.self)
+            }.joined(separator: "\n")
+            try (jsonLines + "\n").write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: modified)], ofItemAtPath: url.path)
+        }
+
+        try writeJournal("\(projectDirectory)/root.jsonl", id: "root", modified: 20)
+        try writeJournal("\(projectDirectory)/fork.jsonl", id: "fork", parentSession: rootPath, modified: 10)
+        try writeJournal("flat.jsonl", id: "flat", modified: 1)
+        try writeJournal("\(projectDirectory)/root/child.jsonl", id: "child", parentSession: rootPath, modified: 100)
+        try writeJournal("\(projectDirectory)/missing-parent/orphan.jsonl", id: "orphan-journal", modified: 200)
+        let copiedArtifact = "\(projectDirectory)/fork/copied.jsonl"
+        try writeJournal(copiedArtifact, id: "copied", parentSession: "/removed/original.jsonl", modified: 300)
+
+        // Newer artifacts must not spend the real scan budget before either conversation is reached.
+        let overflowDirectory = tempDir.appendingPathComponent("\(projectDirectory)/root/nested", isDirectory: true)
+        try FileManager.default.createDirectory(at: overflowDirectory, withIntermediateDirectories: true)
+        for index in 0..<SessionIndexStore.searchMaxFiles {
+            try FileManager.default.copyItem(
+                at: tempDir.appendingPathComponent(copiedArtifact),
+                to: overflowDirectory.appendingPathComponent("\(index).jsonl")
+            )
+        }
+
+        var registration = CmuxVaultAgentRegistration.builtInOmp
+        registration.sessionDirectory = tempDir.path
+        for cwdFilter in [nil, cwd] as [String?] {
+            let expected = cwdFilter == nil ? ["root", "fork", "flat"] : ["root", "fork"]
+            for needle in ["", "artifact-discovery-probe"] {
+                for page in [(offset: 0, limit: 10), (offset: 0, limit: 1), (offset: 1, limit: 1)] {
+                    let entries = await SessionIndexStore.loadRegisteredAgentEntries(
+                        registration: registration,
+                        needle: needle,
+                        cwdFilter: cwdFilter,
+                        offset: page.offset,
+                        limit: page.limit
+                    )
+                    XCTAssertEqual(
+                        entries.map(\.sessionId),
+                        Array(expected.dropFirst(page.offset).prefix(page.limit)),
+                        "cwd=\(cwdFilter ?? "all") needle=\(needle) offset=\(page.offset) limit=\(page.limit)"
+                    )
+                }
+            }
+        }
+
+        let alias = tempDir.appendingPathExtension("alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: tempDir)
+        defer { try? FileManager.default.removeItem(at: alias) }
+        registration.sessionDirectory = alias.path
+        for cwdFilter in [nil, cwd] as [String?] {
+            for needle in ["", "artifact-discovery-probe"] {
+                let entries = await SessionIndexStore.loadRegisteredAgentEntries(
+                    registration: registration,
+                    needle: needle,
+                    cwdFilter: cwdFilter,
+                    offset: 0,
+                    limit: 10
+                )
+                XCTAssertEqual(entries.map(\.sessionId), cwdFilter == nil ? ["root", "fork", "flat"] : ["root", "fork"])
+            }
+        }
+
+        var piRegistration = CmuxVaultAgentRegistration.builtInPi
+        piRegistration.sessionDirectory = tempDir.path
+        let piEntries = await SessionIndexStore.loadRegisteredAgentEntries(
+            registration: piRegistration,
+            needle: "orphan-journal",
+            cwdFilter: cwd,
+            offset: 0,
+            limit: 1
+        )
+        XCTAssertEqual(piEntries.map(\.sessionId), ["orphan-journal"])
+    }
+
     func testPiJSONLTypedContentBlocksUseFirstUserTextAsTitle() async throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("cmux-pi-vault-title-blocks-\(UUID().uuidString)", isDirectory: true)

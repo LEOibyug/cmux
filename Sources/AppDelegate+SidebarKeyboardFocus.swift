@@ -68,6 +68,7 @@ extension AppDelegate {
     }
 
     private func focusSelectedWorkspacePanel(manager: TabManager, window: NSWindow) {
+        contextForMainTerminalWindow(window)?.sidebarSelectionState.selection = .tabs
         _ = window.makeFirstResponder(nil)
         guard let workspace = manager.selectedWorkspace,
               let panelId = workspace.focusedPanelId,

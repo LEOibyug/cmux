@@ -4117,6 +4117,13 @@ class TabManager: ObservableObject {
         _ tabId: UUID,
         notificationDismissalContext: NotificationDismissalContext?
     ) {
+        if case .explicitWorkspaceResume? = notificationDismissalContext {
+            NotificationCenter.default.post(
+                name: .workspaceNavigationRequested,
+                object: self,
+                userInfo: [GhosttyNotificationKey.tabId: tabId]
+            )
+        }
         guard selectedTabId != tabId else {
             notificationDismissal.setPendingSelectionContext(nil)
             if let notificationDismissalContext {
@@ -4456,12 +4463,13 @@ class TabManager: ObservableObject {
         direction: WorkspaceCycleDirection,
         scope: WorkspaceCycleScope
     ) {
-        guard let currentId = selectedTabId,
-              let destinationId = workspaces.cycleDestination(
-                from: currentId,
-                direction: direction,
-                scope: scope
-              ) else {
+        guard let currentId = selectedTabId else { return }
+        guard let destinationId = workspaces.cycleDestination(
+            from: currentId,
+            direction: direction,
+            scope: scope
+        ) else {
+            selectWorkspaceId(currentId, notificationDismissalContext: .explicitWorkspaceResume)
             return
         }
 #if DEBUG
@@ -7327,6 +7335,8 @@ extension Notification.Name {
     static let agentInboxRequested = Notification.Name("cmux.agentInboxRequested")
     static let ghosttyDidSetTitle = Notification.Name("ghosttyDidSetTitle")
     static let ghosttyDidFocusTab = Notification.Name("ghosttyDidFocusTab")
+    /// Explicit workspace navigation, including reselecting the current workspace.
+    static let workspaceNavigationRequested = Notification.Name("cmux.workspaceNavigationRequested")
     static let ghosttyDidFocusSurface = Notification.Name("ghosttyDidFocusSurface")
     static let ghosttyDidBecomeFirstResponderSurface = Notification.Name("ghosttyDidBecomeFirstResponderSurface")
     static let browserDidBecomeFirstResponderWebView = CmuxWebView.didBecomeFirstResponderNotification

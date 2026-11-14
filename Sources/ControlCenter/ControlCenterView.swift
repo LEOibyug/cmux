@@ -1,104 +1,101 @@
 import SwiftUI
 import CmuxControlCenter
 
+enum ControlCenterSection: String, CaseIterable, Identifiable {
+    case chat, sessions, favorites, collections, workspace, preferences, settings, history, connection
+    var id: String { rawValue }
+    var title: String { ControlCenterStrings.text(rawValue) }
+    var symbol: String {
+        switch self {
+        case .chat: return "bubble.left.and.bubble.right"
+        case .sessions: return "clock"
+        case .favorites: return "bookmark"
+        case .collections: return "square.stack"
+        case .workspace: return "plus.rectangle"
+        case .preferences: return "brain"
+        case .settings: return "slider.horizontal.3"
+        case .history: return "list.bullet.rectangle"
+        case .connection: return "network"
+        }
+    }
+}
+
 struct ControlCenterView: View {
     @ObservedObject var coordinator: ControlCenterCoordinator
-    @State private var section: Section? = .operation
+    @State private var section: ControlCenterSection = .chat
 
-    private enum Section: String, CaseIterable, Identifiable {
-        case operation, sessions, favorites, collections, workspace, preferences, settings, history, connection
-        var id: String { rawValue }
-        var title: String { ControlCenterStrings.text(rawValue) }
-    }
+    private var busy: Bool { coordinator.isRunning || coordinator.activeChatTurnID != nil }
 
     var body: some View {
-        NavigationSplitView {
-            List(Section.allCases, selection: $section) { item in
-                Text(item.title).tag(item)
-            }
-            .navigationTitle(ControlCenterStrings.text("title"))
-            .frame(minWidth: 165)
-        } detail: {
-            VStack(alignment: .leading, spacing: 12) {
-                if let error = coordinator.error {
-                    Text(error).foregroundStyle(.red).textSelection(.enabled)
-                        .accessibilityIdentifier("controlCenter.error")
-                }
-                if coordinator.isRunning {
-                    HStack {
-                        ProgressView().controlSize(.small)
-                        Text(coordinator.operation?.title ?? ControlCenterStrings.text("operation"))
-                        Spacer()
-                        Button(ControlCenterStrings.text("cancel")) { coordinator.cancel() }
-                    }
-                }
-                Group {
-                    switch section ?? .operation {
-                    case .operation: ControlCenterOperationView(coordinator: coordinator)
-                    case .sessions: ControlCenterSessionsView(coordinator: coordinator)
-                    case .favorites: ControlCenterFavoritesView(coordinator: coordinator)
-                    case .collections: ControlCenterCollectionsView(coordinator: coordinator)
-                    case .workspace: ControlCenterWorkspaceView(coordinator: coordinator)
-                    case .preferences: ControlCenterPreferencesView(coordinator: coordinator)
-                    case .settings: ControlCenterSettingsView(coordinator: coordinator)
-                    case .history: ControlCenterHistoryView(coordinator: coordinator)
-                    case .connection: ControlCenterConnectionView(coordinator: coordinator)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-            .padding(20)
-            .navigationTitle(ControlCenterStrings.text("title"))
-            .navigationSubtitle((section ?? .operation).title)
-        }
-        .frame(minWidth: 800, minHeight: 560)
-        .task { await coordinator.load() }
-    }
-}
-
-struct ControlCenterOperationView: View {
-    @ObservedObject var coordinator: ControlCenterCoordinator
-    @State private var prompt = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(ControlCenterStrings.text("operationHint")).foregroundStyle(.secondary)
-            TextEditor(text: $prompt)
-                .font(.body)
-                .frame(minHeight: 90, maxHeight: 150)
-                .border(Color.secondary.opacity(0.3))
-                .accessibilityLabel(ControlCenterStrings.text("request"))
-                .accessibilityIdentifier("controlCenter.request")
-            HStack {
-                Button(ControlCenterStrings.text("run")) { submit(followUp: false) }
-                    .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || coordinator.isRunning)
-                Button(ControlCenterStrings.text("followUp")) { submit(followUp: true) }
-                    .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || coordinator.operation == nil || coordinator.isRunning)
-                Button(ControlCenterStrings.text("newOperation")) { coordinator.resetContext(); prompt = "" }
-                    .disabled(coordinator.isRunning)
-                Spacer()
-                if coordinator.isRunning { ProgressView().controlSize(.small) }
-                Button(ControlCenterStrings.text("cancel")) { coordinator.cancel() }.disabled(!coordinator.isRunning)
-            }
-            if coordinator.connection.model.isEmpty {
-                Text(ControlCenterStrings.text("offlineHint")).font(.callout).foregroundStyle(.secondary)
-            }
-            ScrollView {
+        VStack(spacing: 0) {
+            if section == .chat {
+                ControlCenterChatView(coordinator: coordinator) { section = $0 }
+            } else {
+                auxiliaryHeader
+                Divider()
                 VStack(alignment: .leading, spacing: 12) {
-                    if !coordinator.output.isEmpty {
-                        Text(coordinator.output).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                    if let error = coordinator.error {
+                        Text(error).foregroundStyle(.red).textSelection(.enabled)
+                            .accessibilityIdentifier("controlCenter.error")
                     }
-                    if let operation = coordinator.operation { ControlCenterOperationCardView(operation: operation) }
+                    if coordinator.isRunning {
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Text(coordinator.operation?.title ?? ControlCenterStrings.text("operation"))
+                            Spacer()
+                            Button(ControlCenterStrings.text("cancel")) { coordinator.cancel() }
+                        }
+                    }
+                    auxiliaryContent
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
+                .padding(16)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .accessibilityIdentifier("ControlCenterMainContent")
+        .task { await coordinator.load() }
+        .onChange(of: coordinator.pendingApproval?.id) { _, id in
+            if id != nil { section = .chat }
+        }
+        .onChange(of: coordinator.chatPresentationID) { _, _ in section = .chat }
     }
 
-    private func submit(followUp: Bool) {
-        let request = prompt
-        Task { await coordinator.submit(request, followUp: followUp) }
+    private var auxiliaryHeader: some View {
+        HStack(spacing: 12) {
+            Button { section = .chat } label: {
+                Label(ControlCenterSection.chat.title, systemImage: "chevron.left")
+            }
+            .disabled(busy)
+            Text(section.title).font(.headline)
+            Spacer()
+            Menu {
+                ForEach(ControlCenterSection.allCases.filter { $0 != .chat }) { item in
+                    Button { section = item } label: { Label(item.title, systemImage: item.symbol) }
+                }
+            } label: { Label(ControlCenterStrings.text("chatBrowse"), systemImage: "ellipsis.circle") }
+            .disabled(busy)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
+
+    @ViewBuilder private var auxiliaryContent: some View {
+        switch section {
+        case .chat: EmptyView()
+        case .sessions: ControlCenterSessionsView(coordinator: coordinator)
+        case .favorites: ControlCenterFavoritesView(coordinator: coordinator)
+        case .collections: ControlCenterCollectionsView(coordinator: coordinator)
+        case .workspace: ControlCenterWorkspaceView(coordinator: coordinator)
+        case .preferences: ControlCenterPreferencesView(coordinator: coordinator)
+        case .settings: ControlCenterSettingsView(coordinator: coordinator)
+        case .history: ControlCenterHistoryView(coordinator: coordinator)
+        case .connection: ControlCenterConnectionView(coordinator: coordinator)
+        }
     }
 }
+
 
 struct ControlCenterOperationCardView: View {
     let operation: ControlCenterOperation

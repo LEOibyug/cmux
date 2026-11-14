@@ -91,12 +91,12 @@ extension ControlCenterCoordinator {
         }.joined(separator: "\n")
         return """
         Local cmux Control Center (this installed build):
-        • Sessions searches the existing Vault index for OMP. Choose an exact result; a live pane is focused, otherwise the indexed journal is resumed after an ownership probe. Held, unknown, moved-away or missing-mount sessions are blocked, never intentionally forked.
+        • Sessions searches history-enabled Vault sources, default OMP. OMP task-artifact journals are not separate conversations. Choose an exact result; a live pane is focused, otherwise the indexed session uses its source's resume adapter. OMP held, unknown, moved-away or missing-mount sessions are blocked, never intentionally forked.
         • Favorites open local directories, built-in file previews, HTTP(S) browser workspaces or exact sessions without a model request. Collections launch items in saved order; Retry Failed includes only failed/blocked items from the latest collection receipt. Cancel stops remaining work, not existing workspaces.
         • Create Workspace validates the logical directory and optionally creates missing components, then starts the installed OMP with --cwd. It never uses --continue.
         • Settings edits use the current runtime's typed cmux.json mutation engine. Undo refuses a path changed by another writer. Security, credentials and executable settings are not model tools.
         • Memory is explicit key/value/scope data. Project/collection memories outrank global defaults; the current request outranks memory. Memory never grants permissions. Save/delete is explicit; no automatic learning.
-        • Each Submit starts fresh. Follow Up includes only bounded context from the preceding operation; Reset drops it. Connection/model loading happens only when explicitly requested. No arbitrary shell or code tool is exposed.
+        • Chat renders Markdown and streams responses. Messages normally include the current conversation context; New Chat clears it. The full transcript is not restored after app restart. Ask Before Changes requests approval for each local mutation; Full Access skips those approvals only for supported local tools. Neither mode grants shell, account, macOS permission or security access. Connection/model loading happens only when explicitly requested.
         Current settings relevant to the query:
         \(settingsText.isEmpty ? "No safe scalar setting matches. Search the native Settings window for other options." : settingsText)
         """

@@ -4289,6 +4289,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                     hasher.combine(0)
                 case .notifications:
                     hasher.combine(1)
+                case .controlCenter:
+                    hasher.combine(2)
                 }
 
                 if let window = liveRoute.window {
@@ -12950,6 +12952,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             switch sidebarSelection {
             case .tabs: return "tabs"
             case .notifications: return "notifications"
+            case .controlCenter: return "controlCenter"
             }
         }()
         writeMultiWindowNotificationTestData([
@@ -14118,7 +14121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return true
         }
         if matchConfiguredShortcut(event: event, action: .openControlCenter) {
-            ControlCenterWindowController.shared.show(activate: true)
+            ControlCenterPresentation.show(
+                activate: true,
+                preferredWindow: mainWindowForShortcutEvent(event)
+            )
             return true
         }
         if matchConfiguredShortcut(event: event, action: .reloadConfiguration) {

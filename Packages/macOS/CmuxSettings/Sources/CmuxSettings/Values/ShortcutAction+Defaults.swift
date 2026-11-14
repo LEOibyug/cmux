@@ -68,7 +68,7 @@ extension ShortcutAction {
     private var builtInDefaultStroke: ShortcutStroke? {
         switch self {
         case .openSettings: return ShortcutStroke(key: ",", command: true)
-        case .openControlCenter: return nil
+        case .openControlCenter: return ShortcutStroke(key: "j", command: true, shift: true)
         case .reloadConfiguration: return ShortcutStroke(key: ",", command: true, shift: true)
         case .showHideAllWindows: return ShortcutStroke(key: ".", command: true, option: true, control: true)
         case .globalSearch: return ShortcutStroke(key: "f", command: true, option: true)

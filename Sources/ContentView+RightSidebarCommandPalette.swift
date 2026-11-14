@@ -17,6 +17,8 @@ extension ContentView {
         }
 
         switch commandId {
+        case "palette.openControlCenter":
+            return .openControlCenter
         case "palette.newWorkspace":
             return .newTab
         case "palette.newBrowserWorkspace":

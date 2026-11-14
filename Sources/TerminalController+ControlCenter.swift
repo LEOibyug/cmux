@@ -18,7 +18,10 @@ extension TerminalController {
         await coordinator.load()
         switch method {
         case "control_center.show":
-            await MainActor.run { ControlCenterWindowController.shared.show(activate: false) }
+            let tabManager = v2ResolveTabManager(params: params)
+            await MainActor.run {
+                ControlCenterPresentation.show(activate: false, preferredWindow: tabManager?.window)
+            }
         case "control_center.cancel":
             await coordinator.cancel()
         case "control_center.ask":
@@ -29,7 +32,7 @@ extension TerminalController {
             guard await !coordinator.isRunning else {
                 return .err(code: "busy", message: "A Control Center operation is already running", data: nil)
             }
-            await coordinator.submit(prompt, followUp: params["follow_up"] as? Bool ?? false)
+            await coordinator.submit(prompt, followUp: params["follow_up"] as? Bool ?? true)
             if let error = await coordinator.error {
                 return .err(code: "operation_failed", message: error, data: nil)
             }
@@ -65,7 +68,7 @@ extension TerminalController {
                 try JSONEncoder().encode(ControlCenterControlStatus(
                     snapshot: coordinator.snapshot,
                     operation: coordinator.operation,
-                    output: coordinator.output,
+                    output: coordinator.displayedOutput,
                     error: coordinator.error,
                     running: coordinator.isRunning,
                     model: coordinator.connection.model,

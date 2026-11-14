@@ -183,6 +183,7 @@ extension ControlCenterCoordinator {
         defer { try? handle.close() }
         var pending = Data()
         var headerChecked = false
+        var titleSlotSeen = false
         var latestTransfer: String?
         while let chunk = try handle.read(upToCount: 65_536), !chunk.isEmpty {
             try Task.checkCancellation()
@@ -196,6 +197,10 @@ extension ControlCenterCoordinator {
                     throw ControlCenterHostError.blocked("The indexed session journal is invalid.")
                 }
                 if !headerChecked {
+                    if !titleSlotSeen, value["type"] as? String == "title" {
+                        titleSlotSeen = true
+                        continue
+                    }
                     guard value["type"] as? String == "session", value["id"] as? String == sessionID else {
                         throw ControlCenterHostError.blocked("The indexed file no longer identifies this session.")
                     }

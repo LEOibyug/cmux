@@ -1464,17 +1464,22 @@
 		A5001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001012 /* ContentView.swift */; };
 		C0DE32470000000000000001 /* ContentViewIdentifierCopyCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE32470000000000000002 /* ContentViewIdentifierCopyCommands.swift */; };
 		0C1A606285E62F5AC6711DEC /* ControlCenterActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41F0B5AB0D71C287C6785ED6 /* ControlCenterActions.swift */; };
+		BB44EB3E9B521E751C7525BA /* ControlCenterChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745F75009EFE6721C14E0BA1 /* ControlCenterChat.swift */; };
+		E198C9E20443AEE2DD39A763 /* ControlCenterChatInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = B76F8F476E53771934FCC835 /* ControlCenterChatInput.swift */; };
+		A352CFE4386EEA45D2DA6111 /* ControlCenterChatMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29C50A682D6A54C491D880F7 /* ControlCenterChatMarkdown.swift */; };
+		18EE6B5F6F8DE3272B6F398E /* ControlCenterChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C3E79431A9C9E44192E8E4E /* ControlCenterChatView.swift */; };
 		89B00E98BF48BC25092509CC /* ControlCenterCodexpressConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91838AE8175419D326525341 /* ControlCenterCodexpressConnection.swift */; };
 		03F6F668BB4B21491C0DE16F /* ControlCenterConfigurationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A66BCB2BBA2F4088723AE03C /* ControlCenterConfigurationView.swift */; };
 		EB9F383E771E875661005316 /* ControlCenterCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C997CF69DBDCB6C5BF34605B /* ControlCenterCoordinator.swift */; };
 		60AD04C3A9556323C1C98E65 /* ControlCenterModelActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02ED35A2727864FBC0089BFB /* ControlCenterModelActions.swift */; };
 		C85134D905E8054C2650FEED /* ControlCenterOMPProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = B54B8EEC982816674F841746 /* ControlCenterOMPProbe.swift */; };
+		6F271462A0CE6AD720900C5C /* ControlCenterPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4257A5D0A6AE53F8141F2C /* ControlCenterPresentation.swift */; };
 		F7C0E5468840644F6A516E75 /* ControlCenterSessionActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29BB572DFB04A27C99D1DADD /* ControlCenterSessionActions.swift */; };
+		E6860424B8475BB8A74DFC83 /* ControlCenterSessionValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28DE3D7E0FC2A3CA3DCF3423 /* ControlCenterSessionValidationTests.swift */; };
 		EC42DE8B3BDF40560FEAB4FD /* ControlCenterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08CB4148C77D6D1122F8867C /* ControlCenterSettings.swift */; };
 		0F65846CEB44488F790DD0A3 /* ControlCenterStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7372DB2531AC105B1E042A /* ControlCenterStrings.swift */; };
 		E6F26DAE96434558422D6B0D /* ControlCenterTargetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3474EA1598A31608493E5C4 /* ControlCenterTargetsView.swift */; };
 		0BC6BE74197E255ECD204A97 /* ControlCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4049431531E5853603620E4C /* ControlCenterView.swift */; };
-		848F3B2C2965FF36EA60D4EC /* ControlCenterWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFB69D3D0F391743E1AE9763 /* ControlCenterWindowController.swift */; };
 		B88356000000000000000003 /* ControlledPastePreparationDeadlines.swift in Sources */ = {isa = PBXBuildFile; fileRef = B88356000000000000000004 /* ControlledPastePreparationDeadlines.swift */; };
 		B88356000000000000000001 /* ControlledPastePreparationOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B88356000000000000000002 /* ControlledPastePreparationOperation.swift */; };
 		BFC914190FEF400683D6DEBC /* ControlSidebarAgentLifecycleRegistryScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 085B717ACCEF4FDBA77A2FD9 /* ControlSidebarAgentLifecycleRegistryScope.swift */; };
@@ -5445,17 +5450,22 @@
 		A5001012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C0DE32470000000000000002 /* ContentViewIdentifierCopyCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewIdentifierCopyCommands.swift; sourceTree = "<group>"; };
 		41F0B5AB0D71C287C6785ED6 /* ControlCenterActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterActions.swift; sourceTree = "<group>"; };
+		745F75009EFE6721C14E0BA1 /* ControlCenterChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterChat.swift; sourceTree = "<group>"; };
+		B76F8F476E53771934FCC835 /* ControlCenterChatInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterChatInput.swift; sourceTree = "<group>"; };
+		29C50A682D6A54C491D880F7 /* ControlCenterChatMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterChatMarkdown.swift; sourceTree = "<group>"; };
+		6C3E79431A9C9E44192E8E4E /* ControlCenterChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterChatView.swift; sourceTree = "<group>"; };
 		91838AE8175419D326525341 /* ControlCenterCodexpressConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterCodexpressConnection.swift; sourceTree = "<group>"; };
 		A66BCB2BBA2F4088723AE03C /* ControlCenterConfigurationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterConfigurationView.swift; sourceTree = "<group>"; };
 		C997CF69DBDCB6C5BF34605B /* ControlCenterCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterCoordinator.swift; sourceTree = "<group>"; };
 		02ED35A2727864FBC0089BFB /* ControlCenterModelActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterModelActions.swift; sourceTree = "<group>"; };
 		B54B8EEC982816674F841746 /* ControlCenterOMPProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterOMPProbe.swift; sourceTree = "<group>"; };
+		5A4257A5D0A6AE53F8141F2C /* ControlCenterPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterPresentation.swift; sourceTree = "<group>"; };
 		29BB572DFB04A27C99D1DADD /* ControlCenterSessionActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterSessionActions.swift; sourceTree = "<group>"; };
+		28DE3D7E0FC2A3CA3DCF3423 /* ControlCenterSessionValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControlCenterSessionValidationTests.swift"; sourceTree = "<group>"; };
 		08CB4148C77D6D1122F8867C /* ControlCenterSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterSettings.swift; sourceTree = "<group>"; };
 		FA7372DB2531AC105B1E042A /* ControlCenterStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterStrings.swift; sourceTree = "<group>"; };
 		A3474EA1598A31608493E5C4 /* ControlCenterTargetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterTargetsView.swift; sourceTree = "<group>"; };
 		4049431531E5853603620E4C /* ControlCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterView.swift; sourceTree = "<group>"; };
-		FFB69D3D0F391743E1AE9763 /* ControlCenterWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterWindowController.swift; sourceTree = "<group>"; };
 		B88356000000000000000004 /* ControlledPastePreparationDeadlines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlledPastePreparationDeadlines.swift; sourceTree = "<group>"; };
 		B88356000000000000000002 /* ControlledPastePreparationOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlledPastePreparationOperation.swift; sourceTree = "<group>"; };
 		085B717ACCEF4FDBA77A2FD9 /* ControlSidebarAgentLifecycleRegistryScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlSidebarAgentLifecycleRegistryScope.swift; sourceTree = "<group>"; };
@@ -10719,8 +10729,12 @@
 				FA7372DB2531AC105B1E042A /* ControlCenterStrings.swift */,
 				A3474EA1598A31608493E5C4 /* ControlCenterTargetsView.swift */,
 				4049431531E5853603620E4C /* ControlCenterView.swift */,
-				FFB69D3D0F391743E1AE9763 /* ControlCenterWindowController.swift */,
 				91838AE8175419D326525341 /* ControlCenterCodexpressConnection.swift */,
+				745F75009EFE6721C14E0BA1 /* ControlCenterChat.swift */,
+				6C3E79431A9C9E44192E8E4E /* ControlCenterChatView.swift */,
+				B76F8F476E53771934FCC835 /* ControlCenterChatInput.swift */,
+				29C50A682D6A54C491D880F7 /* ControlCenterChatMarkdown.swift */,
+				5A4257A5D0A6AE53F8141F2C /* ControlCenterPresentation.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -12145,6 +12159,7 @@
 				A17F4116C46ACB8777E2B02D /* TuiImagePasteRoutingTests.swift */,
 				5ECB629C6C12D498EE52C08A /* TuiTestHost.swift */,
 				9422F51215E9E166FD7A5555 /* SurfaceDraggingInfo.swift */,
+				28DE3D7E0FC2A3CA3DCF3423 /* ControlCenterSessionValidationTests.swift */,
 			);
 			path = cmuxTests;
 			sourceTree = "<group>";
@@ -13417,17 +13432,21 @@
 				A5001002 /* ContentView.swift in Sources */,
 				C0DE32470000000000000001 /* ContentViewIdentifierCopyCommands.swift in Sources */,
 				0C1A606285E62F5AC6711DEC /* ControlCenterActions.swift in Sources */,
+				BB44EB3E9B521E751C7525BA /* ControlCenterChat.swift in Sources */,
+				E198C9E20443AEE2DD39A763 /* ControlCenterChatInput.swift in Sources */,
+				A352CFE4386EEA45D2DA6111 /* ControlCenterChatMarkdown.swift in Sources */,
+				18EE6B5F6F8DE3272B6F398E /* ControlCenterChatView.swift in Sources */,
 				89B00E98BF48BC25092509CC /* ControlCenterCodexpressConnection.swift in Sources */,
 				03F6F668BB4B21491C0DE16F /* ControlCenterConfigurationView.swift in Sources */,
 				EB9F383E771E875661005316 /* ControlCenterCoordinator.swift in Sources */,
 				60AD04C3A9556323C1C98E65 /* ControlCenterModelActions.swift in Sources */,
 				C85134D905E8054C2650FEED /* ControlCenterOMPProbe.swift in Sources */,
+				6F271462A0CE6AD720900C5C /* ControlCenterPresentation.swift in Sources */,
 				F7C0E5468840644F6A516E75 /* ControlCenterSessionActions.swift in Sources */,
 				EC42DE8B3BDF40560FEAB4FD /* ControlCenterSettings.swift in Sources */,
 				0F65846CEB44488F790DD0A3 /* ControlCenterStrings.swift in Sources */,
 				E6F26DAE96434558422D6B0D /* ControlCenterTargetsView.swift in Sources */,
 				0BC6BE74197E255ECD204A97 /* ControlCenterView.swift in Sources */,
-				848F3B2C2965FF36EA60D4EC /* ControlCenterWindowController.swift in Sources */,
 				BFC914190FEF400683D6DEBC /* ControlSidebarAgentLifecycleRegistryScope.swift in Sources */,
 				BE979B868F4D42199E5400E2 /* ControlSidebarPanelOwner.swift in Sources */,
 				C51A73B30000000000000002 /* ControlSimulatorPendingTextInput.swift in Sources */,
@@ -15975,6 +15994,7 @@
 				C0A710120000000000000002 /* ComputerUseUXTests.swift in Sources */,
 				3764D55A940FE661FDB48418 /* ComputerUseWatchTargetRuntimeTests.swift in Sources */,
 				C0DE77770000000000000001 /* ConfiguredShortcutMatcherTests.swift in Sources */,
+				E6860424B8475BB8A74DFC83 /* ControlCenterSessionValidationTests.swift in Sources */,
 				B88356000000000000000003 /* ControlledPastePreparationDeadlines.swift in Sources */,
 				B88356000000000000000001 /* ControlledPastePreparationOperation.swift in Sources */,
 				C11538000000000000000001 /* CopyOnlyTextSelectionTests.swift in Sources */,

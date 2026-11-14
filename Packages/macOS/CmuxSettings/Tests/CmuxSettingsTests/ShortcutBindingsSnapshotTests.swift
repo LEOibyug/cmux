@@ -33,4 +33,19 @@ import Testing
 
         #expect(shortcut == StoredShortcut(first: ShortcutStroke(key: "j")))
     }
+
+    @Test func implicitControlCenterShortcutYieldsWithoutDiscardingExplicitOverride() {
+        let factory = StoredShortcut(first: ShortcutStroke(key: "j", command: true, shift: true))
+        let custom = StoredShortcut(first: ShortcutStroke(key: "j", command: true, option: true))
+        func resolved(_ candidate: StoredShortcut?) -> StoredShortcut? {
+            ShortcutAction.openControlCenter.effectivePersistedShortcutResolvingLegacyConflicts(
+                candidate,
+                defaultShortcut: factory,
+                explicitlyConfiguredShortcut: { $0 == .newTab ? factory : nil },
+                bindingsConflict: { proposed, _, configured in proposed == configured }
+            )
+        }
+        #expect(resolved(nil) == nil)
+        #expect(resolved(custom) == custom)
+    }
 }

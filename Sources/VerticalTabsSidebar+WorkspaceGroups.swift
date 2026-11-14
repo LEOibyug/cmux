@@ -208,8 +208,8 @@ extension VerticalTabsSidebar {
         let anchorId = group.anchorWorkspaceId
         let liveAnchorId = group.liveAnchorWorkspaceId
         let dragIdentity = group.isEmpty ? group.id : anchorId
-        let isAnchorActive = liveAnchorId.map { tabManager.selectedTabId == $0 } ?? false
-        let isMultiSelected = liveAnchorId.map { selectedTabIds.contains($0) } ?? false
+        let isAnchorActive = selection == .tabs && (liveAnchorId.map { tabManager.selectedTabId == $0 } ?? false)
+        let isMultiSelected = selection == .tabs && (liveAnchorId.map { selectedTabIds.contains($0) } ?? false)
             && selectedTabIds.count > 1
         let anchorCwd = liveAnchorId.flatMap { renderContext.workspaceById[$0]?.currentDirectory }
         let resolvedConfig = cmuxConfigStore.resolveWorkspaceGroupConfig(forCwd: anchorCwd)

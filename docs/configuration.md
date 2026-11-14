@@ -11,10 +11,12 @@ For themes, fonts, transparency, and other appearance settings across Ghostty co
 
 ## Control Center
 
-Open **File → Control Center** or its entry in **Settings → App**. The
-`openControlCenter` shortcut action is unbound by default and can be assigned in
-Keyboard Shortcuts or `shortcuts.bindings`. This is a native local controller,
-not an embedded coding-agent terminal or a permanently resumed model thread.
+Select the permanent **Control Center** item in the left workspace sidebar, use
+**Command-Shift-J**, or choose **File → Control Center**. Chat replaces the central
+content of that same main window; it does not open another window, create a
+workspace or use the right sidebar. Sessions, favorites and configuration stay
+inside that central page under Browse. The `openControlCenter` shortcut remains
+configurable; explicit overrides and unbindings take priority.
 
 Sessions, favorites, named launch collections, explicit preferences, settings
 and operation receipts work without a model. Sessions default to OMP; the
@@ -23,6 +25,10 @@ and exact opens stay within that source and never enable disabled histories.
 The Saved button toggles the persisted bookmark, identified by agent and session
 ID rather than a temporary search-result ID. Identical session IDs from different
 agents remain separate favorites, including after restart.
+OMP discovery follows its own conversation layout: project-bucket journals and
+supported flat-root journals are conversations; nested task/artifact journals are
+not. User forks remain visible even when their header has `parentSession`, and
+symbolic-link session roots use the same admission rule.
 
 The installed OMP executable is a separate runtime dependency; Connection can
 select an absolute installed path and a default directory. Exact OMP opens use
@@ -68,16 +74,41 @@ step receipts; `connection.json` is an owner-only `0600` file. Tagged builds use
 their own bundle-ID namespace. Neither data nor runtime resources depend on the
 development checkout.
 
-Each independent request starts fresh. Explicit Follow Up carries the previous
-request and bounded result/receipts; Reset drops this temporary context. Only
-related explicit memories are loaded, with directory scopes covering their
-descendants but not similarly prefixed neighbors. No complete model transcript
-or automatic inferred-habit database is maintained. Model operations have finite
-turn/tool budgets and retain per-operation protocol items only while running.
-They can inspect current-window metadata, manage saved targets, open temporary
-groups, create directories/OMP workspaces, edit safe settings, remember explicit
-preferences and explain local usage. They cannot execute arbitrary code, delete
-filesystem data, change security permissions or operate provider accounts.
+Chat renders Markdown headings, lists, tables and highlighted fenced code using
+bundled assets. Responses arrive as actual SSE text deltas; tools become eligible
+for approval/execution only after the complete response and arguments validate.
+Stopping or losing a stream keeps partial text and records the unfinished outcome,
+without retrying it. Remote Markdown images are not fetched automatically.
+
+Messages normally include the earlier messages and actual operation receipts from
+the current conversation. **New Chat** clears the visible conversation and model
+context, not saved favorites, explicit memories or durable operation receipts.
+Switching back to a workspace retains the chat, draft and running operation;
+returning to Control Center focuses the composer. Workspace views stay mounted,
+but hidden terminals cannot receive chat input. Relaunch can restore the central
+destination, without restoring a complete transcript. Input/context and tool budgets remain finite; a
+context-limit error requires starting a new chat rather than silent truncation.
+Enter sends, Shift-Enter inserts a line, and Command-Enter also sends. Composing
+an IME candidate never sends a message. Drafting remains available while working.
+
+The composer permission selector defaults to **Ask Before Changes**. Read-only
+tools do not prompt; model-invoked local changes show their exact arguments and
+resolved saved targets before execution. Approve permits that action only; Reject
+leaves it unexecuted. Stop cancels pending approval and remaining work, not actions
+already completed. A changed target requires a new review. **Full Access**, enabled
+through an explicit inline confirmation, skips these per-action approvals only for the
+existing supported local tools. It does not add arbitrary shell/code execution,
+file deletion, provider account access, macOS permissions or security privileges.
+The mode is saved locally and cannot be changed by a model tool or memory record.
+Direct native buttons are already explicit user actions and do not add this model
+approval step.
+
+Only relevant explicit memories are loaded, with directory scopes covering their
+descendants but not similarly prefixed neighbors. No automatic inferred-habit
+database is maintained. The CLI's `control-center ask` also keeps chat context by
+default; `--fresh` starts without it. The local `control_center.ask` RPC accepts
+`follow_up: false` for the same context reset. An ask may wait for approval in the
+central chat page; `status` exposes current partial output without credentials.
 
 Settings edits use the existing typed runtime and JSONC mutation receipts.
 Unrelated content is preserved; conditional undo refuses to overwrite a newer

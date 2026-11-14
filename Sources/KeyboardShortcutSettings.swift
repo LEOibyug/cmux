@@ -420,7 +420,7 @@ enum KeyboardShortcutSettings {
             case .openSettings:
                 return StoredShortcut(key: ",", command: true, shift: false, option: false, control: false)
             case .openControlCenter:
-                return .unbound
+                return StoredShortcut(key: "j", command: true, shift: true, option: false, control: false)
             case .reloadConfiguration:
                 return StoredShortcut(key: ",", command: true, shift: true, option: false, control: false)
             case .showHideAllWindows:

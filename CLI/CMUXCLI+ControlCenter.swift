@@ -6,13 +6,14 @@ extension CMUXCLI {
 
       show                          Open the native Control Center without activating cmux.
       status                        Read favorites, collections, memories and operation results.
-      ask [--follow-up] -- <text>    Run one request; use '-' to read the request from stdin.
+      ask [--fresh] -- <text>        Continue the current chat; use '-' to read text from stdin.
       open-collection <id|name>      Open a saved collection by ID or exact, unique name.
       cancel                        Cancel the current operation, without undoing completed actions.
 
-    Independent requests start with fresh context. --follow-up explicitly continues the last
-    operation. Model connection settings live in Control Center > Settings. A timeout does not
-    imply that no actions ran; inspect status before trying again. No automatic replay occurs.
+    Requests keep the current conversation context; --fresh starts without earlier context.
+    Model connection settings live in Control Center > Connection. Local changes may await
+    approval in the chat window. A timeout is not proof that no actions ran; inspect status.
+    No automatic replay occurs.
     """
 
     func runControlCenterCommand(_ arguments: [String], client: SocketClient, jsonOutput: Bool) throws {
@@ -31,8 +32,8 @@ extension CMUXCLI {
             guard values.isEmpty else { throw CLIError(message: Self.controlCenterUsage, exitCode: 2) }
             method = "control_center.\(verb)"
         case "ask":
-            let followUp = values.first == "--follow-up"
-            if followUp { values.removeFirst() }
+            let fresh = values.first == "--fresh"
+            if fresh { values.removeFirst() }
             if values.first == "--" { values.removeFirst() }
             let prompt = values == ["-"]
                 ? String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
@@ -41,7 +42,7 @@ extension CMUXCLI {
                 throw CLIError(message: Self.controlCenterUsage, exitCode: 2)
             }
             method = "control_center.ask"
-            params = ["prompt": prompt, "follow_up": followUp]
+            params = ["prompt": prompt, "follow_up": !fresh]
         case "open-collection":
             guard values.count == 1, let collection = values.first, !collection.isEmpty else {
                 throw CLIError(message: Self.controlCenterUsage, exitCode: 2)

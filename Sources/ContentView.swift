@@ -1757,7 +1757,7 @@ struct ContentView: View {
             ZStack {
                 ForEach(mountedWorkspaces) { tab in
                     let isSelectedWorkspace = selectedWorkspaceId == tab.id
-                    let isPresentedWorkspace = isSelectedWorkspace
+                    let isPresentedWorkspace = isSelectedWorkspace && sidebarSelectionState.selection == .tabs
                     // Never retain a live source workspace as a loading cover:
                     // that makes mount ownership depend on a later frame signal.
                     WorkspaceContentView(
@@ -1787,6 +1787,12 @@ struct ContentView: View {
             .opacity(sidebarSelectionState.selection == .tabs ? 1 : 0)
             .allowsHitTesting(sidebarSelectionState.selection == .tabs)
             .accessibilityHidden(sidebarSelectionState.selection != .tabs)
+
+            if sidebarSelectionState.selection == .controlCenter {
+                ControlCenterView(coordinator: .shared)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityIdentifier("MainControlCenterContent")
+            }
         }
         .modifier(WorkspacePresentationModeContentTopPaddingModifier(
             isFullScreen: isFullScreen,
@@ -2248,6 +2254,10 @@ struct ContentView: View {
     }
 
     @MainActor private func updateTitlebarText() {
+        if sidebarSelectionState.selection == .controlCenter {
+            titlebarText = ControlCenterStrings.text("title")
+            return
+        }
         guard let selectedId = tabManager.selectedTabId,
               let tab = tabManager.tabs.first(where: { $0.id == selectedId }) else {
             if !titlebarText.isEmpty {
@@ -2500,6 +2510,10 @@ struct ContentView: View {
         // Resigning the retained table or field editor ends any inline edit in
         // the same way unmounting did before the sidebar became persistent.
         _ = window.makeFirstResponder(nil)
+        if sidebarSelectionState.selection == .controlCenter {
+            ControlCenterCoordinator.shared.chatPresentationID = UUID()
+            return
+        }
 
         guard let workspace = tabManager.selectedWorkspace,
               let panelId = workspace.focusedPanelId,
@@ -2512,6 +2526,28 @@ struct ContentView: View {
             in: window
         )
         workspace.focusPanel(panelId, focusIntent: panel.preferredFocusIntentForActivation())
+    }
+
+    private func restoreSelectedWorkspaceFocusAfterPageChange() {
+        // Sidebar keyboard navigation keeps the list focused until Return/Escape.
+        let keepsSidebarFocus = NSApp.currentEvent?.type == .keyDown
+            && observedWindow?.firstResponder is SidebarWorkspaceTableViewImpl
+        DispatchQueue.main.async {
+            guard !keepsSidebarFocus,
+                  sidebarSelectionState.selection == .tabs,
+                  !isCommandPalettePresented,
+                  let window = observedWindow,
+                  window.isKeyWindow,
+                  let workspace = tabManager.selectedWorkspace,
+                  let panelId = workspace.focusedPanelId,
+                  let panel = workspace.panels[panelId] else { return }
+            AppDelegate.shared?.noteMainPanelKeyboardFocusIntent(
+                workspaceId: workspace.id,
+                panelId: panelId,
+                in: window
+            )
+            workspace.focusPanel(panelId, focusIntent: panel.preferredFocusIntentForActivation())
+        }
     }
 
     var body: some View {
@@ -2626,6 +2662,7 @@ struct ContentView: View {
             // already advanced again. Reconcile the current model value once,
             // regardless of which intermediate value triggered this callback.
             let authoritativeSelection = tabManager.selectedTabId
+            sidebarSelectionState.selection = .tabs
 #if DEBUG
             if let snapshot = tabManager.debugCurrentWorkspaceSwitchSnapshot() {
                 let dtMs = (CACurrentMediaTime() - snapshot.startedAt) * 1000
@@ -2665,7 +2702,20 @@ struct ContentView: View {
             updateTitlebarText()
         })
 
-        view = AnyView(view.onChange(of: sidebarSelectionState.selection) { _, _ in
+        view = AnyView(view.onChange(of: sidebarSelectionState.selection) { oldValue, newValue in
+            commandPaletteFocusRestoreCoordinator.clear()
+            if newValue != .tabs {
+                if let window = observedWindow,
+                   let responder = window.firstResponder,
+                   tabManager.selectedWorkspace?.panels.values.contains(where: {
+                       $0.ownedFocusIntent(for: responder, in: window) != nil
+                   }) == true {
+                    _ = window.makeFirstResponder(nil)
+                }
+            } else if oldValue != .tabs {
+                restoreSelectedWorkspaceFocusAfterPageChange()
+            }
+            AppDelegate.shared?.syncBonsplitTabShortcutHintEligibility(in: observedWindow)
             updateTitlebarText()
         })
 
@@ -2738,7 +2788,18 @@ struct ContentView: View {
             refreshCommandPaletteForkableAgentAvailabilityAfterSharedIndexChange(notification)
         })
 
-        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .ghosttyDidFocusTab)) { _ in
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(
+            for: .workspaceNavigationRequested,
+            object: tabManager
+        )) { notification in
+            guard let workspaceId = notification.userInfo?[GhosttyNotificationKey.tabId] as? UUID,
+                  tabManager.tabs.contains(where: { $0.id == workspaceId }) else { return }
+            sidebarSelectionState.selection = .tabs
+        })
+
+        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .ghosttyDidFocusTab)) { notification in
+            guard let workspaceId = notification.userInfo?[GhosttyNotificationKey.tabId] as? UUID,
+                  tabManager.tabs.contains(where: { $0.id == workspaceId }) else { return }
             sidebarSelectionState.selection = .tabs
             scheduleTitlebarTextRefresh()
         })
@@ -2916,6 +2977,9 @@ struct ContentView: View {
             for: NSWindow.didBecomeKeyNotification,
             object: observedWindow
         )) { _ in
+            if sidebarSelectionState.selection == .controlCenter, !isCommandPalettePresented {
+                ControlCenterCoordinator.shared.chatPresentationID = UUID()
+            }
             attemptCommandPaletteFocusRestoreIfNeeded()
             attemptCommandPaletteTextSelectionIfNeeded()
         })
@@ -7556,6 +7620,14 @@ struct ContentView: View {
         )
         contributions.append(
             CommandPaletteCommandContribution(
+                commandId: "palette.openControlCenter",
+                title: constant(ControlCenterStrings.text("openControlCenter")),
+                subtitle: constant(String(localized: "command.openSettings.subtitle", defaultValue: "Global")),
+                keywords: ["control", "center", "chat", "assistant"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
                 commandId: "palette.openCmuxSettingsFile",
                 title: constant(String(localized: "settings.settingsJSON.openFile", defaultValue: "Open cmux.json")),
                 subtitle: constant(String(localized: "command.cmuxConfig.subtitle", defaultValue: "cmux.json")),
@@ -8815,6 +8887,9 @@ struct ContentView: View {
 #endif
                 AppDelegate.presentPreferencesWindow()
             }
+        }
+        registry.register(commandId: "palette.openControlCenter") {
+            ControlCenterPresentation.show(activate: true, preferredWindow: observedWindow)
         }
         registry.register(commandId: "palette.openCmuxSettingsFile") {
 #if DEBUG
@@ -10120,7 +10195,12 @@ struct ContentView: View {
         }
         syncCommandPaletteDebugStateForObservedWindow()
 
-        guard restoreFocus, let focusTarget else { return }
+        guard restoreFocus else { return }
+        if sidebarSelectionState.selection == .controlCenter {
+            ControlCenterCoordinator.shared.chatPresentationID = UUID()
+            return
+        }
+        guard let focusTarget else { return }
         requestCommandPaletteFocusRestore(target: focusTarget)
     }
 
@@ -10130,7 +10210,7 @@ struct ContentView: View {
     }
 
     private func attemptCommandPaletteFocusRestoreIfNeeded(focusTransactionId: UUID? = nil) {
-        guard !isCommandPalettePresented else { return }
+        guard !isCommandPalettePresented, sidebarSelectionState.selection == .tabs else { return }
         guard let target = commandPaletteFocusRestoreCoordinator.pendingTarget else { return }
 
         let activeDock = AppDelegate.shared?.focusedDockStoreForShortcut(
@@ -11071,7 +11151,7 @@ struct VerticalTabsSidebar: View, Equatable {
         now: Date,
         unreadSnapshot: SidebarUnreadSnapshot
     ) -> [String: SwiftValue] {
-        let selectedId = tabManager.selectedTabId
+        let selectedId = selection == .tabs ? tabManager.selectedTabId : nil
         let workspaces = tabManager.tabs.enumerated().map { index, workspace in
             workspace.customSidebarWorkspaceSnapshot(
                 index: index,
@@ -11571,6 +11651,9 @@ struct VerticalTabsSidebar: View, Equatable {
                 frozenShortcutHintsTabId = nil
                 frozenShortcutHintsValue = false
             }
+        }
+        .onChange(of: selection) { _, _ in
+            refreshExtensionSidebarSnapshot()
         }
         .onReceive(NotificationCenter.default.publisher(for: .workspaceChecklistAddItemRequested)) { notification in
             guard isPresented else { return }
@@ -13211,7 +13294,7 @@ struct VerticalTabsSidebar: View, Equatable {
     ) -> CmuxSidebarProviderSnapshot {
         CmuxSidebarProviderSnapshot(
             sequence: UInt64(max(0, CmuxEventBus.shared.latestSequence)),
-            selectedWorkspaceId: tabManager.selectedTabId,
+            selectedWorkspaceId: selection == .tabs ? tabManager.selectedTabId : nil,
             workspaces: workspaces.map {
                 extensionWorkspaceSnapshot(for: $0, unreadSnapshot: unreadSnapshot)
             },
@@ -13269,8 +13352,8 @@ struct VerticalTabsSidebar: View, Equatable {
                             let index = rowStart + offset
                             extensionBrowserStackTile(
                                 row: row,
-                                isSelected: row.workspaceId == tabManager.selectedTabId
-                                    || (tabManager.selectedTabId == nil && index == 0),
+                                isSelected: selection == .tabs && (row.workspaceId == tabManager.selectedTabId
+                                    || (tabManager.selectedTabId == nil && index == 0)),
                                 dropRows: dropRows
                             )
                         }
@@ -13292,7 +13375,7 @@ struct VerticalTabsSidebar: View, Equatable {
                     extensionBrowserStackRow(
                         row: row,
                         now: now,
-                        isSelected: row.workspaceId == tabManager.selectedTabId,
+                        isSelected: selection == .tabs && row.workspaceId == tabManager.selectedTabId,
                         dropRows: dropRows
                     )
                 }
@@ -13360,7 +13443,7 @@ struct VerticalTabsSidebar: View, Equatable {
                         row: row,
                         now: now,
                         compact: true,
-                        isSelected: row.workspaceId == tabManager.selectedTabId,
+                        isSelected: selection == .tabs && row.workspaceId == tabManager.selectedTabId,
                         dropRows: dropRows
                     )
                         .padding(.horizontal, 8)
@@ -13696,7 +13779,7 @@ struct VerticalTabsSidebar: View, Equatable {
     ) -> some View {
         let isCollapsed = collapsedExtensionSidebarSectionIds.contains(section.id)
         let canCreateWorktree = section.treeSection.projectRootPath != nil
-        let selectedWorkspaceId = tabManager.selectedTabId
+        let selectedWorkspaceId = selection == .tabs ? tabManager.selectedTabId : nil
         let workspaceSnapshotsById = extensionSidebarWorkspaceSnapshotsById(for: section.rows)
 
         VStack(alignment: .leading, spacing: 1) {
@@ -14807,8 +14890,8 @@ struct VerticalTabsSidebar: View, Equatable {
             index: index,
             workspaceCount: renderContext.workspaceCount,
             workspace: workspaceSnapshot,
-            isActive: tabManager.selectedTabId == tab.id,
-            isMultiSelected: selectedTabIds.contains(tab.id),
+            isActive: selection == .tabs && tabManager.selectedTabId == tab.id,
+            isMultiSelected: selection == .tabs && selectedTabIds.contains(tab.id),
             hasUserCustomTitle: tab.effectiveCustomTitleSource == .user,
             hasCustomTitle: tab.hasCustomTitle,
             hasCustomDescription: tab.hasCustomDescription,
@@ -15193,14 +15276,19 @@ private struct SidebarFooter: View {
     let modifierKeyMonitor: WindowScopedShortcutHintModifierMonitor
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            SidebarControlCenterButton()
+                .padding(.leading, 6)
+                .padding(.trailing, 10)
 #if DEBUG
-        SidebarDevFooter(fileExplorerState: fileExplorerState, modifierKeyMonitor: modifierKeyMonitor)
+            SidebarDevFooter(fileExplorerState: fileExplorerState, modifierKeyMonitor: modifierKeyMonitor)
 #else
-        SidebarFooterButtons(fileExplorerState: fileExplorerState, modifierKeyMonitor: modifierKeyMonitor)
-            .padding(.leading, 6)
-            .padding(.trailing, 10)
-            .padding(.bottom, 6)
+            SidebarFooterButtons(fileExplorerState: fileExplorerState, modifierKeyMonitor: modifierKeyMonitor)
+                .padding(.leading, 6)
+                .padding(.trailing, 10)
+                .padding(.bottom, 6)
 #endif
+        }
     }
 }
 
@@ -17856,4 +17944,5 @@ private struct ExtensionSidebarBrowserStackDropDelegate: DropDelegate {
 enum SidebarSelection {
     case tabs
     case notifications
+    case controlCenter
 }

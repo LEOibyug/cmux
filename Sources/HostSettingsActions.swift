@@ -255,7 +255,7 @@ final class HostSettingsActions: SettingsHostActions {
     }
 
     func openControlCenter() {
-        ControlCenterWindowController.shared.show(activate: true)
+        ControlCenterPresentation.show(activate: true)
     }
 
     /// Reads the existing automation configuration off-main and summarizes it for Settings.
