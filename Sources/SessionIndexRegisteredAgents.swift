@@ -238,6 +238,84 @@ extension SessionIndexStore {
         var sessionId: String?
     }
 
+    enum ExactOMPSessionError: LocalizedError {
+        case sourceUnavailable, configurationChanged, invalidJournal, ambiguous
+
+        var errorDescription: String? {
+            switch self {
+            case .sourceUnavailable: return "OMP session history is disabled or unavailable."
+            case .configurationChanged: return "Session history configuration changed. Search again before opening the session."
+            case .invalidJournal: return "The selected journal is missing, outside the current OMP source, or no longer identifies this session and its directory."
+            case .ambiguous: return "Multiple OMP journals identify this session. Resolve the duplicate before resuming."
+            }
+        }
+    }
+
+    func exactOMPSession(sessionID: String, journal: URL) async throws -> SessionEntry {
+        let generation = historyConfigurationRevision
+        let registry = await registryProvider(nil)
+        try Task.checkCancellation()
+        guard registry.historyConfigurationIsCurrent, registry.isHistoryEnabled(for: "omp"),
+              let registration = registry.registration(id: "omp") else {
+            throw ExactOMPSessionError.sourceUnavailable
+        }
+        let scan = Task.detached(priority: .userInitiated) {
+            try Self.exactOMPJournal(sessionID: sessionID, journal: journal, registration: registration)
+        }
+        let entry = try await withTaskCancellationHandler {
+            try await scan.value
+        } onCancel: {
+            scan.cancel()
+        }
+        try Task.checkCancellation()
+        guard generation == historyConfigurationRevision, registry.historyConfigurationIsCurrent else {
+            throw ExactOMPSessionError.configurationChanged
+        }
+        return entry
+    }
+
+    nonisolated private static func exactOMPJournal(
+        sessionID: String, journal: URL, registration: CmuxVaultAgentRegistration
+    ) throws -> SessionEntry {
+        guard let root = registration.sessionDirectory.map({
+            URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath).resolvingSymlinksInPath().standardizedFileURL.path
+        }) else { throw ExactOMPSessionError.sourceUnavailable }
+        let selected = journal.resolvingSymlinksInPath().standardizedFileURL
+        let candidates = enumerateRegisteredJSONLCandidates(root: root, ompSessionsRoot: root)
+        guard let candidate = candidates.first(where: { $0.0.resolvingSymlinksInPath().standardizedFileURL == selected }),
+              let header = ompJournalHeader(selected), header.id == sessionID, !header.cwd.isEmpty else {
+            throw ExactOMPSessionError.invalidJournal
+        }
+        for (url, _) in candidates {
+            try Task.checkCancellation()
+            guard url.resolvingSymlinksInPath().standardizedFileURL != selected else { continue }
+            if ompJournalHeader(url)?.id == sessionID { throw ExactOMPSessionError.ambiguous }
+        }
+        let metadata = extractRegisteredJSONLMetadata(url: selected, registration: registration, fallbackCWD: nil)
+        return SessionEntry(
+            id: "omp:\(sessionID)", agent: .registered(RegisteredSessionAgent(registration: registration)),
+            sessionId: sessionID, title: metadata.title, cwd: header.cwd, gitBranch: metadata.branch,
+            pullRequest: nil, modified: candidate.1, fileURL: selected, specifics: .registered(registration)
+        )
+    }
+
+    nonisolated private static func ompJournalHeader(_ url: URL) -> (id: String, cwd: String)? {
+        var titleSeen = false
+        var header: (id: String, cwd: String)?
+        _ = SessionIndexJSONLReader(chunkSize: 4096).fromStart(url: url, maxBytes: 512 * 1024, indexedBody: { object, index in
+            if index == 0, object["type"] as? String == "title" {
+                titleSeen = true
+                return false
+            }
+            if index == (titleSeen ? 1 : 0), object["type"] as? String == "session",
+               let id = object["id"] as? String, let cwd = object["cwd"] as? String {
+                header = (id, cwd)
+            }
+            return true
+        })
+        return header
+    }
+
     private struct AntigravityHistoryMetadata {
         let sessionId: String
         let title: String
@@ -477,7 +555,10 @@ extension SessionIndexStore {
         var candidates: [(url: URL, modified: Date, prefilteredByRipgrep: Bool)] = []
         if !needle.isEmpty {
             for root in roots {
-                guard let rgPaths = await ripgrepMatchingPaths(needle: needle, root: root, fileGlob: "*.jsonl") else {
+                let maximumDepth = ompSessionsRoot.map { canonicalRoot in
+                    URL(fileURLWithPath: root).resolvingSymlinksInPath().standardizedFileURL.path == canonicalRoot ? 2 : 1
+                }
+                guard let rgPaths = await ripgrepMatchingPaths(needle: needle, root: root, fileGlob: "*.jsonl", maximumDepth: maximumDepth) else {
                     candidates.append(
                         contentsOf: enumerateRegisteredJSONLCandidates(root: root, ompSessionsRoot: ompSessionsRoot).map {
                             (url: $0.0, modified: $0.1, prefilteredByRipgrep: false)
@@ -689,15 +770,22 @@ extension SessionIndexStore {
               isDirectory.boolValue,
               let enumerator = fm.enumerator(
                   at: URL(fileURLWithPath: root, isDirectory: true),
-                  includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+                  includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey, .isDirectoryKey],
                   options: [.skipsHiddenFiles]
               ) else {
             return []
         }
         var candidates: [(URL, Date)] = []
-        for case let url as URL in enumerator where url.pathExtension == "jsonl" {
-            guard isRegisteredJSONLCandidate(url, ompSessionsRoot: ompSessionsRoot) else { continue }
-            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
+        for case let url as URL in enumerator {
+            if Task.isCancelled { break }
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey, .isDirectoryKey])
+            if let ompSessionsRoot, values?.isDirectory == true {
+                if url.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.path != ompSessionsRoot {
+                    enumerator.skipDescendants()
+                }
+                continue
+            }
+            guard url.pathExtension == "jsonl", isRegisteredJSONLCandidate(url, ompSessionsRoot: ompSessionsRoot) else { continue }
             guard values?.isRegularFile == true, let modified = values?.contentModificationDate else { continue }
             candidates.append((url, modified))
         }
@@ -754,6 +842,7 @@ extension SessionIndexStore {
         fallbackCWD: String?
     ) -> RegisteredAgentJSONLMetadata {
         var metadata = RegisteredAgentJSONLMetadata()
+        let isOMP = registration.id == CmuxVaultAgentRegistration.builtInOmp.id
         let needsNativeSessionID: Bool
         switch registration.sessionIdSource {
         case .argvOption:
@@ -762,11 +851,18 @@ extension SessionIndexStore {
             needsNativeSessionID = false
         }
         forEachJSONLine(url: url, maxBytes: 512 * 1024) { object in
-            if metadata.sessionId == nil {
-                metadata.sessionId = firstString(in: object, keys: registeredJSONLSessionIDKeys())
-            }
-            if metadata.cwd == nil {
-                metadata.cwd = firstString(in: object, keys: registeredJSONLCWDKeys())
+            if isOMP {
+                if object["type"] as? String == "session", metadata.sessionId == nil {
+                    metadata.sessionId = object["id"] as? String
+                    metadata.cwd = object["cwd"] as? String
+                }
+            } else {
+                if metadata.sessionId == nil {
+                    metadata.sessionId = firstString(in: object, keys: registeredJSONLSessionIDKeys())
+                }
+                if metadata.cwd == nil {
+                    metadata.cwd = firstString(in: object, keys: registeredJSONLCWDKeys())
+                }
             }
             if metadata.branch == nil, let git = object["git"] as? [String: Any] {
                 metadata.branch = firstString(in: git, keys: ["branch", "gitBranch"])
@@ -791,8 +887,8 @@ extension SessionIndexStore {
             }
             return !metadata.title.isEmpty
                 && metadata.cwd != nil
-                && metadata.branch != nil
-                && (!needsNativeSessionID || metadata.sessionId != nil)
+                && (isOMP || metadata.branch != nil)
+                && (isOMP ? metadata.sessionId != nil : (!needsNativeSessionID || metadata.sessionId != nil))
         }
         if case .piSessionFile = registration.sessionIdSource, metadata.cwd == nil {
             metadata.cwd = fallbackCWD ?? piCWDInferred(from: url)

@@ -58,7 +58,7 @@ struct SessionIndexJSONLReader: Sendable {
             return Self.visit(line: line, lineIndex: rawLineIndex, body: indexedBody)
         }
 
-        while bytesRead < maxBytes {
+        while bytesRead < maxBytes && !Task.isCancelled {
             let readCount = min(chunkSize, maxBytes - bytesRead)
             let chunk = (try? handle.read(upToCount: readCount)) ?? Data()
             if chunk.isEmpty {
@@ -68,6 +68,7 @@ struct SessionIndexJSONLReader: Sendable {
             buffer.append(chunk)
 
             while let newline = buffer[lineStart...].firstIndex(of: 0x0a) {
+                if Task.isCancelled { break }
                 let line = Data(buffer[lineStart..<newline])
                 lineStart = buffer.index(after: newline)
                 guard !line.isEmpty else { continue }
@@ -87,7 +88,7 @@ struct SessionIndexJSONLReader: Sendable {
             }
         }
 
-        if lineStart < buffer.endIndex {
+        if !Task.isCancelled, lineStart < buffer.endIndex {
             let line = Data(buffer[lineStart..<buffer.endIndex])
             if !line.isEmpty {
                 _ = visit(line: line)

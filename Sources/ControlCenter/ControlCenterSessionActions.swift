@@ -157,6 +157,14 @@ extension ControlCenterCoordinator {
     func indexedSession(_ target: ControlCenterTarget) async throws -> SessionEntry {
         guard let id = target.sessionID, !id.isEmpty else { throw ControlCenterHostError.blocked("Choose one exact indexed session.") }
         let agent = try await sessionSource(target.agentID)
+        if target.agentID == "omp" {
+            guard let path = target.sessionFile else {
+                throw ControlCenterHostError.blocked("Choose an exact indexed OMP journal from session history. No session was started.")
+            }
+            let entry = try await vaultIndex().exactOMPSession(sessionID: id, journal: URL(fileURLWithPath: path))
+            try checkCancellation()
+            return entry
+        }
         let outcome = await vaultIndex().searchSessions(query: id, scope: .agent(agent), offset: 0, limit: 500)
         try checkCancellation()
         guard outcome.errors.isEmpty else { throw ControlCenterHostError.blocked(outcome.errors.joined(separator: "\n")) }
@@ -169,11 +177,6 @@ extension ControlCenterCoordinator {
         }
         guard entries.count == 1, let entry = entries.first else {
             throw ControlCenterHostError.blocked("Session is missing or ambiguous in the current Vault index. Search again; no session was started.")
-        }
-        if target.agentID == "omp", let expected = target.sessionFile {
-            guard let file = entry.fileURL, canonicalPath(expected) == canonicalPath(file.path) else {
-                throw ControlCenterHostError.blocked("The indexed session moved. Select its current search result before resuming.")
-            }
         }
         return entry
     }
@@ -217,9 +220,40 @@ extension ControlCenterCoordinator {
         guard latestTransfer != "departed" else { throw ControlCenterHostError.blocked("This session moved to another machine. Resuming it would create a copy, so it is blocked.") }
     }
 
+    func observeOMPLaunch(_ launch: ControlCenterOMPLaunch, workspace: Workspace) async throws -> String {
+        guard let terminal = workspace.panels.values.lazy.compactMap({ $0 as? TerminalPanel }).first else {
+            throw ControlCenterHostError.blocked("The OMP workspace has no terminal. No launched process was observed.")
+        }
+        terminal.surface.requestBackgroundSurfaceStartIfNeeded()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while ContinuousClock.now < deadline {
+            try checkCancellation()
+            guard workspace.panels[terminal.id] === terminal else {
+                throw ControlCenterHostError.blocked("The OMP terminal was closed before launch could be observed.")
+            }
+            if terminal.surface.renderHealth == .shellExited {
+                throw ControlCenterHostError.blocked("OMP exited before launch could be observed. Its workspace was left open for inspection.")
+            }
+            if let processID = terminal.surface.foregroundProcessID() {
+                let workspaceID = workspace.id
+                let surfaceID = terminal.surface.id
+                let observed = await Task.detached(priority: .userInitiated) {
+                    launch.runningProcessID(foregroundID: processID, workspaceID: workspaceID, surfaceID: surfaceID)
+                }.value
+                try checkCancellation()
+                if let observed {
+                    return "Observed OMP process \(observed) in logical directory \(launch.directory)" +
+                        (launch.journal.map { " with exact indexed journal \($0.path) (not --continue)." } ?? ".")
+                }
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        throw ControlCenterHostError.blocked("Timed out waiting to observe OMP in workspace \(workspace.id.uuidString). The workspace was left open; an empty shell is not a successful launch.")
+    }
+
     func focusOrResume(_ target: ControlCenterTarget) async throws -> (UUID?, String) {
         let entry = try await indexedSession(target)
-        _ = await SharedLiveAgentIndex.shared.indexRefreshingNow()
+        let liveIndex = await SharedLiveAgentIndex.shared.indexRefreshingNow()
         try checkCancellation()
         for manager in tabManagers() {
             if let active = SessionEntryResumeCoordinator.activeTarget(for: entry, tabManager: manager),
@@ -263,11 +297,24 @@ extension ControlCenterCoordinator {
             }
             return (workspace.id, "Submitted the exact indexed \(entry.agent.displayName) session through its Vault resume adapter. Launch admission and completion are not yet observed.")
         }
+        guard let liveIndex, liveIndex.isComplete else {
+            throw ControlCenterHostError.blocked("Fresh OMP ownership evidence is unavailable or incomplete. No session was started.")
+        }
+        let sessionID = entry.sessionId
         guard let cwd = entry.cwd, !cwd.isEmpty, let file = entry.fileURL else {
             throw ControlCenterHostError.blocked("The indexed session has no working directory or journal.")
         }
-        let logical = try logicalDirectory(canonicalPath(target.path) == canonicalPath(cwd) ? target.path : cwd)
-        let sessionID = entry.sessionId
+        let logical = try logicalDirectory(cwd)
+        let launchKey = "omp-session:\(entry.sessionId):\(canonicalPath(file.path))"
+        let launch = ControlCenterOMPLaunch(executable: try ompExecutable(), directory: logical, journal: file)
+        if let workspaceID = openedTargets[launchKey] {
+            for manager in tabManagers() {
+                if let workspace = manager.tabs.first(where: { $0.id == workspaceID }) {
+                    manager.focusTab(workspaceID)
+                    return (workspaceID, try await observeOMPLaunch(launch, workspace: workspace))
+                }
+            }
+        }
         let inspection = Task.detached(priority: .userInitiated) {
             try Self.checkSessionFile(file, sessionID: sessionID)
         }
@@ -276,7 +323,7 @@ extension ControlCenterCoordinator {
         } onCancel: {
             inspection.cancel()
         }
-        let executable = try ompExecutable()
+        let executable = launch.executable
         let data = try await ControlCenterOMPProbe().capture(
             executable: executable,
             arguments: ["session", "lease", "--json", "--", entry.sessionId],
@@ -290,21 +337,31 @@ extension ControlCenterCoordinator {
         guard lease.held.isEmpty, lease.unknown.isEmpty else {
             throw ControlCenterHostError.blocked("This session is held elsewhere or its ownership is unknown. No copy was created.")
         }
+        let ownership = Task.detached(priority: .userInitiated) {
+            liveIndex.liveSessionOwner(
+                kind: "omp", sessionID: sessionID,
+                processArgumentsProvider: { CmuxTopProcessSnapshot.processArgumentsAndEnvironment(for: $0) }
+            ) != nil
+        }
+        guard !(await ownership.value) else {
+            throw ControlCenterHostError.blocked("The exact OMP session already has a live owner outside the available panes. No copy was created.")
+        }
+        try checkCancellation()
         let manager = try currentManager()
         guard let claim = AgentResumeLaunchGuard.shared.claimResumeLaunchWithToken(kind: "omp", sessionId: entry.sessionId) else {
             throw ControlCenterHostError.blocked("This session already has a pending resume. Wait for it rather than launching a copy.")
         }
-        let command = [executable.path, "--cwd", logical, "--session", file.path].map(SessionEntry.shellQuote).joined(separator: " ")
         guard let workspace = manager.addWorkspaceIfActive(
             title: target.name,
             workingDirectory: logical,
-            initialTerminalInput: TerminalStartupTypedShellCommand().typedInput(posixCommand: command) + "\n",
-            initialTerminalStartupRestoreAgent: entry.resumeLaunch?.startupRestoreAgent,
-            inheritWorkingDirectory: false
+            initialTerminalCommand: launch.initialCommand,
+            inheritWorkingDirectory: false,
+            eagerLoadTerminal: true
         ) else {
             AgentResumeLaunchGuard.shared.releaseResumeLaunch(kind: "omp", sessionId: entry.sessionId, claim: claim)
             throw ControlCenterHostError.blocked("The workspace could not be created. No resume was launched.")
         }
-        return (workspace.id, "Submitted exact indexed OMP journal to a new workspace (not --continue). Launch completion is not yet observed.")
+        openedTargets[launchKey] = workspace.id
+        return (workspace.id, try await observeOMPLaunch(launch, workspace: workspace))
     }
 }

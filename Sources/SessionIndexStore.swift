@@ -1852,12 +1852,12 @@ final class SessionIndexStore: ObservableObject {
     /// cancelled (e.g. user types another key), `onCancel` signals the launched
     /// rg process instead of letting it grind to completion.
     nonisolated static func ripgrepMatchingPaths(
-        needle: String, root: String, fileGlob: String, ripgrepPath: String? = nil
+        needle: String, root: String, fileGlob: String, ripgrepPath: String? = nil, maximumDepth: Int? = nil
     ) async -> [URL]? {
         guard let rg = ripgrepPath ?? resolvedRipgrepPath() else { return nil }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: rg)
-        process.arguments = [
+        var arguments = [
             "--files-with-matches",
             "--ignore-case",
             "--fixed-strings",
@@ -1865,10 +1865,9 @@ final class SessionIndexStore: ObservableObject {
             "--no-ignore",
             "--hidden",
             "--glob", fileGlob,
-            "--",
-            needle,
-            root,
         ]
+        if let maximumDepth { arguments += ["--max-depth", String(maximumDepth)] }
+        process.arguments = arguments + ["--", needle, root]
         let outPipe = Pipe()
         process.standardOutput = outPipe
         // Discard stderr to /dev/null so its pipe can never deadlock either.

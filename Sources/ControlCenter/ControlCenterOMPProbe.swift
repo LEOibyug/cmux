@@ -1,5 +1,57 @@
+import CmuxFoundation
 import Darwin
 import Foundation
+
+/// Starts OMP as the terminal process, never as prompt-dependent typeahead.
+struct ControlCenterOMPLaunch: Sendable {
+    let executable: URL
+    let directory: String
+    let journal: URL?
+
+    var arguments: [String] {
+        [executable.path, "--cwd", directory] + (journal.map { ["--session", $0.path] } ?? [])
+    }
+
+    var initialCommand: String {
+        // Ghostty may start elsewhere if its cwd disappears. Recheck in the
+        // child before exec, preserving the logical path and never falling back.
+        let command = "cd -L -- \(SessionEntry.shellQuote(directory)) && exec " +
+            arguments.map(SessionEntry.shellQuote).joined(separator: " ")
+        return WorkspaceInitialCommandLoginShell.wrap("exec /bin/sh -c \(SessionEntry.shellQuote(command))")
+    }
+
+    func runningProcessID(foregroundID: Int, workspaceID: UUID, surfaceID: UUID) -> Int? {
+        if isRunning(processID: foregroundID, workspaceID: workspaceID, surfaceID: surfaceID) { return foregroundID }
+        guard foregroundID > 0, foregroundID <= Int(Int32.max) else { return nil }
+        // macOS login can remain the foreground group leader after its child execs OMP.
+        let size = proc_listpids(UInt32(PROC_PGRP_ONLY), UInt32(foregroundID), nil, 0)
+        guard size > 0 else { return nil }
+        var pids = [pid_t](repeating: 0, count: Int(size) / MemoryLayout<pid_t>.stride + 8)
+        let bytes = pids.withUnsafeMutableBytes {
+            proc_listpids(UInt32(PROC_PGRP_ONLY), UInt32(foregroundID), $0.baseAddress, Int32($0.count))
+        }
+        guard bytes > 0, Int(bytes) < pids.count * MemoryLayout<pid_t>.stride else { return nil }
+        return pids.prefix(Int(bytes) / MemoryLayout<pid_t>.stride).lazy.map(Int.init).first {
+            $0 != foregroundID && getpgid(pid_t($0)) == pid_t(foregroundID)
+                && isRunning(processID: $0, workspaceID: workspaceID, surfaceID: surfaceID)
+        }
+    }
+
+    func isRunning(processID: Int, workspaceID: UUID, surfaceID: UUID) -> Bool {
+        guard processID > 0, processID <= Int(Int32.max),
+              let identity = AgentPIDProcessIdentity(pid: pid_t(processID)),
+              let process = CmuxTopProcessSnapshot.processArgumentsAndEnvironment(
+                for: processID, expectedIdentity: identity
+              ),
+              process.environment["CMUX_WORKSPACE_ID"]?.lowercased() == workspaceID.uuidString.lowercased(),
+              process.environment["CMUX_SURFACE_ID"]?.lowercased() == surfaceID.uuidString.lowercased(),
+              process.environment["PWD"] == directory,
+              let executableIndex = process.arguments.firstIndex(where: {
+                $0.hasPrefix("/") && URL(fileURLWithPath: $0).resolvingSymlinksInPath() == executable.resolvingSymlinksInPath()
+              }) else { return false }
+        return process.arguments.dropFirst(executableIndex + 1).elementsEqual(arguments.dropFirst())
+    }
+}
 
 /// Only fixed, read-only OMP CLI probes use this runner; model text never becomes argv.
 final class ControlCenterOMPProbe: @unchecked Sendable {

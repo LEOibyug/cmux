@@ -133,6 +133,10 @@ extension ControlCenterCoordinator {
                 }
                 guard target.kind == .newSession || matchesURL else { continue }
                 manager.focusTab(previousID)
+                if target.kind == .newSession {
+                    let launch = ControlCenterOMPLaunch(executable: try ompExecutable(), directory: try logicalDirectory(target.path), journal: nil)
+                    return (previousID, try await observeOMPLaunch(launch, workspace: workspace))
+                }
                 return (previousID, "Reused the target's existing workspace.")
             }
         }
@@ -156,17 +160,17 @@ extension ControlCenterCoordinator {
             return (workspace.id, "Opened local directory \(path).")
         case .newSession:
             let path = try logicalDirectory(target.path)
-            let executable = try ompExecutable()
-            let command = [executable.path, "--cwd", path].map(SessionEntry.shellQuote).joined(separator: " ")
+            let launch = ControlCenterOMPLaunch(executable: try ompExecutable(), directory: path, journal: nil)
             let manager = try currentManager()
             guard let workspace = manager.addWorkspaceIfActive(
                 title: target.name,
                 workingDirectory: path,
-                initialTerminalInput: TerminalStartupTypedShellCommand().typedInput(posixCommand: command) + "\n",
-                inheritWorkingDirectory: false
+                initialTerminalCommand: launch.initialCommand,
+                inheritWorkingDirectory: false,
+                eagerLoadTerminal: true
             ) else { throw ControlCenterHostError.blocked("The OMP workspace could not be created.") }
             openedTargets[key] = workspace.id
-            return (workspace.id, "Submitted fresh OMP launch with logical --cwd \(path). Launch completion is not yet observed.")
+            return (workspace.id, try await observeOMPLaunch(launch, workspace: workspace))
         case .file:
             let path = (target.path as NSString).expandingTildeInPath
             guard path.hasPrefix("/") else { throw ControlCenterHostError.blocked("Choose an absolute file path.") }

@@ -40,6 +40,19 @@ agents use their existing Vault resume adapters and installed runtime; their
 sessions are not passed through OMP's journal or lease checks. The controller
 never steals a lease, deliberately forks, or automatically retries a failed resume.
 
+The controller enters the journal's recorded logical directory before executing
+OMP, passing that same path as `--cwd` and the exact journal as `--session`.
+Startup uses the terminal's initial command, not shell-prompt typeahead, and runs
+even while the Control Center page covers the terminal. Success requires a live
+OMP process in that pane's foreground process group with matching arguments,
+directory and cmux scope; exit or observation timeout leaves the workspace open
+with a blocked receipt rather than reporting an empty shell as success.
+Exact opens revalidate current-source journal headers instead of searching the
+transcript corpus again, and reject duplicate session IDs. OMP searches prune
+nested artifact directories before content scanning; body-text search remains
+available for admitted conversation journals.
+
+
 Saved collections contain ordered target snapshots with stable item IDs.
 Opening a collection reuses existing targets where possible; independent failed
 items do not close successful ones. Failed-only retry carries prior successes
