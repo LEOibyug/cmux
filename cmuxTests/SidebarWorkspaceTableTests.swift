@@ -1669,10 +1669,10 @@ struct SidebarWorkspaceTableTests {
             draggedWorkspaceId: ids[1],
             indicatorRowIds: ids
         )
-        let targetPaint = topEdge.paint(forRowWorkspaceId: ids[3])
+        let targetPaint = topEdge.paint(forRowWorkspaceId: ids[3], groupId: nil, isGroupHeader: false)
         #expect(targetPaint.top)
         #expect(!targetPaint.bottom)
-        let bystanderPaint = topEdge.paint(forRowWorkspaceId: ids[2])
+        let bystanderPaint = topEdge.paint(forRowWorkspaceId: ids[2], groupId: nil, isGroupHeader: false)
         #expect(!bystanderPaint.top)
         #expect(!bystanderPaint.bottom)
 
@@ -1684,7 +1684,7 @@ struct SidebarWorkspaceTableTests {
             draggedWorkspaceId: ids[1],
             indicatorRowIds: ids
         )
-        let canonicalPaint = bottomEdge.paint(forRowWorkspaceId: ids[3])
+        let canonicalPaint = bottomEdge.paint(forRowWorkspaceId: ids[3], groupId: nil, isGroupHeader: false)
         #expect(canonicalPaint.top)
 
         // The dragged row never paints: AppKit snapshots it as the drag image
@@ -1695,7 +1695,7 @@ struct SidebarWorkspaceTableTests {
             draggedWorkspaceId: ids[1],
             indicatorRowIds: ids
         )
-        let draggedPaint = selfTargeting.paint(forRowWorkspaceId: ids[1])
+        let draggedPaint = selfTargeting.paint(forRowWorkspaceId: ids[1], groupId: nil, isGroupHeader: false)
         #expect(!draggedPaint.top)
         #expect(!draggedPaint.bottom)
     }

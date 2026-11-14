@@ -8,9 +8,8 @@ public import Foundation
 /// empty group starts with a generated live anchor. Closing that anchor
 /// promotes the first remaining member in `tabs` order. A pinned group
 /// with no remaining members transitions to an empty anchor and keeps its
-/// header until an explicit Delete Group action removes it. The anchor is
-/// rendered implicitly as the group header (there is no separate workspace
-/// row).
+/// header until an explicit Delete Group action removes it. A live anchor
+/// remains a normal member workspace; the group header is a separate row.
 /// An optional external id gives automation a stable, caller-owned identity
 /// for create-if-absent operations; it is scoped to the owning window.
 public struct WorkspaceGroup: Identifiable, Equatable, Sendable {

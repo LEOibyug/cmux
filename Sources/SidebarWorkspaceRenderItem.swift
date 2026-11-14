@@ -23,10 +23,10 @@ enum SidebarWorkspaceRenderItem {
         }
     }
 
-    var rowWorkspaceId: UUID {
+    var rowId: UUID {
         switch self {
-        case .groupHeader(_, let anchorWorkspaceId):
-            return anchorWorkspaceId
+        case .groupHeader(let groupId, _):
+            return groupId
         case .workspace(let workspaceId):
             return workspaceId
         }
@@ -69,10 +69,6 @@ enum SidebarWorkspaceRenderItem {
                     // two runs, keep honoring the same collapse decision.
                     skipChildrenUntilNextGroup = collapsedByGroupId[groupId] ?? false
                 }
-            }
-            // Anchor workspaces are represented exclusively by the group header.
-            if let groupId, let group = groupsById[groupId], group.liveAnchorWorkspaceId == tab.id {
-                continue
             }
             if groupId == nil || !skipChildrenUntilNextGroup {
                 items.append(.workspace(workspaceId: tab.id))

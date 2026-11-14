@@ -9,12 +9,6 @@ extension WorkspacesModel {
         workspaceGroups.contains { $0.liveAnchorWorkspaceId == workspaceId }
     }
 
-    /// Whether an id identifies a visible group header, including a durable
-    /// header-only group's stable identity.
-    func isWorkspaceGroupHeader(_ workspaceId: UUID) -> Bool {
-        workspaceGroups.contains { $0.anchorWorkspaceId == workspaceId }
-    }
-
     /// The top-level sidebar row id for each given workspace (its group's
     /// anchor when grouped, itself when ungrouped), deduplicated in order.
     func topLevelWorkspaceIds(for workspaces: [Tab]) -> [UUID] {
@@ -137,9 +131,7 @@ extension WorkspacesModel {
             }
         }
 
-        let groupsByAnchorId = Dictionary(
-            uniqueKeysWithValues: workspaceGroups.map { ($0.anchorWorkspaceId, $0) }
-        )
+        let groupsByAnchorId = Dictionary(uniqueKeysWithValues: workspaceGroups.map { ($0.anchorWorkspaceId, $0) })
         let tabsById = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
         func isPinnedRow(_ id: UUID) -> Bool {
             groupsByAnchorId[id]?.isPinned ?? tabsById[id]?.isPinned ?? false
@@ -212,9 +204,7 @@ extension WorkspacesModel {
     func sidebarTopLevelPinnedWorkspaceIdsIncludingEmptyGroups(
         promotingWorkspaceId: UUID? = nil
     ) -> Set<UUID> {
-        let groupsByAnchorId = Dictionary(
-            uniqueKeysWithValues: workspaceGroups.map { ($0.anchorWorkspaceId, $0) }
-        )
+        let groupsByAnchorId = Dictionary(uniqueKeysWithValues: workspaceGroups.map { ($0.anchorWorkspaceId, $0) })
         let tabsById = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
         return Set(
             sidebarTopLevelWorkspaceIdsIncludingEmptyGroups(
@@ -303,8 +293,6 @@ extension WorkspacesModel {
             return groupClamp
         }
         let pinnedCount = leadingGlobalPinnedRowCount()
-        // Tier by how the row renders: a group anchor follows its group's
-        // pin, not its own per-workspace pin (#13417).
         if isGlobalPinnedRow(workspace) {
             return min(clamped, max(0, pinnedCount - 1))
         }
@@ -313,15 +301,14 @@ extension WorkspacesModel {
         return min(max(clamped, pinnedCount), tabs.count - 1)
     }
 
-    /// The in-group clamp for a non-anchor member reorder, or `nil` when the
-    /// workspace is ungrouped or its group's anchor.
+    /// The in-group clamp for any member workspace, including the stored
+    /// anchor, or `nil` when the workspace is ungrouped.
     func clampedGroupedMemberReorderIndex(
         for workspace: Tab,
         clampedTargetIndex: Int
     ) -> Int? {
         guard let groupId = workspace.groupId,
-              let group = workspaceGroups.first(where: { $0.id == groupId }),
-              workspace.id != group.liveAnchorWorkspaceId else {
+              workspaceGroups.contains(where: { $0.id == groupId }) else {
             return nil
         }
         let memberIndices = tabs.indices.filter { tabs[$0].groupId == groupId }
@@ -331,15 +318,15 @@ extension WorkspacesModel {
         }
         let pinnedMemberCount = memberIndices.reduce(into: 0) { count, index in
             let member = tabs[index]
-            if member.id != group.liveAnchorWorkspaceId, member.isPinned {
+            if member.isPinned {
                 count += 1
             }
         }
         let lowerBound = workspace.isPinned
-            ? min(firstIndex + 1, lastIndex)
-            : min(firstIndex + 1 + pinnedMemberCount, lastIndex)
+            ? firstIndex
+            : min(firstIndex + pinnedMemberCount, lastIndex)
         let upperBound = workspace.isPinned
-            ? max(firstIndex + pinnedMemberCount, lowerBound)
+            ? max(firstIndex + pinnedMemberCount - 1, lowerBound)
             : lastIndex
         return min(max(clampedTargetIndex, lowerBound), upperBound)
     }

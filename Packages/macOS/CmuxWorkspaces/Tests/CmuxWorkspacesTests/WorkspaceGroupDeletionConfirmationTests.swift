@@ -68,26 +68,6 @@ struct WorkspaceGroupDeletionConfirmationTests {
         #expect(!model.workspaceGroups.contains { $0.id == groupId })
     }
 
-    @Test
-    func removingAllChildrenRemovesUntouchedGeneratedHeader() throws {
-        let (model, host, groups) = makeWorld()
-        let first = CoordinatorStubTab()
-        let second = CoordinatorStubTab()
-        model.tabs = [first, second]
-        let groupId = try #require(groups.createWorkspaceGroup(name: "G"))
-        groups.addWorkspaceToGroup(workspaceId: first.id, groupId: groupId)
-        groups.addWorkspaceToGroup(workspaceId: second.id, groupId: groupId)
-        let group = try #require(model.workspaceGroups.first { $0.id == groupId })
-        let anchorId = group.anchorWorkspaceId
-
-        groups.removeWorkspaceFromGroup(workspaceId: first.id)
-        groups.removeWorkspaceFromGroup(workspaceId: second.id)
-
-        #expect(!model.workspaceGroups.contains { $0.id == groupId })
-        #expect(host.closedWorkspaceIds == [anchorId])
-        #expect(model.tabs.contains { $0.id == first.id && $0.groupId == nil })
-        #expect(model.tabs.contains { $0.id == second.id && $0.groupId == nil })
-    }
 
     @Test
     func deleteAnchorOnlyGroupClosesHeaderWorkspaceAndCreatesReplacement() throws {

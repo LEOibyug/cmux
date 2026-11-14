@@ -170,12 +170,6 @@ extension ControlCommandCoordinator {
                 message: "Child workspace not found in target window: \(missing.joined(separator: ", "))",
                 data: .object(["unknown_workspace_ids": .array(missing.map { .string($0) })])
             )
-        case .allChildrenAreAnchors(let ineligible):
-            return .err(
-                code: "invalid_state",
-                message: workspaceGroupStrings().allChildrenAreAnchors,
-                data: .object(["ineligible_workspace_ids": .array(ineligible.map { .string($0) })])
-            )
         case .notCreated:
             return .err(code: "not_created", message: "Group was not created", data: nil)
         case .created(let group):
@@ -283,8 +277,6 @@ extension ControlCommandCoordinator {
                 message: workspaceGroupStrings().invalidReferenceWorkspace,
                 data: .object(["reference_workspace_id": .string(referenceWorkspaceID?.uuidString ?? "")])
             )
-        case .workspaceIsOtherGroupAnchor:
-            return .err(code: "invalid_state", message: workspaceGroupStrings().workspaceIsOtherGroupAnchor, data: identity)
         }
     }
 
@@ -550,8 +542,6 @@ extension ControlCommandCoordinator {
     /// conformance against the app bundle.
     func workspaceGroupStrings() -> ControlWorkspaceGroupStrings {
         context?.controlWorkspaceGroupStrings() ?? ControlWorkspaceGroupStrings(
-            allChildrenAreAnchors: "",
-            workspaceIsOtherGroupAnchor: "",
             invalidReferenceWorkspace: "",
             closeWorkspacesMustBeBoolean: "",
             emptyPinnedCannotUngroup: ""

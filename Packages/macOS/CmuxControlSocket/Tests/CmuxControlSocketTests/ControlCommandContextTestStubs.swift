@@ -232,8 +232,6 @@ extension ControlNotificationContext {
 extension ControlWorkspaceGroupContext {
     func controlWorkspaceGroupStrings() -> ControlWorkspaceGroupStrings {
         ControlWorkspaceGroupStrings(
-            allChildrenAreAnchors: "",
-            workspaceIsOtherGroupAnchor: "",
             invalidReferenceWorkspace: "invalid reference workspace",
             closeWorkspacesMustBeBoolean: "close workspaces must be boolean",
             emptyPinnedCannotUngroup: "empty pinned group cannot be ungrouped"

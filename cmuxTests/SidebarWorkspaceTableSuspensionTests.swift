@@ -373,6 +373,202 @@ struct SidebarWorkspaceTableSuspensionTests {
     }
 
     @Test
+    func expandedGroupKeepsAnchorRowInteractionsSeparateFromItsHeader() async throws {
+        let tabManager = TabManager(autoWelcomeIfNeeded: false)
+        let anchor = try #require(tabManager.selectedWorkspace)
+        let members = [anchor] + (0..<2).map { _ in
+            tabManager.addWorkspace(select: false, autoWelcomeIfNeeded: false, autoRefreshMetadata: false)
+        }
+        tabManager.selectTab(members[1])
+        let groupId = Self.groupHeaderGroupID
+        let environment = SidebarWorkspaceTableEnvironmentSnapshot(
+            colorScheme: .light,
+            globalFontMagnificationPercent: 100,
+            lazyContractProbe: SidebarLazyContractProbe()
+        )
+        var headerFocusCount = 0
+        let headerActions = makeGroupHeaderActions(onFocusAnchor: { _ in headerFocusCount += 1 }) {}
+        func headerRow(isCollapsed: Bool) -> SidebarWorkspaceTableRowConfiguration {
+            SidebarWorkspaceTableRowConfiguration(
+                groupHeaderModel: makeGroupHeaderModel(
+                    anchorWorkspaceId: anchor.id,
+                    isCollapsed: isCollapsed,
+                    memberCount: members.count
+                ),
+                actions: headerActions,
+                environment: environment
+            )
+        }
+        let memberRows = members.map { workspace in
+            let model = SidebarWorkspaceRowSuspensionTests.makeModel(workspaceId: workspace.id)
+            return SidebarWorkspaceTableRowConfiguration(
+                workspaceRowModel: model,
+                actions: SidebarWorkspaceRowSuspensionTests.makeActions(
+                    model: model,
+                    workspace: workspace,
+                    tabManager: tabManager
+                ),
+                groupId: groupId,
+                isPinned: false,
+                environment: environment
+            )
+        }
+        let tailRows = (0..<8).map { _ in makeRowConfiguration(fixedHeight: 30) }
+        let expandedRows = [headerRow(isCollapsed: false)] + memberRows + tailRows
+        let workspaceIds = members.map(\.id) + tailRows.map(\.workspaceId)
+        var indicatorScope = SidebarWorkspaceReorderDropIndicatorScope.topLevel
+        var indicator = SidebarDropIndicator(tabId: groupId, edge: .top)
+        var indicatorRowIds = [groupId]
+        let actions = makeTableActions(
+            updateWorkspaceDrag: { _, targets, _ in
+                for target in targets where target.isGroupHeader {
+                    #expect(target.groupId == target.workspaceId)
+                }
+                return SidebarWorkspaceTableReorderDropUpdate(
+                    indicator: indicator,
+                    scope: indicatorScope,
+                    draggedWorkspaceId: members[2].id,
+                    indicatorRowIds: indicatorRowIds,
+                    plan: nil
+                )
+            },
+            workspaceIdForDrag: { rowId, workspaceId in
+                if case .group(let groupId) = rowId { return groupId }
+                return workspaceId
+            }
+        )
+        let controller = SidebarWorkspaceTableController()
+        let container = controller.makeContainerView()
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 480),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = container
+        defer {
+            window.contentView = nil
+            window.close()
+        }
+        controller.apply(
+            rows: expandedRows,
+            actions: actions,
+            workspaceIds: workspaceIds,
+            selectedWorkspaceId: members[1].id,
+            selectedScrollTargetWorkspaceId: nil
+        )
+        await flushStagedTableMutations()
+        container.layoutSubtreeIfNeeded()
+        let table = container.tableView
+        table.layoutSubtreeIfNeeded()
+        #expect(table.numberOfRows == 4 + tailRows.count)
+        let headerCell = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? SidebarGroupHeaderTableCellView)
+        let anchorCell = try #require(table.view(atColumn: 0, row: 1, makeIfNecessary: true) as? SidebarWorkspaceRowTableCellView)
+        for row in 2...3 {
+            #expect(table.view(atColumn: 0, row: row, makeIfNecessary: true) is SidebarWorkspaceRowTableCellView)
+        }
+
+        // A header and its stored anchor share focus identity, not drag identity
+        // or drop-line scope. Neither member paint nor payload may hit the header.
+        do {
+            let headerWriter = try #require(controller.tableView(table, pasteboardWriterForRow: 0) as? SidebarWorkspaceDragPasteboardWriter)
+            let anchorWriter = try #require(controller.tableView(table, pasteboardWriterForRow: 1) as? SidebarWorkspaceDragPasteboardWriter)
+            #expect(headerWriter.workspaceIdForDrag == groupId)
+            #expect(anchorWriter.workspaceIdForDrag == anchor.id)
+        }
+        #expect(controller.updateReorderDrag(windowPoint: .zero))
+        #expect(Self.descendants(of: headerCell).contains { $0 is SidebarReorderIndicatorView && !$0.isHidden })
+        #expect(!Self.descendants(of: anchorCell).contains { $0 is SidebarReorderIndicatorView && !$0.isHidden })
+        indicatorScope = .group(groupId)
+        indicator = SidebarDropIndicator(tabId: anchor.id, edge: .top)
+        indicatorRowIds = members.map(\.id)
+        #expect(controller.updateReorderDrag(windowPoint: .zero))
+        #expect(!Self.descendants(of: headerCell).contains { $0 is SidebarReorderIndicatorView && !$0.isHidden })
+        #expect(Self.descendants(of: anchorCell).contains { $0 is SidebarReorderIndicatorView && !$0.isHidden })
+        controller.reorderDropDragExited()
+
+        container.bonsplitDropView.setWorkspaceDropTargetCollectionActive(true)
+        let targetBridge = try #require(container.bonsplitDropView.targetBridge)
+        let visibleRange = table.rows(in: table.visibleRect)
+        let expectedTargets = (1..<min(expandedRows.count, visibleRange.upperBound)).map { row in
+            SidebarDropPlanner.WorkspaceDropTarget(
+                workspaceId: expandedRows[row].workspaceId,
+                isPinned: false,
+                frame: table.convert(table.rect(ofRow: row), to: container.bonsplitDropView)
+            )
+        }
+        #expect(targetBridge.targets == SidebarDropPlanner.OrderedWorkspaceDropTargets(expectedTargets))
+        container.bonsplitDropView.setWorkspaceDropTargetCollectionActive(false)
+
+        // Retained presentation must replay the member click by render identity,
+        // not dispatch the header action through the shared anchor workspace id.
+        controller.setPresentationActive(false, workspaceIds: workspaceIds, rowIds: expandedRows.map(\.id))
+        controller.setPresentationActive(true, workspaceIds: workspaceIds, rowIds: expandedRows.map(\.id))
+        let action = try #require(table.action)
+        let target = try #require(table.target)
+        table.setValue(1, forKey: "clickedRow")
+        #expect(table.sendAction(action, to: target))
+        table.setValue(-1, forKey: "clickedRow")
+        controller.apply(
+            rows: expandedRows,
+            actions: actions,
+            workspaceIds: workspaceIds,
+            selectedWorkspaceId: members[1].id,
+            selectedScrollTargetWorkspaceId: nil
+        )
+        await flushStagedTableMutations()
+        #expect(tabManager.selectedTabId == anchor.id)
+        #expect(headerFocusCount == 0)
+
+        // Leave room for exactly one workspace row: scrolling the preceding
+        // header instead would leave the selected anchor beneath the footer.
+        let insets = container.scrollView.contentInsets
+        window.setContentSize(NSSize(
+            width: 320,
+            height: insets.top + insets.bottom + table.rect(ofRow: 1).height + 4
+        ))
+        container.layoutSubtreeIfNeeded()
+        controller.viewportDidChange()
+        await flushStagedTableMutations()
+        controller.apply(
+            rows: expandedRows,
+            actions: actions,
+            workspaceIds: workspaceIds,
+            selectedWorkspaceId: anchor.id,
+            selectedScrollTargetWorkspaceId: anchor.id
+        )
+        await flushStagedTableMutations()
+        let anchorFrame = table.rect(ofRow: 1)
+        #expect(anchorFrame.minY >= container.clipView.bounds.minY + insets.top - 0.5)
+        #expect(anchorFrame.maxY <= container.clipView.bounds.maxY - insets.bottom + 0.5)
+
+        controller.apply(
+            rows: [headerRow(isCollapsed: true)] + tailRows,
+            actions: actions,
+            workspaceIds: workspaceIds,
+            selectedWorkspaceId: anchor.id,
+            selectedScrollTargetWorkspaceId: groupId
+        )
+        await flushStagedTableMutations()
+        #expect(table.numberOfRows == 1 + tailRows.count)
+        let headerFrame = table.rect(ofRow: 0)
+        #expect(headerFrame.minY >= container.clipView.bounds.minY + insets.top - 0.5)
+        #expect(headerFrame.maxY <= container.clipView.bounds.maxY - insets.bottom + 0.5)
+
+        indicator = SidebarDropIndicator(tabId: groupId, edge: .bottom)
+        indicatorRowIds = [groupId]
+        #expect(controller.updateReorderDrag(windowPoint: .zero))
+        let collapsedHeader = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? SidebarGroupHeaderTableCellView)
+        #expect(!collapsedHeader.dropIndicatorPaintForTesting.top)
+        #expect(collapsedHeader.dropIndicatorPaintForTesting.bottom)
+        indicator = SidebarDropIndicator(tabId: anchor.id, edge: .top)
+        #expect(controller.updateReorderDrag(windowPoint: .zero))
+        #expect(!collapsedHeader.dropIndicatorPaintForTesting.top)
+        #expect(collapsedHeader.dropIndicatorPaintForTesting.bottom)
+        controller.reorderDropDragExited()
+    }
+
+    @Test
     func hidingClearsReorderIndicator() async {
         let controller = SidebarWorkspaceTableController()
         let container = controller.makeContainerView()
@@ -899,15 +1095,20 @@ struct SidebarWorkspaceTableSuspensionTests {
     private static let groupHeaderAnchorWorkspaceID = UUID(uuidString: "22222222-2222-4222-8222-222222222222")!
     private static let groupHeaderReplacementWorkspaceID = UUID(uuidString: "33333333-3333-4333-8333-333333333333")!
 
-    private func makeGroupHeaderModel(isAnchorActive: Bool = false) -> SidebarGroupHeaderRowModel {
+    private func makeGroupHeaderModel(
+        isAnchorActive: Bool = false,
+        anchorWorkspaceId: UUID = Self.groupHeaderAnchorWorkspaceID,
+        isCollapsed: Bool = false,
+        memberCount: Int = 1
+    ) -> SidebarGroupHeaderRowModel {
         SidebarGroupHeaderRowModel(
             groupId: Self.groupHeaderGroupID,
-            anchorWorkspaceId: Self.groupHeaderAnchorWorkspaceID,
+            anchorWorkspaceId: anchorWorkspaceId,
             name: "Group", iconSymbol: "folder",
-            tintHex: nil, isCollapsed: false, isPinned: false, isAnchorActive: isAnchorActive,
+            tintHex: nil, isCollapsed: isCollapsed, isPinned: false, isAnchorActive: isAnchorActive,
             isMultiSelected: false,
             multiSelectionBackgroundStyle: .clear,
-            memberCount: 1, anchorUnreadCount: 0, canMarkRead: false, canMarkUnread: true,
+            memberCount: memberCount, anchorUnreadCount: 0, canMarkRead: false, canMarkUnread: true,
             hasLatestNotifications: false, canMarkAllRead: false, canMarkAllUnread: true,
             shortcutHintText: nil, shortcutHintXOffset: 0, shortcutHintYOffset: 0,
             fontScale: 1, globalFontMagnificationPercent: 100, cwdContextMenuItems: [],
@@ -919,10 +1120,11 @@ struct SidebarWorkspaceTableSuspensionTests {
     }
 
     private func makeGroupHeaderActions(
+        onFocusAnchor: @escaping (NSEvent.ModifierFlags) -> Void = { _ in },
         onToggleCollapsed: @escaping () -> Void
     ) -> SidebarGroupHeaderRowActions {
         SidebarGroupHeaderRowActions(
-            onToggleCollapsed: onToggleCollapsed, onFocusAnchor: { _ in }, onTapPlus: {},
+            onToggleCollapsed: onToggleCollapsed, onFocusAnchor: onFocusAnchor, onTapPlus: {},
             onRunResolvedItem: { _ in }, onRename: {}, onTogglePinned: {}, onMarkRead: {},
             onMarkUnread: {}, onClearLatestNotifications: {}, onMarkAllRead: {},
             onMarkAllUnread: {}, onUngroup: {}, onDelete: {}, onEditConfig: {}
@@ -937,7 +1139,8 @@ struct SidebarWorkspaceTableSuspensionTests {
         ) -> SidebarWorkspaceTableReorderDropUpdate? = { _, _, _ in nil },
         endWorkspaceDrag: @escaping () -> Void = {},
         performPendingWorkspaceDrop: ((SidebarWorkspaceReorderPendingDrop, [SidebarWorkspaceReorderDropOverlay.Target]) -> Bool)? = nil,
-        clearWorkspaceDropIndicator: @escaping () -> Void = {}
+        clearWorkspaceDropIndicator: @escaping () -> Void = {},
+        workspaceIdForDrag: ((SidebarWorkspaceRenderItemID, UUID) -> UUID)? = nil
     ) -> SidebarWorkspaceTableActions {
         SidebarWorkspaceTableActions(
             attachScrollView: { _ in },
@@ -961,7 +1164,8 @@ struct SidebarWorkspaceTableSuspensionTests {
             didMoveBonsplitToWorkspace: { _ in },
             updateDragAutoscroll: {},
             setBonsplitDropTargetCollectionActive: { _ in },
-            setBonsplitDropIndicator: { _ in }
+            setBonsplitDropIndicator: { _ in },
+            workspaceIdForDrag: workspaceIdForDrag
         )
     }
 

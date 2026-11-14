@@ -5,14 +5,13 @@ import CmuxSidebar
 import SwiftUI
 import CmuxSettings
 
-/// Collapsible group header that doubles as the anchor workspace row.
+/// Collapsible container header for a workspace group.
 struct SidebarWorkspaceGroupHeaderView: View, Equatable {
     // Closures and delegate factories are excluded because they are recreated
     // by the parent on each evaluation. The scalar snapshots below are the
     // header's render and behavior inputs under the LazyVStack.
     nonisolated static func == (lhs: SidebarWorkspaceGroupHeaderView, rhs: SidebarWorkspaceGroupHeaderView) -> Bool {
         lhs.groupId == rhs.groupId &&
-            lhs.anchorWorkspaceId == rhs.anchorWorkspaceId &&
             lhs.name == rhs.name &&
             lhs.iconSymbol == rhs.iconSymbol &&
             lhs.tintHex == rhs.tintHex &&
@@ -49,7 +48,6 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
     }
 
     let groupId: UUID
-    let anchorWorkspaceId: UUID
     let name: String
     let iconSymbol: String
     let tintHex: String?

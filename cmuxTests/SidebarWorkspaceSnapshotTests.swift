@@ -220,12 +220,12 @@ import Testing
         ) == workspaceId)
     }
 
-    @Test func scrollTargetIsGroupAnchorWhenGroupIsCollapsed() {
-        let anchorId = UUID()
+    @Test func scrollTargetIsGroupHeaderWhenGroupIsCollapsed() {
+        let group = makeGroup(isCollapsed: true, anchorWorkspaceId: UUID())
         #expect(SidebarSelectedWorkspaceScrollPolicy.scrollTargetWorkspaceId(
             selectedWorkspaceId: UUID(),
-            group: makeGroup(isCollapsed: true, anchorWorkspaceId: anchorId)
-        ) == anchorId)
+            group: group
+        ) == group.id)
     }
 
     private func makeGroup(isCollapsed: Bool, anchorWorkspaceId: UUID) -> WorkspaceGroup {

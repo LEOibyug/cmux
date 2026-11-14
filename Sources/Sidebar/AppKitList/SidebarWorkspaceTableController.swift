@@ -43,11 +43,6 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
     private var appKitDropIndicator: SidebarDropIndicator?
     private var appKitDropIndicatorScope: SidebarWorkspaceReorderDropIndicatorScope = .raw
     private var appKitDropIndicatorIncludesRowTargets = false
-    /// Live group-anchor ids resolved once per native drag session. Group
-    /// headers retain their stable row identity while an anchor may be
-    /// promoted; caching this map keeps multi-row drag work linear and
-    /// consistent across every dragged item.
-    private var dragWorkspaceGroupAnchorIds: [UUID: UUID]?
     private var isWorkspaceDragSourceActive = false
     // Keep the source table alive until AppKit delivers the terminal callback.
     // SwiftUI may remove the representable (fullscreen/display changes) while
@@ -347,7 +342,6 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
             // session. This controller owns no completion in that interval;
             // calling the generic action would be able to end a newer drag
             // owned by another source.
-            dragWorkspaceGroupAnchorIds = nil
             if !preserveProvisionalWorkspaceDrag {
                 pendingWorkspaceDragSessionId = nil
                 pendingWorkspaceDragWorkspaceId = nil
@@ -553,7 +547,6 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
             // There is no table-owned native session to complete here. Leave
             // session termination to the native source instead of invoking a
             // generic callback during presentation teardown.
-            dragWorkspaceGroupAnchorIds = nil
             pendingWorkspaceDragSessionId = nil
             pendingWorkspaceDragWorkspaceId = nil
             actions = nil
@@ -937,7 +930,14 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
                 newWorkspaceIds: nextWorkspaceIds
             )
         workspaceIds = nextWorkspaceIds
+        let previousScrollRowId = self.selectedScrollTargetWorkspaceId.flatMap { workspaceId in
+            Self.rowIndex(forTargetId: workspaceId, in: previousRows).map { previousRows[$0].id }
+        }
+        let nextScrollRowId = selectedScrollTargetWorkspaceId.flatMap { workspaceId in
+            Self.rowIndex(forTargetId: workspaceId, in: rows).map { rows[$0].id }
+        }
         let selectionTargetChanged = self.selectedScrollTargetWorkspaceId != selectedScrollTargetWorkspaceId
+            || previousScrollRowId != nextScrollRowId
         self.selectedScrollTargetWorkspaceId = selectedScrollTargetWorkspaceId
         // A drop in this window must not move the viewport: the pointer's
         // release position IS the user's context. The selected-scroll policy
@@ -1163,32 +1163,12 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
     }
 
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> (any NSPasteboardWriting)? {
-        // Group headers intentionally mint their anchor payload: anchor drags
-        // route to top-level whole-group plans and are rejected cross-window.
+        // Headers drag their durable group identity; ordinary rows, including
+        // the group's stored anchor, drag only their own workspace identity.
         _ = tableView
         guard rows.indices.contains(row), let actions else { return nil }
         let rowConfiguration = rows[row]
-        // Group headers resolve through the live anchor map captured for the
-        // drag. A missing anchor fails closed; workspace rows retain the
-        // optional feature resolver for compatibility with older action
-        // bundles and fall back to their rendered workspace id.
-        let workspaceId: UUID?
-        if rowConfiguration.isGroupHeader {
-            workspaceId = workspaceIdForDrag(rowConfiguration, actions: actions)
-        } else {
-            workspaceId = actions.workspaceIdForDrag?(
-                rowConfiguration.id,
-                rowConfiguration.workspaceId
-            ) ?? rowConfiguration.workspaceId
-        }
-        guard let workspaceId else {
-            // No native drag session was created, so the per-session map has
-            // no end callback that could retire it. Let the next attempt
-            // resolve a newly-promoted anchor instead of reusing this failed
-            // snapshot.
-            dragWorkspaceGroupAnchorIds = nil
-            return nil
-        }
+        guard let workspaceId = workspaceIdForDrag(rowConfiguration, actions: actions) else { return nil }
         // AppKit asks for the writer before it creates an NSDraggingSession.
         // Keep the latest requested row as the provisional identity while no
         // native session is active; an older writer may still be retained while
@@ -1267,17 +1247,10 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
                 // until this callback establishes the native session.
                 return pendingWorkspaceDragWorkspaceId
             }
-            let rowConfiguration = rows[sourceRow]
-            if rowConfiguration.isGroupHeader {
-                return workspaceIdForDrag(
-                    rowConfiguration,
-                    actions: actions ?? pendingWorkspaceDragActions
-                )
-            }
-            return (actions ?? pendingWorkspaceDragActions)?.workspaceIdForDrag?(
-                rowConfiguration.id,
-                rowConfiguration.workspaceId
-            ) ?? rowConfiguration.workspaceId
+            return workspaceIdForDrag(
+                rows[sourceRow],
+                actions: actions ?? pendingWorkspaceDragActions
+            )
         }()
         guard let workspaceId = sourceWorkspaceId else {
             // AppKit has already created a native session even though the
@@ -1377,16 +1350,7 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
             guard rows.indices.contains(row) else { return }
             let rowConfiguration = rows[row]
             let actionBundle = activeWorkspaceDragActions ?? actions ?? pendingWorkspaceDragActions
-            let workspaceId: UUID?
-            if rowConfiguration.isGroupHeader {
-                workspaceId = workspaceIdForDrag(rowConfiguration, actions: actionBundle)
-            } else {
-                workspaceId = actionBundle?.workspaceIdForDrag?(
-                    rowConfiguration.id,
-                    rowConfiguration.workspaceId
-                ) ?? rowConfiguration.workspaceId
-            }
-            guard let workspaceId else { return }
+            guard let workspaceId = workspaceIdForDrag(rowConfiguration, actions: actionBundle) else { return }
             let count = actionBundle?.movingWorkspaceCount?(workspaceId) ?? 1
             guard count > 1,
                   let image = workspaceDragImage(
@@ -1534,7 +1498,6 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
             // controller/container hold without waiting for pasteboard churn.
             discardAbandonedProvisionalWorkspaceDrag()
         }
-        dragWorkspaceGroupAnchorIds = nil
         pendingWorkspaceDragSessionId = nil
         pendingWorkspaceDragWorkspaceId = nil
     }
@@ -1617,7 +1580,6 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
             // newer session that has already replaced this controller's state.
             return
         }
-        dragWorkspaceGroupAnchorIds = nil
         // AppKit may deliver a duplicate terminal callback while a deferred
         // drop is still waiting for its target bridge. The first callback owns
         // source completion; a later callback must not fall back to the
@@ -1724,24 +1686,16 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
         tableView.delegate = nil
     }
 
-    /// Resolves one row's drag target from the map captured for this native
-    /// drag session. Group members keep their own workspace identity; only a
-    /// group-header row maps through its stable group id. A missing live anchor
-    /// fails closed instead of falling back to a closed workspace id.
+    /// Render identity distinguishes a whole-group header drag from a drag of
+    /// its ordinary anchor workspace row, even though both focus that workspace.
     private func workspaceIdForDrag(
         _ row: SidebarWorkspaceTableRowConfiguration,
         actions: SidebarWorkspaceTableActions?
     ) -> UUID? {
-        guard row.isGroupHeader else {
-            return row.workspaceId
+        if let resolver = actions?.workspaceIdForDrag {
+            return resolver(row.id, row.workspaceId)
         }
-        guard let groupId = row.groupId else {
-            return nil
-        }
-        if dragWorkspaceGroupAnchorIds == nil {
-            dragWorkspaceGroupAnchorIds = actions?.workspaceGroupAnchorIdsForDrag() ?? [:]
-        }
-        return dragWorkspaceGroupAnchorIds?[groupId]
+        return row.isGroupHeader ? row.groupId : row.workspaceId
     }
 
     // MARK: Workspace reorder drop
@@ -1905,7 +1859,12 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
         guard visible.length > 0 else { return }
         for row in visible.lowerBound..<(visible.lowerBound + visible.length)
         where rows.indices.contains(row) {
-            let paint = painter?.paint(forRowWorkspaceId: rows[row].workspaceId)
+            let configuration = rows[row]
+            let paint = painter?.paint(
+                forRowWorkspaceId: configuration.workspaceId,
+                groupId: configuration.groupId,
+                isGroupHeader: configuration.isGroupHeader
+            )
                 ?? (top: false, bottom: false)
             switch table.view(atColumn: 0, row: row, makeIfNecessary: false) {
             case let cell as SidebarWorkspaceRowTableCellView:
@@ -1936,8 +1895,9 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
         }
         let targets = (lower..<upper).map { row in
             let configuration = rows[row]
+            let targetId = configuration.id.groupId ?? configuration.workspaceId
             return SidebarWorkspaceReorderDropOverlay.Target(
-                workspaceId: configuration.workspaceId,
+                workspaceId: targetId,
                 groupId: configuration.groupId,
                 isGroupHeader: configuration.isGroupHeader,
                 frame: table.convert(table.rect(ofRow: row), to: container.reorderDropView)
@@ -2568,7 +2528,11 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
         // during a reorder drag); recycled/reconfigured cells must re-apply
         // the controller-owned paint or scrolling mid-drag drops the line.
         if let painter = reorderIndicatorPainter {
-            let paint = painter.paint(forRowWorkspaceId: configuration.workspaceId)
+            let paint = painter.paint(
+                forRowWorkspaceId: configuration.workspaceId,
+                groupId: configuration.groupId,
+                isGroupHeader: configuration.isGroupHeader
+            )
             cell.paintControllerDropIndicator(top: paint.top, bottom: paint.bottom)
         }
     }
@@ -2797,7 +2761,11 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
         // Same recycled-cell rule as configure(workspaceCell:): re-apply the
         // controller-owned drop line after the model reset it.
         if let painter = reorderIndicatorPainter {
-            let paint = painter.paint(forRowWorkspaceId: configuration.workspaceId)
+            let paint = painter.paint(
+                forRowWorkspaceId: configuration.workspaceId,
+                groupId: configuration.groupId,
+                isGroupHeader: configuration.isGroupHeader
+            )
             cell.paintControllerDropIndicator(top: paint.top, bottom: paint.bottom)
         }
     }
@@ -2820,10 +2788,39 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
         )
     }
 
+    /// Workspace targets prefer their ordinary row, falling back to a collapsed
+    /// header. Explicit group targets always retain the container's identity.
+    private static func rowIndex(
+        forTargetId targetId: UUID,
+        in rows: [SidebarWorkspaceTableRowConfiguration],
+        scope: SidebarWorkspaceReorderDropIndicatorScope = .raw
+    ) -> Int? {
+        var headerIndex: Int?
+        for index in rows.indices {
+            let row = rows[index]
+            switch scope {
+            case .raw:
+                if !row.isGroupHeader, row.workspaceId == targetId { return index }
+                if row.isGroupHeader, row.groupId == targetId || row.workspaceId == targetId {
+                    headerIndex = index
+                }
+            case .topLevel:
+                if row.isGroupHeader {
+                    if row.groupId == targetId { return index }
+                } else if row.groupId == nil, row.workspaceId == targetId {
+                    return index
+                }
+            case .group(let groupId):
+                if !row.isGroupHeader, row.groupId == groupId, row.workspaceId == targetId { return index }
+            }
+        }
+        return headerIndex
+    }
+
     private func scrollSelectedRowToVisibleIfNeeded() {
         guard let container = containerView,
               let selectedScrollTargetWorkspaceId,
-              let row = rows.firstIndex(where: { $0.workspaceId == selectedScrollTargetWorkspaceId }) else {
+              let row = Self.rowIndex(forTargetId: selectedScrollTargetWorkspaceId, in: rows) else {
             return
         }
         let table = container.tableView
@@ -3019,7 +3016,11 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
             if includeRowTargets { return true }
             guard !scope.isGroup else { return false }
             if indicator.tabId == nil { return true }
-            return indicator.edge == .bottom && rows.last?.workspaceId == indicator.tabId
+            guard indicator.edge == .bottom, let lastRow = rows.last else { return false }
+            if scope == .topLevel {
+                return (lastRow.groupId ?? lastRow.workspaceId) == indicator.tabId
+            }
+            return lastRow.workspaceId == indicator.tabId
         }()
         appKitDropIndicator = shouldDisplay ? indicator : nil
         appKitDropIndicatorScope = scope
@@ -3031,7 +3032,14 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
     private func positionAppKitDropIndicator() {
         guard let indicator = appKitDropIndicator, let container = containerView else { return }
         let targetRow = indicator.tabId.flatMap { tabId in
-            rows.firstIndex { $0.workspaceId == tabId }
+            guard let row = Self.rowIndex(forTargetId: tabId, in: rows, scope: appKitDropIndicatorScope) else {
+                return nil as Int?
+            }
+            if appKitDropIndicatorScope == .topLevel, indicator.edge == .bottom,
+               rows[row].isGroupHeader, let groupId = rows[row].groupId {
+                return rows.lastIndex { $0.groupId == groupId } ?? row
+            }
+            return row
         }
         if indicator.tabId != nil, targetRow == nil {
             container.emptyDropIndicatorView.isHidden = true

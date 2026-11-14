@@ -117,7 +117,6 @@ struct SidebarWorkspaceContextMenuTargetAggregateTests {
         let groupId = UUID()
         let connectingWorkspaceId = UUID()
         let disconnectedWorkspaceId = UUID()
-        let anchorWorkspaceId = disconnectedWorkspaceId
         let singleWorkspaceId = UUID()
         let suiteName = "SidebarWorkspaceContextMenuTargetAggregateTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -168,7 +167,6 @@ struct SidebarWorkspaceContextMenuTargetAggregateTests {
             workspaceRowsById: rows,
             groupRowsById: [:],
             selectedContextTargetIds: [connectingWorkspaceId, disconnectedWorkspaceId],
-            anchorWorkspaceIds: [anchorWorkspaceId],
             workspaceGroupMenuSnapshot: WorkspaceGroupMenuSnapshot(items: []),
             canCreateEmptyGroup: true,
             notificationIndex: notificationIndex
@@ -182,7 +180,7 @@ struct SidebarWorkspaceContextMenuTargetAggregateTests {
         #expect(selected.remoteTargetWorkspaceIds == [connectingWorkspaceId, disconnectedWorkspaceId])
         #expect(!selected.allRemoteTargetsConnecting)
         #expect(!selected.allRemoteTargetsDisconnected)
-        #expect(selected.eligibleGroupTargetIds == [connectingWorkspaceId])
+        #expect(selected.eligibleGroupTargetIds == [connectingWorkspaceId, disconnectedWorkspaceId])
         #expect(selected.allEligibleTargetsGroupId == groupId)
         #expect(selected.hasGroupedEligibleTarget)
         #expect(selected.canMarkRead)

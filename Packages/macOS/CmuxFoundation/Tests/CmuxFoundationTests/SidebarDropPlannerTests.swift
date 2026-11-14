@@ -5,7 +5,7 @@ import Testing
 @testable import CmuxFoundation
 
 @Suite struct SidebarDropPlannerPackageTests {
-    @Test func pinnedGroupDropAfterItselfBeforeNextPinnedGroupIsNoOp() {
+    @Test func collapsedPinnedGroupOwnGapRetainsExplicitHeaderIdentity() throws {
         let firstGroupId = UUID()
         let firstAnchorId = UUID()
         let firstChildId = UUID()
@@ -13,10 +13,10 @@ import Testing
         let secondAnchorId = UUID()
         let secondChildId = UUID()
 
-        let plan = SidebarWorkspaceReorderDropResolver().plan(
+        let plan = try #require(SidebarWorkspaceReorderDropResolver().plan(
             for: SidebarWorkspaceReorderDropRequest(
                 point: CGPoint(x: 12, y: 31),
-                draggedWorkspaceId: firstAnchorId,
+                draggedWorkspaceId: firstGroupId,
                 workspaces: [
                     SidebarWorkspaceReorderWorkspaceSnapshot(
                         id: firstAnchorId,
@@ -53,27 +53,27 @@ import Testing
                 ],
                 targets: [
                     SidebarWorkspaceReorderDropTarget(
-                        workspaceId: firstAnchorId,
+                        workspaceId: firstGroupId,
                         groupId: firstGroupId,
                         isGroupHeader: true,
                         frame: CGRect(x: 0, y: 0, width: 180, height: 32)
                     ),
                     SidebarWorkspaceReorderDropTarget(
-                        workspaceId: secondAnchorId,
+                        workspaceId: secondGroupId,
                         groupId: secondGroupId,
                         isGroupHeader: true,
                         frame: CGRect(x: 0, y: 40, width: 180, height: 32)
                     ),
                 ]
             )
-        )
+        ))
 
-        #expect(plan == nil)
+        #expect(plan.action == .reorderGroup(targetIndex: 0))
+        #expect(plan.draggedWorkspaceId == firstGroupId)
     }
 
     @Test func droppingWorkspaceOnEmptyGroupHeaderProducesExplicitGroupPlan() throws {
         let groupId = UUID()
-        let headerId = UUID()
         let draggedId = UUID()
         let plan = try #require(SidebarWorkspaceReorderDropResolver().plan(
             for: SidebarWorkspaceReorderDropRequest(
@@ -89,14 +89,14 @@ import Testing
                 groups: [
                     SidebarWorkspaceReorderGroupSnapshot(
                         id: groupId,
-                        anchorWorkspaceId: headerId,
+                        anchorWorkspaceId: groupId,
                         isPinned: true,
                         isEmpty: true
                     ),
                 ],
                 targets: [
                     SidebarWorkspaceReorderDropTarget(
-                        workspaceId: headerId,
+                        workspaceId: groupId,
                         groupId: groupId,
                         isGroupHeader: true,
                         frame: CGRect(x: 0, y: 0, width: 180, height: 32)
@@ -110,7 +110,7 @@ import Testing
             return
         }
         #expect(explicitGroupId == groupId)
-        #expect(plan.indicator?.tabId == headerId)
+        #expect(plan.indicator?.tabId == groupId)
     }
 
     @Test func draggingEmptyGroupHeaderProducesGroupReorderPlan() throws {
@@ -120,9 +120,14 @@ import Testing
         let outsideWorkspaceId = UUID()
         let plan = try #require(SidebarWorkspaceReorderDropResolver().plan(
             for: SidebarWorkspaceReorderDropRequest(
-                point: CGPoint(x: 12, y: 64),
+                point: CGPoint(x: 12, y: 104),
                 draggedWorkspaceId: groupId,
                 workspaces: [
+                    SidebarWorkspaceReorderWorkspaceSnapshot(
+                        id: otherAnchorId,
+                        isPinned: false,
+                        groupId: otherGroupId
+                    ),
                     SidebarWorkspaceReorderWorkspaceSnapshot(
                         id: outsideWorkspaceId,
                         isPinned: false,
@@ -150,17 +155,23 @@ import Testing
                         frame: CGRect(x: 0, y: 0, width: 180, height: 32)
                     ),
                     SidebarWorkspaceReorderDropTarget(
-                        workspaceId: otherAnchorId,
+                        workspaceId: otherGroupId,
                         groupId: otherGroupId,
                         isGroupHeader: true,
                         frame: CGRect(x: 0, y: 40, width: 180, height: 32)
+                    ),
+                    SidebarWorkspaceReorderDropTarget(
+                        workspaceId: otherAnchorId,
+                        groupId: otherGroupId,
+                        isGroupHeader: false,
+                        frame: CGRect(x: 12, y: 80, width: 168, height: 32)
                     ),
                 ]
             )
         ))
 
         guard case .reorderGroup(let targetIndex) = plan.action else {
-            Issue.record("expected a group-slot reorder")
+            Issue.record("expected a top-level group reorder")
             return
         }
         #expect(targetIndex == 1)
@@ -174,7 +185,7 @@ import Testing
         let unpinnedMemberId = UUID()
         let plan = try #require(SidebarWorkspaceReorderDropResolver().plan(
             for: SidebarWorkspaceReorderDropRequest(
-                point: CGPoint(x: 12, y: 96),
+                point: CGPoint(x: 12, y: 136),
                 draggedWorkspaceId: emptyGroupId,
                 workspaces: [
                     SidebarWorkspaceReorderWorkspaceSnapshot(
@@ -209,16 +220,22 @@ import Testing
                         frame: CGRect(x: 0, y: 0, width: 180, height: 32)
                     ),
                     SidebarWorkspaceReorderDropTarget(
-                        workspaceId: unpinnedAnchorId,
+                        workspaceId: unpinnedGroupId,
                         groupId: unpinnedGroupId,
                         isGroupHeader: true,
                         frame: CGRect(x: 0, y: 40, width: 180, height: 32)
                     ),
                     SidebarWorkspaceReorderDropTarget(
-                        workspaceId: unpinnedMemberId,
+                        workspaceId: unpinnedAnchorId,
                         groupId: unpinnedGroupId,
                         isGroupHeader: false,
                         frame: CGRect(x: 12, y: 80, width: 168, height: 32)
+                    ),
+                    SidebarWorkspaceReorderDropTarget(
+                        workspaceId: unpinnedMemberId,
+                        groupId: unpinnedGroupId,
+                        isGroupHeader: false,
+                        frame: CGRect(x: 12, y: 120, width: 168, height: 32)
                     ),
                 ]
             )
@@ -229,7 +246,7 @@ import Testing
             return
         }
         #expect(targetIndex == 0)
-        #expect(plan.indicator?.tabId == unpinnedAnchorId)
+        #expect(plan.indicator?.tabId == unpinnedGroupId)
     }
 
     @Test func emptyGroupRootDropUsesUnrealizedGroupSlots() throws {
@@ -308,12 +325,12 @@ import Testing
             Issue.record("expected an empty-group slot move")
             return
         }
-        #expect(targetIndex == 2)
-        #expect(plan.indicator?.tabId == secondAnchorId)
+        #expect(targetIndex == 3)
+        #expect(plan.indicator?.tabId == rootId)
         #expect(plan.indicator?.edge == .bottom)
     }
 
-    @Test func trailingEmptyGroupRootTopDropMovesAcrossPrecedingGroup() throws {
+    @Test func trailingEmptyGroupRootTopDropUsesTheRootSlot() throws {
         let liveGroupId = UUID()
         let liveAnchorId = UUID()
         let liveMemberId = UUID()
@@ -321,10 +338,9 @@ import Testing
         let trailingEmptyGroupId = UUID()
         let plan = try #require(SidebarWorkspaceReorderDropResolver().plan(
             for: SidebarWorkspaceReorderDropRequest(
-                // The top edge of the root row is on the opposite side of the
-                // trailing empty header, even though the preceding group row is
-                // the nearest realized target.
-                point: CGPoint(x: 12, y: 80),
+                // The empty header is unrealized after the root row. Its
+                // target index must still count that root's top-level slot.
+                point: CGPoint(x: 12, y: 120),
                 draggedWorkspaceId: trailingEmptyGroupId,
                 workspaces: [
                     SidebarWorkspaceReorderWorkspaceSnapshot(
@@ -358,22 +374,28 @@ import Testing
                 ],
                 targets: [
                     SidebarWorkspaceReorderDropTarget(
-                        workspaceId: liveAnchorId,
+                        workspaceId: liveGroupId,
                         groupId: liveGroupId,
                         isGroupHeader: true,
                         frame: CGRect(x: 0, y: 0, width: 180, height: 32)
                     ),
                     SidebarWorkspaceReorderDropTarget(
-                        workspaceId: liveMemberId,
+                        workspaceId: liveAnchorId,
                         groupId: liveGroupId,
                         isGroupHeader: false,
                         frame: CGRect(x: 12, y: 40, width: 168, height: 32)
                     ),
                     SidebarWorkspaceReorderDropTarget(
+                        workspaceId: liveMemberId,
+                        groupId: liveGroupId,
+                        isGroupHeader: false,
+                        frame: CGRect(x: 12, y: 80, width: 168, height: 32)
+                    ),
+                    SidebarWorkspaceReorderDropTarget(
                         workspaceId: rootId,
                         groupId: nil,
                         isGroupHeader: false,
-                        frame: CGRect(x: 0, y: 80, width: 180, height: 32)
+                        frame: CGRect(x: 0, y: 120, width: 180, height: 32)
                     ),
                 ]
             )
@@ -383,8 +405,8 @@ import Testing
             Issue.record("expected a trailing empty-group move")
             return
         }
-        #expect(targetIndex == 0)
-        #expect(plan.indicator?.tabId == liveAnchorId)
+        #expect(targetIndex == 1)
+        #expect(plan.indicator?.tabId == rootId)
         #expect(plan.indicator?.edge == .top)
     }
 
@@ -495,7 +517,7 @@ import Testing
         #expect(plan.indicator?.edge == .top)
     }
 
-    @Test func emptyHeaderDragAtRootBoundaryUsesFollowingGroupSlot() throws {
+    @Test func emptyHeaderDragAtRootBoundaryUsesTheRootRowIndex() throws {
         let emptyGroupId = UUID()
         let liveGroupId = UUID()
         let liveAnchorId = UUID()
@@ -503,7 +525,7 @@ import Testing
         let rootId = UUID()
         let plan = try #require(SidebarWorkspaceReorderDropResolver().plan(
             for: SidebarWorkspaceReorderDropRequest(
-                point: CGPoint(x: 12, y: 128),
+                point: CGPoint(x: 12, y: 168),
                 draggedWorkspaceId: emptyGroupId,
                 workspaces: [
                     SidebarWorkspaceReorderWorkspaceSnapshot(id: liveAnchorId, isPinned: false, groupId: liveGroupId),
@@ -531,22 +553,28 @@ import Testing
                         frame: CGRect(x: 0, y: 0, width: 180, height: 32)
                     ),
                     SidebarWorkspaceReorderDropTarget(
-                        workspaceId: liveAnchorId,
+                        workspaceId: liveGroupId,
                         groupId: liveGroupId,
                         isGroupHeader: true,
                         frame: CGRect(x: 0, y: 40, width: 180, height: 32)
                     ),
                     SidebarWorkspaceReorderDropTarget(
+                        workspaceId: liveAnchorId,
+                        groupId: liveGroupId,
+                        isGroupHeader: false,
+                        frame: CGRect(x: 12, y: 80, width: 168, height: 32)
+                    ),
+                    SidebarWorkspaceReorderDropTarget(
                         workspaceId: liveMemberId,
                         groupId: liveGroupId,
                         isGroupHeader: false,
-                        frame: CGRect(x: 0, y: 80, width: 180, height: 32)
+                        frame: CGRect(x: 12, y: 120, width: 168, height: 32)
                     ),
                     SidebarWorkspaceReorderDropTarget(
                         workspaceId: rootId,
                         groupId: nil,
                         isGroupHeader: false,
-                        frame: CGRect(x: 0, y: 120, width: 180, height: 32)
+                        frame: CGRect(x: 0, y: 160, width: 180, height: 32)
                     ),
                 ]
             )
@@ -557,6 +585,73 @@ import Testing
             return
         }
         #expect(targetIndex == 1)
+    }
+
+    @Test(arguments: ["header", "adoptAnchor", "promoteAnchor"])
+    func expandedHeaderAndStoredAnchorProduceDifferentActions(interaction: String) throws {
+        let rootBefore = UUID()
+        let sourceGroup = UUID()
+        let sourceAnchor = UUID()
+        let sourcePeer = UUID()
+        let targetGroup = UUID()
+        let targetAnchor = UUID()
+        let targetPeer = UUID()
+        let rootAfter = UUID()
+        let workspaces = [
+            SidebarWorkspaceReorderWorkspaceSnapshot(id: rootBefore, isPinned: false, groupId: nil),
+            SidebarWorkspaceReorderWorkspaceSnapshot(id: sourceAnchor, isPinned: false, groupId: sourceGroup),
+            SidebarWorkspaceReorderWorkspaceSnapshot(id: sourcePeer, isPinned: false, groupId: sourceGroup),
+            SidebarWorkspaceReorderWorkspaceSnapshot(id: targetAnchor, isPinned: false, groupId: targetGroup),
+            SidebarWorkspaceReorderWorkspaceSnapshot(id: targetPeer, isPinned: false, groupId: targetGroup),
+            SidebarWorkspaceReorderWorkspaceSnapshot(id: rootAfter, isPinned: false, groupId: nil)
+        ]
+        let groups = [
+            SidebarWorkspaceReorderGroupSnapshot(id: sourceGroup, anchorWorkspaceId: sourceAnchor, isPinned: false),
+            SidebarWorkspaceReorderGroupSnapshot(id: targetGroup, anchorWorkspaceId: targetAnchor, isPinned: false)
+        ]
+        let rows: [(UUID, UUID?, Bool)] = [
+            (rootBefore, nil, false),
+            (sourceGroup, sourceGroup, true),
+            (sourceAnchor, sourceGroup, false),
+            (sourcePeer, sourceGroup, false),
+            (targetGroup, targetGroup, true),
+            (targetAnchor, targetGroup, false),
+            (targetPeer, targetGroup, false),
+            (rootAfter, nil, false)
+        ]
+        let targets = rows.enumerated().map { index, row in
+            SidebarWorkspaceReorderDropTarget(
+                workspaceId: row.0,
+                groupId: row.1,
+                isGroupHeader: row.2,
+                frame: CGRect(x: 0, y: CGFloat(index * 40), width: 180, height: 32)
+            )
+        }
+        let plan = try #require(SidebarWorkspaceReorderDropResolver().plan(for: SidebarWorkspaceReorderDropRequest(
+            point: CGPoint(x: 12, y: interaction == "adoptAnchor" ? 184 : 304),
+            draggedWorkspaceId: interaction == "header" ? sourceGroup : sourceAnchor,
+            workspaces: workspaces,
+            groups: groups,
+            targets: targets
+        )))
+
+        switch interaction {
+        case "header":
+            #expect(plan.action == .reorderGroup(targetIndex: 3))
+            #expect(plan.indicatorScope == .topLevel)
+            #expect(plan.indicator?.tabId == rootAfter)
+            #expect(plan.indicator?.edge == .bottom)
+        case "adoptAnchor":
+            #expect(plan.action == .reorder(targetIndex: 2, usesTopLevelRows: false, explicitGroupId: targetGroup))
+            #expect(plan.indicatorScope == .group(targetGroup))
+            #expect(plan.indicator?.tabId == targetAnchor)
+            #expect(plan.indicator?.edge == .top)
+        default:
+            #expect(plan.action == .reorder(targetIndex: 4, usesTopLevelRows: true, explicitGroupId: nil))
+            #expect(plan.indicatorScope == .topLevel)
+            #expect(plan.indicator?.tabId == rootAfter)
+            #expect(plan.indicator?.edge == .bottom)
+        }
     }
 
     @Test func orderedWorkspaceDropTargetsMatchArrayWorkspaceAction() {

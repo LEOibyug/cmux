@@ -55,9 +55,6 @@ public final class WorkspacesModel<Tab: WorkspaceTabRepresenting>: Observable {
         }
     }
 
-    /// O(1) display-title lookup for group anchors in title-churn observers.
-    public private(set) var groupNamesByAnchorWorkspaceId: [UUID: String] = [:]
-
     /// The selected workspace's id, if any.
     public var selectedTabId: UUID? {
         get {
@@ -87,10 +84,6 @@ public final class WorkspacesModel<Tab: WorkspaceTabRepresenting>: Observable {
 
     private var storedWorkspaceGroups: [WorkspaceGroup] = [] {
         willSet {
-            groupNamesByAnchorWorkspaceId = Dictionary(
-                newValue.map { ($0.anchorWorkspaceId, $0.name) },
-                uniquingKeysWith: { first, _ in first }
-            )
             host?.workspaceGroupsWillChange(to: newValue)
         }
     }

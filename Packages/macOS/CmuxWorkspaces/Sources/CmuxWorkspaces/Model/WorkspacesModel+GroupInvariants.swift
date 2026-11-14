@@ -19,7 +19,47 @@ extension WorkspacesModel {
             workspaceGroups[groupIndex].anchor = .workspace(workspaceId)
             workspaceGroups[groupIndex].anchorWorkspaceProvenance = .user
         }
-        expandWorkspaceGroupForSelectionIfNeeded()
+        if selectedTabId == workspaceId {
+            expandWorkspaceGroupForSelectionIfNeeded()
+        }
+    }
+
+    /// Preserve source containers after transfers without closing any workspace.
+    /// Sidebar member reorders may also promote the first member in their new
+    /// order so the internal anchor does not override the requested row order.
+    func repairWorkspaceGroupAnchors(
+        groupIds: Set<UUID>,
+        preferringFirstMemberIn preferredGroupIds: Set<UUID> = []
+    ) {
+        guard !groupIds.isEmpty else { return }
+        var firstMemberIds: [UUID: UUID] = [:]
+        var remainingGroupIdsByWorkspaceId: [UUID: UUID] = [:]
+        for tab in tabs {
+            guard let groupId = tab.groupId, groupIds.contains(groupId) else { continue }
+            if firstMemberIds[groupId] == nil {
+                firstMemberIds[groupId] = tab.id
+            }
+            remainingGroupIdsByWorkspaceId[tab.id] = groupId
+        }
+        for index in workspaceGroups.indices {
+            let group = workspaceGroups[index]
+            guard groupIds.contains(group.id) else { continue }
+            if let anchorId = group.liveAnchorWorkspaceId,
+               remainingGroupIdsByWorkspaceId[anchorId] == group.id,
+               !preferredGroupIds.contains(group.id) || firstMemberIds[group.id] == anchorId {
+                continue
+            }
+            if let firstMemberId = firstMemberIds[group.id] {
+                workspaceGroups[index].anchor = .workspace(firstMemberId)
+                workspaceGroups[index].anchorWorkspaceProvenance = .user
+            } else {
+                workspaceGroups[index].anchor = .empty(group.id)
+                workspaceGroups[index].anchorWorkspaceProvenance = .unknown
+            }
+        }
+        workspaceGroups.removeAll {
+            groupIds.contains($0.id) && $0.isEmpty && !$0.isPinned
+        }
     }
 
     /// Rebuild `tabs` by walking a desired top-level workspace order and

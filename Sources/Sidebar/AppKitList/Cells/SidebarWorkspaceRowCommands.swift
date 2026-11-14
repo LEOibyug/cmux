@@ -54,7 +54,6 @@ struct SidebarWorkspaceRowCommands {
 #endif
         var selectedTabIds = readSelectedTabIds()
         let workspaceIds = tabManager.tabs.map(\.id)
-        let anchorIds = Set(tabManager.workspaceGroups.compactMap(\.liveAnchorWorkspaceId))
         let selectionKindPolicy = SidebarSelectionKindPolicy()
         let shiftAnchorIndex = isShift
             ? SidebarWorkspaceSelectionSyncPolicy().shiftClickAnchorIndex(
@@ -76,26 +75,20 @@ struct SidebarWorkspaceRowCommands {
                     .filter { $0.isCollapsed }
                     .map(\.id)
             )
-            let anchorIdsByGroup: [UUID: UUID] = Dictionary(
-                uniqueKeysWithValues: tabManager.workspaceGroups.compactMap { group in
-                    group.liveAnchorWorkspaceId.map { (group.id, $0) }
-                }
-            )
             let visibleRangeIds = tabManager.tabs[lower...upper].compactMap { tab -> UUID? in
                 if let gid = tab.groupId,
-                   collapsedGroupIds.contains(gid),
-                   anchorIdsByGroup[gid] != tab.id {
+                   collapsedGroupIds.contains(gid) {
                     return nil
                 }
                 return tab.id
             }
             selectedTabIds = Set(selectionKindPolicy.workspaceShiftRangeIds(
                 rangeIds: Array(selectedTabIds),
-                anchorIds: anchorIds
+                anchorIds: []
             ))
             let rangeIds = selectionKindPolicy.workspaceShiftRangeIds(
                 rangeIds: visibleRangeIds,
-                anchorIds: anchorIds
+                anchorIds: []
             )
             if isCommand {
                 selectedTabIds.formUnion(rangeIds)
@@ -106,7 +99,7 @@ struct SidebarWorkspaceRowCommands {
             selectedTabIds = selectionKindPolicy.workspaceCmdClickSelection(
                 current: selectedTabIds,
                 clickedId: tab.id,
-                anchorIds: anchorIds
+                anchorIds: []
             )
         } else {
             selectedTabIds = [tab.id]

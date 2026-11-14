@@ -14,14 +14,6 @@ import CmuxSettings
 extension TerminalController: ControlWorkspaceGroupContext {
     func controlWorkspaceGroupStrings() -> ControlWorkspaceGroupStrings {
         ControlWorkspaceGroupStrings(
-            allChildrenAreAnchors: String(
-                localized: "workspaceGroup.error.allChildrenAreAnchors",
-                defaultValue: "All requested children are ineligible because they are already group anchors; ungroup them first"
-            ),
-            workspaceIsOtherGroupAnchor: String(
-                localized: "workspaceGroup.error.workspaceIsOtherGroupAnchor",
-                defaultValue: "Workspace is the anchor of another group; ungroup it first"
-            ),
             invalidReferenceWorkspace: String(
                 localized: "workspaceGroup.error.invalidReferenceWorkspace",
                 defaultValue: "Reference workspace must be a member of the target group"
@@ -151,15 +143,6 @@ extension TerminalController: ControlWorkspaceGroupContext {
         if !missing.isEmpty {
             return .childWorkspaceNotFound(missing)
         }
-        if !childWorkspaceIDs.isEmpty {
-            let existingAnchorIds = Set(tabManager.workspaceGroups.compactMap(\.liveAnchorWorkspaceId))
-            let ineligible: [String] = childWorkspaceIDs.compactMap { id in
-                existingAnchorIds.contains(id) ? id.uuidString : nil
-            }
-            if ineligible.count == childWorkspaceIDs.count {
-                return .allChildrenAreAnchors(ineligible)
-            }
-        }
 
         // workspace.group.create is NOT a focus-intent method; do not change the
         // user's active workspace. The identity lookup and create call both run
@@ -269,8 +252,6 @@ extension TerminalController: ControlWorkspaceGroupContext {
            !tabManager.tabs.contains(where: { $0.id == referenceWorkspaceID && $0.groupId == groupID }) {
             return .invalidReferenceWorkspace
         }
-        // addWorkspaceToGroup silently no-ops for anchors of other groups.
-        // Confirm membership actually changed before reporting success.
         tabManager.addWorkspaceToGroup(
             workspaceId: workspaceID,
             groupId: groupID,
@@ -279,9 +260,6 @@ extension TerminalController: ControlWorkspaceGroupContext {
         )
         if tab.groupId == groupID {
             return .added
-        }
-        if tabManager.workspaceGroups.contains(where: { $0.id != groupID && $0.liveAnchorWorkspaceId == workspaceID }) {
-            return .workspaceIsOtherGroupAnchor
         }
         return .notFound
     }

@@ -5,7 +5,6 @@ import SwiftUI
 struct SidebarWorkspaceGroupRowView: View {
     let header: SidebarWorkspaceGroupHeaderView
     let groupId: UUID
-    let anchorWorkspaceId: UUID
     let shouldCollectWorkspaceDropTargets: Bool
     let onPointerFrameChange: (CGRect) -> Void
     let onPointerFrameDisappear: () -> Void
@@ -13,10 +12,10 @@ struct SidebarWorkspaceGroupRowView: View {
     var body: some View {
         header
             .equatable()
-            .id(anchorWorkspaceId)
+            .id(groupId)
             .accessibilityIdentifier("sidebarWorkspaceGroup.\(groupId.uuidString)")
             .sidebarWorkspaceFrameAnchor(
-                id: anchorWorkspaceId,
+                id: groupId,
                 isEnabled: shouldCollectWorkspaceDropTargets
             )
             .sidebarPointerFrameReporting(

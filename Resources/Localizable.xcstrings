@@ -401779,65 +401779,6 @@
         }
       }
     },
-    "workspaceGroup.error.allChildrenAreAnchors": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "All requested children are ineligible because they are already group anchors; ungroup them first"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "要求された子ワークスペースはすべて既にグループのアンカーのため対象外です。先にグループ解除してください"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "所请求的子项均不符合条件，因为它们已经是分组锚点；请先取消它们的分组"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Alle angeforderten untergeordneten Elemente sind ungeeignet, da sie bereits Gruppenanker sind; hebe zuerst deren Gruppierung auf"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tous les enfants demandés ne sont pas éligibles car ils sont déjà des ancres de groupe ; dissociez-les d’abord"
-          }
-        },
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "جميع العناصر التابعة المطلوبة غير مؤهلة لأنها بالفعل مرتكزات للمجموعة؛ قم بفك تجميعها أولاً"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Todos los elementos secundarios solicitados no son válidos porque ya son anclajes de grupo; desagrópalos primero"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "所有要求的子項目皆不符合資格，因為它們已經是群組錨點；請先取消群組"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "요청한 모든 하위 항목이 이미 그룹 앵커이므로 대상이 될 수 없습니다. 먼저 그룹을 해제해 주세요."
-          }
-        }
-      }
-    },
     "workspaceGroup.error.closeWorkspacesMustBeBoolean": {
       "extractionState": "manual",
       "localizations": {
@@ -402601,65 +402542,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "기준 작업 공간은 대상 그룹의 멤버여야 합니다"
-          }
-        }
-      }
-    },
-    "workspaceGroup.error.workspaceIsOtherGroupAnchor": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Workspace is the anchor of another group; ungroup it first"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このワークスペースは別のグループのアンカーです。先にグループ解除してください"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "该工作区是另一个分组的锚点；请先取消其分组"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Der Arbeitsbereich ist der Anker einer anderen Gruppe; hebe zuerst seine Gruppierung auf"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "L’espace de travail est l’ancre d’un autre groupe ; dissociez-le d’abord"
-          }
-        },
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "مساحة العمل هي مرتكز لمجموعة أخرى؛ قم بفك تجميعها أولاً"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "El espacio de trabajo es el anclaje de otro grupo; desagrópalo primero"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "工作區是另一個群組的錨點；請先取消群組"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "작업 공간이 다른 그룹의 앵커입니다. 먼저 그룹을 해제하십시오"
           }
         }
       }

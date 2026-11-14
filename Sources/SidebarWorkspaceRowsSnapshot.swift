@@ -12,7 +12,6 @@ struct SidebarWorkspaceRowsSnapshot {
     let canCreateEmptyGroup: Bool
     let selectedContextMenuTargetAggregate: SidebarWorkspaceContextMenuTargetAggregate
 
-    private let anchorWorkspaceIds: Set<UUID>
     private let notificationIndex: SidebarWorkspaceNotificationIndex
 
     @MainActor
@@ -20,7 +19,6 @@ struct SidebarWorkspaceRowsSnapshot {
         workspaceRowsById: [UUID: SidebarWorkspaceRowInput],
         groupRowsById: [UUID: SidebarWorkspaceGroupRowSnapshot],
         selectedContextTargetIds: [UUID],
-        anchorWorkspaceIds: Set<UUID>,
         workspaceGroupMenuSnapshot: WorkspaceGroupMenuSnapshot,
         canCreateEmptyGroup: Bool,
         notificationIndex: SidebarWorkspaceNotificationIndex
@@ -29,12 +27,10 @@ struct SidebarWorkspaceRowsSnapshot {
         self.groupRowsById = groupRowsById
         self.workspaceGroupMenuSnapshot = workspaceGroupMenuSnapshot
         self.canCreateEmptyGroup = canCreateEmptyGroup
-        self.anchorWorkspaceIds = anchorWorkspaceIds
         self.notificationIndex = notificationIndex
         selectedContextMenuTargetAggregate = SidebarWorkspaceContextMenuTargetAggregate(
             targetWorkspaceIds: selectedContextTargetIds,
             workspaceRowsById: workspaceRowsById,
-            anchorWorkspaceIds: anchorWorkspaceIds,
             notificationIndex: notificationIndex
         )
     }
@@ -49,7 +45,6 @@ struct SidebarWorkspaceRowsSnapshot {
         return SidebarWorkspaceContextMenuTargetAggregate(
             targetWorkspaceIds: [input.workspaceId],
             workspaceRowsById: workspaceRowsById,
-            anchorWorkspaceIds: anchorWorkspaceIds,
             notificationIndex: notificationIndex
         )
     }

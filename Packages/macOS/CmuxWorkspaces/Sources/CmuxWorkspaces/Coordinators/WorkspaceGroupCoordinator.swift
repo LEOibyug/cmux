@@ -32,10 +32,11 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
     /// Create a new group around the given child workspaces. Returns the new
     /// group id.
     ///
-    /// When children are provided, the first eligible child becomes the
-    /// anchor and no workspace is created. Empty groups receive a fresh
-    /// generated anchor whose cwd defaults to `anchorWorkingDirectory`, or
-    /// the active workspace resolved by the host.
+    /// When children are provided, the first child becomes the anchor and no
+    /// workspace is created. All requested children must still exist; existing
+    /// anchors can transfer without closing workspaces. Empty groups receive a
+    /// generated anchor whose cwd defaults to `anchorWorkingDirectory` or the
+    /// active workspace resolved by the host.
     @discardableResult
     public func createWorkspaceGroup(
         name: String,
@@ -56,18 +57,10 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
            let existingGroup = model.workspaceGroups.first(where: { $0.externalID == normalizedExternalID }) {
             return existingGroup.id
         }
-        // Eligible children: not currently an anchor of a different group.
-        // Pulling an anchor into a new group would orphan the
-        // source group (its anchorWorkspaceId would no longer match), so we
-        // reject those silently and let the user explicitly ungroup first.
-        let existingAnchorIds = Set(model.workspaceGroups.compactMap(\.liveAnchorWorkspaceId))
+        let liveWorkspaceIds = Set(model.tabs.map(\.id))
+        guard childWorkspaceIds.allSatisfy({ liveWorkspaceIds.contains($0) }) else { return nil }
         var seenChildIds = Set<UUID>()
-        let eligibleChildren = childWorkspaceIds.compactMap { id -> UUID? in
-            guard seenChildIds.insert(id).inserted,
-                  model.tabs.contains(where: { $0.id == id }),
-                  !existingAnchorIds.contains(id) else { return nil }
-            return id
-        }
+        let eligibleChildren = childWorkspaceIds.filter { seenChildIds.insert($0).inserted }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = trimmedName.isEmpty
             ? nextAutoWorkspaceGroupName()
@@ -118,6 +111,7 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
         for id in eligibleChildren {
             model.assignGroup(workspaceId: id, groupId: group.id)
         }
+        model.repairWorkspaceGroupAnchors(groupIds: previousGroupIds)
         if generatedAnchor == nil,
            selectAnchor,
            let anchor = model.tabs.first(where: { $0.id == anchorId }) {
@@ -129,12 +123,6 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
             childWorkspaceIds: eligibleChildren,
             originalTabOrder: originalTabOrder
         )
-        for previousGroupId in previousGroupIds {
-            _ = removeGeneratedAnchorIfOrphaned(
-                groupId: previousGroupId,
-                additionalMovedWorkspaceIds: eligibleChildren
-            )
-        }
         // Collapse the sidebar multi-selection so a second ⌘⇧G press doesn't
         // immediately reuse the same child ids and create a duplicate group
         // around them. The new anchor is the only sensible "current"
@@ -288,12 +276,10 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
 
     // MARK: - Membership
 
-    /// Add an existing workspace to an existing group as a non-anchor member.
-    /// No-op for workspaces that are the anchor of a different group (those
-    /// must be ungrouped first to avoid orphaning the
-    /// source group). If the workspace is the currently selected one and the
-    /// target group is collapsed, the group auto-expands so the focused
-    /// workspace stays visible.
+    /// Add an existing workspace to an existing group. Moving a source anchor
+    /// promotes its first remaining member, or leaves an empty pinned group.
+    /// No workspace is closed. If the workspace is currently selected and the
+    /// target group is collapsed, the normal selection visibility rules apply.
     public func addWorkspaceToGroup(
         workspaceId: UUID,
         groupId: UUID,
@@ -303,15 +289,19 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
         guard let tab = model.tabs.first(where: { $0.id == workspaceId }) else { return }
         guard let targetGroup = model.workspaceGroups.first(where: { $0.id == groupId }) else { return }
         guard tab.groupId != groupId else { return }
-        let isAnchorOfOtherGroup = model.workspaceGroups.contains { group in
-            group.id != groupId && group.liveAnchorWorkspaceId == workspaceId
-        }
-        if isAnchorOfOtherGroup { return }
         let originalTopLevelIds = model.sidebarTopLevelWorkspaceIdsIncludingEmptyGroups()
         let emptyHeaderId = targetGroup.isEmpty ? targetGroup.anchorWorkspaceId : nil
         let previousGroupId = tab.groupId
         model.assignGroup(workspaceId: workspaceId, groupId: groupId)
-        var preferredTopLevelIds = originalTopLevelIds.filter { $0 != workspaceId }
+        if let previousGroupId {
+            model.repairWorkspaceGroupAnchors(groupIds: [previousGroupId])
+        }
+        let sourceAnchorId = previousGroupId.flatMap { previousGroupId in
+            model.workspaceGroups.first(where: { $0.id == previousGroupId })?.anchorWorkspaceId
+        }
+        var preferredTopLevelIds = originalTopLevelIds.compactMap { id in
+            id == workspaceId ? sourceAnchorId : id
+        }
         if let emptyHeaderId,
            let slot = preferredTopLevelIds.firstIndex(of: emptyHeaderId) {
             preferredTopLevelIds[slot] = workspaceId
@@ -327,39 +317,21 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
                 referenceWorkspaceId: referenceWorkspaceId
             )
         }
-        if let previousGroupId {
-            _ = removeGeneratedAnchorIfOrphaned(
-                groupId: previousGroupId,
-                additionalMovedWorkspaceIds: [workspaceId]
-            )
-        }
         host?.workspaceOrderDidChange(movedWorkspaceIds: [workspaceId])
     }
 
-    /// Remove a non-anchor workspace from its group. If this leaves only an
-    /// untouched generated anchor, that shell is removed with the group. If the
-    /// workspace is its group's anchor, the group is explicitly ungrouped
-    /// instead (other members survive as ungrouped workspaces).
+    /// Detach only the requested workspace, including a stored anchor.
+    /// Surviving source members retain their group; no workspace is closed.
     public func removeWorkspaceFromGroup(workspaceId: UUID) {
         guard let tab = model.tabs.first(where: { $0.id == workspaceId }),
               let groupId = tab.groupId else { return }
-        if let group = model.workspaceGroups.first(where: { $0.id == groupId }),
-           group.liveAnchorWorkspaceId == workspaceId {
-            ungroupWorkspaceGroup(groupId: groupId)
-            return
-        }
         model.assignGroup(workspaceId: workspaceId, groupId: nil)
+        model.repairWorkspaceGroupAnchors(groupIds: [groupId])
         model.normalizeWorkspaceGroupContiguity()
-        if removeGeneratedAnchorIfOrphaned(
-            groupId: groupId,
-            additionalMovedWorkspaceIds: [workspaceId]
-        ) {
-            return
-        }
         host?.workspaceOrderDidChange(movedWorkspaceIds: [workspaceId])
     }
 
-    /// Removes an untouched generated anchor after its last real member leaves.
+    /// Removes an untouched generated anchor after its last real member closes.
     /// - Parameters:
     ///   - groupId: The group whose generated anchor may be removed.
     ///   - additionalMovedWorkspaceIds: Workspaces whose order changed with the cleanup.
@@ -392,11 +364,8 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
 
     /// Dissolve a group while preserving every member workspace (including its
     /// anchor) as a regular ungrouped workspace. Nothing is closed. The
-    /// former members KEEP their `tabs[]` positions so the anchor — which
-    /// was previously rendered exclusively as the group header — appears as
-    /// a workspace row at the same vertical spot the header occupied, with
-    /// the rest of the members staying right below it in their existing
-    /// relative order. We deliberately do not re-normalize here: that would
+    /// former members KEEP their `tabs[]` positions and their existing relative
+    /// order. We deliberately do not re-normalize here: that would
     /// push the now-ungrouped members down into the "ungrouped tier at the
     /// bottom" slot, which makes Ungroup feel like a destructive move
     /// instead of a flatten-in-place.
@@ -440,7 +409,7 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
 
     // MARK: - Group properties
 
-    /// Rename a group. Whitespace-only names are ignored.
+    /// Rename only the group container. Workspace titles remain independently owned.
     public func renameWorkspaceGroup(groupId: UUID, name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -448,11 +417,6 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
         let group = model.workspaceGroups[index]
         guard group.name != trimmed else { return }
         model.workspaceGroups[index].name = trimmed
-        if group.anchorWorkspaceProvenance == .generated,
-           let anchorWorkspaceId = group.liveAnchorWorkspaceId,
-           let anchor = model.tabs.first(where: { $0.id == anchorWorkspaceId }) {
-            host?.workspaceGroupGeneratedAnchorNameDidChange(anchor, name: trimmed)
-        }
         host?.workspaceGroupNameDidChange()
     }
 

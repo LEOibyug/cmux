@@ -1,22 +1,24 @@
 # Workspace Groups
 
-Workspace groups let you nest workspaces into collapsible named sections in the sidebar. Each group has an implicit "anchor workspace," a customizable `+` button for spawning new workspaces inside it, and right-click actions for renaming, pinning, ungrouping, and editing its configuration.
+Workspace groups organize workspaces into collapsible named sections in the sidebar. Each group has its own header, a `+` button for creating workspaces, and context-menu actions for renaming, pinning, ungrouping, and editing its configuration.
 
 ## Concepts
 
 ### Anchor workspace
 
-Every group is owned by exactly one workspace called the **anchor**. The group header in the sidebar IS the anchor's representation — there is no separate row for it. Clicking the header name area focuses the anchor's panels. Clicking the chevron toggles collapse.
+A group retains an internal **anchor workspace** for ordering and default working-directory bookkeeping. The sidebar header is a separate container row: an expanded group shows every member, including the anchor, under its own workspace title. Collapsing hides the member rows; expanding restores them all. Clicking the header name focuses the group's default workspace; the chevron toggles collapse.
 
 When a group is created from existing workspaces, the first listed workspace becomes the anchor and no extra terminal is created. An empty group gets a new generated anchor. The anchor's working directory is inherited from the first selected workspace (when grouping a selection) or from the active workspace (when creating via the CLI without `--cwd`). A generated anchor that is still an untouched shell is skipped when you click the header name area and the first real member is focused instead.
 
-Closing the anchor workspace closes only that workspace and **promotes the group's next member to be the new anchor**, so the group and its other members stay intact (the promoted member then shows the group name as the header). When the anchor is the group's only workspace, the group is removed. To flatten a group back into ungrouped workspaces, use **Ungroup**; to close every workspace in a group, use **Delete Group**.
+Closing the anchor closes only that workspace and promotes the next member, preserving the group and its other members. Removing or moving the anchor out of a group likewise affects only that workspace and promotes a remaining member. An unpinned group disappears when no members remain; a pinned group can remain empty. Use **Ungroup** to remove a container while retaining its workspaces, or **Delete Group** to close every member.
 
 ### Group identity
 
 A group has a `name`, `iconSymbol` (an SF Symbol, default `folder.fill`), and an optional `customColor` (hex string). Automation can also provide an `external_id` (or `idempotency_key`) as a caller-owned identity scoped to the window. Repeating `workspace.group.create` with that identity returns the existing group instead of creating another anchor. Names are not identities: users may have multiple groups with the same name.
 
 The current anchor carries explicit provenance. Only an anchor created by cmux can be removed through the guarded anchor-cleanup option; a user-selected or promoted anchor is never inferred to be disposable.
+
+Creating a new group or adding members to an existing group adopts every explicitly selected workspace, including anchors of other groups. Source groups promote a surviving member when necessary; transfers do not implicitly close generated terminal workspaces. Renaming a group changes only its header name, not its members' titles.
 
 ### Pinning
 
@@ -26,11 +28,17 @@ The sidebar layout, top to bottom:
 1. Pinned top-level rows (workspaces and groups).
 2. Unpinned top-level rows (workspaces and groups).
 
+### Dragging and selection
+
+Drag a group header to move its whole section among top-level rows. Drag a workspace row to move that workspace or its explicit multi-selection; the internal anchor is an ordinary workspace row, not a second group-drag handle. Group headers and member rows have independent identities, so selection, scrolling, numbering, and drop indicators target the correct row.
+
+Group-header moves stay within their window. Cross-window transfers of a group's current anchor remain unsupported.
+
 ## Creating a group
 
 ### From the keyboard (`⌃⌘G` or `⌘⇧G`)
 
-Press `⌃⌘G` to create a new empty workspace group. cmux inserts a fresh anchor workspace as the group header and auto-names it `Group 1`, `Group 2`, … (rename anytime via the header context menu).
+Press `⌃⌘G` to create a new group with a generated terminal workspace. The header and workspace appear as separate rows. Groups are auto-named `Group 1`, `Group 2`, … and can be renamed from the header context menu.
 
 Select two or more workspaces in the sidebar, press `⌘⇧G`. The first selected workspace becomes the anchor; all selected workspaces become children without creating an extra terminal. The group is auto-named `Group 1`, `Group 2`, … (rename anytime via the header context menu). `⌘⇧G` collides with React Grab's default; the group handler only consumes the chord when there is an explicit sidebar multi-selection of at least two workspaces, so React Grab still fires in single-selection and browser/terminal contexts. Rebind in Settings → Keyboard if you'd rather the two not share a key.
 
@@ -42,7 +50,7 @@ Right-click any workspace in the sidebar, choose **New Empty Workspace Group** f
 
 ### From the group header context menu
 
-Right-click an existing group's header for: **Rename Group…**, **Pin / Unpin Group**, **Edit Group Config…** (opens `~/.config/cmux/cmux.json`), **Open Workspace Groups Docs**, **Ungroup Workspaces**, **Delete Group**. Ungroup Workspaces keeps the workspaces and removes only the group container. Delete Group closes the group header workspace and every workspace inside the group; if the group contains child workspaces, it prompts for confirmation first.
+Right-click an existing group's header for: **Rename Group…**, **Pin / Unpin Group**, **Edit Group Config…** (opens `~/.config/cmux/cmux.json`), **Open Workspace Groups Docs**, **Ungroup Workspaces**, **Delete Group**. Ungroup Workspaces keeps the workspaces and removes only the group container. Delete Group closes every member; groups containing multiple workspaces require confirmation.
 
 ### From the `+` button on a group header
 

@@ -48,8 +48,15 @@ final class SidebarWorkspaceTableDropTargetGeometryGate {
 
         let lower = max(0, visibleRange.location)
         let upper = min(rows.count, visibleRange.location + visibleRange.length)
-        bonsplitTargetBridge.updateTargets((lower..<upper).map { row in
+        var workspaceRowIds: Set<UUID>?
+        bonsplitTargetBridge.updateTargets((lower..<upper).compactMap { row in
             let configuration = rows[row]
+            if configuration.isGroupHeader {
+                if workspaceRowIds == nil {
+                    workspaceRowIds = Set(rows.lazy.filter { !$0.isGroupHeader }.map(\.workspaceId))
+                }
+                if workspaceRowIds?.contains(configuration.workspaceId) == true { return nil }
+            }
             return SidebarDropPlanner.WorkspaceDropTarget(
                 workspaceId: configuration.workspaceId,
                 isPinned: configuration.isPinned,

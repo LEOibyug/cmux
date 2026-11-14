@@ -3,7 +3,7 @@ import Testing
 
 @testable import CmuxWorkspaces
 
-/// Shared two-group world for top-level group-block reorder tests.
+/// Shared two-group world for explicit group-header reorder tests.
 @MainActor
 struct WorkspaceCoordinatorTopLevelGroupBlockFixture {
     let model: WorkspacesModel<CoordinatorStubTab>
@@ -61,6 +61,7 @@ struct WorkspaceCoordinatorTopLevelGroupBlockFixture {
             loose2.id,
             loose3.id,
         ])
+        model.syncWorkspaceGroupsOrderToAnchorOrder()
         try #require(model.tabs.map(\.id) == [
             anchor1Id,
             group1Child1.id,

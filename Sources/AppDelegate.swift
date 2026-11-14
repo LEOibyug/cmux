@@ -16189,27 +16189,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // singleton after keyboard nav), so the singleton case must be
         // treated the same as "no selection."
         guard orderedSelectedIds.count >= 2 else { return false }
-        let candidateIds: [UUID] = orderedSelectedIds
-        // Match the workspace context-menu eligibility filter so the shortcut
-        // doesn't silently create an anchor-only group when every selected
-        // target is already an existing group's anchor.
-        let existingAnchorIds = Set(tabManager.workspaceGroups.compactMap(\.liveAnchorWorkspaceId))
-        let eligibleIds: [UUID] = candidateIds.filter { id in
-            tabManager.tabs.contains(where: { $0.id == id }) && !existingAnchorIds.contains(id)
-        }
-        guard eligibleIds.count >= 2 else {
-            // Don't consume the event — let it propagate to the next handler
-            // (e.g. toggleReactGrab on the default Cmd+Shift+G binding) so
-            // the user gets the next-best action instead of a dead key. The
-            // shortcut contract is "multi-select then ⌘⇧G"; single-workspace
-            // groups are only created from the right-click context menu, so
-            // a 2-row sidebar selection where only one survives the
-            // pinned/anchor filter should also fall through.
-            return false
-        }
         // No name prompt: TabManager auto-names ("Group N"). Rename via the
         // header context menu.
-        tabManager.createWorkspaceGroup(name: "", childWorkspaceIds: eligibleIds)
+        tabManager.createWorkspaceGroup(name: "", childWorkspaceIds: orderedSelectedIds)
         return true
     }
 

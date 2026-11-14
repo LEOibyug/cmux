@@ -16,19 +16,47 @@ struct SidebarWorkspaceTableReorderIndicatorPainter {
     /// predicate, so adjacency and end-of-scope answers cannot diverge.
     let indicatorRowIds: [UUID]
 
-    func paint(forRowWorkspaceId rowWorkspaceId: UUID) -> (top: Bool, bottom: Bool) {
+    func paint(
+        forRowWorkspaceId rowWorkspaceId: UUID,
+        groupId: UUID?,
+        isGroupHeader: Bool
+    ) -> (top: Bool, bottom: Bool) {
+        let rowId: UUID
+        switch scope {
+        case .raw:
+            guard !isGroupHeader else { return (false, false) }
+            rowId = rowWorkspaceId
+        case .topLevel:
+            guard isGroupHeader || groupId == nil else { return (false, false) }
+            guard let identity = isGroupHeader ? groupId : rowWorkspaceId else { return (false, false) }
+            rowId = identity
+        case .group(let targetGroupId):
+            guard groupId == targetGroupId else { return (false, false) }
+            if isGroupHeader {
+                guard indicatorRowIds.allSatisfy({ $0 == targetGroupId }),
+                      let indicator,
+                      indicator.tabId == targetGroupId || indicator.tabId == rowWorkspaceId,
+                      draggedWorkspaceId != targetGroupId,
+                      draggedWorkspaceId != rowWorkspaceId else { return (false, false) }
+                // With no rendered members, adoption is represented by the
+                // container's lower edge even when the hidden anchor is the
+                // resolver's top-edge target.
+                return (false, true)
+            }
+            rowId = rowWorkspaceId
+        }
         guard indicator != nil else { return (false, false) }
-        guard rowWorkspaceId != draggedWorkspaceId else { return (false, false) }
+        guard rowId != draggedWorkspaceId else { return (false, false) }
         let predicate = SidebarTabDropIndicatorPredicate()
         return (
             top: predicate.topVisible(
-                forTabId: rowWorkspaceId,
+                forTabId: rowId,
                 draggedTabId: draggedWorkspaceId,
                 dropIndicator: indicator,
                 tabIds: indicatorRowIds
             ),
             bottom: predicate.bottomVisible(
-                forTabId: rowWorkspaceId,
+                forTabId: rowId,
                 draggedTabId: draggedWorkspaceId,
                 dropIndicator: indicator,
                 tabIds: indicatorRowIds,

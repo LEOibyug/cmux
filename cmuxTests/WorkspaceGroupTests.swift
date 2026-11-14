@@ -53,6 +53,24 @@ struct WorkspaceGroupTests {
         }
     }
 
+    @Test func regroupingRendersEveryWorkspaceExactlyOnce() throws {
+        let manager = makeTabManager()
+        manager.addWorkspace(autoWelcomeIfNeeded: false)
+        let workspaceIds = manager.tabs.map(\.id)
+        for name in ["First", "Second"] {
+            let groupId = try #require(manager.createWorkspaceGroup(
+                name: name,
+                childWorkspaceIds: workspaceIds
+            ))
+            let items = SidebarWorkspaceRenderItem.renderItems(
+                tabs: manager.tabs,
+                groupsById: Dictionary(uniqueKeysWithValues: manager.workspaceGroups.map { ($0.id, $0) })
+            )
+            #expect(items.map(\.id) == [.group(groupId)] + manager.tabs.map { .workspace($0.id) })
+            #expect(Set(SidebarWorkspaceRenderItem.numberedWorkspaceIds(from: items)) == Set(workspaceIds))
+        }
+    }
+
     @Test func createEmptyGroupInsertsAnchorOnlyGroup() throws {
         let manager = makeTabManager()
         let originalIds = manager.tabs.map(\.id)
@@ -93,18 +111,14 @@ struct WorkspaceGroupTests {
         let groupId = try #require(manager.createWorkspaceGroup(name: "Middle", childWorkspaceIds: [originalIds[1]]))
         let group = try #require(manager.workspaceGroups.first { $0.id == groupId })
 
-        #expect(manager.sidebarReorderWorkspaceIds(forDraggedWorkspaceId: group.anchorWorkspaceId) == [
+        #expect(manager.sidebarReorderWorkspaceIds(forDraggedWorkspaceId: groupId) == [
             originalIds[0],
-            group.anchorWorkspaceId,
+            groupId,
             originalIds[2],
             originalIds[3],
         ])
 
-        let moved = manager.reorderSidebarWorkspace(
-            tabId: group.anchorWorkspaceId,
-            toIndex: 2,
-            isDragOperation: true
-        )
+        let moved = manager.reorderSidebarGroup(groupId: groupId, toIndex: 2)
 
         #expect(moved)
         #expect(manager.tabs.map(\.id) == [
@@ -129,16 +143,16 @@ struct WorkspaceGroupTests {
         let group = try #require(manager.workspaceGroups.first { $0.id == groupId })
         let reorderIds = manager.sidebarReorderWorkspaceIds(
             forDraggedWorkspaceId: originalIds[0],
-            targetWorkspaceId: group.anchorWorkspaceId
+            targetWorkspaceId: groupId
         )
         let pinnedIds = manager.sidebarReorderPinnedWorkspaceIds(
             forDraggedWorkspaceId: originalIds[0],
-            targetWorkspaceId: group.anchorWorkspaceId
+            targetWorkspaceId: groupId
         )
         let targetIndex = try #require(SidebarDropPlanner().targetIndex(
             draggedTabId: originalIds[0],
-            targetTabId: group.anchorWorkspaceId,
-            indicator: SidebarDropIndicator(tabId: group.anchorWorkspaceId, edge: .bottom),
+            targetTabId: groupId,
+            indicator: SidebarDropIndicator(tabId: groupId, edge: .bottom),
             tabIds: reorderIds,
             pinnedTabIds: pinnedIds
         ))
@@ -148,7 +162,7 @@ struct WorkspaceGroupTests {
             isDragOperation: true,
             usesTopLevelRows: manager.sidebarReorderUsesTopLevelRows(
                 forDraggedWorkspaceId: originalIds[0],
-                targetWorkspaceId: group.anchorWorkspaceId
+                targetWorkspaceId: groupId
             )
         )
 
@@ -202,7 +216,7 @@ struct WorkspaceGroupTests {
         var visibleWorkspaceIds: [UUID] = []
         var visibleRowIds: [UUID] = []
         for item in items {
-            visibleRowIds.append(item.rowWorkspaceId)
+            visibleRowIds.append(item.rowId)
             switch item {
             case .groupHeader(let renderedGroupId, _) where renderedGroupId == groupId:
                 groupMemberIds = memberWorkspaceIdsByGroupId[renderedGroupId] ?? []
@@ -221,7 +235,7 @@ struct WorkspaceGroupTests {
         #expect(!visibleWorkspaceIds.contains(originalIds[2]))
         #expect(visibleRowIds == [
             originalIds[0],
-            group.anchorWorkspaceId,
+            group.id,
             originalIds[3],
         ])
     }
@@ -325,22 +339,22 @@ struct WorkspaceGroupTests {
         let fullRowIds = manager.sidebarReorderWorkspaceIds(forDraggedWorkspaceId: originalIds[0])
         let headerTargetIds = manager.sidebarReorderWorkspaceIds(
             forDraggedWorkspaceId: originalIds[0],
-            targetWorkspaceId: group.anchorWorkspaceId
+            targetWorkspaceId: groupId
         )
         let forcedTopLevelIds = manager.sidebarReorderWorkspaceIds(
             forDraggedWorkspaceId: originalIds[0],
             usesTopLevelRows: true
         )
-        let indicator = SidebarDropIndicator(tabId: group.anchorWorkspaceId, edge: .bottom)
+        let indicator = SidebarDropIndicator(tabId: groupId, edge: .bottom)
 
         #expect(headerTargetIds == [
             originalIds[0],
-            group.anchorWorkspaceId,
+            groupId,
             originalIds[3],
         ] + Array(originalIds.dropFirst(4)))
         #expect(forcedTopLevelIds == headerTargetIds)
         #expect(!SidebarTabDropIndicatorPredicate().bottomVisible(
-            forTabId: group.anchorWorkspaceId,
+            forTabId: groupId,
             draggedTabId: originalIds[0],
             dropIndicator: indicator,
             tabIds: forcedTopLevelIds,
@@ -385,7 +399,7 @@ struct WorkspaceGroupTests {
         let targetIndex = try #require(SidebarDropPlanner().targetIndex(
             draggedTabId: draggedId,
             targetTabId: targetId,
-            indicator: SidebarDropIndicator(tabId: group.anchorWorkspaceId, edge: .top),
+            indicator: SidebarDropIndicator(tabId: groupId, edge: .top),
             tabIds: reorderIds,
             pinnedTabIds: pinnedIds
         ))
@@ -896,7 +910,7 @@ struct WorkspaceGroupTests {
         #expect(manager.tabs.first(where: { $0.id == firstChild })?.groupId == nil)
     }
 
-    @Test func removingLastRealMemberRemovesUntouchedGeneratedAnchor() throws {
+    @Test func removingLastRealMemberPreservesGeneratedWorkspace() throws {
         let manager = makeTabManager()
         let realMemberId = manager.tabs[0].id
         let groupId = try #require(manager.createWorkspaceGroup(name: "G"))
@@ -905,8 +919,8 @@ struct WorkspaceGroupTests {
         manager.addWorkspaceToGroup(workspaceId: realMemberId, groupId: groupId)
         manager.removeWorkspaceFromGroup(workspaceId: realMemberId)
 
-        #expect(!manager.tabs.contains { $0.id == generatedAnchor })
-        #expect(manager.workspaceGroups.first { $0.id == groupId } == nil)
+        #expect(manager.tabs.first { $0.id == generatedAnchor }?.groupId == groupId)
+        #expect(manager.workspaceGroups.first { $0.id == groupId }?.anchorWorkspaceId == generatedAnchor)
         #expect(manager.tabs.first { $0.id == realMemberId }?.groupId == nil)
     }
 
@@ -957,7 +971,7 @@ struct WorkspaceGroupTests {
         #expect(manager.workspaceGroups.first { $0.id == groupId } == nil)
     }
 
-    @Test func removeAnchorViaRemoveWorkspaceFromGroupDissolves() throws {
+    @Test func removingAnchorDetachesOnlyItAndPromotesRemainingMember() throws {
         let manager = makeTabManager()
         let children = manager.tabs.map(\.id)
         let groupId = manager.createWorkspaceGroup(name: "G", childWorkspaceIds: children)!
@@ -965,8 +979,10 @@ struct WorkspaceGroupTests {
 
         manager.removeWorkspaceFromGroup(workspaceId: group.anchorWorkspaceId)
 
-        #expect(manager.workspaceGroups.first(where: { $0.id == groupId }) == nil)
-        #expect(manager.tabs.allSatisfy { $0.groupId == nil })
+        #expect(manager.tabs.first { $0.id == group.anchorWorkspaceId }?.groupId == nil)
+        let remaining = try #require(children.first { $0 != group.anchorWorkspaceId })
+        #expect(manager.workspaceGroups.first { $0.id == groupId }?.anchorWorkspaceId == remaining)
+        #expect(manager.tabs.first { $0.id == remaining }?.groupId == groupId)
     }
 
     @Test func closingAnchorWorkspacePromotesMemberAndKeepsGroup() throws {
@@ -1365,38 +1381,22 @@ struct WorkspaceGroupTests {
         #expect(RenderableSystemSymbol.resolvedSurfaceTabIcon("   ") == "doc.text")
     }
 
-    @Test func renamingGroupUpdatesAnchorDisplayTitle() throws {
+    @Test func renamingGroupPreservesWorkspaceTitlesAndRestoresThem() throws {
         let manager = makeTabManager()
-        let groupId = try #require(manager.createWorkspaceGroup(name: "Group 1"))
-        let group = try #require(manager.workspaceGroups.first { $0.id == groupId })
-        let anchor = try #require(manager.tabs.first { $0.id == group.anchorWorkspaceId })
+        let workspaceIds = manager.tabs.map(\.id)
+        let titles = Dictionary(uniqueKeysWithValues: manager.tabs.map { ($0.id, $0.title) })
+        let groupId = try #require(manager.createWorkspaceGroup(
+            name: "Original",
+            childWorkspaceIds: workspaceIds
+        ))
+        manager.renameWorkspaceGroup(groupId: groupId, name: "Renamed")
+        #expect(manager.workspaceGroups.first { $0.id == groupId }?.name == "Renamed")
+        #expect(manager.resolvedWorkspaceDisplayTitles(for: Set(workspaceIds)) == titles)
 
-        #expect(manager.resolvedWorkspaceDisplayTitle(for: anchor) == "Group 1")
-
-        manager.renameWorkspaceGroup(groupId: groupId, name: "AUSTIN GENERAL INTELLIGENCE")
-
-        #expect(manager.workspaceGroups.first { $0.id == groupId }?.name == "AUSTIN GENERAL INTELLIGENCE")
-        #expect(manager.resolvedWorkspaceDisplayTitle(for: anchor) == "AUSTIN GENERAL INTELLIGENCE")
-        #expect(anchor.title == "AUSTIN GENERAL INTELLIGENCE")
         let restored = makeTabManager()
         restored.restoreSessionSnapshot(manager.sessionSnapshot(includeScrollback: false))
-        let restoredGroup = try #require(restored.workspaceGroups.first { $0.id == groupId })
-        let restoredAnchor = try #require(restored.tabs.first { $0.id == restoredGroup.anchorWorkspaceId })
-        #expect(restoredGroup.name == "AUSTIN GENERAL INTELLIGENCE" && restoredAnchor.title == "AUSTIN GENERAL INTELLIGENCE")
+        #expect(restored.workspaceGroups.first { $0.id == groupId }?.name == "Renamed")
+        #expect(restored.resolvedWorkspaceDisplayTitles(for: Set(workspaceIds)) == titles)
     }
 
-    // A non-anchor workspace keeps its own title; only the anchor mirrors the
-    // group name. Guards against the derivation over-reaching to every member.
-    @Test func renamingGroupLeavesNonAnchorMemberTitleAlone() throws {
-        let manager = makeTabManager()
-        let memberId = manager.tabs[0].id
-        let groupId = try #require(manager.createWorkspaceGroup(name: "Group 1"))
-        manager.addWorkspaceToGroup(workspaceId: memberId, groupId: groupId)
-        let member = try #require(manager.tabs.first { $0.id == memberId })
-        let memberTitle = member.title
-
-        manager.renameWorkspaceGroup(groupId: groupId, name: "Renamed")
-
-        #expect(manager.resolvedWorkspaceDisplayTitle(for: member) == memberTitle)
-    }
 }

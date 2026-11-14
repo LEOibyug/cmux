@@ -13,7 +13,7 @@ import Testing
 @MainActor
 @Suite("Workspace group numbered selection", .serialized)
 struct WorkspaceGroupNumberedSelectionTests {
-    @Test func controlTwoSkipsAnchorRepresentedByGroupHeader() throws {
+    @Test func controlTwoSelectsTheFirstGroupedWorkspace() throws {
         let appDelegate = try #require(AppDelegate.shared)
         let originalSettingsFileStore = KeyboardShortcutSettings.installIsolatedTestFileStore(
             prefix: "cmux-workspace-group-numbered-selection"
@@ -41,14 +41,7 @@ struct WorkspaceGroupNumberedSelectionTests {
         let groupId = try #require(manager.createWorkspaceGroup(name: "Grouped"))
         manager.addWorkspaceToGroup(workspaceId: memberWorkspace.id, groupId: groupId)
         let group = try #require(manager.workspaceGroups.first { $0.id == groupId })
-        // Empty groups insert a generated header at the first top-level slot.
-        // Move that group run after the ungrouped workspace so digit 1 remains
-        // the ungrouped row and digit 2 reaches the real member.
-        _ = manager.reorderSidebarWorkspace(
-            tabId: group.anchorWorkspaceId,
-            toIndex: 1,
-            isDragOperation: true
-        )
+        _ = manager.reorderSidebarGroup(groupId: groupId, toIndex: 1)
         let renderItems = SidebarWorkspaceRenderItem.renderItems(
             tabs: manager.tabs,
             groupsById: [groupId: group]
@@ -58,7 +51,7 @@ struct WorkspaceGroupNumberedSelectionTests {
             return workspaceId
         }
 
-        #expect(visibleWorkspaceRowIds == [ungroupedWorkspace.id, memberWorkspace.id])
+        #expect(visibleWorkspaceRowIds == [ungroupedWorkspace.id, group.anchorWorkspaceId, memberWorkspace.id])
         window.makeKeyAndOrderFront(nil)
         window.displayIfNeeded()
         manager.selectWorkspace(ungroupedWorkspace)
@@ -81,8 +74,7 @@ struct WorkspaceGroupNumberedSelectionTests {
         ) == 2)
         #expect(appDelegate.preferredMainWindowContextForShortcutRouting(event: event)?.tabManager === manager)
         #expect(appDelegate.debugHandleCustomShortcut(event: event))
-        #expect(manager.selectedTabId == memberWorkspace.id)
-        #expect(manager.selectedTabId != group.anchorWorkspaceId)
+        #expect(manager.selectedTabId == group.anchorWorkspaceId)
     }
 }
 #endif

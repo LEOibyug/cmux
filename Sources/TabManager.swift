@@ -1958,16 +1958,11 @@ class TabManager: ObservableObject {
 
     @discardableResult
     func reorderWorkspace(tabId: UUID, toIndex targetIndex: Int, isDragOperation: Bool = false) -> Bool {
-        let previousMemberships = workspaceGroupMemberships(for: [tabId])
-        let handled = workspaceReordering.reorderWorkspace(
+        workspaceReordering.reorderWorkspace(
             tabId: tabId,
             toIndex: targetIndex,
             isDragOperation: isDragOperation
         )
-        cleanupGeneratedAnchorsAfterWorkspaceRemoval(
-            previousMemberships: previousMemberships
-        )
-        return handled
     }
 
     func sidebarReorderWorkspaceIds(
@@ -2016,18 +2011,13 @@ class TabManager: ObservableObject {
         usesTopLevelRows: Bool = false,
         explicitGroupId: UUID? = nil
     ) -> Bool {
-        let previousMemberships = workspaceGroupMemberships(for: [tabId])
-        let handled = workspaceReordering.reorderSidebarWorkspace(
+        workspaceReordering.reorderSidebarWorkspace(
             tabId: tabId,
             toIndex: targetIndex,
             isDragOperation: isDragOperation,
             usesTopLevelRows: usesTopLevelRows,
             explicitGroupId: explicitGroupId
         )
-        cleanupGeneratedAnchorsAfterWorkspaceRemoval(
-            previousMemberships: previousMemberships
-        )
-        return handled
     }
 
     @discardableResult
@@ -2039,8 +2029,7 @@ class TabManager: ObservableObject {
         usesTopLevelRows: Bool = false,
         explicitGroupId: UUID? = nil
     ) -> Bool {
-        let previousMemberships = workspaceGroupMemberships(for: tabIds)
-        let handled = workspaceReordering.reorderSidebarWorkspaces(
+        workspaceReordering.reorderSidebarWorkspaces(
             tabIds: tabIds,
             draggedTabId: draggedTabId,
             toIndex: targetIndex,
@@ -2048,37 +2037,13 @@ class TabManager: ObservableObject {
             usesTopLevelRows: usesTopLevelRows,
             explicitGroupId: explicitGroupId
         )
-        cleanupGeneratedAnchorsAfterWorkspaceRemoval(
-            previousMemberships: previousMemberships
-        )
-        return handled
     }
 
-    private func workspaceGroupMemberships(for workspaceIds: [UUID]) -> [UUID: UUID] {
-        let requestedIds = Set(workspaceIds)
-        return Dictionary(uniqueKeysWithValues: tabs.compactMap { workspace in
-            guard requestedIds.contains(workspace.id), let groupId = workspace.groupId else {
-                return nil
-            }
-            return (workspace.id, groupId)
-        })
+    @discardableResult
+    func reorderSidebarGroup(groupId: UUID, toIndex targetIndex: Int) -> Bool {
+        workspaceReordering.reorderSidebarGroup(groupId: groupId, toIndex: targetIndex)
     }
 
-    private func cleanupGeneratedAnchorsAfterWorkspaceRemoval(
-        previousMemberships: [UUID: UUID]
-    ) {
-        let removedMemberships = previousMemberships.filter { workspaceId, groupId in
-            workspacesById[workspaceId]?.groupId != groupId
-        }
-        for groupId in Set(removedMemberships.values) {
-            _ = workspaceGrouping.removeGeneratedAnchorIfOrphaned(
-                groupId: groupId,
-                additionalMovedWorkspaceIds: removedMemberships.compactMap { workspaceId, previousGroupId in
-                    previousGroupId == groupId ? workspaceId : nil
-                }
-            )
-        }
-    }
 
     func sidebarReorderUsesTopLevelRows(
         forDraggedWorkspaceId draggedWorkspaceId: UUID?,
