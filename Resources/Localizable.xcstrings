@@ -536052,25 +536052,71 @@
         }
       }
     },
+    "controlCenter.approve.bash": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run Bash command"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "运行 Bash 命令"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "執行 Bash 指令"
+          }
+        }
+      }
+    },
+    "controlCenter.bashApprovalDisclosure": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This command may read/write files or use the network with existing user/macOS app permissions, without elevation. Its output will be sent to the configured model and saved in durable receipts. Rejecting runs nothing."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此命令可读写文件或使用网络，沿用现有用户及 macOS 应用权限，不提升权限。输出会发送给配置的模型并保存在持久回执中。拒绝则不执行。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此指令可讀寫檔案或使用網路，沿用現有使用者及 macOS 應用程式權限，不提升權限。輸出會傳送給設定的模型並儲存於持久回執。拒絕則不執行。"
+          }
+        }
+      }
+    },
     "controlCenter.chatAccessHelp": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ask requires approval for supported local changes. Full Access skips those per-action approvals."
+            "value": "Ask approves each local change and Bash command. Full Access skips those approvals. Command output goes to the configured model and durable receipts."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "询问模式会在执行受支持的本地更改前请求批准。完全访问会跳过逐项批准。"
+            "value": "询问模式逐项批准本地更改和 Bash 命令；完全访问跳过批准。命令输出会发送给配置的模型并保存在持久回执中。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "詢問模式會在執行支援的本機變更前要求核准。完整存取會略過逐項核准。"
+            "value": "詢問模式逐項核准本機變更和 Bash 指令；完整存取略過核准。指令輸出會傳送給設定的模型並儲存於持久回執。"
           }
         }
       }
@@ -536081,19 +536127,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Allow supported local actions without asking?"
+            "value": "Allow local actions and Bash without asking?"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "允许受支持的本地操作不再逐项询问？"
+            "value": "允许本地操作和 Bash 不再逐项询问？"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "允許支援的本機操作不再逐項詢問？"
+            "value": "允許本機操作和 Bash 不再逐項詢問？"
           }
         }
       }
@@ -536104,19 +536150,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Full Access lets Control Center execute its supported local actions without individual approval, including opening workspaces and changing saved favorites, collections, preferences, and safe settings. It does not grant arbitrary shell execution, macOS permissions, account access, or security privileges. You can switch back to Ask at any time while idle."
+            "value": "Full Access runs supported actions and arbitrary Bash commands without individual approval. Commands may read/write files and use the network with your existing user/macOS app permissions; no permissions are elevated. Command output is sent to the configured model and saved in durable receipts. Stop cannot undo side effects. Switch back to Ask while idle."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "完全访问允许控制中心执行受支持的本地操作而不逐项请求批准，包括打开工作区，以及更改已保存的收藏、集合、偏好和允许修改的常规设置。它不会授予任意 Shell 执行、macOS 权限、账户访问或安全特权。空闲时可随时切回询问模式。"
+            "value": "完全访问无需逐项批准即可执行受支持的操作和任意 Bash 命令。命令可读写文件或使用网络，沿用当前用户及 macOS 应用权限，不提升权限。命令输出会发送给配置的模型并保存在持久回执中。停止无法撤销副作用。空闲时可切回询问模式。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "完整存取允許控制中心執行支援的本機操作而不逐項要求核准，包括開啟工作區，以及變更已儲存的收藏、集合、偏好與允許修改的一般設定。它不會授予任意 Shell 執行、macOS 權限、帳號存取或安全特權。閒置時可隨時切回詢問模式。"
+            "value": "完整存取無需逐項核准即可執行支援的操作和任意 Bash 指令。指令可讀寫檔案或使用網路，沿用目前使用者及 macOS 應用程式權限，不提升權限。指令輸出會傳送給設定的模型並儲存於持久回執。停止無法復原副作用。閒置時可切回詢問模式。"
           }
         }
       }

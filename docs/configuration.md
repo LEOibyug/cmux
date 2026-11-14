@@ -97,16 +97,32 @@ focus or consume keyboard shortcuts. The initial WebView theme matches the page
 before the first transcript update.
 
 The composer permission selector defaults to **Ask Before Changes**. Read-only
-tools do not prompt; model-invoked local changes show their exact arguments and
-resolved saved targets before execution. Approve permits that action only; Reject
-leaves it unexecuted. Stop cancels pending approval and remaining work, not actions
-already completed. A changed target requires a new review. **Full Access**, enabled
-through an explicit inline confirmation, skips these per-action approvals only for the
-existing supported local tools. It does not add arbitrary shell/code execution,
-file deletion, provider account access, macOS permissions or security privileges.
+typed tools do not prompt; model-invoked local changes show exact arguments and
+resolved targets. Every Bash command, including inspection, requires approval of
+the command, resolved logical cwd, timeout and output disclosure. Reject executes
+nothing. Stop cancels pending approval and remaining work, not completed effects.
+A changed target requires a new review. **Full Access**, enabled through explicit
+inline confirmation, skips these per-action approvals, including arbitrary Bash.
+Commands may read/write files or use the network with existing current-user/macOS
+app permissions; neither mode elevates permissions or grants account/security access.
 The mode is saved locally and cannot be changed by a model tool or memory record.
 Direct native buttons are already explicit user actions and do not add this model
 approval step.
+
+Bash runs `/bin/bash --noprofile --norc -c` with stdin closed (`/dev/null`),
+the app's normal environment/PATH and no injected model connection key. `cwd`
+defaults to the Connection directory; existing logical paths and symlinks are
+preserved, with no creation or fallback for missing paths. `timeout_seconds` is
+an integer from 1–300, default 60. stdout and stderr are capped at 32 KiB each
+while pipes continue draining. Command output is sent to the configured model
+and saved in durable receipts with command, cwd, exit status, signal, truncation,
+timeout and partial cancelled output. Nonzero exits and timeouts are failures;
+cancellation is recorded before stopping the operation. There are no automatic
+retries. Stop terminates the owned process group, but cannot undo external effects
+or guarantee stopping deliberate daemonization/launchd jobs.
+Each call starts a fresh shell; shell variables and `cd` do not persist between
+calls, and ordinary background jobs are stopped when the shell exits. Use a cmux
+workspace for interactive commands or persistent services.
 
 Only relevant explicit memories are loaded, with directory scopes covering their
 descendants but not similarly prefixed neighbors. No automatic inferred-habit

@@ -117,6 +117,10 @@ extension ControlCenterCoordinator {
 
     private func approvalDetail(_ call: ControlCenterToolCall) throws -> String {
         let args = call.arguments.objectValue ?? [:]
+        if call.name == "bash" {
+            let request = try bashArguments(call.arguments)
+            return "\(ControlCenterStrings.text("bashApprovalDisclosure"))\n\ncommand:\n\(request.command)\n\ncwd: \(request.directory)\ntimeout_seconds: \(request.timeout)"
+        }
         var detail: [String: ControlCenterJSON] = ["arguments": call.arguments]
         var identifiers: Set<String> = []
         if let id = args["id"]?.stringValue { identifiers.insert(id.lowercased()) }
