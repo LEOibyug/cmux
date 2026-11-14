@@ -81,6 +81,7 @@ public final class ControlCenterModelClient: Sendable {
                 "type": .string("function"),
                 "name": .string(tool.name),
                 "description": .string(tool.description),
+                "strict": .bool(false),
                 "parameters": tool.parameters
             ])
         }

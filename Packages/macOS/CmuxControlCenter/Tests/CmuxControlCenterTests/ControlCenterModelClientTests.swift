@@ -31,6 +31,7 @@ struct ControlCenterModelClientTests {
         #expect(body?["store"] == .bool(false))
         #expect(body?["stream"] == .bool(true))
         #expect(body?["tools"]?.arrayValue?.first?.objectValue?["type"] == .string("function"))
+        #expect(body?["tools"]?.arrayValue?.first?.objectValue?["strict"] == .bool(false))
     }
 
     @Test(arguments: ["not-json", "[]", "null"])

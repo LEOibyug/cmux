@@ -110,6 +110,12 @@ default; `--fresh` starts without it. The local `control_center.ask` RPC accepts
 `follow_up: false` for the same context reset. An ask may wait for approval in the
 central chat page; `status` exposes current partial output without credentials.
 
+Function requests explicitly set `strict: false` so Responses does not promote
+optional parameters to required ones. For `memory_save`, `save_favorite` and
+`save_collection`, an omitted, `null` or empty `id` creates a host-generated UUID;
+a nonempty edit ID must be a valid UUID of an existing record. Invalid or unknown
+edit IDs never fall back to creating records. Open/delete IDs remain mandatory.
+
 Settings edits use the existing typed runtime and JSONC mutation receipts.
 Unrelated content is preserved; conditional undo refuses to overwrite a newer
 external edit. Cancellation stops remaining work, not completed actions. Model
