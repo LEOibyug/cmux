@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ControlCenterChatView: View {
     @ObservedObject var coordinator: ControlCenterCoordinator
+    let isVisible: Bool
     let onOpenSection: (ControlCenterSection) -> Void
     @State private var composerHeight: CGFloat = 48
     @State private var focusRequest = 0
@@ -11,7 +12,7 @@ struct ControlCenterChatView: View {
 
     private var isActive: Bool { coordinator.isRunning || coordinator.activeChatTurnID != nil }
     private var canSend: Bool {
-        !isActive && !coordinator.chatDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        isVisible && !isActive && !coordinator.chatDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var body: some View {
@@ -27,7 +28,8 @@ struct ControlCenterChatView: View {
                     liveError: coordinator.error,
                     isRunning: isActive,
                     standaloneError: coordinator.chatTurns.isEmpty ? coordinator.error : nil,
-                    isAwaitingApproval: coordinator.pendingApproval != nil
+                    isAwaitingApproval: coordinator.pendingApproval != nil,
+                    isVisible: isVisible
                 )
                 .accessibilityIdentifier("controlCenter.chatTranscript")
                 if coordinator.chatTurns.isEmpty && coordinator.error == nil {
@@ -53,7 +55,12 @@ struct ControlCenterChatView: View {
             .frame(maxWidth: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
         }
-        .onChange(of: coordinator.chatPresentationID) { _, _ in focusRequest += 1 }
+        .onChange(of: isVisible) { _, visible in
+            if visible { focusRequest += 1 }
+        }
+        .onChange(of: coordinator.chatPresentationID) { _, _ in
+            if isVisible { focusRequest += 1 }
+        }
     }
 
     private var header: some View {
@@ -218,6 +225,7 @@ struct ControlCenterChatView: View {
                     text: $coordinator.chatDraft,
                     measuredHeight: $composerHeight,
                     focusRequest: focusRequest,
+                    isVisible: isVisible,
                     canSend: canSend,
                     onSend: send
                 )

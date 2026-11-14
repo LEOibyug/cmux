@@ -974,6 +974,7 @@ struct ContentView: View {
     // Non-observed: flush pacing must not invalidate the view.
     @State private var selectedTabIds: Set<UUID> = []
     @State private var mountedWorkspaceIds: [UUID] = []
+    @State private var hasMountedControlCenter = false
     @State private var lastReconciledPortalRenderingStatesByWorkspaceId: [UUID: Bool] = [:]
     @State private var lastSidebarSelectionIndex: Int? = nil
     @State private var titlebarText: String = ""
@@ -1788,10 +1789,17 @@ struct ContentView: View {
             .allowsHitTesting(sidebarSelectionState.selection == .tabs)
             .accessibilityHidden(sidebarSelectionState.selection != .tabs)
 
-            if sidebarSelectionState.selection == .controlCenter {
-                ControlCenterView(coordinator: .shared)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .accessibilityIdentifier("MainControlCenterContent")
+            if hasMountedControlCenter || sidebarSelectionState.selection == .controlCenter {
+                ControlCenterView(
+                    coordinator: .shared,
+                    isVisible: sidebarSelectionState.selection == .controlCenter
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(sidebarSelectionState.selection == .controlCenter ? 1 : 0)
+                .allowsHitTesting(sidebarSelectionState.selection == .controlCenter)
+                .accessibilityHidden(sidebarSelectionState.selection != .controlCenter)
+                .accessibilityIdentifier("MainControlCenterContent")
+                .onAppear { hasMountedControlCenter = true }
             }
         }
         .modifier(WorkspacePresentationModeContentTopPaddingModifier(

@@ -90,6 +90,11 @@ destination, without restoring a complete transcript. Input/context and tool bud
 context-limit error requires starting a new chat rather than silent truncation.
 Enter sends, Shift-Enter inserts a line, and Command-Enter also sends. Composing
 an IME candidate never sends a message. Drafting remains available while working.
+The chat mounts on its first visit and stays mounted across workspace and Browse
+page switches, preserving its Markdown document, scroll position and expanded
+receipts rather than reloading a blank WebView. Its hidden composer cannot take
+focus or consume keyboard shortcuts. The initial WebView theme matches the page
+before the first transcript update.
 
 The composer permission selector defaults to **Ask Before Changes**. Read-only
 tools do not prompt; model-invoked local changes show their exact arguments and

@@ -5,6 +5,7 @@ struct ControlCenterChatInput: NSViewRepresentable {
     @Binding var text: String
     @Binding var measuredHeight: CGFloat
     let focusRequest: Int
+    let isVisible: Bool
     let canSend: Bool
     let onSend: () -> Void
 
@@ -19,7 +20,7 @@ struct ControlCenterChatInput: NSViewRepresentable {
         editor.setAccessibilityIdentifier("controlCenter.chatInput")
         configure(scrollView, coordinator: context.coordinator)
         editor.focusRequest = focusRequest
-        editor.needsInitialFocus = true
+        editor.needsInitialFocus = isVisible
         return scrollView
     }
 
@@ -41,6 +42,13 @@ struct ControlCenterChatInput: NSViewRepresentable {
     }
 
     private func configure(_ scrollView: ChatInputScrollView, coordinator: Coordinator) {
+        scrollView.isHidden = !isVisible
+        scrollView.editor.isInputActive = isVisible
+        scrollView.editor.isEditable = isVisible
+        scrollView.editor.isSelectable = isVisible
+        if !isVisible, let window = scrollView.window, window.firstResponder === scrollView.editor {
+            window.makeFirstResponder(nil)
+        }
         scrollView.editor.canSend = canSend
         scrollView.editor.onSend = { [weak coordinator, weak scrollView] in
             guard let coordinator, let scrollView else { return }
@@ -126,6 +134,7 @@ final class ChatInputTextView: NSTextView {
     var onSend: (() -> Void)?
     var focusRequest = 0
     var needsInitialFocus = false
+    var isInputActive = false
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -137,7 +146,7 @@ final class ChatInputTextView: NSTextView {
 
     func requestFocus() {
         DispatchQueue.main.async { [weak self] in
-            guard let self, let window = self.window, window.isKeyWindow else { return }
+            guard let self, self.isInputActive, let window = self.window, window.isKeyWindow else { return }
             window.makeFirstResponder(self)
         }
     }
@@ -158,6 +167,7 @@ final class ChatInputTextView: NSTextView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard isInputActive else { return false }
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
         if isReturn(event), flags == .command, !hasMarkedText() {
             if canSend { onSend?() }

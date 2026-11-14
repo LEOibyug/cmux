@@ -22,34 +22,40 @@ enum ControlCenterSection: String, CaseIterable, Identifiable {
 
 struct ControlCenterView: View {
     @ObservedObject var coordinator: ControlCenterCoordinator
+    let isVisible: Bool
     @State private var section: ControlCenterSection = .chat
 
     private var busy: Bool { coordinator.isRunning || coordinator.activeChatTurnID != nil }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if section == .chat {
-                ControlCenterChatView(coordinator: coordinator) { section = $0 }
-            } else {
-                auxiliaryHeader
-                Divider()
-                VStack(alignment: .leading, spacing: 12) {
-                    if let error = coordinator.error {
-                        Text(error).foregroundStyle(.red).textSelection(.enabled)
-                            .accessibilityIdentifier("controlCenter.error")
-                    }
-                    if coordinator.isRunning {
-                        HStack {
-                            ProgressView().controlSize(.small)
-                            Text(coordinator.operation?.title ?? ControlCenterStrings.text("operation"))
-                            Spacer()
-                            Button(ControlCenterStrings.text("cancel")) { coordinator.cancel() }
+        ZStack {
+            ControlCenterChatView(coordinator: coordinator, isVisible: isVisible && section == .chat) { section = $0 }
+                .opacity(section == .chat ? 1 : 0)
+                .allowsHitTesting(section == .chat)
+                .accessibilityHidden(section != .chat)
+            if section != .chat {
+                VStack(spacing: 0) {
+                    auxiliaryHeader
+                    Divider()
+                    VStack(alignment: .leading, spacing: 12) {
+                        if let error = coordinator.error {
+                            Text(error).foregroundStyle(.red).textSelection(.enabled)
+                                .accessibilityIdentifier("controlCenter.error")
                         }
+                        if coordinator.isRunning {
+                            HStack {
+                                ProgressView().controlSize(.small)
+                                Text(coordinator.operation?.title ?? ControlCenterStrings.text("operation"))
+                                Spacer()
+                                Button(ControlCenterStrings.text("cancel")) { coordinator.cancel() }
+                            }
+                        }
+                        auxiliaryContent
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
-                    auxiliaryContent
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(16)
                 }
-                .padding(16)
+                .background(Color(nsColor: .windowBackgroundColor))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

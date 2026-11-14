@@ -12,6 +12,7 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
     let isRunning: Bool
     let standaloneError: String?
     let isAwaitingApproval: Bool
+    let isVisible: Bool
     @Environment(\.colorScheme) private var colorScheme
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -22,10 +23,13 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.userContentController.add(context.coordinator, name: "controlCenterChat")
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.underPageBackgroundColor = .clear
+        webView.isHidden = !isVisible
         webView.navigationDelegate = context.coordinator
         webView.setAccessibilityLabel(ControlCenterStrings.text("chatTranscriptLabel"))
         context.coordinator.webView = webView
-        webView.loadHTMLString(Self.shellHTML(), baseURL: nil)
+        webView.loadHTMLString(Self.shellHTML(dark: colorScheme == .dark), baseURL: nil)
         return webView
     }
 
@@ -34,6 +38,12 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
+        webView.isHidden = !isVisible
+        if !isVisible, let window = webView.window,
+           let responder = window.firstResponder as? NSView,
+           responder === webView || responder.isDescendant(of: webView) {
+            window.makeFirstResponder(nil)
+        }
         let payload = TranscriptPayload(
             turns: turns.map { turn in
                 let active = turn.id == activeTurnID
@@ -181,17 +191,17 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
         }
     }
 
-    private static func shellHTML() -> String {
+    private static func shellHTML(dark: Bool) -> String {
         let assets = MarkdownViewerAssets.shared
         let nonce = UUID().uuidString
         return """
         <!doctype html>
-        <html><head><meta charset="utf-8">
+        <html class="\(dark ? "dark" : "")"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-\(nonce)'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
         <style>\(assets.lazyAsset(name: "github-markdown", ext: "css"))</style>
-        <style id="highlight-light">\(assets.lazyAsset(name: "highlight-github", ext: "css"))</style>
-        <style id="highlight-dark" media="not all">\(assets.lazyAsset(name: "highlight-github-dark", ext: "css"))</style>
+        <style id="highlight-light" media="\(dark ? "not all" : "all")">\(assets.lazyAsset(name: "highlight-github", ext: "css"))</style>
+        <style id="highlight-dark" media="\(dark ? "all" : "not all")">\(assets.lazyAsset(name: "highlight-github-dark", ext: "css"))</style>
         <style>
         :root { color-scheme: light; --fg:#202124; --muted:#707078; --line:#dedee3; --user:#f1f1f5; --code:#f5f5f7; --link:#0067c0; --error:#b42318; }
         :root.dark { color-scheme:dark; --fg:#ececf0; --muted:#a1a1ab; --line:#3a3a40; --user:#292930; --code:#25252b; --link:#75baff; --error:#ff9d94; }
