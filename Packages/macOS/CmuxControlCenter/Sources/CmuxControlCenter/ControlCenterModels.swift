@@ -189,7 +189,7 @@ public struct ControlCenterConnection: Codable, Equatable, Sendable {
     public var ompExecutable: String
     public var defaultDirectory: String
 
-    public init(baseURL: String = "http://127.0.0.1:17865/v1", model: String = "", apiKey: String = "", ompExecutable: String = "", defaultDirectory: String = "~/Work") {
+    public init(baseURL: String = "http://127.0.0.1:17865/v1", model: String = "", apiKey: String = "", ompExecutable: String = "", defaultDirectory: String = "~/Work/temp") {
         self.baseURL = baseURL
         self.model = model
         self.apiKey = apiKey

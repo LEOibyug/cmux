@@ -121,6 +121,10 @@ extension ControlCenterCoordinator {
             let request = try bashArguments(call.arguments)
             return "\(ControlCenterStrings.text("bashApprovalDisclosure"))\n\ncommand:\n\(request.command)\n\ncwd: \(request.directory)\ntimeout_seconds: \(request.timeout)"
         }
+        if call.name == "open_command_workspace" {
+            let request = try commandWorkspaceArguments(call.arguments)
+            return "\(ControlCenterStrings.text("commandWorkspaceDisclosure"))\n\nname: \(request.name)\ncommand:\n\(request.command)\n\ncwd: \(request.directory)"
+        }
         var detail: [String: ControlCenterJSON] = ["arguments": call.arguments]
         var identifiers: Set<String> = []
         if let id = args["id"]?.stringValue { identifiers.insert(id.lowercased()) }

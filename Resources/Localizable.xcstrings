@@ -535934,25 +535934,71 @@
         }
       }
     },
+    "controlCenter.approve.open_command_workspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open command workspace"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开命令工作区"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟指令工作區"
+          }
+        }
+      }
+    },
+    "controlCenter.commandWorkspaceDisclosure": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a new terminal workspace at the exact directory below and submit this admitted command. Existing user SSH configuration is trusted; authentication and host verification stay in the terminal. Completion is not observed. Rejecting creates nothing. After launch, Stop does not terminate this workspace's command."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在下方的确切目录中新建终端工作区并提交此已准入的命令。信任用户已有的 SSH 配置；认证和主机校验留在终端中完成。不代表命令已经执行成功。拒绝则不创建任何工作区。启动后，停止按钮不会终止此工作区中的命令。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在下方的確切目錄中新建終端機工作區並提交此已准入的指令。信任使用者既有的 SSH 設定；認證和主機驗證留在終端機中完成。不代表指令已經執行成功。拒絕則不建立任何工作區。啟動後，停止按鈕不會終止此工作區中的指令。"
+          }
+        }
+      }
+    },
     "controlCenter.approve.bash": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Run Bash command"
+            "value": "Run admitted command"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "运行 Bash 命令"
+            "value": "运行已准入的命令"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "執行 Bash 指令"
+            "value": "執行已准入的指令"
           }
         }
       }
@@ -535963,19 +536009,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This command may read/write files or use the network with existing user/macOS app permissions, without elevation. Its output will be sent to the configured model and saved in durable receipts. Rejecting runs nothing."
+            "value": "This admitted read-only command runs noninteractively with existing user/macOS app permissions, without elevation. Its output will be sent to the configured model and saved in durable receipts. Rejecting runs nothing."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "此命令可读写文件或使用网络，沿用现有用户及 macOS 应用权限，不提升权限。输出会发送给配置的模型并保存在持久回执中。拒绝则不执行。"
+            "value": "此已准入的只读命令以非交互方式执行，沿用现有用户及 macOS 应用权限，不提升权限。输出会发送给配置的模型并保存在持久回执中。拒绝则不执行。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "此指令可讀寫檔案或使用網路，沿用現有使用者及 macOS 應用程式權限，不提升權限。輸出會傳送給設定的模型並儲存於持久回執。拒絕則不執行。"
+            "value": "此已准入的唯讀指令以非互動方式執行，沿用現有使用者及 macOS 應用程式權限，不提升權限。輸出會傳送給設定的模型並儲存於持久回執。拒絕則不執行。"
           }
         }
       }
@@ -535986,19 +536032,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ask approves each local change and Bash command. Full Access skips those approvals. Command output goes to the configured model and durable receipts."
+            "value": "Ask approves each local change and admitted command. Full Access skips approval, never command safety checks. Command output goes to the configured model and durable receipts."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "询问模式逐项批准本地更改和 Bash 命令；完全访问跳过批准。命令输出会发送给配置的模型并保存在持久回执中。"
+            "value": "询问模式逐项批准本地更改和已准入的命令；完全访问跳过批准，但不绕过命令安全检查。命令输出会发送给配置的模型并保存在持久回执中。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "詢問模式逐項核准本機變更和 Bash 指令；完整存取略過核准。指令輸出會傳送給設定的模型並儲存於持久回執。"
+            "value": "詢問模式逐項核准本機變更和已准入的指令；完整存取略過核准，但不略過指令安全檢查。指令輸出會傳送給設定的模型並儲存於持久回執。"
           }
         }
       }
@@ -536009,19 +536055,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Allow local actions and Bash without asking?"
+            "value": "Allow supported local actions without asking?"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "允许本地操作和 Bash 不再逐项询问？"
+            "value": "允许受支持的本地操作不再逐项询问？"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "允許本機操作和 Bash 不再逐項詢問？"
+            "value": "允許支援的本機操作不再逐項詢問？"
           }
         }
       }
@@ -536032,19 +536078,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Full Access runs supported actions and arbitrary Bash commands without individual approval. Commands may read/write files and use the network with your existing user/macOS app permissions; no permissions are elevated. Command output is sent to the configured model and saved in durable receipts. Stop cannot undo side effects. Switch back to Ask while idle."
+            "value": "Full Access runs supported actions without individual approval, but never bypasses command safety checks. Only supported read-only system commands and SSH connections without remote commands are admitted; shells, scripts, destructive commands and unknown executables are refused. Existing user SSH configuration is trusted. No permissions are elevated. Command output is sent to the configured model and saved in durable receipts. Stop cannot undo side effects or close an already opened terminal. Switch back to Ask while idle."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "完全访问无需逐项批准即可执行受支持的操作和任意 Bash 命令。命令可读写文件或使用网络，沿用当前用户及 macOS 应用权限，不提升权限。命令输出会发送给配置的模型并保存在持久回执中。停止无法撤销副作用。空闲时可切回询问模式。"
+            "value": "完全访问无需逐项批准即可执行受支持的操作，但不绕过命令安全检查。仅准入受支持的只读系统命令及不附带远程命令的 SSH 连接；拒绝 Shell、脚本、破坏性命令和未知程序。信任用户已有的 SSH 配置，不提升权限。命令输出会发送给配置的模型并保存在持久回执中。停止无法撤销副作用，也不会关闭已打开的终端。空闲时可切回询问模式。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "完整存取無需逐項核准即可執行支援的操作和任意 Bash 指令。指令可讀寫檔案或使用網路，沿用目前使用者及 macOS 應用程式權限，不提升權限。指令輸出會傳送給設定的模型並儲存於持久回執。停止無法復原副作用。閒置時可切回詢問模式。"
+            "value": "完整存取無需逐項核准即可執行支援的操作，但不略過指令安全檢查。僅准入支援的唯讀系統指令及不附帶遠端指令的 SSH 連線；拒絕 Shell、腳本、破壞性指令和未知程式。信任使用者既有的 SSH 設定，不提升權限。指令輸出會傳送給設定的模型並儲存於持久回執。停止無法撤銷副作用，也不會關閉已開啟的終端機。閒置時可切回詢問模式。"
           }
         }
       }

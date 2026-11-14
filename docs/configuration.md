@@ -70,6 +70,11 @@ The model connection is configured in **Control Center → Connection**:
 - API Key: stored in the controller's private connection file, not `cmux.json`,
   UserDefaults, prompts, SQLite records, or operation history. No keychain/login
   integration is required.
+- Default Directory: the existing logical directory used when a launch omits `cwd`.
+  New configurations start with `~/Work/temp`; an explicitly saved directory is
+  preserved. A request's explicit directory takes precedence, followed by relevant
+  directory memory/context, then this configured default. Missing paths are not
+  silently created or replaced.
 
 **Import from Codexpress** reads the running chat ingress address and client API
 key through the local read-only `chatbot.status` and `chatbot.key` control calls.
@@ -111,31 +116,49 @@ before the first transcript update.
 
 The composer permission selector defaults to **Ask Before Changes**. Read-only
 typed tools do not prompt; model-invoked local changes show exact arguments and
-resolved targets. Every Bash command, including inspection, requires approval of
-the command, resolved logical cwd, timeout and output disclosure. Reject executes
-nothing. Stop cancels pending approval and remaining work, not completed effects.
+resolved targets. Every admitted command, including inspection, requires approval
+of the command, resolved logical cwd and output disclosure; background commands
+also show their timeout. Reject executes nothing and creates no workspace.
+Stop cancels pending approval and remaining work, not completed effects.
 A changed target requires a new review. **Full Access**, enabled through explicit
-inline confirmation, skips these per-action approvals, including arbitrary Bash.
-Commands may read/write files or use the network with existing current-user/macOS
-app permissions; neither mode elevates permissions or grants account/security access.
+inline confirmation, skips per-action approvals but never command safety checks.
+Neither mode elevates permissions or grants account/security access.
 The mode is saved locally and cannot be changed by a model tool or memory record.
 Direct native buttons are already explicit user actions and do not add this model
 approval step.
 
-Bash runs `/bin/bash --noprofile --norc -c` with stdin closed (`/dev/null`),
-the app's normal environment/PATH and no injected model connection key. `cwd`
-defaults to the Connection directory; existing logical paths and symlinks are
-preserved, with no creation or fallback for missing paths. `timeout_seconds` is
-an integer from 1–300, default 60. stdout and stderr are capped at 32 KiB each
-while pipes continue draining. Command output is sent to the configured model
-and saved in durable receipts with command, cwd, exit status, signal, truncation,
-timeout and partial cancelled output. Nonzero exits and timeouts are failures;
-cancellation is recorded before stopping the operation. There are no automatic
-retries. Stop terminates the owned process group, but cannot undo external effects
-or guarantee stopping deliberate daemonization/launchd jobs.
-Each call starts a fresh shell; shell variables and `cd` do not persist between
-calls, and ordinary background jobs are stopped when the shell exits. Use a cmux
-workspace for interactive commands or persistent services.
+Use `open_command_workspace` for a new terminal running a requested command, for
+example `command: ["ssh", "lab-computer"]` and an optional `cwd`. It never reuses
+an existing workspace or starts OMP. The child changes to the validated logical
+directory before executing the command; a missing directory prevents execution.
+SSH uses existing user aliases/configuration. Authentication and host verification
+remain in the terminal. After the command exits, an interactive shell remains.
+The receipt confirms workspace creation and command **submission**, not completion
+or a successful remote connection. Stop does not terminate an already launched
+terminal command, and an uncertain launch is never retried automatically.
+
+Both command tools accept literal argument arrays, not shell source. The host
+admits only fixed macOS system executables with supported read-only options:
+`ls`, `pwd`, literal `echo`/`printf`, `whoami`, `hostname`, `uname`, `uptime`,
+read-only `date`, plus terminal-only SSH connections. Destructive operations,
+elevation, Shell/script interpreters, download-and-execute and unknown executables
+are refused even in Full Access. SSH remote commands and model-supplied `-o`/`-F`
+options are rejected; `LocalCommand` and `RemoteCommand` are disabled. Existing
+user SSH configuration, including connection routing, remains trusted. This is
+command admission, not an OS sandbox. Unsupported commands can be run manually
+in an ordinary terminal, not retried through another model tool.
+
+For noninteractive inspection, `bash` executes the same admitted arguments through
+`/bin/bash --noprofile --norc -c`, individually shell-quoted, with stdin closed
+(`/dev/null`) and no injected model connection key. `cwd` defaults to the Connection
+directory; existing logical paths and symlinks are preserved, with no creation or
+fallback for missing paths. `timeout_seconds` is an integer from 1–300, default 60.
+stdout and stderr are capped at 32 KiB each while pipes continue draining. Output
+is sent to the configured model and saved in durable receipts with command, cwd,
+exit status, signal, truncation, timeout and partial cancelled output. Nonzero
+exits and timeouts are failures; cancellation is recorded before stopping the
+operation. There are no automatic retries. Stop terminates this owned background
+command group, not command workspaces. Shell state does not persist between calls.
 
 Only relevant explicit memories are loaded, with directory scopes covering their
 descendants but not similarly prefixed neighbors. No automatic inferred-habit
