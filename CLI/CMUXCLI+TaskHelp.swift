@@ -208,6 +208,7 @@ extension CMUXCLI {
         agent-hibernation <on|off>
         agent-hibernation <hibernate|wake> <surface>
         agent dispatch [--agent codex|claude] [--name <title>] [--cwd <dir>|--worktree <repo> [--branch <name>]] [--agent-arg <arg>] [--focus|--no-focus] [--wait-working [--timeout <s>]] [--json] (-- <task>|--prompt-file <path|->)
+        control-center <show|status|ask|open-collection|cancel>
         claude-teams [claude-args...]
         codex-teams [codex-args...]
         omo [opencode-args...]

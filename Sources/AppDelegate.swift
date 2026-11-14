@@ -14117,6 +14117,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             openPreferencesWindow(debugSource: "shortcut.openSettings")
             return true
         }
+        if matchConfiguredShortcut(event: event, action: .openControlCenter) {
+            ControlCenterWindowController.shared.show(activate: true)
+            return true
+        }
         if matchConfiguredShortcut(event: event, action: .reloadConfiguration) {
             reloadConfiguration(source: "shortcut.reloadConfiguration")
             return true

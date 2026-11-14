@@ -2491,6 +2491,7 @@ enum CmuxEmbeddedConfigSchema {
           "propertyNames": {
             "enum": [
               "openSettings",
+              "openControlCenter",
               "reloadConfiguration",
               "showHideAllWindows",
               "globalSearch",

@@ -225,7 +225,7 @@ struct cmuxApp: App {
                 )
             }
         )
-        self.settingsRuntime = SettingsRuntime(
+        let settingsRuntime = SettingsRuntime(
             catalog: settingsCatalog,
             userDefaultsStore: defaultsStore,
             jsonStore: JSONConfigStore(fileURL: configFileURL),
@@ -234,6 +234,8 @@ struct cmuxApp: App {
             hostActions: hostSettingsActions,
             shortcutDefaultResolver: Self.makeShortcutDefaultResolver()
         )
+        self.settingsRuntime = settingsRuntime
+        ControlCenterCoordinator.shared.configure(settingsRuntime: settingsRuntime)
         StartupBreadcrumbLog.append("app.init.settingsRuntime.created")
 
         let startupAppearance = AppearanceSettings.resolvedMode()
@@ -540,6 +542,9 @@ struct cmuxApp: App {
             CommandGroup(replacing: .appSettings) {
                 splitCommandButton(title: String(localized: "menu.app.settings", defaultValue: "Settings…"), shortcut: menuShortcut(for: .openSettings)) {
                     appDelegate.openPreferencesWindow(debugSource: "menu.cmdComma")
+                }
+                splitCommandButton(title: ControlCenterStrings.text("title"), shortcut: menuShortcut(for: .openControlCenter)) {
+                    ControlCenterWindowController.shared.show(activate: true)
                 }
                 Button(AppDelegate.actionsAndLaunchersMenuTitle) {
                     appDelegate.presentActionsAndLaunchersCustomization(

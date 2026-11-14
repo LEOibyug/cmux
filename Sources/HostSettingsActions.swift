@@ -254,6 +254,10 @@ final class HostSettingsActions: SettingsHostActions {
         PreferredEditorService(defaults: .standard).open(configFileURL)
     }
 
+    func openControlCenter() {
+        ControlCenterWindowController.shared.show(activate: true)
+    }
+
     /// Reads the existing automation configuration off-main and summarizes it for Settings.
     func automationRulesStatus() async -> AutomationRulesStatus {
         let fileURL = automationConfigStore.fileURL

@@ -63,6 +63,8 @@ public enum ControlCommandExecutionPolicy: Sendable, Equatable {
     static let socketWorkerMethods: Set<String> = Set([
         "system.ping",
         "system.capabilities",
+        "control_center.show", "control_center.status", "control_center.ask",
+        "control_center.open_collection", "control_center.cancel",
         // Agent session recovery reads the journal (SQLite), the hook stores
         // and transcripts; only the open-session scan and workspace creation
         // hop to the main actor.

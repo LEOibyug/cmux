@@ -82,6 +82,7 @@ enum KeyboardShortcutSettings {
     enum Action: String, CaseIterable, Identifiable {
         // App / window
         case openSettings
+        case openControlCenter
         case reloadConfiguration
         case showHideAllWindows
         case globalSearch
@@ -236,6 +237,7 @@ enum KeyboardShortcutSettings {
         var label: String {
             switch self {
             case .openSettings: return String(localized: "menu.app.settings", defaultValue: "Settings…")
+            case .openControlCenter: return ControlCenterStrings.text("title")
             case .reloadConfiguration: return String(localized: "menu.app.reloadConfiguration", defaultValue: "Reload Configuration")
             case .showHideAllWindows: return String(localized: "settings.globalHotkey.shortcut", defaultValue: "Show/Hide All Windows")
             case .globalSearch: return String(localized: "shortcut.globalSearch.label", defaultValue: "Global Search")
@@ -417,6 +419,8 @@ enum KeyboardShortcutSettings {
             switch self {
             case .openSettings:
                 return StoredShortcut(key: ",", command: true, shift: false, option: false, control: false)
+            case .openControlCenter:
+                return .unbound
             case .reloadConfiguration:
                 return StoredShortcut(key: ",", command: true, shift: true, option: false, control: false)
             case .showHideAllWindows:

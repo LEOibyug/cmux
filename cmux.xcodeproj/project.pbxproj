@@ -955,6 +955,7 @@
 		B9000050A1B2C3D4E5F60719 /* CMUXCLI+Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000051A1B2C3D4E5F60719 /* CMUXCLI+Config.swift */; };
 		112080C00000000000000008 /* CMUXCLI+ConfigValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112080A00000000000000008 /* CMUXCLI+ConfigValidation.swift */; };
 		112950000000000000000006 /* CMUXCLI+ContinuationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112950000000000000000005 /* CMUXCLI+ContinuationSupport.swift */; };
+		892CE9173A18A422506A7E03 /* CMUXCLI+ControlCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F537FD68B052BEC2DBF6A8E /* CMUXCLI+ControlCenter.swift */; };
 		807AC28C2C2457B59F8792AC /* CMUXCLI+Current.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A09ECE26DDC67D94CF18B1 /* CMUXCLI+Current.swift */; };
 		D1FF51000000000000000001 /* CMUXCLI+DiffSidecar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1FF51000000000000000002 /* CMUXCLI+DiffSidecar.swift */; };
 		C0DE75890000000000000001 /* CMUXCLI+DiffViewerBundledAssets.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE75890000000000000002 /* CMUXCLI+DiffViewerBundledAssets.swift */; };
@@ -1095,6 +1096,7 @@
 		C1A2B3C4D5E6F70800000001 /* CmuxConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000002 /* CmuxConfigTests.swift */; };
 		C0DEF0A10000000000000001 /* CmuxConfigUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DEF0A10000000000000002 /* CmuxConfigUI.swift */; };
 		A5FB1205 /* CmuxConfigWorkspaceActionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FB1206 /* CmuxConfigWorkspaceActionTests.swift */; };
+		C0C3A003C0C3A003C0C3A003 /* CmuxControlCenter in Frameworks */ = {isa = PBXBuildFile; productRef = C0C3A002C0C3A002C0C3A002 /* CmuxControlCenter */; };
 		A79840010000000000000003 /* CmuxControlSocket in Frameworks */ = {isa = PBXBuildFile; productRef = C750100000000000000000A2 /* CmuxControlSocket */; };
 		C750100000000000000000A3 /* CmuxControlSocket in Frameworks */ = {isa = PBXBuildFile; productRef = C750100000000000000000A2 /* CmuxControlSocket */; };
 		C79470010000000000000005 /* CmuxControlSocket in Frameworks */ = {isa = PBXBuildFile; productRef = C750100000000000000000A2 /* CmuxControlSocket */; };
@@ -1461,6 +1463,17 @@
 		C3408A000000000000000005 /* ContentView+ViewCommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3408A000000000000000006 /* ContentView+ViewCommandPalette.swift */; };
 		A5001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001012 /* ContentView.swift */; };
 		C0DE32470000000000000001 /* ContentViewIdentifierCopyCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE32470000000000000002 /* ContentViewIdentifierCopyCommands.swift */; };
+		0C1A606285E62F5AC6711DEC /* ControlCenterActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41F0B5AB0D71C287C6785ED6 /* ControlCenterActions.swift */; };
+		03F6F668BB4B21491C0DE16F /* ControlCenterConfigurationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A66BCB2BBA2F4088723AE03C /* ControlCenterConfigurationView.swift */; };
+		EB9F383E771E875661005316 /* ControlCenterCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C997CF69DBDCB6C5BF34605B /* ControlCenterCoordinator.swift */; };
+		60AD04C3A9556323C1C98E65 /* ControlCenterModelActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02ED35A2727864FBC0089BFB /* ControlCenterModelActions.swift */; };
+		C85134D905E8054C2650FEED /* ControlCenterOMPProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = B54B8EEC982816674F841746 /* ControlCenterOMPProbe.swift */; };
+		F7C0E5468840644F6A516E75 /* ControlCenterSessionActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29BB572DFB04A27C99D1DADD /* ControlCenterSessionActions.swift */; };
+		EC42DE8B3BDF40560FEAB4FD /* ControlCenterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08CB4148C77D6D1122F8867C /* ControlCenterSettings.swift */; };
+		0F65846CEB44488F790DD0A3 /* ControlCenterStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7372DB2531AC105B1E042A /* ControlCenterStrings.swift */; };
+		E6F26DAE96434558422D6B0D /* ControlCenterTargetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3474EA1598A31608493E5C4 /* ControlCenterTargetsView.swift */; };
+		0BC6BE74197E255ECD204A97 /* ControlCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4049431531E5853603620E4C /* ControlCenterView.swift */; };
+		848F3B2C2965FF36EA60D4EC /* ControlCenterWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFB69D3D0F391743E1AE9763 /* ControlCenterWindowController.swift */; };
 		B88356000000000000000003 /* ControlledPastePreparationDeadlines.swift in Sources */ = {isa = PBXBuildFile; fileRef = B88356000000000000000004 /* ControlledPastePreparationDeadlines.swift */; };
 		B88356000000000000000001 /* ControlledPastePreparationOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B88356000000000000000002 /* ControlledPastePreparationOperation.swift */; };
 		BFC914190FEF400683D6DEBC /* ControlSidebarAgentLifecycleRegistryScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 085B717ACCEF4FDBA77A2FD9 /* ControlSidebarAgentLifecycleRegistryScope.swift */; };
@@ -3222,6 +3235,7 @@
 		C0DE00000000000000000C82 /* TerminalController+ControlBrowserPanelContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000C81 /* TerminalController+ControlBrowserPanelContext.swift */; };
 		A6E57A0E0000000000000001 /* TerminalController+ControlCallResultBridging.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6E57A0E0000000000000002 /* TerminalController+ControlCallResultBridging.swift */; };
 		CA52E0020000000000000000 /* TerminalController+ControlCanvasContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA52F0020000000000000000 /* TerminalController+ControlCanvasContext.swift */; };
+		D1B622388BB643D035858086 /* TerminalController+ControlCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3E4F8F6764C6596A1A57D87 /* TerminalController+ControlCenter.swift */; };
 		C0DE00000000000000000C6E /* TerminalController+ControlDebugContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000C6D /* TerminalController+ControlDebugContext.swift */; };
 		C0DE00000000000000000C44 /* TerminalController+ControlFeedContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000C43 /* TerminalController+ControlFeedContext.swift */; };
 		C0DE1A040000000000000001 /* TerminalController+ControlLayoutContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE1A040000000000000002 /* TerminalController+ControlLayoutContext.swift */; };
@@ -5008,6 +5022,7 @@
 		B9000051A1B2C3D4E5F60719 /* CMUXCLI+Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CMUXCLI+Config.swift"; sourceTree = "<group>"; };
 		112080A00000000000000008 /* CMUXCLI+ConfigValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CMUXCLI+ConfigValidation.swift"; sourceTree = "<group>"; };
 		112950000000000000000005 /* CMUXCLI+ContinuationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CMUXCLI+ContinuationSupport.swift"; sourceTree = "<group>"; };
+		9F537FD68B052BEC2DBF6A8E /* CMUXCLI+ControlCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CMUXCLI+ControlCenter.swift"; sourceTree = "<group>"; };
 		E1A09ECE26DDC67D94CF18B1 /* CMUXCLI+Current.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CMUXCLI+Current.swift"; sourceTree = "<group>"; };
 		D1FF51000000000000000002 /* CMUXCLI+DiffSidecar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CMUXCLI+DiffSidecar.swift"; sourceTree = "<group>"; };
 		C0DE75890000000000000002 /* CMUXCLI+DiffViewerBundledAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CMUXCLI+DiffViewerBundledAssets.swift"; sourceTree = "<group>"; };
@@ -5428,6 +5443,17 @@
 		C3408A000000000000000006 /* ContentView+ViewCommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+ViewCommandPalette.swift"; sourceTree = "<group>"; };
 		A5001012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		C0DE32470000000000000002 /* ContentViewIdentifierCopyCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewIdentifierCopyCommands.swift; sourceTree = "<group>"; };
+		41F0B5AB0D71C287C6785ED6 /* ControlCenterActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterActions.swift; sourceTree = "<group>"; };
+		A66BCB2BBA2F4088723AE03C /* ControlCenterConfigurationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterConfigurationView.swift; sourceTree = "<group>"; };
+		C997CF69DBDCB6C5BF34605B /* ControlCenterCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterCoordinator.swift; sourceTree = "<group>"; };
+		02ED35A2727864FBC0089BFB /* ControlCenterModelActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterModelActions.swift; sourceTree = "<group>"; };
+		B54B8EEC982816674F841746 /* ControlCenterOMPProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterOMPProbe.swift; sourceTree = "<group>"; };
+		29BB572DFB04A27C99D1DADD /* ControlCenterSessionActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterSessionActions.swift; sourceTree = "<group>"; };
+		08CB4148C77D6D1122F8867C /* ControlCenterSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterSettings.swift; sourceTree = "<group>"; };
+		FA7372DB2531AC105B1E042A /* ControlCenterStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterStrings.swift; sourceTree = "<group>"; };
+		A3474EA1598A31608493E5C4 /* ControlCenterTargetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterTargetsView.swift; sourceTree = "<group>"; };
+		4049431531E5853603620E4C /* ControlCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterView.swift; sourceTree = "<group>"; };
+		FFB69D3D0F391743E1AE9763 /* ControlCenterWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterWindowController.swift; sourceTree = "<group>"; };
 		B88356000000000000000004 /* ControlledPastePreparationDeadlines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlledPastePreparationDeadlines.swift; sourceTree = "<group>"; };
 		B88356000000000000000002 /* ControlledPastePreparationOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlledPastePreparationOperation.swift; sourceTree = "<group>"; };
 		085B717ACCEF4FDBA77A2FD9 /* ControlSidebarAgentLifecycleRegistryScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlSidebarAgentLifecycleRegistryScope.swift; sourceTree = "<group>"; };
@@ -7167,6 +7193,7 @@
 		C0DE00000000000000000C81 /* TerminalController+ControlBrowserPanelContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+ControlBrowserPanelContext.swift"; sourceTree = "<group>"; };
 		A6E57A0E0000000000000002 /* TerminalController+ControlCallResultBridging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+ControlCallResultBridging.swift"; sourceTree = "<group>"; };
 		CA52F0020000000000000000 /* TerminalController+ControlCanvasContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+ControlCanvasContext.swift"; sourceTree = "<group>"; };
+		F3E4F8F6764C6596A1A57D87 /* TerminalController+ControlCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+ControlCenter.swift"; sourceTree = "<group>"; };
 		C0DE00000000000000000C6D /* TerminalController+ControlDebugContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+ControlDebugContext.swift"; sourceTree = "<group>"; };
 		C0DE00000000000000000C43 /* TerminalController+ControlFeedContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+ControlFeedContext.swift"; sourceTree = "<group>"; };
 		C0DE1A040000000000000002 /* TerminalController+ControlLayoutContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+ControlLayoutContext.swift"; sourceTree = "<group>"; };
@@ -7997,6 +8024,7 @@
 				CA53A003CA53A003CA53A003 /* CmuxCanvasUI in Frameworks */,
 				5E55500000000000000000E3 /* CmuxCommandPalette in Frameworks */,
 				C0C0A2026091900000000003 /* CmuxComputerUse in Frameworks */,
+				C0C3A003C0C3A003C0C3A003 /* CmuxControlCenter in Frameworks */,
 				C750100000000000000000A3 /* CmuxControlSocket in Frameworks */,
 				CC0DE00000000000000000A3 /* CmuxCore in Frameworks */,
 				CC0033E15A1B2C3D4E5F0013 /* CmuxDiffComments in Frameworks */,
@@ -10678,6 +10706,18 @@
 				5D13E6139F7DEC2368DFDA9C /* TerminalImagePreviewContent.swift */,
 				96B3F8EF343E338523F511E2 /* GhosttyNSView+TerminalImagePreview.swift */,
 				4A32B5A5C2A5D049C1BD7A63 /* Workspace+TerminalImagePreview.swift */,
+				F3E4F8F6764C6596A1A57D87 /* TerminalController+ControlCenter.swift */,
+				41F0B5AB0D71C287C6785ED6 /* ControlCenterActions.swift */,
+				A66BCB2BBA2F4088723AE03C /* ControlCenterConfigurationView.swift */,
+				C997CF69DBDCB6C5BF34605B /* ControlCenterCoordinator.swift */,
+				02ED35A2727864FBC0089BFB /* ControlCenterModelActions.swift */,
+				B54B8EEC982816674F841746 /* ControlCenterOMPProbe.swift */,
+				29BB572DFB04A27C99D1DADD /* ControlCenterSessionActions.swift */,
+				08CB4148C77D6D1122F8867C /* ControlCenterSettings.swift */,
+				FA7372DB2531AC105B1E042A /* ControlCenterStrings.swift */,
+				A3474EA1598A31608493E5C4 /* ControlCenterTargetsView.swift */,
+				4049431531E5853603620E4C /* ControlCenterView.swift */,
+				FFB69D3D0F391743E1AE9763 /* ControlCenterWindowController.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -10941,6 +10981,7 @@
 				80066C12BE02CC6DEA3CDE46 /* CMUXCLI+AgentInboxHooks.swift */,
 				9AE112222B9A0955D772EF5E /* CLISocketEnvironment.swift */,
 				3B9EED6D6D44EEE14BF88D76 /* CMUXCLI+SurfaceCatalog.swift */,
+				9F537FD68B052BEC2DBF6A8E /* CMUXCLI+ControlCenter.swift */,
 			);
 			path = CLI;
 			sourceTree = "<group>";
@@ -12211,6 +12252,7 @@
 
 				AC4A6E7C4A700001AC4A0002 /* CmuxAgentChat */,
 				9758E0029758E0029758E002 /* CmuxAgentSessionStore */,
+				C0C3A002C0C3A002C0C3A002 /* CmuxControlCenter */,
 				C0DE45000000000000000002 /* CmuxExtensionKit */,
 				C0DE4A000000000000000002 /* CmuxSidebarProviderKit */,
 				C0DE49000000000000000002 /* CmuxExtensionSidebarExamples */,
@@ -12435,6 +12477,7 @@
 				A5B00001A1B2C3D4E5F60718 /* XCLocalSwiftPackageReference "CMUXAgentLaunch" */,
 				A77A0001A1B2C3D4E5F60001 /* XCLocalSwiftPackageReference "CmuxAgentJournal" */,
 				9758E0019758E0019758E001 /* XCLocalSwiftPackageReference "CmuxAgentSessionStore" */,
+				C0C3A001C0C3A001C0C3A001 /* XCLocalSwiftPackageReference "CmuxControlCenter" */,
 				A500D012A1B2C3D4E5F60718 /* XCLocalSwiftPackageReference "CMUXDebugLog" */,
 				CC0033E15A1B2C3D4E5F0010 /* XCLocalSwiftPackageReference "CmuxDiffComments" */,
 				4E2D7E500000000000000001 /* XCLocalSwiftPackageReference "CmuxHerdrResume" */,
@@ -13370,6 +13413,17 @@
 				C3408A000000000000000005 /* ContentView+ViewCommandPalette.swift in Sources */,
 				A5001002 /* ContentView.swift in Sources */,
 				C0DE32470000000000000001 /* ContentViewIdentifierCopyCommands.swift in Sources */,
+				0C1A606285E62F5AC6711DEC /* ControlCenterActions.swift in Sources */,
+				03F6F668BB4B21491C0DE16F /* ControlCenterConfigurationView.swift in Sources */,
+				EB9F383E771E875661005316 /* ControlCenterCoordinator.swift in Sources */,
+				60AD04C3A9556323C1C98E65 /* ControlCenterModelActions.swift in Sources */,
+				C85134D905E8054C2650FEED /* ControlCenterOMPProbe.swift in Sources */,
+				F7C0E5468840644F6A516E75 /* ControlCenterSessionActions.swift in Sources */,
+				EC42DE8B3BDF40560FEAB4FD /* ControlCenterSettings.swift in Sources */,
+				0F65846CEB44488F790DD0A3 /* ControlCenterStrings.swift in Sources */,
+				E6F26DAE96434558422D6B0D /* ControlCenterTargetsView.swift in Sources */,
+				0BC6BE74197E255ECD204A97 /* ControlCenterView.swift in Sources */,
+				848F3B2C2965FF36EA60D4EC /* ControlCenterWindowController.swift in Sources */,
 				BFC914190FEF400683D6DEBC /* ControlSidebarAgentLifecycleRegistryScope.swift in Sources */,
 				BE979B868F4D42199E5400E2 /* ControlSidebarPanelOwner.swift in Sources */,
 				C51A73B30000000000000002 /* ControlSimulatorPendingTextInput.swift in Sources */,
@@ -14491,6 +14545,7 @@
 				C0DE00000000000000000C82 /* TerminalController+ControlBrowserPanelContext.swift in Sources */,
 				A6E57A0E0000000000000001 /* TerminalController+ControlCallResultBridging.swift in Sources */,
 				CA52E0020000000000000000 /* TerminalController+ControlCanvasContext.swift in Sources */,
+				D1B622388BB643D035858086 /* TerminalController+ControlCenter.swift in Sources */,
 				C0DE00000000000000000C6E /* TerminalController+ControlDebugContext.swift in Sources */,
 				C0DE00000000000000000C44 /* TerminalController+ControlFeedContext.swift in Sources */,
 				C0DE1A040000000000000001 /* TerminalController+ControlLayoutContext.swift in Sources */,
@@ -15190,6 +15245,7 @@
 				B9000050A1B2C3D4E5F60719 /* CMUXCLI+Config.swift in Sources */,
 				112080C00000000000000008 /* CMUXCLI+ConfigValidation.swift in Sources */,
 				112950000000000000000006 /* CMUXCLI+ContinuationSupport.swift in Sources */,
+				892CE9173A18A422506A7E03 /* CMUXCLI+ControlCenter.swift in Sources */,
 				807AC28C2C2457B59F8792AC /* CMUXCLI+Current.swift in Sources */,
 				D1FF51000000000000000001 /* CMUXCLI+DiffSidecar.swift in Sources */,
 				C0DE75890000000000000001 /* CMUXCLI+DiffViewerBundledAssets.swift in Sources */,
@@ -17098,6 +17154,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/macOS/CmuxAgentSessionStore;
 		};
+		C0C3A001C0C3A001C0C3A001 /* XCLocalSwiftPackageReference "CmuxControlCenter" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/macOS/CmuxControlCenter;
+		};
 		0C69E6A5FA9B0513E68DF443 /* XCLocalSwiftPackageReference "CMUXMobileCore" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/Shared/CMUXMobileCore;
@@ -17350,6 +17410,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 9758E0019758E0019758E001 /* XCLocalSwiftPackageReference "CmuxAgentSessionStore" */;
 			productName = CmuxAgentSessionStore;
+		};
+		C0C3A002C0C3A002C0C3A002 /* CmuxControlCenter */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0C3A001C0C3A001C0C3A001 /* XCLocalSwiftPackageReference "CmuxControlCenter" */;
+			productName = CmuxControlCenter;
 		};
 		C1A900000000000000000007 /* ArgumentParser */ = {
 			isa = XCSwiftPackageProductDependency;

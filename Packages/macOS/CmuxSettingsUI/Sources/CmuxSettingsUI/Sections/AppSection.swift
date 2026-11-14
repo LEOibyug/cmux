@@ -391,6 +391,21 @@ public struct AppSection: View {
             }
             SettingsCardDivider()
 
+            SettingsCardRow(
+                configurationReview: .action,
+                searchAnchorID: "setting:app:control-center",
+                String(localized: "controlCenter.title", defaultValue: "Control Center"),
+                subtitle: String(localized: "controlCenter.settingsHint", defaultValue: "Open sessions, favorites, launch collections, and local operations."),
+                controlWidth: Self.columnWidth
+            ) {
+                Button(String(localized: "controlCenter.open", defaultValue: "Open")) {
+                    hostActions.openControlCenter()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            SettingsCardDivider()
+
             // Global Font Magnification
             SettingsCardRow(
                 configurationReview: .json("app.globalFontMagnification"),

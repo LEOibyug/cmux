@@ -24,6 +24,7 @@ struct CmuxCommand: AsyncParsableCommand {
             GuideCommand.self,
             DocsCommand.self,
             SettingsCommand.self,
+            ControlCenterCommand.self,
             ConfigCommand.self,
             ShortcutsCommand.self,
             VersionCommand.self,

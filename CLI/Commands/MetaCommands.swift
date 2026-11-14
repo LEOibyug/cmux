@@ -38,6 +38,12 @@ struct SettingsCommand: LegacyMetaCommand {
     static let configuration = CommandConfiguration(commandName: "settings", helpNames: [])
 }
 
+struct ControlCenterCommand: LegacyMetaCommand {
+    @Argument(parsing: .allUnrecognized, completion: .list(["show", "status", "ask", "open-collection", "cancel"]))
+    var arguments: [String] = []
+    static let configuration = CommandConfiguration(commandName: "control-center", helpNames: [])
+}
+
 struct ConfigCommand: LegacyMetaCommand {
     @Option(name: .customLong("path"), completion: .file()) var path: String?
     // The two font-size keys are both subcommands and the values `get`/`set`

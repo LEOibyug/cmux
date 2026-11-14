@@ -5395,6 +5395,8 @@ struct CMUXCLI {
         case "agent-hibernation":
             try runAgentHibernation(commandArgs: commandArgs, client: client, jsonOutput: jsonOutput)
 
+        case "control-center":
+            try runControlCenterCommand(commandArgs, client: client, jsonOutput: jsonOutput)
         case "agent":
             if commandArgs.first?.lowercased() == "dispatch" {
                 try runAgentDispatchCommand(
@@ -16253,6 +16255,8 @@ struct CMUXCLI {
             defaultValue: "Run this as the new terminal's initial command"
         )
         switch command {
+        case "control-center":
+            return Self.controlCenterUsage
         case "agent":
             return "Usage: cmux agent <dispatch|message|reply|messages|inbox|hibernate|wake>\n\nLaunch coding agents, exchange local messages, manage inbox and hibernation. See `cmux agent dispatch --help` and `cmux agent-hibernation --help`."
         case "todo":

@@ -48,6 +48,9 @@
          location = "group:CmuxAgentSessionStore">
       </FileRef>
       <FileRef
+         location = "group:CmuxControlCenter">
+      </FileRef>
+      <FileRef
          location = "group:CmuxAppKitSupportUI">
       </FileRef>
       <FileRef

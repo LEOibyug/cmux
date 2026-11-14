@@ -96,7 +96,7 @@ extension KeyboardShortcutSettings.Action {
              .diffViewerNextHunk, .diffViewerPreviousHunk, .diffViewerToggleViewed:
             .focusResolved
 
-        case .openSettings, .reloadConfiguration,
+        case .openSettings, .openControlCenter, .reloadConfiguration,
              .showHideAllWindows, .globalSearch,
              .newWindow, .closeWindow, .toggleFullScreen, .quit,
              .toggleSidebar, .focusSidebar, .showWindowHints, .newTab, .newLocalWorkspace, .newBrowserWorkspace,

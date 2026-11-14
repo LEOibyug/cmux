@@ -169,6 +169,7 @@ public protocol SettingsHostActions: AnyObject {
     /// "Open Config" row in the App section). The host owns the
     /// window scene so the package can't open it directly.
     func openTerminalConfigWindow()
+    func openControlCenter()
 
     /// Opens the user's workspace-layout action definitions for editing.
     func customizeWorkspaceLayouts()
@@ -566,6 +567,7 @@ public final class NoopSettingsHostActions: SettingsHostActions {
     public func openBrowserImportFlow() {}
     public func requestNotificationAuthorization() {}
     public func openTerminalConfigWindow() {}
+    public func openControlCenter() {}
     /// No-op notification sound preview used by tests, previews, and
     /// package-only settings hosts.
     public func previewNotificationSound(value: String, customFilePath: String) {}

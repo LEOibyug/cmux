@@ -9,6 +9,65 @@ when copied from the legacy settings path.
 
 For themes, fonts, transparency, and other appearance settings across Ghostty config and `cmux.json`, see [Customizing cmux's look](customizing-appearance.md).
 
+## Control Center
+
+Open **File → Control Center** or its entry in **Settings → App**. The
+`openControlCenter` shortcut action is unbound by default and can be assigned in
+Keyboard Shortcuts or `shortcuts.bindings`. This is a native local controller,
+not an embedded coding-agent terminal or a permanently resumed model thread.
+
+Sessions, favorites, named launch collections, explicit preferences, settings
+and operation receipts work without a model. The installed OMP executable is a
+separate runtime dependency; Connection can select an absolute installed path
+and a default directory. Exact session opens use the indexed journal, never
+`--continue`: an already running session is focused, known-held/unknown ownership
+is blocked, and cmux serializes pending resumes. OMP does not expose an atomic
+lease-transfer/no-fork launch protocol; an external writer racing the final
+probe-to-launch gap remains an upstream boundary. The controller never steals a
+lease, deliberately forks, or automatically retries a failed resume.
+
+Saved collections contain ordered target snapshots with stable item IDs.
+Opening a collection reuses existing targets where possible; independent failed
+items do not close successful ones. Failed-only retry carries prior successes
+forward without executing them again. Native workspace groups have one owner
+per workspace; conflicting group anchors can prevent grouping and are reported
+without closing or duplicating existing work. Logical paths remain visible and
+are passed to OMP's `--cwd`; dangling symlinks and missing volumes block creation.
+
+The model connection is configured in **Control Center → Connection**:
+
+- Base URL: an OpenAI-compatible Responses base; Codexpress defaults to
+  `http://127.0.0.1:17865/v1`. The client sends `/responses` and queries `/models`
+  only on explicit request. The `17867` management API and its Key are separate.
+- Model: entered manually or chosen from the returned list; no fixed model.
+- API Key: stored in the controller's private connection file, not `cmux.json`,
+  UserDefaults, prompts, SQLite records, or operation history. No keychain/login
+  integration is required.
+
+The production data directory is
+`~/Library/Application Support/com.cmuxterm.app/ControlCenter/`:
+`control-center.sqlite3` contains favorites, collections, preferences and actual
+step receipts; `connection.json` is an owner-only `0600` file. Tagged builds use
+their own bundle-ID namespace. Neither data nor runtime resources depend on the
+development checkout.
+
+Each independent request starts fresh. Explicit Follow Up carries the previous
+request and bounded result/receipts; Reset drops this temporary context. Only
+related explicit memories are loaded, with directory scopes covering their
+descendants but not similarly prefixed neighbors. No complete model transcript
+or automatic inferred-habit database is maintained. Model operations have finite
+turn/tool budgets and retain per-operation protocol items only while running.
+They can inspect current-window metadata, manage saved targets, open temporary
+groups, create directories/OMP workspaces, edit safe settings, remember explicit
+preferences and explain local usage. They cannot execute arbitrary code, delete
+filesystem data, change security permissions or operate provider accounts.
+
+Settings edits use the existing typed runtime and JSONC mutation receipts.
+Unrelated content is preserved; conditional undo refuses to overwrite a newer
+external edit. Cancellation stops remaining work, not completed actions. Model
+transport timeouts and unknown outcomes are never automatically replayed: read
+the actual operation receipt before retrying.
+
 ## Automation socket trust boundary
 
 `cmuxOnly` allows the cmux CLI and programs started from cmux terminals. This

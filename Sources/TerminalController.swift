@@ -1667,6 +1667,10 @@ class TerminalController {
                     try await self.v2SystemMemory(params: request.params)
                 }
             }
+        case "control_center.show", "control_center.status", "control_center.ask", "control_center.open_collection", "control_center.cancel":
+            return v2AsyncResultCall(id: request.id, timeoutSeconds: 180) {
+                await self.v2ControlCenter(method: request.method, params: request.params)
+            }
         case "vault.sessions":
             return v2AsyncResultCall(id: request.id, timeoutSeconds: 30) {
                 await self.v2VaultSessions(params: request.params)
