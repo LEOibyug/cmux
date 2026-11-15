@@ -182,16 +182,20 @@ actor OMPMetadataCoordinator {
                 case .ignored: continue
                 case .full: full = true
                 case .file:
-                    let normalizedPath = path.hasPrefix(source.canonicalRoot + "/")
-                        ? source.root.path + String(path.dropFirst(source.canonicalRoot.count))
-                        : path
-                    let url = URL(fileURLWithPath: normalizedPath).standardizedFileURL
+                    let url = URL(fileURLWithPath: path).standardizedFileURL
                     if eligible(url, source: source) { urls.append(url) }
                 }
                 if full { break }
             }
         }
         if full { urls = try candidates(source: source) }
+        if source.root.path != source.canonicalRoot {
+            let prefix = source.canonicalRoot + "/"
+            for index in urls.indices where urls[index].path.hasPrefix(prefix) {
+                let path = source.root.path + String(urls[index].path.dropFirst(source.canonicalRoot.count))
+                urls[index] = URL(fileURLWithPath: path).standardizedFileURL
+            }
+        }
         var result = Delta(completedScan: full)
         let present = Set(urls.map(\.path))
         if full { result.removing = old.keys.filter { !present.contains($0) } }
