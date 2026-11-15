@@ -178,6 +178,9 @@ remain in the terminal. After the command exits, an interactive shell remains.
 The receipt confirms workspace creation and command **submission**, not completion
 or a successful remote connection. Stop does not terminate an already launched
 terminal command, and an uncertain launch is never retried automatically.
+The `name` field is optional for both `open_command_workspace` and
+`create_workspace`. Omit it, send `null`, or leave it blank to retain cmux's
+automatic terminal title. A supplied nonblank name becomes the workspace title.
 
 Both command tools accept literal argument arrays, not shell source. The host
 admits only fixed macOS system executables with supported read-only options:

@@ -346,7 +346,8 @@ extension ControlCenterCoordinator {
         }
         if call.name == "open_command_workspace" {
             let request = try commandWorkspaceArguments(call.arguments)
-            return "\(ControlCenterStrings.text("commandWorkspaceDisclosure"))\n\nname: \(request.name)\ncommand:\n\(request.command)\n\ncwd: \(request.directory)"
+            let name = request.name.isEmpty ? "" : "name: \(request.name)\n"
+            return "\(ControlCenterStrings.text("commandWorkspaceDisclosure"))\n\n\(name)command:\n\(request.command)\n\ncwd: \(request.directory)"
         }
         var detail: [String: ControlCenterJSON] = ["arguments": call.arguments]
         var identifiers: Set<String> = []

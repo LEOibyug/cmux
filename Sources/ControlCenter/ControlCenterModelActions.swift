@@ -22,6 +22,10 @@ extension ControlCenterCoordinator {
             "type": .array([.string("string"), .string("null")]),
             "description": .string("Existing record UUID to edit. Omit, null, or an empty string creates a new record with a host-generated ID. Never invent an edit ID.")
         ])
+        let workspaceName: ControlCenterJSON = .object([
+            "type": .array([.string("string"), .string("null")]),
+            "description": .string("Optional display name. Omit, null or blank keeps the automatic terminal title.")
+        ])
         let source: ControlCenterJSON = .object([
             "type": .string("string"),
             "description": .string("Exact history-enabled Vault agent ID, default omp. search_sessions returns available source IDs."),
@@ -68,7 +72,7 @@ extension ControlCenterCoordinator {
         ])
         return [
             Self.tool("bash", "Run an admitted read-only system command noninteractively. Supply literal argv, not Bash source. Output goes to the configured model and durable receipts. No automatic retries; missing cwd is blocked.", ["command": command, "cwd": .object(["type": .array([.string("string"), .string("null")])]), "timeout_seconds": .object(["type": .array([.string("integer"), .string("null")]), "minimum": .number(1), "maximum": .number(300), "default": .number(60)])], required: ["command"]),
-            Self.tool("open_command_workspace", "Create a NEW terminal workspace and run the admitted command there. Use this for interactive/long-running commands, especially SSH with existing user configuration, not bash or create_workspace. Authentication stays in the terminal. Omitted cwd uses Connection's default directory; never reuse a workspace or start OMP. Returns launch submission, not command completion. Unsafe/unsupported commands are refused before creating anything.", ["command": command, "cwd": .object(["type": .array([.string("string"), .string("null")])]), "name": string], required: ["command", "name"]),
+            Self.tool("open_command_workspace", "Create a NEW terminal workspace and run the admitted command there. Use this for interactive/long-running commands, especially SSH with existing user configuration, not bash or create_workspace. Authentication stays in the terminal. Omitted cwd uses Connection's default directory; never reuse a workspace or start OMP. Returns launch submission, not command completion. Unsafe/unsupported commands are refused before creating anything.", ["command": command, "cwd": .object(["type": .array([.string("string"), .string("null")])]), "name": workspaceName], required: ["command"]),
             Self.tool("search_sessions", "Find conversations in one enabled Vault source (default omp). OMP searches the complete persistent title/path/session-ID metadata index before returning up to 500 matches, not transcript bodies. Other sources search their latest 500 metadata entries. Use search_content:true for full transcript search; this may take longer. Never choose a first result when ambiguous.", ["query": string, "agent_id": source, "search_content": boolean], required: ["query"]),
             Self.tool("list_saved", "List exact favorites and collections with IDs and ordered targets.", [:]),
             Self.tool("current_state", "Read bounded metadata for the current cmux window: workspace IDs, titles, directories, selected workspace and native group membership. Does not read terminal contents, environment, credentials or other windows. Never infer a session ID from a workspace title.", [:]),
@@ -80,7 +84,7 @@ extension ControlCenterCoordinator {
             Self.tool("save_collection", "Only on an explicit request to save/edit a named group: persist 1–32 ordered target definitions or favorite_id references. Omitted, null or empty id creates; a nonempty id must exist. Does not open targets or create favorites.", ["id": optionalRecordID, "name": string, "items": items], required: ["name", "items"]),
             Self.tool("delete_collection", "Only when explicitly asked: remove one saved collection by exact ID. Leaves its workspaces and files intact.", ["id": string], required: ["id"]),
             Self.tool("open_targets", "Open a one-off ordered group of 1–32 safe target definitions or favorite_id references without saving a collection or favorites. Name the group. Launches through native actions with per-target receipts; no rollback or directory creation. Inline sessions must be exact current search candidates.", ["name": string, "items": items], required: ["name", "items"]),
-            Self.tool("create_workspace", "Start a fresh OMP workspace at an explicit logical cwd. create_directory must be explicitly requested; missing mounts are blocked.", ["path": string, "name": string, "create_directory": boolean], required: ["path", "name", "create_directory"]),
+            Self.tool("create_workspace", "Start a fresh OMP workspace at an explicit logical cwd. create_directory must be explicitly requested; missing mounts are blocked.", ["path": string, "name": workspaceName, "create_directory": boolean], required: ["path", "create_directory"]),
             Self.tool("list_settings", "Query safe live typed settings. Search title/path; returns current values, not credentials.", ["query": string], required: ["query"]),
             Self.tool("set_setting", "Change one safe scalar setting explicitly requested by the user. Existing typed runtime validates it; conditional undo receipt retained.", ["id": string, "value": .object([:])], required: ["id", "value"]),
             Self.tool("undo_setting", "Conditionally undo the latest local setting edit only if its installed value still owns the path.", [:]),
@@ -221,6 +225,12 @@ extension ControlCenterCoordinator {
         return text
     }
 
+    func modelWorkspaceName(_ value: ControlCenterJSON?) throws -> String {
+        guard let value, value != .null else { return "" }
+        if let text = value.stringValue, text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "" }
+        return try modelTargetText(value, field: "Workspace name", maximum: 160)
+    }
+
     func resolveModelTarget(_ definition: ControlCenterJSON) async throws -> ControlCenterTarget {
         guard let fields = definition.objectValue else { throw ControlCenterHostError.blocked("A target definition must be an object.") }
         if let reference = fields["favorite_id"] {
@@ -321,7 +331,7 @@ extension ControlCenterCoordinator {
             throw ControlCenterHostError.blocked("Command workspace arguments must contain only command, cwd and name.")
         }
         let request = try modelCommandArguments(args, terminal: true)
-        let name = try modelTargetText(args["name"], field: "Workspace name", maximum: 160)
+        let name = try modelWorkspaceName(args["name"])
         return (request.command, request.directory, name)
     }
 
@@ -334,7 +344,7 @@ extension ControlCenterCoordinator {
         let initialCommand = WorkspaceInitialCommandLoginShell.wrap("exec /bin/sh -c \(SessionEntry.shellQuote(payload))")
         let manager = try currentManager()
         guard let workspace = manager.addWorkspaceIfActive(
-            title: request.name,
+            title: request.name.isEmpty ? nil : request.name,
             workingDirectory: directory,
             initialTerminalCommand: initialCommand,
             inheritWorkingDirectory: false,
@@ -345,7 +355,7 @@ extension ControlCenterCoordinator {
             "command": .string(request.command), "state": .string("submitted"),
             "detail": .string("Created a new terminal workspace and submitted the command. Command completion is not observed; inspect the terminal. It was not saved as a favorite or OMP session.")
         ])
-        try await record(ControlCenterStep(title: request.name, status: .success, detail: String(decoding: try receipt.data(), as: UTF8.self), workspaceID: workspace.id.uuidString))
+        try await record(ControlCenterStep(title: request.name.isEmpty ? workspace.title : request.name, status: .success, detail: String(decoding: try receipt.data(), as: UTF8.self), workspaceID: workspace.id.uuidString))
         return receipt
     }
 
@@ -530,7 +540,7 @@ extension ControlCenterCoordinator {
                 ])
             case "create_workspace":
                 let path = try string("path")
-                let target = ControlCenterTarget(name: try string("name"), kind: .newSession, path: path)
+                let target = ControlCenterTarget(name: try modelWorkspaceName(args["name"]), kind: .newSession, path: path)
                 if args["create_directory"]?.boolValue == true {
                     _ = try logicalDirectory(path, create: true)
                     try await record(ControlCenterStep(targetID: target.id, title: "Prepare directory", status: .success, detail: "Directory prepared at \(path); created components will not be rolled back."))

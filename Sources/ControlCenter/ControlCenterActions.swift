@@ -11,7 +11,7 @@ extension ControlCenterCoordinator {
 
     func createWorkspace(path: String, name: String, createDirectory: Bool) async {
         await runOperation(title: "Create \(name.isEmpty ? path : name)") {
-            let target = ControlCenterTarget(name: name.isEmpty ? (path as NSString).lastPathComponent : name, kind: .newSession, path: path)
+            let target = ControlCenterTarget(name: name, kind: .newSession, path: path)
             if createDirectory {
                 _ = try self.logicalDirectory(path, create: true)
                 try await self.record(ControlCenterStep(targetID: target.id, title: "Prepare directory", status: .success, detail: "Directory is ready at \(path). Any created components remain if launch is cancelled or fails."))
@@ -101,16 +101,17 @@ extension ControlCenterCoordinator {
     @discardableResult
     func openTargetRecording(_ target: ControlCenterTarget, prior: ControlCenterStep? = nil) async throws -> ControlCenterStep {
         let step: ControlCenterStep
+        let title = target.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? target.path : target.name
         do {
             try checkCancellation()
             let result = try await executeTarget(target, prior: prior)
-            step = ControlCenterStep(targetID: target.id, title: target.name, status: .success, detail: result.detail, workspaceID: result.workspaceID?.uuidString)
+            step = ControlCenterStep(targetID: target.id, title: title, status: .success, detail: result.detail, workspaceID: result.workspaceID?.uuidString)
         } catch {
             let status: ControlCenterStep.Status
             if cancelled || error is CancellationError { status = .cancelled }
             else if error is ControlCenterHostError { status = .blocked }
             else { status = .failed }
-            step = ControlCenterStep(targetID: target.id, title: target.name, status: status, detail: error.localizedDescription)
+            step = ControlCenterStep(targetID: target.id, title: title, status: status, detail: error.localizedDescription)
         }
         try await record(step)
         return step
@@ -163,7 +164,7 @@ extension ControlCenterCoordinator {
             let launch = ControlCenterOMPLaunch(executable: try ompExecutable(), directory: path, journal: nil)
             let manager = try currentManager()
             guard let workspace = manager.addWorkspaceIfActive(
-                title: target.name,
+                title: target.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : target.name,
                 workingDirectory: path,
                 initialTerminalCommand: launch.initialCommand,
                 inheritWorkingDirectory: false,
