@@ -34,18 +34,25 @@ extension ControlCenterCoordinator {
         }
     }
 
-    func findSessions(_ query: String, agentID: String) async throws {
+    func findSessions(_ query: String, agentID: String, searchContent: Bool = true) async throws {
         sessionSearchGeneration += 1
         let generation = sessionSearchGeneration
         sessions = []
         sessionResultsSourceID = agentID
         let agent = try await sessionSource(agentID)
         guard generation == sessionSearchGeneration else { throw CancellationError() }
-        let result = await vaultIndex().searchSessions(query: query, scope: .agent(agent), offset: 0, limit: 500)
+        let result = await vaultIndex().searchSessions(query: searchContent ? query : "", scope: .agent(agent), offset: 0, limit: 500)
         try Task.checkCancellation()
         guard generation == sessionSearchGeneration else { throw CancellationError() }
         error = nil
-        sessions = result.entries.filter { $0.agent.rawValue == agentID }.map { entry in
+        let entries = result.entries.filter { entry in
+            guard entry.agent.rawValue == agentID else { return false }
+            if searchContent || query.isEmpty { return true }
+            return [entry.title, entry.cwd ?? "", entry.sessionId].contains {
+                $0.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            }
+        }
+        sessions = entries.map { entry in
             var target = ControlCenterTarget(
                 name: entry.title,
                 kind: .session,

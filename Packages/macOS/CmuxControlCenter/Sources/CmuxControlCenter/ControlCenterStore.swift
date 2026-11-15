@@ -26,6 +26,8 @@ public enum ControlCenterStoreError: Error, LocalizedError, Equatable, Sendable 
 public actor ControlCenterStore {
     private let database: ControlCenterDatabase
     private let configurationURL: URL
+    private let chatLogURL: URL
+    private var chatLogDatabase: ControlCenterChatLogDatabase?
 
     public init(directory: URL) throws {
         try FileManager.default.createDirectory(
@@ -34,6 +36,7 @@ public actor ControlCenterStore {
             attributes: [.posixPermissions: 0o700]
         )
         configurationURL = directory.appendingPathComponent("connection.json")
+        chatLogURL = directory.appendingPathComponent("chat-logs.sqlite3")
         database = try ControlCenterDatabase(url: directory.appendingPathComponent("control-center.sqlite3"))
     }
 
@@ -86,6 +89,49 @@ public actor ControlCenterStore {
 
     public func saveConnection(_ connection: ControlCenterConnection) throws {
         try ControlCenterPrivateConfiguration.write(connection, to: configurationURL)
+    }
+
+    public func saveConversation(_ conversation: ControlCenterConversation) throws {
+        try chatLogs(create: true)?.saveConversation(conversation)
+    }
+
+    public func latestConversation() throws -> ControlCenterConversation? {
+        try chatLogs()?.latestConversation()
+    }
+
+    public func conversation(id: UUID) throws -> ControlCenterConversation? {
+        try chatLogs()?.conversation(id: id)
+    }
+
+    public func appendChatEvents(conversationID: UUID, events: [ControlCenterChatLogEvent]) throws {
+        guard !events.isEmpty else { return }
+        try chatLogs(create: true)?.appendEvents(conversationID: conversationID, events: events)
+    }
+
+    public func chatEvents(conversationID: UUID) throws -> [ControlCenterChatLogEvent] {
+        try chatLogs()?.events(conversationID: conversationID) ?? []
+    }
+
+    public func chatLogStatistics() throws -> ControlCenterChatLogStatistics {
+        try chatLogs()?.statistics() ?? ControlCenterChatLogStatistics(conversationCount: 0, eventCount: 0, storageBytes: 0)
+    }
+
+    public func clearChatLogs() throws {
+        chatLogDatabase = nil
+        for suffix in ["", "-journal", "-wal", "-shm"] {
+            let url = URL(fileURLWithPath: chatLogURL.path + suffix)
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
+    private func chatLogs(create: Bool = false) throws -> ControlCenterChatLogDatabase? {
+        if let chatLogDatabase { return chatLogDatabase }
+        guard create || FileManager.default.fileExists(atPath: chatLogURL.path) else { return nil }
+        let database = try ControlCenterChatLogDatabase(url: chatLogURL)
+        chatLogDatabase = database
+        return database
     }
 }
 

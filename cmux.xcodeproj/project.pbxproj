@@ -1465,8 +1465,10 @@
 		C0DE32470000000000000001 /* ContentViewIdentifierCopyCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE32470000000000000002 /* ContentViewIdentifierCopyCommands.swift */; };
 		0C1A606285E62F5AC6711DEC /* ControlCenterActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41F0B5AB0D71C287C6785ED6 /* ControlCenterActions.swift */; };
 		BB44EB3E9B521E751C7525BA /* ControlCenterChat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745F75009EFE6721C14E0BA1 /* ControlCenterChat.swift */; };
+		8590D30E0925E39067FF71EF /* ControlCenterChatAttachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40CC9DCDA99E5C23ECE3A97A /* ControlCenterChatAttachments.swift */; };
 		E198C9E20443AEE2DD39A763 /* ControlCenterChatInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = B76F8F476E53771934FCC835 /* ControlCenterChatInput.swift */; };
 		A352CFE4386EEA45D2DA6111 /* ControlCenterChatMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29C50A682D6A54C491D880F7 /* ControlCenterChatMarkdown.swift */; };
+		19CFA32A00E2B4BF42013248 /* ControlCenterChatStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD25241C952F64E6D2D97837 /* ControlCenterChatStorage.swift */; };
 		18EE6B5F6F8DE3272B6F398E /* ControlCenterChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C3E79431A9C9E44192E8E4E /* ControlCenterChatView.swift */; };
 		89B00E98BF48BC25092509CC /* ControlCenterCodexpressConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91838AE8175419D326525341 /* ControlCenterCodexpressConnection.swift */; };
 		03F6F668BB4B21491C0DE16F /* ControlCenterConfigurationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A66BCB2BBA2F4088723AE03C /* ControlCenterConfigurationView.swift */; };
@@ -5450,8 +5452,10 @@
 		C0DE32470000000000000002 /* ContentViewIdentifierCopyCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewIdentifierCopyCommands.swift; sourceTree = "<group>"; };
 		41F0B5AB0D71C287C6785ED6 /* ControlCenterActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterActions.swift; sourceTree = "<group>"; };
 		745F75009EFE6721C14E0BA1 /* ControlCenterChat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterChat.swift; sourceTree = "<group>"; };
+		40CC9DCDA99E5C23ECE3A97A /* ControlCenterChatAttachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterChatAttachments.swift; sourceTree = "<group>"; };
 		B76F8F476E53771934FCC835 /* ControlCenterChatInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterChatInput.swift; sourceTree = "<group>"; };
 		29C50A682D6A54C491D880F7 /* ControlCenterChatMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterChatMarkdown.swift; sourceTree = "<group>"; };
+		FD25241C952F64E6D2D97837 /* ControlCenterChatStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterChatStorage.swift; sourceTree = "<group>"; };
 		6C3E79431A9C9E44192E8E4E /* ControlCenterChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterChatView.swift; sourceTree = "<group>"; };
 		91838AE8175419D326525341 /* ControlCenterCodexpressConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterCodexpressConnection.swift; sourceTree = "<group>"; };
 		A66BCB2BBA2F4088723AE03C /* ControlCenterConfigurationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterConfigurationView.swift; sourceTree = "<group>"; };
@@ -10732,6 +10736,8 @@
 				B76F8F476E53771934FCC835 /* ControlCenterChatInput.swift */,
 				29C50A682D6A54C491D880F7 /* ControlCenterChatMarkdown.swift */,
 				5A4257A5D0A6AE53F8141F2C /* ControlCenterPresentation.swift */,
+				40CC9DCDA99E5C23ECE3A97A /* ControlCenterChatAttachments.swift */,
+				FD25241C952F64E6D2D97837 /* ControlCenterChatStorage.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -13430,8 +13436,10 @@
 				C0DE32470000000000000001 /* ContentViewIdentifierCopyCommands.swift in Sources */,
 				0C1A606285E62F5AC6711DEC /* ControlCenterActions.swift in Sources */,
 				BB44EB3E9B521E751C7525BA /* ControlCenterChat.swift in Sources */,
+				8590D30E0925E39067FF71EF /* ControlCenterChatAttachments.swift in Sources */,
 				E198C9E20443AEE2DD39A763 /* ControlCenterChatInput.swift in Sources */,
 				A352CFE4386EEA45D2DA6111 /* ControlCenterChatMarkdown.swift in Sources */,
+				19CFA32A00E2B4BF42013248 /* ControlCenterChatStorage.swift in Sources */,
 				18EE6B5F6F8DE3272B6F398E /* ControlCenterChatView.swift in Sources */,
 				89B00E98BF48BC25092509CC /* ControlCenterCodexpressConnection.swift in Sources */,
 				03F6F668BB4B21491C0DE16F /* ControlCenterConfigurationView.swift in Sources */,

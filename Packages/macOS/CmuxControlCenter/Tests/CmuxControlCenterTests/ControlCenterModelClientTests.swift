@@ -8,7 +8,7 @@ struct ControlCenterModelClientTests {
     @Test func responsesPreserveReasoningAndUseCallIDRatherThanItemID() async throws {
         let server = try ControlCenterHTTPFixture(reply: .json(200, #"""
         {"status":"completed","output":[
-          {"type":"reasoning","id":"rs_1","encrypted_content":"opaque-reasoning","summary":[]},
+          {"type":"reasoning","id":"rs_1","encrypted_content":"opaque-reasoning","summary":[{"type":"summary_text","text":"Checking the target."}]},
           {"type":"function_call","id":"fc_item","call_id":"call_actual","name":"open_target","arguments":"{\"path\":\"/logical/project\"}"},
           {"type":"message","role":"assistant","content":[{"type":"output_text","text":"Opening the exact target."}]}
         ]}
@@ -16,13 +16,20 @@ struct ControlCenterModelClientTests {
         let port = try await server.start()
         defer { server.stop() }
         let operation = UUID()
-        let client = ControlCenterModelClient(connection: ControlCenterConnection(baseURL: "http://127.0.0.1:\(port)/v1", model: "explicit-model", apiKey: "test-bearer"))
-        let turn = try await client.respond(input: [.object(["role": .string("user"), "content": .string("Open the target")])], tools: [
+        let client = ControlCenterModelClient(connection: ControlCenterConnection(baseURL: "http://127.0.0.1:\(port)/v1", model: "explicit-model", apiKey: "test-bearer", reasoningEffort: "high"))
+        let received = ControlCenterDeltaRecorder()
+        let image: ControlCenterJSON = .object(["type": .string("input_image"), "image_url": .string("data:image/png;base64,aW1hZ2U=")])
+        let input: [ControlCenterJSON] = [.object(["role": .string("user"), "content": .array([
+            .object(["type": .string("input_text"), "text": .string("Open the target")]), image
+        ])])]
+        let turn = try await client.respond(input: input, tools: [
             ControlCenterTool(name: "open_target", description: "Open a logical target", parameters: .object(["type": .string("object"), "properties": .object(["path": .object(["type": .string("string")])])]))
-        ], operationID: operation)
+        ], operationID: operation) { event in
+            await received.append(event)
+        }
         #expect(turn.calls == [ControlCenterToolCall(id: "call_actual", name: "open_target", arguments: .object(["path": .string("/logical/project")]))])
         #expect(turn.text == "Opening the exact target.")
-        #expect(turn.output.first == .object(["type": .string("reasoning"), "id": .string("rs_1"), "encrypted_content": .string("opaque-reasoning"), "summary": .array([])]))
+        #expect(turn.output.first?.objectValue?["encrypted_content"] == .string("opaque-reasoning"))
         let request = try #require(server.requests.first)
         #expect(request.path == "/v1/responses")
         #expect(request.headers["authorization"] == "Bearer test-bearer")
@@ -32,6 +39,19 @@ struct ControlCenterModelClientTests {
         #expect(body?["stream"] == .bool(true))
         #expect(body?["tools"]?.arrayValue?.first?.objectValue?["type"] == .string("function"))
         #expect(body?["tools"]?.arrayValue?.first?.objectValue?["strict"] == .bool(false))
+        #expect(body?["reasoning"] == .object(["effort": .string("high")]))
+        #expect(body?["include"] == .array([.string("reasoning.encrypted_content")]))
+        #expect(body?["input"] == .array(input))
+        let events = await received.events
+        #expect(events == [
+            .requestSubmitted(try ControlCenterJSON.decode(request.body)), .responseStarted,
+            .reasoningDelta("Checking the target."),
+            .toolCall(id: "call_actual", name: "open_target", arguments: "{\"path\":\"/logical/project\"}"),
+            .textDelta("Opening the exact target.")
+        ])
+        _ = try await client.respond(input: turn.output, tools: [], operationID: operation)
+        let next = try #require(server.requests.last)
+        #expect(try ControlCenterJSON.decode(next.body).objectValue?["input"] == .array(turn.output))
     }
 
     @Test(arguments: ["not-json", "[]", "null"])
@@ -85,30 +105,42 @@ struct ControlCenterModelClientTests {
         #expect(held.requests.count == 1)
     }
 
-    @Test func chunkedEventsDeliverTextBeforeCompletionAndPreserveVerifiedOutput() async throws {
+    @Test func chunkedEventsCompleteWithoutEOFOrDuplicatingText() async throws {
         let prefix = Data(": keepalive\r\nevent: response.output_text.delta\r\ndata: {\"type\":\"response.output_text.delta\",\r\ndata: \"delta\":\"Héllo\"}\r\n\r\n".utf8)
         let split = try #require(prefix.firstIndex(of: 0xC3)) + 1
-        let terminal = #"data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"reasoning","id":"rs_1","encrypted_content":"opaque","summary":[]},{"type":"function_call","status":"completed","id":"item_1","call_id":"call_1","name":"open_target","arguments":"{\"path\":\"/logical/project\"}"},{"type":"message","status":"completed","content":[{"type":"output_text","text":"Héllo world"}]}]}}"# + "\n\n"
+        let terminal = #"data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"reasoning","id":"rs_1","encrypted_content":"opaque","summary":[]},{"type":"function_call","status":"completed","id":"item_1","call_id":"call_1","name":"open_target","arguments":"{\"path\":\"/logical/project\"}"},{"type":"message","status":"completed","content":[{"type":"output_text","text":"Héllo world"},{"type":"output_text","text":"Completed-only text"}]}]}}"# + "\n\n"
         let server = try ControlCenterHTTPFixture(reply: .stream([
             Data(prefix[..<split]),
             Data(prefix[split...]),
             Data("data: {\"type\":\"response.output_text.delta\",\"delta\":\" world\"}\n\ndata: {\"type\":\"response.output_text.done\",\"text\":\"Héllo world\"}\n\n".utf8),
             Data(terminal.utf8)
-        ], finish: true))
+        ], finish: false))
         let port = try await server.start()
         defer { server.stop() }
         let received = ControlCenterDeltaRecorder()
         let client = ControlCenterModelClient(connection: ControlCenterConnection(baseURL: "http://127.0.0.1:\(port)/v1", model: "explicit-model"))
-        let turn = try await client.respond(input: [], tools: [], operationID: UUID()) { delta in
-            await received.append(delta, beforeFinalChunk: !server.sentFinalStreamChunk)
+        let turn = try await withThrowingTaskGroup(of: ControlCenterModelTurn.self) { group in
+            defer { group.cancelAll() }
+            group.addTask {
+                try await client.respond(input: [], tools: [], operationID: UUID()) { event in
+                    await received.append(event, beforeFinalChunk: !server.sentFinalStreamChunk)
+                }
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(3))
+                throw URLError(.timedOut)
+            }
+            return try #require(await group.next())
         }
         let deltas = await received.values
-        #expect(deltas == ["Héllo", " world"])
-        #expect(await received.allBeforeFinalChunk)
-        #expect(turn.text == "Héllo world")
+        #expect(deltas == ["Héllo", " world", "\nCompleted-only text"])
+        #expect(await received.textBeforeFinalChunk == [true, true, false])
+        #expect(turn.text == "Héllo world\nCompleted-only text")
         #expect(turn.calls == [ControlCenterToolCall(id: "call_1", name: "open_target", arguments: .object(["path": .string("/logical/project")]))])
         #expect(turn.output.first?.objectValue?["encrypted_content"] == .string("opaque"))
         #expect(server.requests.count == 1)
+        let request = try #require(server.requests.first)
+        #expect(try ControlCenterJSON.decode(request.body).objectValue?["reasoning"] == nil)
     }
 
     @Test(arguments: [
@@ -124,7 +156,25 @@ struct ControlCenterModelClientTests {
         ControlCenterStreamFailure(ending: "data: not-json\n\n", expected: .invalidResponse)
     ])
     func unfinishedOrInvalidStreamsNeverReturnRunnableCalls(_ failure: ControlCenterStreamFailure) async throws {
-        let partial = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Visible\"}\n\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"path\\\":\"}\n\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"open_target\",\"arguments\":\"{}\"}}\n\n"
+        let partial = #"""
+        data: {"type":"response.reasoning_summary_text.delta","output_index":0,"summary_index":0,"delta":"Checking"}
+
+        data: {"type":"response.reasoning_text.delta","delta":"private reasoning must not be shown"}
+
+        data: {"type":"response.reasoning_summary_text.done","output_index":0,"summary_index":0,"text":"Checking"}
+
+        data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"open_target","arguments":""}}
+
+        data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"{\"path\":"}
+
+        data: {"type":"response.function_call_arguments.delta","output_index":1,"delta":"\"/logical/project\"}"}
+
+        data: {"type":"response.function_call_arguments.done","item_id":"fc_1","arguments":"{\"path\":\"/logical/project\"}"}
+
+        data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"open_target","arguments":"{\"path\":\"/logical/project\"}"}}
+
+        data: {"type":"response.output_text.delta","output_index":2,"content_index":0,"delta":"Visible"}
+        """# + "\n\n"
         let server = try ControlCenterHTTPFixture(reply: .stream([Data(partial.utf8), Data(failure.ending.utf8)], finish: true))
         let port = try await server.start()
         defer { server.stop() }
@@ -140,6 +190,13 @@ struct ControlCenterModelClientTests {
             #expect(!error.localizedDescription.contains("do-not-expose-test-token"))
         }
         #expect(await received.values == ["Visible"])
+        #expect(Array(await received.events.dropFirst(2)) == [
+            .reasoningDelta("Checking"),
+            .toolCall(id: "call_1", name: "open_target", arguments: ""),
+            .toolCall(id: "call_1", name: "open_target", arguments: "{\"path\":"),
+            .toolCall(id: "call_1", name: "open_target", arguments: "{\"path\":\"/logical/project\"}"),
+            .textDelta("Visible")
+        ])
         #expect(server.requests.count == 1)
     }
 
@@ -202,11 +259,15 @@ struct ControlCenterStreamFailure: Sendable {
 
 private actor ControlCenterDeltaRecorder {
     private(set) var values: [String] = []
-    private(set) var allBeforeFinalChunk = true
+    private(set) var events: [ControlCenterModelEvent] = []
+    private(set) var textBeforeFinalChunk: [Bool] = []
 
-    func append(_ value: String, beforeFinalChunk: Bool = true) {
-        values.append(value)
-        allBeforeFinalChunk = allBeforeFinalChunk && beforeFinalChunk
+    func append(_ event: ControlCenterModelEvent, beforeFinalChunk: Bool = true) {
+        events.append(event)
+        if case .textDelta(let value) = event {
+            values.append(value)
+            textBeforeFinalChunk.append(beforeFinalChunk)
+        }
     }
 }
 

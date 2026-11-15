@@ -18,7 +18,7 @@ public enum ControlCenterModelError: Error, LocalizedError, Equatable, Sendable 
         case .invalidBaseURL: return "Enter an HTTP or HTTPS API base URL without embedded credentials, query, or fragment."
         case .missingModel: return "Choose or enter a model before starting a model operation."
         case .invalidAPIKey: return "The API key contains invalid header characters."
-        case .invalidInput: return "The model request contains a value that cannot be encoded as JSON."
+        case .invalidInput: return "The model request cannot be encoded as JSON or exceeds the 32 MiB request limit. Start a new conversation or use smaller images."
         case .invalidToolSchema: return "A model tool has an invalid parameter schema."
         case .transport(let code): return "The model connection failed (network \(code)). No automatic retry was attempted."
         case .httpStatus(let code): return "The model server returned HTTP \(code). No automatic retry was attempted."
@@ -70,7 +70,7 @@ public final class ControlCenterModelClient: Sendable {
         input: [ControlCenterJSON],
         tools: [ControlCenterTool],
         operationID: UUID,
-        onTextDelta: (@Sendable (String) async -> Void)? = nil
+        onEvent: (@Sendable (ControlCenterModelEvent) async -> Void)? = nil
     ) async throws -> ControlCenterModelTurn {
         guard !connection.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ControlCenterModelError.missingModel
@@ -85,73 +85,98 @@ public final class ControlCenterModelClient: Sendable {
                 "parameters": tool.parameters
             ])
         }
-        let body = ControlCenterJSON.object([
+        var fields: [String: ControlCenterJSON] = [
             "model": .string(connection.model),
             "input": .array(input),
             "tools": .array(toolJSON),
             "stream": .bool(true),
-            "store": .bool(false)
-        ])
+            "store": .bool(false),
+            "include": .array([.string("reasoning.encrypted_content")])
+        ]
+        if let effort = connection.reasoningEffort {
+            fields["reasoning"] = .object(["effort": .string(effort)])
+        }
+        let body = ControlCenterJSON.object(fields)
         var request = try request(endpoint: "responses")
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream, application/json", forHTTPHeaderField: "Accept")
         request.setValue(operationID.uuidString.lowercased(), forHTTPHeaderField: "x-session-id")
-        do { request.httpBody = try body.data() }
+        do {
+            let data = try body.data()
+            guard data.count <= 32 * 1024 * 1024 else { throw ControlCenterModelError.invalidInput }
+            request.httpBody = data
+        }
         catch { throw ControlCenterModelError.invalidInput }
         try Task.checkCancellation()
+        let (stream, continuation) = AsyncThrowingStream<ControlCenterHTTPEvent, any Error>.makeStream()
+        let transport = URLSession(configuration: session.configuration, delegate: ControlCenterHTTPDelegate(continuation: continuation), delegateQueue: nil)
+        let task = transport.dataTask(with: request)
+        defer { transport.invalidateAndCancel() }
         do {
-            let (bytes, response) = try await session.bytes(for: request)
-            let task = bytes.task
-            defer { task.cancel() }
             return try await withTaskCancellationHandler {
                 try Task.checkCancellation()
-                guard let http = response as? HTTPURLResponse else { throw ControlCenterModelError.invalidResponse }
-                guard (200..<300).contains(http.statusCode) else { throw ControlCenterModelError.httpStatus(http.statusCode) }
-                let contentType = http.mimeType?.lowercased()
-                if contentType == "application/json" {
-                    var data = Data()
-                    for try await byte in bytes {
-                        try Task.checkCancellation()
-                        data.append(byte)
-                    }
-                    try Task.checkCancellation()
-                    return try Self.turn(from: data)
-                }
-                guard contentType == "text/event-stream" else { throw ControlCenterModelError.invalidResponse }
+                await onEvent?(.requestSubmitted(body))
+                try Task.checkCancellation()
+                task.resume()
+                var contentType: String?
+                var data = Data()
                 var events = ControlCenterServerSentEvents()
-                for try await byte in bytes {
+                var progress = ControlCenterModelProgress()
+                for try await chunk in stream {
                     try Task.checkCancellation()
-                    guard let event = try events.append(byte) else { continue }
-                    if event.data == "[DONE]" { throw ControlCenterModelError.incompleteResponse }
-                    guard let object = try Self.json(Data(event.data.utf8)).objectValue,
-                          let type = object["type"]?.stringValue,
-                          event.name.isEmpty || event.name == type else {
-                        throw ControlCenterModelError.invalidResponse
-                    }
-                    switch type {
-                    case "response.output_text.delta", "response.refusal.delta":
-                        guard let delta = object["delta"]?.stringValue else { throw ControlCenterModelError.invalidResponse }
-                        if !delta.isEmpty { await onTextDelta?(delta) }
-                        try Task.checkCancellation()
-                    case "response.completed":
-                        guard let completed = object["response"],
-                              completed.objectValue?["status"]?.stringValue == "completed" else {
-                            throw ControlCenterModelError.incompleteResponse
+                    switch chunk {
+                    case .response(let response):
+                        guard let http = response as? HTTPURLResponse else { throw ControlCenterModelError.invalidResponse }
+                        guard (200..<300).contains(http.statusCode) else { throw ControlCenterModelError.httpStatus(http.statusCode) }
+                        contentType = http.mimeType?.lowercased()
+                        guard contentType == "application/json" || contentType == "text/event-stream" else {
+                            throw ControlCenterModelError.invalidResponse
                         }
-                        return try Self.turn(from: completed.data())
-                    case "response.failed", "error":
-                        throw ControlCenterModelError.responseFailed
-                    case "response.incomplete":
-                        throw ControlCenterModelError.incompleteResponse
-                    default:
-                        break
+                        await onEvent?(.responseStarted)
+                    case .data(let chunk):
+                        if contentType == "application/json" {
+                            data.append(chunk)
+                            continue
+                        }
+                        guard contentType == "text/event-stream" else { throw ControlCenterModelError.invalidResponse }
+                        for byte in chunk {
+                            guard let event = try events.append(byte) else { continue }
+                            if event.data == "[DONE]" { throw ControlCenterModelError.incompleteResponse }
+                            guard let object = try Self.json(Data(event.data.utf8)).objectValue,
+                                  let type = object["type"]?.stringValue,
+                                  event.name.isEmpty || event.name == type else {
+                                throw ControlCenterModelError.invalidResponse
+                            }
+                            switch type {
+                            case "response.completed":
+                                guard let completed = object["response"],
+                                      completed.objectValue?["status"]?.stringValue == "completed" else {
+                                    throw ControlCenterModelError.incompleteResponse
+                                }
+                                let turn = try Self.turn(from: completed.data())
+                                for event in progress.complete(turn) { await onEvent?(event) }
+                                try Task.checkCancellation()
+                                return turn
+                            case "response.failed", "error":
+                                throw ControlCenterModelError.responseFailed
+                            case "response.incomplete":
+                                throw ControlCenterModelError.incompleteResponse
+                            default:
+                                if let event = try progress.append(type: type, object: object) { await onEvent?(event) }
+                                try Task.checkCancellation()
+                            }
+                        }
                     }
                 }
                 try Task.checkCancellation()
-                throw ControlCenterModelError.incompleteResponse
+                guard contentType == "application/json" else { throw ControlCenterModelError.incompleteResponse }
+                let turn = try Self.turn(from: data)
+                for event in progress.complete(turn) { await onEvent?(event) }
+                try Task.checkCancellation()
+                return turn
             } onCancel: {
-                task.cancel()
+                transport.invalidateAndCancel()
             }
         } catch {
             if Task.isCancelled || (error as? URLError)?.code == .cancelled { throw CancellationError() }
@@ -249,6 +274,139 @@ public final class ControlCenterModelClient: Sendable {
     }
 }
 
+// Progress is provisional. Only turn(from:) validates a complete response for execution.
+private struct ControlCenterModelProgress {
+    private struct Call: Equatable {
+        let id: String
+        let name: String
+        var arguments: String
+    }
+
+    private var emitted: [String: String] = [:]
+    private var itemKeys: [String: String] = [:]
+    private var calls: [String: Call] = [:]
+    private var emittedCalls: [String: Call] = [:]
+
+    mutating func append(type: String, object: [String: ControlCenterJSON]) throws -> ControlCenterModelEvent? {
+        switch type {
+        case "response.output_text.delta", "response.refusal.delta", "response.reasoning_summary_text.delta":
+            guard let delta = object["delta"]?.stringValue else { throw ControlCenterModelError.invalidResponse }
+            let reasoning = type == "response.reasoning_summary_text.delta"
+            return update(delta, key: contentKey(object, reasoning: reasoning), delta: true, reasoning: reasoning)
+        case "response.output_text.done", "response.refusal.done", "response.reasoning_summary_text.done":
+            let reasoning = type == "response.reasoning_summary_text.done"
+            guard let text = object["text"]?.stringValue ?? object["refusal"]?.stringValue else {
+                throw ControlCenterModelError.invalidResponse
+            }
+            return update(text, key: contentKey(object, reasoning: reasoning), delta: false, reasoning: reasoning)
+        case "response.output_item.added", "response.output_item.done":
+            guard let item = object["item"]?.objectValue else { throw ControlCenterModelError.invalidResponse }
+            let key = itemKey(object) ?? item["id"]?.stringValue
+            if let id = item["id"]?.stringValue, let key { itemKeys[id] = key }
+            guard item["type"]?.stringValue == "function_call", let key,
+                  let id = item["call_id"]?.stringValue, !id.isEmpty,
+                  let name = item["name"]?.stringValue, !name.isEmpty else { return nil }
+            let call = Call(id: id, name: name, arguments: item["arguments"]?.stringValue ?? "")
+            calls[key] = call
+            return emit(call)
+        case "response.function_call_arguments.delta", "response.function_call_arguments.done":
+            guard let key = itemKey(object), var call = calls[key] else { return nil }
+            if type == "response.function_call_arguments.delta" {
+                guard let delta = object["delta"]?.stringValue else { throw ControlCenterModelError.invalidResponse }
+                call.arguments += delta
+            } else {
+                guard let arguments = object["arguments"]?.stringValue else { throw ControlCenterModelError.invalidResponse }
+                call.arguments = arguments
+            }
+            calls[key] = call
+            return emit(call)
+        default:
+            return nil
+        }
+    }
+
+    mutating func complete(_ turn: ControlCenterModelTurn) -> [ControlCenterModelEvent] {
+        var events: [ControlCenterModelEvent] = []
+        var summary: [String] = []
+        let unindexedText = emitted["text|unindexed"] != nil
+        let unindexedReasoning = emitted["reasoning|unindexed"] != nil
+        for (index, output) in turn.output.enumerated() {
+            guard let item = output.objectValue else { continue }
+            let key = item["id"]?.stringValue.flatMap { itemKeys[$0] } ?? String(Double(index))
+            switch item["type"]?.stringValue {
+            case "function_call":
+                if let id = item["call_id"]?.stringValue, let name = item["name"]?.stringValue,
+                   let arguments = item["arguments"]?.stringValue {
+                    if let event = emit(Call(id: id, name: name, arguments: arguments)) { events.append(event) }
+                }
+            case "message":
+                for (partIndex, part) in (item["content"]?.arrayValue ?? []).enumerated() {
+                    guard let part = part.objectValue,
+                          let text = part["text"]?.stringValue ?? part["refusal"]?.stringValue,
+                          part["type"]?.stringValue == "output_text" || part["type"]?.stringValue == "refusal" else { continue }
+                    if !unindexedText,
+                       let event = update(text, key: "text|\(key)|\(Double(partIndex))", delta: false, reasoning: false) {
+                        events.append(event)
+                    }
+                }
+            case "reasoning":
+                for (partIndex, part) in (item["summary"]?.arrayValue ?? []).enumerated() {
+                    guard part.objectValue?["type"]?.stringValue == "summary_text",
+                          let text = part.objectValue?["text"]?.stringValue else { continue }
+                    if unindexedReasoning { summary.append(text) }
+                    else if let event = update(text, key: "reasoning|\(key)|\(Double(partIndex))", delta: false, reasoning: true) {
+                        events.append(event)
+                    }
+                }
+            default:
+                break
+            }
+        }
+        if unindexedText, let event = update(turn.text, key: "text|unindexed", delta: false, reasoning: false) {
+            events.append(event)
+        }
+        if unindexedReasoning, let event = update(summary.joined(separator: "\n"), key: "reasoning|unindexed", delta: false, reasoning: true) {
+            events.append(event)
+        }
+        return events
+    }
+
+    private func itemKey(_ object: [String: ControlCenterJSON]) -> String? {
+        if let index = object["output_index"]?.numberValue { return String(index) }
+        if let id = object["item_id"]?.stringValue { return itemKeys[id] ?? id }
+        return nil
+    }
+
+    private func contentKey(_ object: [String: ControlCenterJSON], reasoning: Bool) -> String {
+        let kind = reasoning ? "reasoning" : "text"
+        guard let item = itemKey(object) else { return "\(kind)|unindexed" }
+        let index = object[reasoning ? "summary_index" : "content_index"]?.numberValue ?? 0
+        return "\(kind)|\(item)|\(index)"
+    }
+
+    private mutating func update(_ value: String, key: String, delta: Bool, reasoning: Bool) -> ControlCenterModelEvent? {
+        let previous = emitted[key] ?? ""
+        let addition: String
+        if delta {
+            addition = value
+            emitted[key] = previous + value
+        } else {
+            // Completed/done payloads repeat deltas. Emit only the unseen suffix.
+            guard value.hasPrefix(previous) else { return nil }
+            addition = String(value.dropFirst(previous.count))
+            emitted[key] = value
+        }
+        guard !addition.isEmpty else { return nil }
+        return reasoning ? .reasoningDelta(addition) : .textDelta(addition)
+    }
+
+    private mutating func emit(_ call: Call) -> ControlCenterModelEvent? {
+        guard emittedCalls[call.id] != call else { return nil }
+        emittedCalls[call.id] = call
+        return .toolCall(id: call.id, name: call.name, arguments: call.arguments)
+    }
+}
+
 private struct ControlCenterServerSentEvents {
     struct Event {
         let name: String
@@ -295,7 +453,37 @@ private struct ControlCenterServerSentEvents {
     }
 }
 
-private final class ControlCenterHTTPDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+private enum ControlCenterHTTPEvent: Sendable {
+    case response(URLResponse)
+    case data(Data)
+}
+
+private final class ControlCenterHTTPDelegate: NSObject, URLSessionDataDelegate, Sendable {
+    private let continuation: AsyncThrowingStream<ControlCenterHTTPEvent, any Error>.Continuation?
+
+    init(continuation: AsyncThrowingStream<ControlCenterHTTPEvent, any Error>.Continuation? = nil) {
+        self.continuation = continuation
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void
+    ) {
+        continuation?.yield(.response(response))
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        continuation?.yield(.data(data))
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+        if let error { continuation?.finish(throwing: error) }
+        else { continuation?.finish() }
+    }
+
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,

@@ -92,27 +92,51 @@ step receipts; `connection.json` is an owner-only `0600` file. Tagged builds use
 their own bundle-ID namespace. Neither data nor runtime resources depend on the
 development checkout.
 
-Chat renders Markdown headings, lists, tables and highlighted fenced code using
-bundled assets. Responses arrive as actual SSE text deltas; tools become eligible
-for approval/execution only after the complete response and arguments validate.
-Stopping or losing a stream keeps partial text and records the unfinished outcome,
-without retrying it. Remote Markdown images are not fetched automatically.
+Chat uses a native multiline composer and a mounted Markdown transcript. Text,
+public reasoning summaries and individual tool calls/results appear in their
+actual order as the stream arrives. Provisional tool arguments are display-only:
+execution still requires a fully validated completed response and host approval.
+The transport consumes network chunks and returns on `response.completed`, even
+if the HTTP connection remains open. UI publication is coalesced rather than
+rebuilding the transcript on every token. Stop retains partial output, never
+retries uncertain actions, and does not roll back completed effects.
 
-Messages normally include the earlier messages and actual operation receipts from
-the current conversation. **New Chat** clears the visible conversation and model
-context, not saved favorites, explicit memories or durable operation receipts.
-Switching back to a workspace retains the chat, draft and running operation;
-returning to Control Center focuses the composer. Workspace views stay mounted,
-but hidden terminals cannot receive chat input. Relaunch can restore the central
-destination, without restoring a complete transcript. Input/context and tool budgets remain finite; a
-context-limit error requires starting a new chat rather than silent truncation.
-Enter sends, Shift-Enter inserts a line, and Command-Enter also sends. Composing
-an IME candidate never sends a message. Drafting remains available while working.
-The chat mounts on its first visit and stays mounted across workspace and Browse
-page switches, preserving its Markdown document, scroll position and expanded
-receipts rather than reloading a blank WebView. Its hidden composer cannot take
-focus or consume keyboard shortcuts. The initial WebView theme matches the page
-before the first transcript update.
+The composer includes model and reasoning-effort menus. **Default** omits the
+reasoning override; explicit choices send `reasoning.effort`. Refresh the model
+list explicitly. Images can be selected, pasted or dropped and removed before
+sending. They are normalized locally to PNG at up to 2048 pixels, with bounded
+input/payload size, and sent as Responses `input_image` parts alongside text.
+Sending shares that message's context and images with the configured provider.
+Remote or model-supplied Markdown images are not loaded automatically.
+
+Messages include the exact earlier model outputs and actual tool results,
+including opaque encrypted reasoning when supplied by the API. **New Chat**,
+`/new` and `/clear` reset the visible conversation and model context, not durable
+logs or saved favorites/memories. **Edit** and **Retry from here** icons on a
+user message replace that turn and later context; they make a fresh request, do not replay
+cached tool calls, and cannot undo previous actions. Enter sends, Shift-Enter
+inserts a line, and Command-Enter also sends. IME composition is respected.
+Up/Down at the input boundary recall prior prompts and restore an unsent draft.
+
+Complete messages, images, request JSON bodies, model outputs, tool arguments and
+results, approvals, errors and lifecycle timestamps are kept in the separate
+owner-only `chat-logs.sqlite3`. API keys and authentication headers are excluded.
+The latest conversation and its exact context restore after relaunch; interrupted
+work is marked as such and never automatically executed again. **Browse → cmux Settings**
+shows conversation/event counts, database-plus-sidecar bytes (disk, not RAM), and
+a confirmed cleanup button. Cleanup preserves connection configuration, favorites,
+collections, explicit memories and separate ordinary operation history.
+
+Normal navigation searches the most recent 500 conversation titles/paths/IDs;
+the tool result declares that scope. Set `search_content: true` for transcript
+contents or older conversations. Native Vault/Sessions searches remain full-text.
+Searching is shown as a live tool phase rather than an apparently frozen reply.
+Context/request size and tool-round budgets remain bounded; oversized context is
+reported rather than silently truncated.
+The chat stays mounted across workspace and Browse page switches, preserving
+scroll position, draft and expanded tool cards. Image data is sent to the renderer
+once per attachment UUID, not with every token update. Hidden chat input cannot
+take focus or consume terminal shortcuts. Initial renderer colors match the page.
 
 The composer permission selector defaults to **Ask Before Changes**. Read-only
 typed tools do not prompt; model-invoked local changes show exact arguments and

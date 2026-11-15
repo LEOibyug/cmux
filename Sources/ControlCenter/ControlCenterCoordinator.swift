@@ -45,7 +45,18 @@ final class ControlCenterCoordinator: ObservableObject {
     @Published var error: String?
     @Published var isRunning = false
     @Published var chatTurns: [ControlCenterChatTurn] = []
-    @Published var chatDraft = ""
+    @Published var chatDraft = "" {
+        didSet { if oldValue != chatDraft { chatHistoryIndex = nil } }
+    }
+    @Published var chatAttachments: [ControlCenterChatAttachment] = []
+    @Published var chatEntries: [ControlCenterChatEntry] = []
+    @Published var chatImagesLoading = false
+    @Published var chatComposerError: String?
+    @Published var chatEditingTurnID: UUID?
+    @Published var chatHistoryIndex: Int?
+    @Published var chatLogStatistics = ControlCenterChatLogStatistics(conversationCount: 0, eventCount: 0, storageBytes: 0)
+    @Published var chatLogError: String?
+    @Published var chatLogsLoading = false
     @Published var activeChatTurnID: UUID?
     @Published var chatPresentationID = UUID()
     @Published var streamingText = ""
@@ -68,6 +79,22 @@ final class ControlCenterCoordinator: ObservableObject {
     var sessionSearchGeneration = 0
     var openedTargets: [String: UUID] = [:]
     var approvalContinuation: CheckedContinuation<Bool, Never>?
+    var pendingChatEntries: [ControlCenterChatEntry] = []
+    var pendingChatText = ""
+    var chatProgressTask: Task<Void, Never>?
+    var activeChatToolID: String?
+    var chatInputHistory: [String] = []
+    var recalledChatDraft = ""
+    var draftBeforeChatEdit = ""
+    var attachmentsBeforeChatEdit: [ControlCenterChatAttachment] = []
+    var chatImageImportCount = 0
+    var chatDraftGeneration = 0
+    var chatConversationID = UUID()
+    var chatConversationCreatedAt = Date()
+    var chatLogsLoaded = false
+    var pendingChatLogEvents: [(UUID, ControlCenterChatLogEvent)] = []
+    var pendingChatLogSnapshots: [UUID: ControlCenterConversation] = [:]
+    var chatLogWriteTask: Task<Void, Never>?
 
     func configure(settingsRuntime: SettingsRuntime) {
         self.settingsRuntime = settingsRuntime
@@ -99,6 +126,7 @@ final class ControlCenterCoordinator: ObservableObject {
             if !hasLoadedConnection {
                 connection = try await store.connection()
                 hasLoadedConnection = true
+                await restoreChatConversation()
             }
             await loadSettings()
         } catch { self.error = error.localizedDescription }
@@ -169,6 +197,9 @@ final class ControlCenterCoordinator: ObservableObject {
         error = nil
         output = ""
         streamingText = ""
+        pendingChatText = ""
+        pendingChatEntries = []
+        chatEntries = []
         operation = ControlCenterOperation(title: title)
         let task = Task { @MainActor in
             do {
@@ -185,10 +216,10 @@ final class ControlCenterCoordinator: ObservableObject {
                 if status != .cancelled { self.error = error.localizedDescription }
             }
             do {
-                if let operation = self.operation { try await self.localStore().saveOperation(operation) }
+                if self.activeChatTurnID == nil, let operation = self.operation { try await self.localStore().saveOperation(operation) }
                 try await self.refreshSnapshot()
             } catch { self.error = error.localizedDescription }
-            self.finishChatTurn()
+            await self.finishChatTurn()
             self.isRunning = false
             self.activeTask = nil
         }
@@ -202,7 +233,10 @@ final class ControlCenterCoordinator: ObservableObject {
 
     func record(_ step: ControlCenterStep) async throws {
         operation?.steps.append(step)
-        if let operation { try await localStore().saveOperation(operation) }
+        if activeChatTurnID == nil, let operation { try await localStore().saveOperation(operation) }
+        if activeChatTurnID != nil {
+            appendChatLog("operation.receipt", payload: (try? toolJSON(step)) ?? .null)
+        }
     }
 
     func checkCancellation() throws {

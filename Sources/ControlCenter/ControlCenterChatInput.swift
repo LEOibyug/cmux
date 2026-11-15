@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ControlCenterChatInput: NSViewRepresentable {
     @Binding var text: String
@@ -7,7 +8,11 @@ struct ControlCenterChatInput: NSViewRepresentable {
     let focusRequest: Int
     let isVisible: Bool
     let canSend: Bool
+    let historyActive: Bool
     let onSend: () -> Void
+    let onRecall: (Int) -> Void
+    let onImageURLs: ([URL]) -> Void
+    let onImageData: (Data, String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -50,11 +55,15 @@ struct ControlCenterChatInput: NSViewRepresentable {
             window.makeFirstResponder(nil)
         }
         scrollView.editor.canSend = canSend
+        scrollView.editor.historyActive = historyActive
         scrollView.editor.onSend = { [weak coordinator, weak scrollView] in
             guard let coordinator, let scrollView else { return }
             coordinator.parent.text = scrollView.editor.string
             coordinator.parent.onSend()
         }
+        scrollView.editor.onRecall = { [weak coordinator] direction in coordinator?.parent.onRecall(direction) }
+        scrollView.editor.onImageURLs = { [weak coordinator] urls in coordinator?.parent.onImageURLs(urls) }
+        scrollView.editor.onImageData = { [weak coordinator] data, name in coordinator?.parent.onImageData(data, name) }
         scrollView.onHeightChange = { [weak coordinator] height in
             guard let coordinator, abs(coordinator.parent.measuredHeight - height) > 0.5 else { return }
             coordinator.parent.measuredHeight = height
@@ -104,6 +113,7 @@ final class ChatInputScrollView: NSScrollView {
         editor.textContainer?.widthTracksTextView = true
         editor.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         documentView = editor
+        editor.registerForDraggedTypes([.fileURL, .png, .tiff])
     }
 
     required init?(coder: NSCoder) { return nil }
@@ -131,7 +141,11 @@ final class ChatInputScrollView: NSScrollView {
 
 final class ChatInputTextView: NSTextView {
     var canSend = false
+    var historyActive = false
     var onSend: (() -> Void)?
+    var onRecall: ((Int) -> Void)?
+    var onImageURLs: (([URL]) -> Void)?
+    var onImageData: ((Data, String) -> Void)?
     var focusRequest = 0
     var needsInitialFocus = false
     var isInputActive = false
@@ -152,11 +166,26 @@ final class ChatInputTextView: NSTextView {
     }
 
     override func keyDown(with event: NSEvent) {
-        guard !hasMarkedText(), isReturn(event) else {
+        guard !hasMarkedText() else {
             super.keyDown(with: event)
             return
         }
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        if isInputActive, flags.isEmpty, selectedRange().length == 0 {
+            let position = selectedRange().location
+            if event.keyCode == 126, position == 0 || historyActive {
+                onRecall?(-1)
+                return
+            }
+            if event.keyCode == 125, position == string.utf16.count {
+                onRecall?(1)
+                return
+            }
+        }
+        guard isReturn(event) else {
+            super.keyDown(with: event)
+            return
+        }
         if flags.isEmpty && canSend {
             onSend?()
         } else if flags == .command {
@@ -174,6 +203,46 @@ final class ChatInputTextView: NSTextView {
             return true
         }
         return super.performKeyEquivalent(with: event)
+    }
+
+    override func paste(_ sender: Any?) {
+        if !receiveImages(from: .general) { super.paste(sender) }
+    }
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if isInputActive, hasImages(in: sender.draggingPasteboard) { return .copy }
+        return super.draggingEntered(sender)
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        if receiveImages(from: sender.draggingPasteboard) { return true }
+        return super.performDragOperation(sender)
+    }
+
+    private func imageURLs(in pasteboard: NSPasteboard) -> [URL] {
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        return urls.filter { url in
+            guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+            return type.conforms(to: .image)
+        }
+    }
+
+    private func hasImages(in pasteboard: NSPasteboard) -> Bool {
+        !imageURLs(in: pasteboard).isEmpty || pasteboard.availableType(from: [.png, .tiff]) != nil
+    }
+
+    private func receiveImages(from pasteboard: NSPasteboard) -> Bool {
+        guard isInputActive else { return false }
+        let urls = imageURLs(in: pasteboard)
+        if !urls.isEmpty {
+            onImageURLs?(urls)
+            return true
+        }
+        if let type = pasteboard.availableType(from: [.png, .tiff]), let data = pasteboard.data(forType: type) {
+            onImageData?(data, type == .png ? "pasted-image.png" : "pasted-image.tiff")
+            return true
+        }
+        return false
     }
 
     private func isReturn(_ event: NSEvent) -> Bool { event.keyCode == 36 || event.keyCode == 76 }

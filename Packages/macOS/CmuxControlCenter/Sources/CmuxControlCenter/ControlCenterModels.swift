@@ -188,13 +188,15 @@ public struct ControlCenterConnection: Codable, Equatable, Sendable {
     public var apiKey: String
     public var ompExecutable: String
     public var defaultDirectory: String
+    public var reasoningEffort: String?
 
-    public init(baseURL: String = "http://127.0.0.1:17865/v1", model: String = "", apiKey: String = "", ompExecutable: String = "", defaultDirectory: String = "~/Work/temp") {
+    public init(baseURL: String = "http://127.0.0.1:17865/v1", model: String = "", apiKey: String = "", ompExecutable: String = "", defaultDirectory: String = "~/Work/temp", reasoningEffort: String? = nil) {
         self.baseURL = baseURL
         self.model = model
         self.apiKey = apiKey
         self.ompExecutable = ompExecutable
         self.defaultDirectory = defaultDirectory
+        self.reasoningEffort = reasoningEffort
     }
 }
 
@@ -220,6 +222,13 @@ public struct ControlCenterToolCall: Codable, Equatable, Identifiable, Sendable 
         self.name = name
         self.arguments = arguments
     }
+}
+public enum ControlCenterModelEvent: Equatable, Sendable {
+    case requestSubmitted(ControlCenterJSON)
+    case responseStarted
+    case textDelta(String)
+    case reasoningDelta(String)
+    case toolCall(id: String, name: String, arguments: String)
 }
 
 public struct ControlCenterModelTurn: Codable, Equatable, Sendable {

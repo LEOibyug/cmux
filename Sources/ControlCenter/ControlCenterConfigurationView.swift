@@ -100,6 +100,39 @@ struct ControlCenterConnectionView: View {
     }
 }
 
+struct ControlCenterChatLogSettingsView: View {
+    @ObservedObject var coordinator: ControlCenterCoordinator
+    @State private var confirmsLogClear = false
+
+    var body: some View {
+        GroupBox(ControlCenterStrings.text("chatLogs")) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 20) {
+                    LabeledContent(ControlCenterStrings.text("chatLogStorage"), value: ByteCountFormatter.string(fromByteCount: coordinator.chatLogStatistics.storageBytes, countStyle: .file))
+                    LabeledContent(ControlCenterStrings.text("chatLogConversations"), value: String(coordinator.chatLogStatistics.conversationCount))
+                    LabeledContent(ControlCenterStrings.text("chatLogEvents"), value: String(coordinator.chatLogStatistics.eventCount))
+                    Spacer(minLength: 0)
+                    Button(ControlCenterStrings.text("refresh")) { Task { await coordinator.refreshChatLogStatistics() } }
+                    Button(ControlCenterStrings.text("chatLogClear"), role: .destructive) { confirmsLogClear = true }
+                        .accessibilityIdentifier("controlCenter.clearChatLogs")
+                }
+                Text(ControlCenterStrings.text("chatLogHelp")).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let error = coordinator.chatLogError { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+            }
+            .padding(8)
+        }
+        .disabled(coordinator.isRunning || coordinator.chatLogsLoading)
+        .task { await coordinator.refreshChatLogStatistics() }
+        .alert(ControlCenterStrings.text("chatLogClearTitle"), isPresented: $confirmsLogClear) {
+            Button(ControlCenterStrings.text("cancel"), role: .cancel) {}
+            Button(ControlCenterStrings.text("chatLogClear"), role: .destructive) { Task { await coordinator.clearSavedChatLogs() } }
+        } message: {
+            Text(ControlCenterStrings.text("chatLogClearDetail"))
+        }
+    }
+}
+
 struct ControlCenterSettingsView: View {
     @ObservedObject var coordinator: ControlCenterCoordinator
     @State private var query = ""
@@ -110,6 +143,7 @@ struct ControlCenterSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            ControlCenterChatLogSettingsView(coordinator: coordinator)
             HStack {
                 TextField(ControlCenterStrings.text("searchSettings"), text: $query)
                 Button(ControlCenterStrings.text("refresh")) { Task { await coordinator.loadSettings() } }
