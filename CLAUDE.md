@@ -32,7 +32,9 @@
   所有 tag 复用 `cache/xcode`；依赖在 `cache/swiftpm`，tag 日志/socket/隔离 HOME 在 `tmp/`。tag 用 1–40 个字母/数字/`_`/`-`。
 - GhosttyKit 预编译：`./scripts/download-prebuilt-ghosttykit.sh`，构建时配 `CMUX_GHOSTTYKIT_PREPROVISIONED=1`。
 - 构建前置：Metal 工具链、Zig 0.16、Rust（PATH 加 `/opt/homebrew/opt/rustup/bin`）；一键安装见 `scripts/setup.sh`。
-- 替换稳定安装必须先由用户退出运行中的 cmux；本地 ad-hoc 签名用 `scripts/sign-cmux-bundle.sh`。
+- 程序修改完成后自动执行 `scripts/update-local.sh` 并清理本轮开发残留，无需用户再次提出“替换”或“清理”；纯文档修改不触发构建。仅复用与当前源码一致的已验证 Release 产物，否则增量构建。
+- 更新沿用 `.cmux/signing/` 中的固定 PEM 本地证书与私钥，不使用钥匙链，不生成替代身份。正式 cmux 运行时先暂存更新，安装器在用户正常退出后自动原位原子替换，由用户自行重新打开；不强退、不自动重启。
+- 自动清理本轮测试应用及其注册、独立偏好域、隔离 HOME、临时验证文件和失效 socket；保留源码、用户修改、签名身份与必要增量缓存。`waiting_for_exit` 不是安装完成，待安装包、安装任务及其必需文件必须保留，汇报实际状态。
 
 ## 日常
 
