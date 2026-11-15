@@ -100,7 +100,7 @@ private final class OMPMetadataDatabase: @unchecked Sendable {
         }
         var connection: OpaquePointer?
         let result = sqlite3_open_v2(
-            url.path,
+            directory.resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).path,
             &connection,
             SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_NOFOLLOW,
             nil

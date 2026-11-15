@@ -106,6 +106,21 @@ struct OMPSessionMetadataIndexTests {
         #expect(try await !index.isInitialized(namespace: "root"))
     }
 
+    @Test("ancestor aliases reopen the same private metadata database")
+    func ancestorAlias() async throws {
+        let fixture = MetadataIndexFixture()
+        defer { fixture.remove() }
+        let root = fixture.directory.appendingPathComponent("source", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let alias = fixture.directory.appendingPathComponent("alias", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: root)
+        let record = metadata("/journals/a.jsonl", id: "native-a", title: "Conversation", time: 1)
+        let index = try OMPSessionMetadataIndex(databaseURL: alias.appendingPathComponent("private/metadata.sqlite3"))
+        try await index.apply(namespace: "root", upserts: [record], removing: [], completedScan: true)
+        let reopened = try OMPSessionMetadataIndex(databaseURL: root.appendingPathComponent("private/metadata.sqlite3"))
+        #expect(try await reopened.records(namespace: "root") == [record])
+    }
+
     @Test("a symlink cannot redirect the metadata database")
     func rejectsSymlink() throws {
         let fixture = MetadataIndexFixture()
