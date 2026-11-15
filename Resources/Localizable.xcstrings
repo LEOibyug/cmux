@@ -533410,19 +533410,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Explicit Preferences"
+            "value": "Preferences"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "显式偏好"
+            "value": "偏好"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "明確偏好"
+            "value": "偏好"
           }
         }
       }
@@ -533502,19 +533502,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Each request starts a separate operation. Only Follow Up reuses the previous operation’s context."
+            "value": "Start an operation, or follow up to continue the current context."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "每次请求均为独立操作，只有“继续追问”会复用上次操作的上下文。"
+            "value": "开始新操作，或继续当前上下文。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "每次請求皆為獨立操作，只有「繼續追問」會沿用上次操作的上下文。"
+            "value": "開始新操作，或延續目前的上下文。"
           }
         }
       }
@@ -533640,19 +533640,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No model selected. Favorites, collections, sessions and local settings remain available offline."
+            "value": "Browse sessions and favorites, or connect a model to chat."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "尚未选择模型。收藏、集合、会话和本地设置仍可离线使用。"
+            "value": "浏览会话与收藏，或连接模型开始对话。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "尚未選擇模型。收藏、集合、工作階段與本機設定仍可離線使用。"
+            "value": "瀏覽對話與收藏，或連線模型開始聊天。"
           }
         }
       }
@@ -533824,19 +533824,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choose the exact session below. Opening never silently selects the first match or continues a different session."
+            "value": "Choose a session to open or resume."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请在下方选择确切会话。打开时不会自动选择首个匹配或继续其他会话。"
+            "value": "选择要打开或恢复的会话。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "請在下方選擇確切工作階段。開啟時不會自動選擇首筆符合項目或繼續其他工作階段。"
+            "value": "選擇要開啟或接續的對話。"
           }
         }
       }
@@ -534031,19 +534031,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Exact Session ID"
+            "value": "Session ID"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "确切会话 ID"
+            "value": "会话 ID"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "確切工作階段 ID"
+            "value": "對話 ID"
           }
         }
       }
@@ -534376,19 +534376,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Launch an installed OMP in the chosen directory. Creating a directory requires the explicit switch below."
+            "value": "Start OMP in the selected directory."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在所选目录启动已安装的 OMP。创建目录须显式开启下方选项。"
+            "value": "在所选目录启动 OMP。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "在所選目錄啟動已安裝的 OMP。建立目錄須明確開啟下方選項。"
+            "value": "在所選目錄啟動 OMP。"
           }
         }
       }
@@ -534445,19 +534445,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Only preferences you explicitly save are remembered. Preferences never grant permissions."
+            "value": "Save preferences for future conversations."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "只记住您显式保存的偏好，偏好不会授予权限。"
+            "value": "保存常用偏好，供后续对话使用。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "僅記住您明確儲存的偏好，偏好不會授予權限。"
+            "value": "儲存常用偏好，供後續對話使用。"
           }
         }
       }
@@ -534606,19 +534606,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Model requests happen only when you run an operation or query models. Credentials stay in private local configuration, never operation history."
+            "value": "Connect a Responses API for chat. Connection settings are saved locally."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "仅运行操作或查询模型时发送模型请求。凭据只保存在私有本地配置中，不写入操作历史。"
+            "value": "配置对话使用的 Responses API，连接信息保存在本机。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "僅執行操作或查詢模型時傳送模型請求。憑證僅儲存於私有本機設定，不寫入操作記錄。"
+            "value": "設定聊天使用的 Responses API，連線資訊儲存在這部 Mac。"
           }
         }
       }
@@ -534790,19 +534790,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Leave the executable empty to use the installed OMP resolver. No development environment is required."
+            "value": "Leave empty to find the installed OMP automatically."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "可执行文件留空时使用已安装 OMP 解析器，无需开发环境。"
+            "value": "留空自动查找已安装的 OMP。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "執行檔留空時使用已安裝 OMP 解析器，無需開發環境。"
+            "value": "留空即可自動尋找已安裝的 OMP。"
           }
         }
       }
@@ -534991,6 +534991,75 @@
         }
       }
     },
+    "controlCenter.settingDefaultSource": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current or default value"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前值或默认值"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前值或預設值"
+          }
+        }
+      }
+    },
+    "controlCenter.settingSaved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved. Undo is available."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已保存，可撤销这次修改。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已儲存，可還原這次修改。"
+          }
+        }
+      }
+    },
+    "controlCenter.settingRestored": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restored the previous value."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已恢复之前的值。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已還原先前的值。"
+          }
+        }
+      }
+    },
     "controlCenter.importCodexpress": {
       "extractionState": "manual",
       "localizations": {
@@ -535020,19 +535089,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Read and save the running Codexpress chat ingress address and client API key. Your model, OMP executable, and default directory stay unchanged. No model request is sent."
+            "value": "Import the address and API key from the running Codexpress."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "读取并保存正在运行的 Codexpress 聊天入口地址和客户端 API Key。保留模型、OMP 可执行文件和默认目录，不发送模型请求。"
+            "value": "从运行中的 Codexpress 导入接口地址和 API Key。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "讀取並儲存正在執行的 Codexpress 聊天入口位址和用戶端 API Key。保留模型、OMP 執行檔和預設目錄，不傳送模型請求。"
+            "value": "從執行中的 Codexpress 匯入 API 網址與 API Key。"
           }
         }
       }
@@ -535043,19 +535112,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Imported and saved the Codexpress address and client API key. Model, OMP executable, and default directory were preserved."
+            "value": "Codexpress connection saved."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已导入并保存 Codexpress 地址和客户端 API Key，保留了模型、OMP 可执行文件和默认目录。"
+            "value": "已保存 Codexpress 连接。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "已匯入並儲存 Codexpress 位址和用戶端 API Key，保留了模型、OMP 執行檔和預設目錄。"
+            "value": "已儲存 Codexpress 連線。"
           }
         }
       }
@@ -535066,19 +535135,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Could not save the imported Codexpress connection privately. The previous connection was not changed."
+            "value": "Could not save the Codexpress connection."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法安全保存导入的 Codexpress 连接，原连接未更改。"
+            "value": "无法保存 Codexpress 连接。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "無法安全儲存匯入的 Codexpress 連線，原連線未變更。"
+            "value": "無法儲存 Codexpress 連線。"
           }
         }
       }
@@ -535089,19 +535158,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The Codexpress state directory cannot be used for its local control socket. The connection was not changed."
+            "value": "Check the Codexpress data directory, then import again."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 状态目录无法用于本地控制套接字，连接未更改。"
+            "value": "请检查 Codexpress 数据目录后重新导入。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 狀態目錄無法用於本機控制通訊端，連線未變更。"
+            "value": "請檢查 Codexpress 資料目錄後重新匯入。"
           }
         }
       }
@@ -535112,19 +535181,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cannot reach Codexpress. Open Codexpress and enable its chat ingress, then import again. The connection was not changed."
+            "value": "Start Codexpress and enable its chat API, then import again."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法连接 Codexpress。请打开 Codexpress 并启用聊天入口后重试导入。连接未更改。"
+            "value": "请启动 Codexpress 并开启对话 API，然后重新导入。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "無法連線 Codexpress。請開啟 Codexpress 並啟用聊天入口後重試匯入。連線未變更。"
+            "value": "請啟動 Codexpress 並開啟聊天 API，再重新匯入。"
           }
         }
       }
@@ -535135,19 +535204,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress did not finish responding in time. The connection was not changed."
+            "value": "Codexpress import timed out."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 响应超时，连接未更改。"
+            "value": "导入 Codexpress 连接超时。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 回應逾時，連線未變更。"
+            "value": "匯入 Codexpress 連線逾時。"
           }
         }
       }
@@ -535158,19 +535227,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress returned an invalid local control response. The connection was not changed."
+            "value": "Codexpress returned an invalid response."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 返回了无效的本地控制响应，连接未更改。"
+            "value": "Codexpress 返回的数据格式有误。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 傳回了無效的本機控制回應，連線未變更。"
+            "value": "Codexpress 傳回的資料格式有誤。"
           }
         }
       }
@@ -535181,19 +535250,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress rejected the read-only import request. The connection was not changed."
+            "value": "Codexpress rejected the import request."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 拒绝了只读导入请求，连接未更改。"
+            "value": "Codexpress 拒绝了导入请求。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 拒絕了唯讀匯入請求，連線未變更。"
+            "value": "Codexpress 拒絕了匯入要求。"
           }
         }
       }
@@ -535204,19 +535273,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enable and start the chat ingress in Codexpress before importing. The connection was not changed."
+            "value": "Start the chat API in Codexpress before importing."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请先在 Codexpress 中启用并启动聊天入口，再执行导入。连接未更改。"
+            "value": "请先在 Codexpress 中启动对话 API。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "請先在 Codexpress 中啟用並啟動聊天入口，再執行匯入。連線未變更。"
+            "value": "請先在 Codexpress 中啟動聊天 API。"
           }
         }
       }
@@ -535227,19 +535296,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress did not report a valid chat ingress port. The connection was not changed."
+            "value": "Codexpress returned an invalid chat API port."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 未返回有效的聊天入口端口，连接未更改。"
+            "value": "Codexpress 返回的对话接口端口无效。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 未傳回有效的聊天入口連接埠，連線未變更。"
+            "value": "Codexpress 傳回的聊天 API 連接埠無效。"
           }
         }
       }
@@ -535250,19 +535319,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress did not report a valid client API key. The connection was not changed."
+            "value": "Codexpress returned an invalid client API key."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 未返回有效的客户端 API Key，连接未更改。"
+            "value": "Codexpress 返回的客户端 API Key 无效。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "Codexpress 未傳回有效的用戶端 API Key，連線未變更。"
+            "value": "Codexpress 傳回的用戶端 API Key 無效。"
           }
         }
       }
@@ -535365,19 +535434,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uses this source’s exact current Vault record, never a supplied journal path or command."
+            "value": "Resume this source's session from its Vault record."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用此来源当前准确的 Vault 记录，不接受自定义会话文件路径或命令。"
+            "value": "从保险库记录恢复此来源的会话。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用此來源目前確切的 Vault 記錄，不接受自訂工作階段檔案路徑或命令。"
+            "value": "從保險庫記錄接續此來源的對話。"
           }
         }
       }
@@ -535457,19 +535526,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connection configuration, not a live availability check"
+            "value": "Connection settings"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "连接配置状态，并非实时可用性检测"
+            "value": "连接设置"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "連線設定狀態，並非即時可用性檢查"
+            "value": "連線設定"
           }
         }
       }
@@ -535503,19 +535572,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No model selected · Set up connection"
+            "value": "Connect a model"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "尚未选择模型 · 设置连接"
+            "value": "连接模型"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "尚未選取模型 · 設定連線"
+            "value": "連線模型"
           }
         }
       }
@@ -535572,19 +535641,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start a new conversation and context; saved logs remain until cleared in settings."
+            "value": "Start a new conversation"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "开始新对话和上下文；本地日志保留至在设置中清理。"
+            "value": "开始新对话"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "開始新對話和上下文；本機日誌保留至在設定中清理。"
+            "value": "開始新對話"
           }
         }
       }
@@ -535618,19 +535687,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Find a session, arrange workspaces, or change a cmux setting. Follow-up messages keep the context of this conversation."
+            "value": "Find sessions, arrange workspaces, or change settings."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "查找会话、整理工作区，或修改 cmux 设置。后续消息会沿用当前对话的上下文。"
+            "value": "查找会话、整理工作区或调整设置。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "尋找工作階段、整理工作區，或修改 cmux 設定。後續訊息會沿用目前對話的上下文。"
+            "value": "尋找對話、整理工作區或調整設定。"
           }
         }
       }
@@ -535641,19 +535710,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choose a model to chat. You can still browse sessions, favorites, collections, and local settings without one."
+            "value": "Browse sessions and favorites, or connect a model to chat."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "选择模型后即可对话。未配置模型时仍可浏览会话、收藏、启动集合和本地设置。"
+            "value": "浏览会话与收藏，或连接模型开始对话。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "選取模型後即可對話。未設定模型時仍可瀏覽工作階段、收藏、啟動集合與本機設定。"
+            "value": "瀏覽對話與收藏，或連線模型開始聊天。"
           }
         }
       }
@@ -535756,19 +535825,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Conversations and logs are saved locally. Sending shares the current context and images with the configured model."
+            "value": "Conversations are saved on this Mac."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "对话和日志保存在本机。发送消息时，当前上下文与图片会提交给配置的模型。"
+            "value": "对话自动保存在本机。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "對話和日誌儲存在本機。傳送訊息時，目前上下文與圖片會提交給設定的模型。"
+            "value": "對話自動儲存在這部 Mac。"
           }
         }
       }
@@ -535963,19 +536032,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Create a new terminal workspace at the exact directory below and submit this admitted command. Existing user SSH configuration is trusted; authentication and host verification stay in the terminal. Completion is not observed. Rejecting creates nothing. After launch, Stop does not terminate this workspace's command."
+            "value": "Open a terminal workspace at the directory below and start this command. Complete SSH authentication and host checks in the terminal. Manage the running command there."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在下方的确切目录中新建终端工作区并提交此已准入的命令。信任用户已有的 SSH 配置；认证和主机校验留在终端中完成。不代表命令已经执行成功。拒绝则不创建任何工作区。启动后，停止按钮不会终止此工作区中的命令。"
+            "value": "在下方目录新建终端工作区并运行命令。SSH 登录和主机验证在终端完成，后续在该终端管理命令。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "在下方的確切目錄中新建終端機工作區並提交此已准入的指令。信任使用者既有的 SSH 設定；認證和主機驗證留在終端機中完成。不代表指令已經執行成功。拒絕則不建立任何工作區。啟動後，停止按鈕不會終止此工作區中的指令。"
+            "value": "在下方目錄新增終端工作區並執行命令。SSH 登入與主機驗證在終端完成，後續在該終端管理命令。"
           }
         }
       }
@@ -536331,19 +536400,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Editing message · Sending replaces later turns, not earlier actions"
+            "value": "Editing message · Sending replaces later turns"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在编辑消息 · 发送时替换后续对话，但不撤销已执行的操作"
+            "value": "正在编辑消息 · 发送后替换后续对话"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在編輯訊息 · 傳送時取代後續對話，但不撤銷已執行的操作"
+            "value": "正在編輯訊息 · 傳送後取代後續對話"
           }
         }
       }
@@ -536561,19 +536630,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The previous request was interrupted when the application exited. No action was automatically retried."
+            "value": "The previous request was interrupted when the app exited."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "上次请求因应用退出而中断，未自动重试任何操作。"
+            "value": "上次请求在应用退出时中断。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "上次請求因應用程式退出而中斷，未自動重試任何操作。"
+            "value": "上次要求在 App 結束時中斷。"
           }
         }
       }
@@ -536590,13 +536659,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "完整对话日志"
+            "value": "对话日志"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "完整對話日誌"
+            "value": "對話日誌"
           }
         }
       }
@@ -536676,19 +536745,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Full messages, images, request bodies, model output and tool/approval/error timings are saved locally. API keys and authentication headers are excluded. Usage counts the conversation database and sidecars, not RAM; ordinary operation history is separate."
+            "value": "Full conversations and operation records are saved on this Mac. Usage shows disk storage."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "完整保存消息、图片、请求正文、模型返回，以及工具、审批、错误与时间点；不记录 API Key 或认证请求头。此处统计对话数据库及附属文件的存储空间，不是运行内存；操作历史单独保留。"
+            "value": "本机保存完整对话与操作记录，占用按磁盘空间统计。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "完整儲存訊息、圖片、請求本文、模型回傳，以及工具、核准、錯誤與時間點；不記錄 API Key 或認證請求標頭。此處統計對話資料庫及附屬檔案的儲存空間，不是執行記憶體；操作歷史另外保留。"
+            "value": "完整對話與操作記錄儲存在這部 Mac，使用量按磁碟空間統計。"
           }
         }
       }
@@ -536745,19 +536814,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Permanently delete full conversation logs and reset the current conversation context. Connection settings, favorites, collections, explicit memory and ordinary operation history are preserved. This cannot be undone."
+            "value": "Delete all conversation logs and clear the current chat. Connection settings, favorites, collections, preferences and operation history are kept. This cannot be undone."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "永久删除完整对话日志并清空当前聊天上下文。连接配置、收藏、分组、显式记忆和操作历史不受影响。此操作无法撤销。"
+            "value": "删除全部对话日志并清空当前聊天。保留连接、收藏、分组、偏好和操作历史。删除后无法恢复。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "永久刪除完整對話日誌並清空目前聊天上下文。連線設定、收藏、群組、明確記憶和操作歷史不受影響。此操作無法復原。"
+            "value": "刪除全部對話日誌並清空目前聊天。保留連線、收藏、群組、偏好與操作歷史。刪除後無法復原。"
           }
         }
       }
@@ -536814,19 +536883,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Run admitted command"
+            "value": "Run command"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "运行已准入的命令"
+            "value": "运行命令"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "執行已准入的指令"
+            "value": "執行命令"
           }
         }
       }
@@ -536837,19 +536906,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This admitted read-only command runs noninteractively with existing user/macOS app permissions, without elevation. Its output will be sent to the configured model and saved in durable receipts. Rejecting runs nothing."
+            "value": "Run the read-only command below. Its output is sent to the selected model and saved locally."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "此已准入的只读命令以非交互方式执行，沿用现有用户及 macOS 应用权限，不提升权限。输出会发送给配置的模型并保存在持久回执中。拒绝则不执行。"
+            "value": "运行下方只读命令，输出发送给所选模型并保存到本机。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "此已准入的唯讀指令以非互動方式執行，沿用現有使用者及 macOS 應用程式權限，不提升權限。輸出會傳送給設定的模型並儲存於持久回執。拒絕則不執行。"
+            "value": "執行下方唯讀命令，輸出傳送給所選模型並儲存在這部 Mac。"
           }
         }
       }
@@ -536860,19 +536929,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ask approves each local change and admitted command. Full Access skips approval, never command safety checks. Command output goes to the configured model and durable receipts."
+            "value": "Approve actions individually, or use Full Access to run supported actions directly. Command output is shared with the selected model."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "询问模式逐项批准本地更改和已准入的命令；完全访问跳过批准，但不绕过命令安全检查。命令输出会发送给配置的模型并保存在持久回执中。"
+            "value": "选择逐项批准，或使用“完全访问”直接执行支持的操作。命令输出会发送给所选模型。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "詢問模式逐項核准本機變更和已准入的指令；完整存取略過核准，但不略過指令安全檢查。指令輸出會傳送給設定的模型並儲存於持久回執。"
+            "value": "選擇逐項核准，或使用「完整存取」直接執行支援的操作。命令輸出會傳送給所選模型。"
           }
         }
       }
@@ -536883,19 +536952,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Allow supported local actions without asking?"
+            "value": "Enable Full Access?"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "允许受支持的本地操作不再逐项询问？"
+            "value": "启用完全访问？"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "允許支援的本機操作不再逐項詢問？"
+            "value": "啟用完整存取？"
           }
         }
       }
@@ -536906,19 +536975,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Full Access runs supported actions without individual approval, but never bypasses command safety checks. Only supported read-only system commands and SSH connections without remote commands are admitted; shells, scripts, destructive commands and unknown executables are refused. Existing user SSH configuration is trusted. No permissions are elevated. Command output is sent to the configured model and saved in durable receipts. Stop cannot undo side effects or close an already opened terminal. Switch back to Ask while idle."
+            "value": "Run supported workspace, favorite, preference, setting and command actions without individual approval. Commands use your existing permissions; their output is sent to the selected model and saved locally. Switch back to Ask Before Changes when idle."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "完全访问无需逐项批准即可执行受支持的操作，但不绕过命令安全检查。仅准入受支持的只读系统命令及不附带远程命令的 SSH 连接；拒绝 Shell、脚本、破坏性命令和未知程序。信任用户已有的 SSH 配置，不提升权限。命令输出会发送给配置的模型并保存在持久回执中。停止无法撤销副作用，也不会关闭已打开的终端。空闲时可切回询问模式。"
+            "value": "直接执行支持的工作区、收藏、偏好、设置和命令操作。命令沿用当前权限，输出发送给所选模型并保存到本机。空闲时可切回“操作前询问”。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "完整存取無需逐項核准即可執行支援的操作，但不略過指令安全檢查。僅准入支援的唯讀系統指令及不附帶遠端指令的 SSH 連線；拒絕 Shell、腳本、破壞性指令和未知程式。信任使用者既有的 SSH 設定，不提升權限。指令輸出會傳送給設定的模型並儲存於持久回執。停止無法撤銷副作用，也不會關閉已開啟的終端機。閒置時可切回詢問模式。"
+            "value": "直接執行支援的工作區、收藏、偏好、設定與命令操作。命令沿用目前權限，輸出傳送給所選模型並儲存在這部 Mac。閒置時可切回「操作前詢問」。"
           }
         }
       }
@@ -537596,19 +537665,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Save explicit preference"
+            "value": "Save preference"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存显式偏好"
+            "value": "保存偏好"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "儲存明確偏好"
+            "value": "儲存偏好"
           }
         }
       }
@@ -537619,19 +537688,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Forget explicit preference"
+            "value": "Forget preference"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "移除显式偏好"
+            "value": "忘记偏好"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "移除明確偏好"
+            "value": "忘記偏好"
           }
         }
       }

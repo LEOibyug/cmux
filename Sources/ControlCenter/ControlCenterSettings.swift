@@ -19,6 +19,7 @@ extension ControlCenterCoordinator {
         let schema = CmuxConfigSchemaPathLookup()
         let live = CmuxSettingLiveValues.userDefaults(suiteName: Bundle.main.bundleIdentifier)
         var rows: [ControlCenterSetting] = []
+        let defaultSource = ControlCenterStrings.text("settingDefaultSource")
         for key in runtime.catalog.all.sorted(by: { $0.id < $1.id }) where isSafeSetting(key.id) {
             if case .secretFile = key.kind { continue }
             let types = schema.declaredTypes(at: key.id.split(separator: ".").map(String.init))
@@ -26,13 +27,13 @@ extension ControlCenterCoordinator {
             let reading = try runtime.jsonStore.reading(at: key.id, liveValues: live)
             guard let effective = reading.effective else { continue }
             let value = try ControlCenterJSON.decode(Data(effective.jsonText.utf8))
-            let source = reading.configured == nil ? "Live value or schema default" : "Configured in cmux.json"
+            let source = reading.configured == nil ? defaultSource : "cmux.json"
             let anchor = runtime.searchIndex.anchorID(forSettingsPath: key.id)
             let title = anchor.flatMap { id in runtime.searchIndex.entries.first { $0.anchorID == id }?.title } ?? key.id
             rows.append(ControlCenterSetting(
                 id: key.id,
                 title: title,
-                detail: "\(source). Type: \(types.sorted().joined(separator: ", ")). Edits preserve unrelated file text; consumers apply through the existing configuration reload.",
+                detail: "\(source) · \(types.sorted().joined(separator: ", "))",
                 value: value
             ))
         }
@@ -58,7 +59,7 @@ extension ControlCenterCoordinator {
         settingUndo.append(contentsOf: result.receipts)
         runtime.hostActions.reloadSettingsFile()
         settings = try settingsRows()
-        try await record(ControlCenterStep(title: id, status: .success, detail: "Persisted one typed setting. Conditional undo is available; runtime application is not asserted."))
+        try await record(ControlCenterStep(title: id, status: .success, detail: ControlCenterStrings.text("settingSaved")))
     }
 
     func setSetting(_ id: String, value: ControlCenterJSON) async {
@@ -73,7 +74,7 @@ extension ControlCenterCoordinator {
         settingUndo.removeLast()
         runtime.hostActions.reloadSettingsFile()
         settings = try settingsRows()
-        try await record(ControlCenterStep(title: "Undo \(receipt.path)", status: .success, detail: "Restored the prior path value only after checking that this edit still owns it. Unrelated settings were left intact."))
+        try await record(ControlCenterStep(title: "Undo \(receipt.path)", status: .success, detail: ControlCenterStrings.text("settingRestored")))
     }
 
     func undoLastSetting() async {
