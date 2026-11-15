@@ -2654,6 +2654,7 @@
 		FE003104 /* SessionIndexStore+CodexSQL.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE003004 /* SessionIndexStore+CodexSQL.swift */; };
 		AFE11421E005492295BE3703 /* SessionIndexStore+GlobalSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CF53113EACF43C49EFFEF5C /* SessionIndexStore+GlobalSearch.swift */; };
 		CBD31606AA934B110EDBDE97 /* SessionIndexStore+Muse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603138BB51C4ADFD98885570 /* SessionIndexStore+Muse.swift */; };
+		549E43896993CE129E7F0521 /* SessionIndexStore+OMPMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05B1E81408BE1D2785522F28 /* SessionIndexStore+OMPMetadata.swift */; };
 		FE003101 /* SessionIndexStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE003001 /* SessionIndexStore.swift */; };
 		850000000000000000000008 /* SessionIndexSyntheticCorpus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 850000000000000000000007 /* SessionIndexSyntheticCorpus.swift */; };
 		85000000000000000000002D /* SessionIndexTableApplyInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85000000000000000000001D /* SessionIndexTableApplyInput.swift */; };
@@ -6625,6 +6626,7 @@
 		FE003004 /* SessionIndexStore+CodexSQL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionIndexStore+CodexSQL.swift"; sourceTree = "<group>"; };
 		5CF53113EACF43C49EFFEF5C /* SessionIndexStore+GlobalSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionIndexStore+GlobalSearch.swift"; sourceTree = "<group>"; };
 		603138BB51C4ADFD98885570 /* SessionIndexStore+Muse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionIndexStore+Muse.swift"; sourceTree = "<group>"; };
+		05B1E81408BE1D2785522F28 /* SessionIndexStore+OMPMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SessionIndexStore+OMPMetadata.swift"; sourceTree = "<group>"; };
 		FE003001 /* SessionIndexStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionIndexStore.swift; sourceTree = "<group>"; };
 		850000000000000000000007 /* SessionIndexSyntheticCorpus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionIndexSyntheticCorpus.swift; sourceTree = "<group>"; };
 		85000000000000000000001D /* SessionIndexTableApplyInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionIndexTableApplyInput.swift; sourceTree = "<group>"; };
@@ -10738,6 +10740,7 @@
 				5A4257A5D0A6AE53F8141F2C /* ControlCenterPresentation.swift */,
 				40CC9DCDA99E5C23ECE3A97A /* ControlCenterChatAttachments.swift */,
 				FD25241C952F64E6D2D97837 /* ControlCenterChatStorage.swift */,
+				05B1E81408BE1D2785522F28 /* SessionIndexStore+OMPMetadata.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -14179,6 +14182,7 @@
 				FE003104 /* SessionIndexStore+CodexSQL.swift in Sources */,
 				AFE11421E005492295BE3703 /* SessionIndexStore+GlobalSearch.swift in Sources */,
 				CBD31606AA934B110EDBDE97 /* SessionIndexStore+Muse.swift in Sources */,
+				549E43896993CE129E7F0521 /* SessionIndexStore+OMPMetadata.swift in Sources */,
 				FE003101 /* SessionIndexStore.swift in Sources */,
 				85000000000000000000002D /* SessionIndexTableApplyInput.swift in Sources */,
 				850000000000000000000020 /* SessionIndexTableCellRootView.swift in Sources */,

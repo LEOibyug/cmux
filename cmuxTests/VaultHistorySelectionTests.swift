@@ -360,6 +360,22 @@ struct VaultHistorySelectionTests {
         #expect(await fixture.requests().count == 1)
     }
 
+    @Test
+    func changingEnabledOMPRootReloadsAndFencesOldSnapshots() async throws {
+        defer { UserDefaults.standard.removePersistentDomain(forName: defaultsDomain) }
+        let fixture = VaultHistorySourceFixture(enabled: ["omp"])
+        let store = try makeStore(fixture)
+        await store.reload().value
+        let previousRevision = store.historyConfigurationRevision
+        await fixture.clearRequests()
+        await fixture.setOMPDirectory("/replacement/omp-sessions")
+        await store.refreshHistoryConfiguration()
+        await waitUntilLoaded(store)
+        #expect(store.historyConfigurationRevision > previousRevision)
+        #expect(await fixture.requests().count == 1)
+        #expect(store.entries.map(\.agent.rawValue) == ["omp"])
+    }
+
     private func makeStore(_ fixture: VaultHistorySourceFixture) throws -> SessionIndexStore {
         let defaults = try #require(UserDefaults(suiteName: defaultsDomain))
         return SessionIndexStore(
@@ -380,6 +396,7 @@ struct VaultHistorySelectionTests {
 
 private actor VaultHistorySourceFixture {
     private var enabled: Set<String>?
+    private var ompRegistration = CmuxVaultAgentRegistration.builtInOmp
     private var recordedRequests: [SessionIndexStore.SourceRequest] = []
     private var shouldHold = false
     private var heldRead: CheckedContinuation<Void, Never>?
@@ -389,10 +406,11 @@ private actor VaultHistorySourceFixture {
     init(enabled: Set<String>?) { self.enabled = enabled }
 
     func registry() -> CmuxVaultAgentRegistry {
-        CmuxVaultAgentRegistry(registrations: [.builtInOmp], enabledAgentIDs: enabled)
+        CmuxVaultAgentRegistry(registrations: [ompRegistration], enabledAgentIDs: enabled)
     }
 
     func setEnabled(_ ids: Set<String>?) { enabled = ids }
+    func setOMPDirectory(_ directory: String) { ompRegistration.sessionDirectory = directory }
     func clearRequests() { recordedRequests.removeAll() }
     func requests() -> [SessionIndexStore.SourceRequest] { recordedRequests }
     func setTitle(_ title: String) { self.title = title }

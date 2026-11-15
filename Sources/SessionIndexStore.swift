@@ -365,6 +365,17 @@ final class SessionIndexStore: ObservableObject {
                 }
             }
         }
+        if sourceReader == nil {
+            Task.detached(priority: .utility) {
+                let registry = await registryProvider(nil)
+                guard registry.historyConfigurationIsCurrent, registry.isHistoryEnabled(for: "omp"),
+                      let registration = registry.registration(id: "omp") else { return }
+                _ = await Self.loadOMPMetadataEntries(
+                    registration: registration, query: "", cwd: nil,
+                    offset: 0, limit: 1, errorBag: ErrorBag()
+                )
+            }
+        }
     }
 
     deinit {
@@ -742,6 +753,15 @@ final class SessionIndexStore: ObservableObject {
         let registry = await registryProvider(nil)
         guard request == configurationRequestRevision, !Task.isCancelled,
               registry.historyConfigurationIsCurrent else { return }
+        let ompRegistrationChanged = appliedHistoryRegistry.map {
+            $0.registration(id: "omp") != registry.registration(id: "omp")
+                || $0.isHistoryEnabled(for: "omp") != registry.isHistoryEnabled(for: "omp")
+        } ?? false
+        if sourceReader == nil, ompRegistrationChanged || !registry.isHistoryEnabled(for: "omp") {
+            await OMPMetadataCoordinator.shared.stopWatching()
+            guard request == configurationRequestRevision, !Task.isCancelled,
+                  registry.historyConfigurationIsCurrent else { return }
+        }
         // A rejected first load still needs replacement after its loading
         // flag clears; the revision distinguishes it from an unopened Vault.
         let needsInitialLoad = loadRevision > 0 && appliedHistoryRegistry == nil
@@ -777,14 +797,20 @@ final class SessionIndexStore: ObservableObject {
         if historyAgentOptions != options { historyAgentOptions = options }
         let generationChanged = appliedHistoryRegistry.map { !$0.historyConfigurationIsCurrent } ?? false
         let selectionChanged = enabledAgentIDs != registry.enabledAgentIDs
+        let ompRegistrationChanged = appliedHistoryRegistry.map {
+            $0.registration(id: "omp") != registry.registration(id: "omp")
+        } ?? false
         appliedHistoryRegistry = registry
-        guard selectionChanged || generationChanged else { return false }
+        guard selectionChanged || generationChanged || ompRegistrationChanged else { return false }
         enabledAgentIDs = registry.enabledAgentIDs
         historyConfigurationRevision &+= 1
         if cancelLoad { loadTask?.cancel() }
         directorySnapshotGeneration &+= 1
         invalidateDirectorySnapshots()
-        entries.removeAll { !registry.isHistoryEnabled(for: $0.agent.rawValue) }
+        entries.removeAll {
+            !registry.isHistoryEnabled(for: $0.agent.rawValue)
+                || (ompRegistrationChanged && $0.agent.rawValue == "omp")
+        }
         return true
     }
 
@@ -1812,6 +1838,13 @@ final class SessionIndexStore: ObservableObject {
             case .registered(let agent):
                 guard let registration = registry.registration(id: agent.id) else {
                     return []
+                }
+                if registration.id == "omp", needle.isEmpty {
+                    entries = await loadOMPMetadataEntries(
+                        registration: registration, query: "", cwd: cwdFilter,
+                        offset: offset, limit: limit, errorBag: errorBag
+                    )
+                    break
                 }
                 entries = await loadRegisteredAgentEntries(
                     registration: registration,

@@ -1,3 +1,4 @@
+import CmuxAgentSessionStore
 import CmuxWorkspaces
 import XCTest
 
@@ -1234,6 +1235,147 @@ final class PiVaultAgentPersistenceTests: XCTestCase {
                 workingDirectory: "/tmp/pi repo"
             )
         )
+    }
+
+    func testOMPMetadataReconciliationIndexesAllConversationsAndNamespaces() async throws {
+        let directory = try ompMetadataTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = directory.appendingPathComponent("sessions")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        var registration = CmuxVaultAgentRegistration.builtInOmp
+        registration.sessionDirectory = root.path
+        let source = try OMPMetadataCoordinator.Source(registration: registration)
+        let coordinator = OMPMetadataCoordinator(databaseURL: directory.appendingPathComponent("private/index.sqlite3"))
+        for index in 0...SessionIndexStore.searchMaxFiles {
+            try writeOMPMetadataJournal(root.appendingPathComponent("bucket/\(index).jsonl"), id: "native-\(index)", title: "Conversation \(index)")
+        }
+        try writeOMPMetadataJournal(root.appendingPathComponent("flat.jsonl"), id: "fork", title: "Café target")
+        try writeOMPMetadataJournal(root.appendingPathComponent("bucket/fork.jsonl"), id: "fork", title: "Duplicate native ID")
+        try writeOMPMetadataJournal(root.appendingPathComponent("bucket/absent-parent/artifact.jsonl"), id: "artifact", title: "Excluded")
+        try writeOMPMetadataJournal(root.appendingPathComponent(".hidden.jsonl"), id: "hidden", title: "Excluded")
+        try "{\"type\":\"message\",\"id\":\"not-a-header\",\"title\":\"No identity\"}\n".write(to: root.appendingPathComponent("no-header.jsonl"), atomically: true, encoding: .utf8)
+        async let first = coordinator.search(source: source, query: "", cwd: nil, offset: 0, limit: 10_000)
+        async let concurrent = coordinator.search(source: source, query: "cafe", cwd: "/logical/repo", offset: 0, limit: 1)
+        let (all, match) = try await (first, concurrent)
+        XCTAssertEqual(all.count, SessionIndexStore.searchMaxFiles + 3)
+        XCTAssertEqual(all.filter { $0.sessionID == "fork" }.count, 2)
+        XCTAssertEqual(match.map(\.title), ["Café target"])
+        XCTAssertEqual(match.first?.cwd, "/logical/repo")
+        try await coordinator.reconcile(source: source)
+        let unchanged = try await coordinator.search(source: source, query: "cafe", cwd: nil, offset: 0, limit: 1)
+        XCTAssertEqual(unchanged, match)
+
+        let otherRoot = directory.appendingPathComponent("other")
+        try writeOMPMetadataJournal(otherRoot.appendingPathComponent("other.jsonl"), id: "other", title: "Other namespace")
+        registration.sessionDirectory = otherRoot.path
+        let other = try OMPMetadataCoordinator.Source(registration: registration)
+        let otherRecords = try await coordinator.search(source: other, query: "", cwd: nil, offset: 0, limit: 10)
+        XCTAssertEqual(otherRecords.map(\.sessionID), ["other"])
+        registration.resumeCommand += " --changed-registration"
+        let changedRegistration = try OMPMetadataCoordinator.Source(registration: registration)
+        XCTAssertNotEqual(changedRegistration.namespace, other.namespace)
+        let alias = directory.appendingPathComponent("source-alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: otherRoot)
+        registration.sessionDirectory = alias.path
+        let beforeRetarget = try OMPMetadataCoordinator.Source(registration: registration)
+        _ = try await coordinator.search(source: beforeRetarget, query: "", cwd: nil, offset: 0, limit: 10)
+        let replacementRoot = directory.appendingPathComponent("replacement")
+        try writeOMPMetadataJournal(replacementRoot.appendingPathComponent("replacement.jsonl"), id: "replacement", title: "Replacement")
+        try FileManager.default.removeItem(at: alias)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: replacementRoot)
+        let afterRetarget = try OMPMetadataCoordinator.Source(registration: registration)
+        XCTAssertNotEqual(afterRetarget.namespace, beforeRetarget.namespace)
+        let retargeted = try await coordinator.search(source: afterRetarget, query: "", cwd: nil, offset: 0, limit: 10)
+        XCTAssertEqual(retargeted.map(\.sessionID), ["replacement"])
+    }
+
+    func testOMPMetadataReopenReturnsPersistedSnapshotWhileFailedScanPreservesIt() async throws {
+        let directory = try ompMetadataTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var registration = CmuxVaultAgentRegistration.builtInOmp
+        registration.sessionDirectory = directory.appendingPathComponent("unavailable-root").path
+        let source = try OMPMetadataCoordinator.Source(registration: registration)
+        let databaseURL = directory.appendingPathComponent("private/index.sqlite3")
+        let database = try OMPSessionMetadataIndex(databaseURL: databaseURL)
+        let saved = OMPSessionMetadataRecord(
+            journalPath: source.root.appendingPathComponent("saved.jsonl").path,
+            sessionID: "native-saved", title: "Persisted snapshot", cwd: "/logical/repo",
+            modifiedAt: Date(timeIntervalSince1970: 1), fingerprint: "persisted"
+        )
+        try await database.apply(namespace: source.namespace, upserts: [saved], removing: [], completedScan: true)
+        let reopened = OMPMetadataCoordinator(databaseURL: databaseURL)
+        // This root cannot enumerate: awaiting startup reconciliation would throw,
+        // whereas a warm query must return the committed database snapshot.
+        let warm = try await reopened.search(source: source, query: "persisted", cwd: nil, offset: 0, limit: 10)
+        XCTAssertEqual(warm, [saved])
+        do {
+            try await reopened.reconcile(source: source)
+            XCTFail("Unavailable root must not be committed as an empty scan")
+        } catch {}
+        let preserved = try await database.records(namespace: source.namespace)
+        XCTAssertEqual(preserved, [saved])
+    }
+
+    func testOMPMetadataWatcherUpdatesDeletesAndRenamesEligibleJournals() async throws {
+        let directory = try ompMetadataTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = directory.appendingPathComponent("sessions")
+        let journal = root.appendingPathComponent("bucket/session.jsonl")
+        try writeOMPMetadataJournal(journal, id: "native", title: "Original")
+        var registration = CmuxVaultAgentRegistration.builtInOmp
+        let alias = directory.appendingPathComponent("source-alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: root)
+        registration.sessionDirectory = alias.path
+        let source = try OMPMetadataCoordinator.Source(registration: registration)
+        let coordinator = OMPMetadataCoordinator(databaseURL: directory.appendingPathComponent("private/index.sqlite3"))
+        _ = try await coordinator.search(source: source, query: "", cwd: nil, offset: 0, limit: 10)
+
+        func awaitRecords(_ predicate: ([OMPSessionMetadataRecord]) -> Bool) async throws -> [OMPSessionMetadataRecord] {
+            let deadline = Date().addingTimeInterval(8)
+            repeat {
+                let records = try await coordinator.search(source: source, query: "", cwd: nil, offset: 0, limit: 10)
+                if predicate(records) { return records }
+                try await Task.sleep(for: .milliseconds(30))
+            } while Date() < deadline
+            throw NSError(domain: "OMPMetadataWatcherTimeout", code: 1)
+        }
+
+        try writeOMPMetadataJournal(journal, id: "native", title: "Replaced")
+        let updated = try await awaitRecords { $0.first?.title == "Replaced" }
+        XCTAssertEqual(updated.first?.sessionID, "native")
+        // Growth refreshes the signature while retaining the leading title slot.
+        let handle = try FileHandle(forWritingTo: journal)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("{\"type\":\"message\",\"message\":{\"role\":\"assistant\",\"content\":\"body only\"}}\n".utf8))
+        try handle.close()
+        let grown = try await awaitRecords { $0.first?.fingerprint != updated.first?.fingerprint }
+        XCTAssertEqual(grown.first?.title, "Replaced")
+        let renamed = root.appendingPathComponent("bucket/renamed.jsonl")
+        try FileManager.default.moveItem(at: journal, to: renamed)
+        let indexedRename = alias.appendingPathComponent("bucket/renamed.jsonl").path
+        _ = try await awaitRecords { $0.count == 1 && $0.first?.journalPath == indexedRename }
+        try FileManager.default.removeItem(at: renamed)
+        _ = try await awaitRecords { $0.isEmpty }
+    }
+
+    private func ompMetadataTestDirectory() throws -> URL {
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("tmp/tests/omp-metadata-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private func writeOMPMetadataJournal(_ url: URL, id: String, title: String) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let records: [[String: Any]] = [
+            ["type": "title", "title": title],
+            ["type": "session", "id": id, "cwd": "/logical/repo", "parentSession": "/old/parent.jsonl"]
+        ]
+        let data = try records.reduce(into: Data()) { result, object in
+            result.append(try JSONSerialization.data(withJSONObject: object))
+            result.append(0x0a)
+        }
+        try data.write(to: url, options: .atomic)
     }
 
     private func makeSnapshot() -> AppSessionSnapshot {

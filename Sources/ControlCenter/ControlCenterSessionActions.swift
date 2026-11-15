@@ -27,7 +27,7 @@ extension ControlCenterCoordinator {
     func searchSessions(_ query: String) async {
         let source = sessionSourceID
         let generation = sessionSearchGeneration + 1
-        do { try await findSessions(query, agentID: source) }
+        do { try await findSessions(query, agentID: source, searchContent: source != "omp") }
         catch is CancellationError {}
         catch {
             if sessionSourceID == source, sessionSearchGeneration == generation { self.error = error.localizedDescription }
@@ -41,17 +41,24 @@ extension ControlCenterCoordinator {
         sessionResultsSourceID = agentID
         let agent = try await sessionSource(agentID)
         guard generation == sessionSearchGeneration else { throw CancellationError() }
-        let result = await vaultIndex().searchSessions(query: searchContent ? query : "", scope: .agent(agent), offset: 0, limit: 500)
+        let indexedOMP = agentID == "omp" && !searchContent
+        let result: SessionIndexStore.SearchOutcome
+        if indexedOMP {
+            result = await vaultIndex().searchOMPMetadata(query: query, offset: 0, limit: 500)
+        } else {
+            result = await vaultIndex().searchSessions(query: searchContent ? query : "", scope: .agent(agent), offset: 0, limit: 500)
+        }
         try Task.checkCancellation()
         guard generation == sessionSearchGeneration else { throw CancellationError() }
         error = nil
         let entries = result.entries.filter { entry in
             guard entry.agent.rawValue == agentID else { return false }
-            if searchContent || query.isEmpty { return true }
+            if indexedOMP || searchContent || query.isEmpty { return true }
             return [entry.title, entry.cwd ?? "", entry.sessionId].contains {
                 $0.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
             }
         }
+        let sessionCounts = Dictionary(grouping: entries, by: \.sessionId).mapValues(\.count)
         sessions = entries.map { entry in
             var target = ControlCenterTarget(
                 name: entry.title,
@@ -61,7 +68,7 @@ extension ControlCenterCoordinator {
                 sessionFile: entry.fileURL?.path,
                 agentID: entry.agent.rawValue
             )
-            if let identity = target.sessionIdentity {
+            if sessionCounts[entry.sessionId] == 1, let identity = target.sessionIdentity {
                 target.id = sessionTargetIDs[identity] ?? target.id
                 sessionTargetIDs[identity] = target.id
             }

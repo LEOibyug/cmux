@@ -836,10 +836,23 @@ extension SessionIndexStore {
         return metadata
     }
 
+    /// Uses the same byte-bounded title-slot/first-user preview as ordinary discovery.
+    nonisolated static func ompIndexedMetadata(url: URL, registration: CmuxVaultAgentRegistration) throws -> (id: String, title: String, cwd: String?, branch: String?)? {
+        guard FileManager.default.isReadableFile(atPath: url.path) else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        let metadata = extractRegisteredJSONLMetadata(
+            url: url, registration: registration, fallbackCWD: nil, inferCWD: false
+        )
+        guard let id = metadata.sessionId, !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return (id, String(metadata.title.prefix(512)), metadata.cwd, metadata.branch)
+    }
+
     nonisolated private static func extractRegisteredJSONLMetadata(
         url: URL,
         registration: CmuxVaultAgentRegistration,
-        fallbackCWD: String?
+        fallbackCWD: String?,
+        inferCWD: Bool = true
     ) -> RegisteredAgentJSONLMetadata {
         var metadata = RegisteredAgentJSONLMetadata()
         let isOMP = registration.id == CmuxVaultAgentRegistration.builtInOmp.id
@@ -890,7 +903,7 @@ extension SessionIndexStore {
                 && (isOMP || metadata.branch != nil)
                 && (isOMP ? metadata.sessionId != nil : (!needsNativeSessionID || metadata.sessionId != nil))
         }
-        if case .piSessionFile = registration.sessionIdSource, metadata.cwd == nil {
+        if inferCWD, case .piSessionFile = registration.sessionIdSource, metadata.cwd == nil {
             metadata.cwd = fallbackCWD ?? piCWDInferred(from: url)
         }
         return metadata

@@ -266,15 +266,20 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
         body { margin:0; background:transparent; color:var(--fg); font:13px -apple-system,BlinkMacSystemFont,sans-serif; }
         main { max-width:900px; margin:0 auto; padding:28px 24px 36px; }
         article { margin:0 0 30px; }
-        .turn-user { margin-left:clamp(20px,8vw,88px); padding:14px 17px; background:var(--user); border-radius:12px; margin-bottom:22px; }
+        .user-message { position:relative; display:flex; flex-direction:column; align-items:flex-end; margin:0 0 16px clamp(20px,8vw,88px); padding-bottom:32px; }
+        .turn-user { width:fit-content; max-width:100%; min-width:0; padding:8px 12px; background:var(--user); border-radius:12px; }
         .turn-assistant { padding:0 1px; }
         .speaker { margin:0 0 8px; color:var(--muted); font-size:11px; font-weight:600; letter-spacing:.02em; }
-        .turn-actions { display:flex; justify-content:flex-end; gap:4px; margin-top:6px; }
+        .turn-actions { position:absolute; right:0; bottom:0; display:flex; gap:4px; opacity:0; pointer-events:none; transition:opacity .12s ease; }
+        .user-message:hover .turn-actions,.user-message:focus-within .turn-actions { opacity:1; pointer-events:auto; }
+        @media (prefers-reduced-motion:reduce) { .turn-actions { transition:none; } }
         .turn-actions button { display:grid; place-items:center; width:28px; height:28px; color:var(--muted); border:0; border-radius:6px; background:none; padding:6px; cursor:pointer; }
         .turn-actions button:hover:not(:disabled) { color:var(--fg); background:var(--line); }
         .turn-actions svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
         .turn-actions button:disabled { opacity:.4; cursor:default; }
         .attachments { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+        .attachments:empty { display:none; }
+        .turn-user .markdown-body:empty + .attachments { margin-top:0; }
         .attachments img { width:92px; height:76px; object-fit:cover; border-radius:7px; border:1px solid var(--line); }
         .entry { margin:0 0 16px; }
         .tool-card,.reasoning-card { border:1px solid var(--line); border-radius:8px; background:var(--code); padding:10px 12px; }
@@ -370,8 +375,9 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
             function makeTurn(id) {
                 const article = element('article');
                 article.dataset.turn = id;
+                const userMessage = element('div', 'user-message');
                 const user = element('section', 'turn-user');
-                const userLabel = element('h2', 'speaker', strings.you);
+                user.setAttribute('aria-label', strings.you);
                 const prompt = element('div', 'markdown-body');
                 const attachments = element('div', 'attachments');
                 const actions = element('div', 'turn-actions');
@@ -384,7 +390,8 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
                     if (!retry.disabled) window.webkit.messageHandlers.controlCenterChat.postMessage({action:'retry', turnID:id});
                 });
                 actions.append(edit, retry);
-                user.append(userLabel, prompt, attachments, actions);
+                user.append(prompt, attachments);
+                userMessage.append(user, actions);
                 const assistant = element('section', 'turn-assistant');
                 const assistantLabel = element('h2', 'speaker', strings.assistant);
                 const response = element('div', 'markdown-body');
@@ -398,9 +405,9 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
                 const receiptContent = element('div', 'receipt-content');
                 receipt.append(receiptSummary, receiptContent);
                 assistant.append(assistantLabel, timeline, response, working, error, receipt);
-                article.append(user, assistant);
+                article.append(userMessage, assistant);
                 root.append(article);
-                return {article, prompt, attachments, edit, retry, timeline, entries:new Map(), response, working, error, receipt, receiptSummary, receiptContent, userLabel, assistantLabel};
+                return {article, user, prompt, attachments, edit, retry, timeline, entries:new Map(), response, working, error, receipt, receiptSummary, receiptContent, assistantLabel};
             }
             function makeEntry(value) {
                 if (value.kind === 'text') {
@@ -517,7 +524,7 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
                         markdown(turn.error, value.error);
                         turn.error.hidden = !value.error;
                         turn.working.hidden = !value.working;
-                        turn.userLabel.textContent = strings.you;
+                        turn.user.setAttribute('aria-label', strings.you);
                         turn.assistantLabel.textContent = strings.assistant;
                         turn.working.textContent = strings.working;
                         updateReceipt(turn, value.entries.length === 0 ? value.operation : null);

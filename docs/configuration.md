@@ -112,8 +112,10 @@ Remote or model-supplied Markdown images are not loaded automatically.
 Messages include the exact earlier model outputs and actual tool results,
 including opaque encrypted reasoning when supplied by the API. **New Chat**,
 `/new` and `/clear` reset the visible conversation and model context, not durable
-logs or saved favorites/memories. **Edit** and **Retry from here** icons on a
-user message replace that turn and later context; they make a fresh request, do not replay
+logs or saved favorites/memories. User bubbles size to their content; **Edit** and
+**Retry from here** icons sit outside the bubble and appear on hover or keyboard
+focus, with reserved toolbar space to keep the layout stable. These actions
+replace that turn and later context; they make a fresh request, do not replay
 cached tool calls, and cannot undo previous actions. Enter sends, Shift-Enter
 inserts a line, and Command-Enter also sends. IME composition is respected.
 Up/Down at the input boundary recall prior prompts and restore an unsent draft.
@@ -127,10 +129,26 @@ shows conversation/event counts, database-plus-sidecar bytes (disk, not RAM), an
 a confirmed cleanup button. Cleanup preserves connection configuration, favorites,
 collections, explicit memories and separate ordinary operation history.
 
-Normal navigation searches the most recent 500 conversation titles/paths/IDs;
-the tool result declares that scope. Set `search_content: true` for transcript
-contents or older conversations. Native Vault/Sessions searches remain full-text.
-Searching is shown as a live tool phase rather than an apparently frozen reply.
+OMP navigation uses a persistent metadata table at
+`~/Library/Application Support/com.cmuxterm.app/Vault/OMPMetadata/metadata.sqlite3`.
+Startup initializes or refreshes it off the main thread; filesystem events update
+changed journals and reconcile directory changes. Warm searches query the saved
+snapshot immediately, including after relaunch, while reconciliation runs in the
+background. A failed scan preserves the last committed snapshot.
+
+The table contains bounded display titles, native session IDs, logical working
+directories, branches, journal paths, modification dates and file fingerprints.
+Namespaces follow the effective Vault registration and source root; disabled
+history sources stop their watchers. Journal metadata uses the existing bounded
+header/title-slot reader, and task/artifact directories remain excluded.
+
+Control Center's OMP Sessions page and normal model navigation search this entire
+metadata table before the 500-result output limit. Other sources retain their
+recent-500 metadata window. Set `search_content: true` for transcript contents;
+Vault transcript search also retains its existing behavior. The tool result
+declares its search scope. Cached metadata is discovery data: opening a session
+still checks the current exact journal, transfer state, lease and live ownership.
+Searching remains visible as a live tool phase.
 Context/request size and tool-round budgets remain bounded; oversized context is
 reported rather than silently truncated.
 The chat stays mounted across workspace and Browse page switches, preserving
