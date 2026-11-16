@@ -17,16 +17,31 @@ struct CodexpressSourceRow: View {
     let onRequestReset: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     private let strings = CodexpressPanelStrings()
 
     var body: some View {
+        if isOfficial && quotaWindows.contains(where: { $0.windowSeconds == 604_800 && ($0.resetAt ?? 0).isFinite && ($0.resetAt ?? 0) > 0 }) {
+            TimelineView(.everyMinute) { clock in
+                retryTimeline(at: clock.date)
+            }
+        } else {
+            retryTimeline(at: .distantPast)
+        }
+    }
+
+    private func retryTimeline(at clockDate: Date) -> some View {
         TimelineView(.explicit(source.refreshRetryAt.map { [Date(timeIntervalSince1970: $0)] } ?? [])) { context in
-            row(at: context.date)
+            row(at: max(clockDate, context.date))
         }
     }
 
     private func row(at date: Date) -> some View {
         let windows = quotaWindows
+        let hasShorterWindow = windows.contains { window in
+            guard let seconds = window.windowSeconds else { return false }
+            return seconds.isFinite && seconds > 0 && seconds < 604_800
+        }
         let refreshCoolingDown = (source.refreshRetryAt ?? 0) > date.timeIntervalSince1970
         let refreshHelp = refreshHelp(at: date)
         return VStack(alignment: .leading, spacing: 4) {
@@ -97,7 +112,7 @@ struct CodexpressSourceRow: View {
                         Text(strings.unknown).foregroundStyle(.secondary)
                     } else {
                         ForEach(windows, id: \.name) { window in
-                            quotaCell(window)
+                            quotaCell(window, at: date, hasShorterWindow: hasShorterWindow)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
@@ -215,8 +230,9 @@ struct CodexpressSourceRow: View {
         return windows
     }
 
-    private func quotaCell(_ window: CodexpressSnapshot.QuotaWindow) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+    private func quotaCell(_ window: CodexpressSnapshot.QuotaWindow, at date: Date, hasShorterWindow: Bool) -> some View {
+        let reference = window.referenceProgress(at: date)
+        return VStack(alignment: .leading, spacing: 1) {
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(quotaLabel(window)).cmuxFont(size: CGFloat(settings.fontSize - 1.5)).foregroundStyle(.secondary)
                 if let used = window.usedPercent, used.isFinite {
@@ -229,6 +245,14 @@ struct CodexpressSourceRow: View {
                 } else {
                     Text(strings.unknown).foregroundStyle(.secondary)
                 }
+                if let reference, !hasShorterWindow {
+                    referenceLabel(reference, window: window, at: date)
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            if let reference, hasShorterWindow {
+                referenceLabel(reference, window: window, at: date)
             }
             if settings.showResetTimes, let timestamp = window.resetAt, timestamp.isFinite {
                 Text(Date(timeIntervalSince1970: timestamp), format: .dateTime.month(.twoDigits).day().hour().minute())
@@ -240,6 +264,20 @@ struct CodexpressSourceRow: View {
                     .help(strings.resetTime)
             }
         }
+    }
+
+    private func referenceLabel(_ reference: Double, window: CodexpressSnapshot.QuotaWindow, at date: Date) -> some View {
+        let color: Color = switch window.referenceLevel(at: date) {
+        case .normal: .secondary
+        case .warning: colorScheme == .dark ? .yellow : Color(red: 168.0 / 255, green: 107.0 / 255, blue: 0)
+        case .critical: .red
+        }
+        return Text("ref \(reference.formatted(.number.precision(.fractionLength(1))))%")
+            .cmuxFont(size: CGFloat(settings.fontSize - 2))
+            .foregroundStyle(color)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
     }
 
     private func quotaLabel(_ window: CodexpressSnapshot.QuotaWindow) -> String {

@@ -113,12 +113,45 @@ struct CodexpressSnapshot: Decodable, Sendable, Equatable {
         let usedPercent: Double?
         let resetAt: Double?
         let windowSeconds: Double?
+        let refCost: Double?
+
+        init(from decoder: any Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            name = try values.decode(String.self, forKey: .name)
+            usedPercent = try values.decodeIfPresent(Double.self, forKey: .usedPercent)
+            resetAt = try values.decodeIfPresent(Double.self, forKey: .resetAt)
+            windowSeconds = try values.decodeIfPresent(Double.self, forKey: .windowSeconds)
+            // A malformed optional reference must not hide the real quota.
+            refCost = try? values.decodeIfPresent(Double.self, forKey: .refCost)
+        }
+
+        enum ReferenceLevel {
+            case normal, warning, critical
+        }
+
+        func referenceProgress(at date: Date) -> Double? {
+            guard windowSeconds == 604_800 else { return nil }
+            if let resetAt, resetAt.isFinite, resetAt > 0, resetAt <= 253402300799 {
+                return min(100, max(0, (resetAt - date.timeIntervalSince1970) / 604_800 * 100))
+            }
+            guard let refCost, refCost.isFinite, (0...100).contains(refCost) else { return nil }
+            return refCost
+        }
+
+        func referenceLevel(at date: Date) -> ReferenceLevel {
+            guard let reference = referenceProgress(at: date), let usedPercent, usedPercent.isFinite else { return .normal }
+            let difference = reference - min(100, max(0, 100 - usedPercent))
+            if difference >= 10 { return .critical }
+            if difference >= 5 { return .warning }
+            return .normal
+        }
 
         private enum CodingKeys: String, CodingKey {
             case name
             case usedPercent = "used_percent"
             case resetAt = "reset_at"
             case windowSeconds = "window_seconds"
+            case refCost = "ref_cost"
         }
     }
 

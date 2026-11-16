@@ -65,6 +65,7 @@
 侧栏底部的可折叠面板通过本机管理 API 读取 [Codexpress](https://github.com/LEOibyug/Codexpress) 网关状态，可同时展示多个来源：
 
 - 官方账号并排显示实际存在的 `5h`、`week` 额度及重置时间。
+- 七天窗口旁以小字显示 `ref 42.3%`，表示本周期剩余时间百分比，不是费用或新增额度。存在真实短周期时放在周额度下方；否则与周额度同行。按 `(重置时间 − 当前时间) / 七天 × 100%` 本地每分钟倒计，周期开始为 100%，到期保持 0% 等新快照；缺少有效重置时间时仅接受有效的 `ref_cost`，不推测新周期。`ref` 比实际剩余额度高至少 5/10 个百分点时分别显示黄色/红色，真实额度原配色及路由、抢占、计费不变。
 - 第三方来源显示余额，币种与金额分开排版。
 - 来源名称旁显示 API 提供的活跃请求数 `active_requests`。
 - 提供抢占、取消抢占、刷新与重置卡操作；重置由 Codexpress 原生弹窗确认，操作超时或结果未知时不自动重发。
@@ -90,6 +91,8 @@
 开发命令通过 `./scripts/dev.sh <命令> [参数...]` 执行，或先载入 `scripts/project-env.sh`。构建与依赖缓存放在项目内的 `cache/`，日志、截图、socket 和隔离 HOME 放在 `tmp/`，均不提交。正式应用启动时使用正常用户环境，不继承开发用的 HOME 或 socket 覆盖。
 
 验证按功能边界进行：行为修改执行定向构建与隔离 smoke，缺陷修复优先扩展已有行为回归；纯文案、注释不重复构建或回归。不默认运行全量测试，也不增加只检查源码文本、转发或实现细节的测试。
+
+Codexpress 参考进度的独立消费回归不需要 app host 或网关：`./scripts/dev.sh swiftc Sources/Codexpress/CodexpressSnapshot.swift tests/test_codexpress_snapshot_reference.swift -o tmp/codexpress-snapshot-reference-tests && ./tmp/codexpress-snapshot-reference-tests`。原生布局仍需隔离应用 smoke：用独立本机 fixture 管理端点分别提供单周、短周期加周、缺重置/参考值、过期重置及 5/10 点差场景，检查窄侧栏、浅/深色、分钟走时与刷新冷却；不连接真实账号，不点击刷新、抢占或重置卡。仅编译应用可用 `./scripts/reload.sh --tag ref-cost-check --build-only`，不替换或重启当前应用。
 
 ## 本地安装与更新
 
