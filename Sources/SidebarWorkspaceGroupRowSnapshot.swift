@@ -22,6 +22,7 @@ struct SidebarWorkspaceGroupRowSnapshot {
     /// selection is off.
     var anchorActiveEdgeColor: NSColor? = nil
     let memberCount: Int
+    var hasVisibleMembers: Bool = false
     let anchorUnreadCount: Int
     let canMarkRead: Bool
     let canMarkUnread: Bool

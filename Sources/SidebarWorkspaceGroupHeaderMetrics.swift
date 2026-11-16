@@ -39,13 +39,13 @@ struct SidebarWorkspaceGroupHeaderMetrics: Equatable {
     /// Chevron tap-target frame edge at the default sidebar font size.
     static let baseChevronFrame: CGFloat = 14
     /// Folder/group icon point size at the default sidebar font size.
-    static let baseIconFontSize: CGFloat = 11
+    static let baseIconFontSize: CGFloat = 11.5
     /// Folder/group icon frame edge at the default sidebar font size.
     static let baseIconFrame: CGFloat = 14
     /// Pinned group glyph point size at the default sidebar font size.
     static let basePinnedIconFontSize: CGFloat = 9
     /// Group name point size at the default sidebar font size.
-    static let baseNameFontSize: CGFloat = 11
+    static let baseNameFontSize: CGFloat = 12
     /// Unread badge point size at the default sidebar font size.
     static let baseUnreadFontSize: CGFloat = 10
     /// Unread badge horizontal padding at the default sidebar font size.

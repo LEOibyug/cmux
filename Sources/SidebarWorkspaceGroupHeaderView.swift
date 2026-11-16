@@ -22,6 +22,7 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
             lhs.multiSelectionBackgroundStyle == rhs.multiSelectionBackgroundStyle &&
             lhs.anchorActiveEdgeColor == rhs.anchorActiveEdgeColor &&
             lhs.memberCount == rhs.memberCount &&
+            lhs.hasVisibleMembers == rhs.hasVisibleMembers &&
             lhs.anchorUnreadCount == rhs.anchorUnreadCount &&
             lhs.canMarkRead == rhs.canMarkRead &&
             lhs.canMarkUnread == rhs.canMarkUnread &&
@@ -60,6 +61,7 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
     /// selection is off.
     var anchorActiveEdgeColor: NSColor? = nil
     let memberCount: Int
+    var hasVisibleMembers: Bool = false
     let anchorUnreadCount: Int
     let canMarkRead: Bool
     let canMarkUnread: Bool
@@ -107,11 +109,15 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
         SidebarWorkspaceGroupHeaderMetrics(fontScale: fontScale)
     }
 
+    private var hasCustomTint: Bool {
+        tintHex.flatMap { NSColor(hex: $0) } != nil
+    }
+
     private var iconColor: Color {
         if let tintHex, let nsColor = NSColor(hex: tintHex) {
             return Color(nsColor: nsColor)
         }
-        return .secondary
+        return Color(nsColor: accentColor.nsColor(for: colorScheme))
     }
 
     private var displayedIconSymbol: String {
@@ -166,8 +172,8 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
             CmuxSystemSymbolImage(
                 systemName: isCollapsed ? "chevron.right" : "chevron.down",
                 pointSize: metrics.chevronFontSize,
-                weight: .semibold,
-                tint: .secondary,
+                weight: .bold,
+                tint: iconColor.opacity(0.9),
                 appliesGlobalFontMagnification: true)
                 .frame(width: metrics.chevronFrame, height: metrics.chevronFrame)
                 .contentShape(Rectangle())
@@ -189,10 +195,15 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
                     tint: iconColor,
                     appliesGlobalFontMagnification: true)
                     .frame(width: metrics.iconFrame, height: metrics.iconFrame)
+                    .padding(2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(iconColor.opacity(colorScheme == .dark ? 0.18 : 0.12))
+                    )
                     .accessibilityHidden(true)
                 Text(name)
-                    .cmuxFont(size: metrics.nameFontSize, weight: .semibold)
-                    .foregroundStyle(isAnchorActive ? Color.primary : Color.primary.opacity(0.9))
+                    .cmuxFont(size: metrics.nameFontSize, weight: .bold)
+                    .foregroundStyle(isAnchorActive ? Color.primary : Color.primary.opacity(0.92))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 // Compact status mode: unread folds into the glyph (blue).
@@ -216,6 +227,16 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
                             String(localized: "workspaceGroup.unread.a11y", defaultValue: "%lld unread"),
                             anchorUnreadCount
                         )))
+                } else if !compactsAgentStatus, memberCount > 0 {
+                    Text("\(memberCount)")
+                        .cmuxFont(size: max(9, metrics.unreadFontSize - 0.5), weight: .semibold)
+                        .foregroundStyle(Color.primary.opacity(0.75))
+                        .padding(.horizontal, metrics.unreadHorizontalPadding)
+                        .padding(.vertical, metrics.unreadVerticalPadding)
+                        .background(
+                            Capsule().fill(iconColor.opacity(colorScheme == .dark ? 0.20 : 0.14))
+                        )
+                        .accessibilityHidden(true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -289,7 +310,7 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
                 )
             }
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, 6)
         .padding(.trailing, SidebarWorkspaceListMetrics.rowContentHorizontalPadding)
         .contentShape(Rectangle())
         .background(
@@ -315,7 +336,29 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
             offsetX: shortcutHintXOffset,
             offsetY: shortcutHintYOffset
         )
-        .padding(.horizontal, SidebarWorkspaceListMetrics.rowOuterHorizontalPadding)
+        .padding(.horizontal, 3)
+        .padding(.vertical, 1)
+        .background {
+            UnevenRoundedRectangle(
+                cornerRadii: RectangleCornerRadii(
+                    topLeading: 8,
+                    bottomLeading: hasVisibleMembers ? 0 : 8,
+                    bottomTrailing: hasVisibleMembers ? 0 : 8,
+                    topTrailing: 8
+                ),
+                style: .continuous
+            )
+            .fill(iconColor.opacity(hasCustomTint ? (colorScheme == .dark ? 0.16 : 0.10) : (colorScheme == .dark ? 0.10 : 0.06)))
+        }
+        .overlay(alignment: .bottom) {
+            if hasVisibleMembers {
+                Rectangle()
+                    .fill(iconColor.opacity(hasCustomTint ? (colorScheme == .dark ? 0.28 : 0.22) : (colorScheme == .dark ? 0.12 : 0.09)))
+                    .frame(height: 1)
+                    .padding(.horizontal, 1)
+            }
+        }
+        .padding(.horizontal, 3)
         .shortcutHintVisibilityAnimation(value: showsShortcutHint)
         .opacity(isBeingDragged ? 0.6 : 1)
         .overlay(alignment: .top) {

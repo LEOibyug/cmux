@@ -1,14 +1,19 @@
 import AppKit
+import CmuxAppKitSupportUI
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct ControlCenterChatInput: NSViewRepresentable {
     @Binding var text: String
     @Binding var measuredHeight: CGFloat
+    @Binding var isFocused: Bool
     let focusRequest: Int
     let isVisible: Bool
     let canSend: Bool
     let historyActive: Bool
+    let colorScheme: ColorScheme
+    let textColor: NSColor
+    let insertionPointColor: NSColor
     let onSend: () -> Void
     let onRecall: (Int) -> Void
     let onImageURLs: ([URL]) -> Void
@@ -47,6 +52,20 @@ struct ControlCenterChatInput: NSViewRepresentable {
     }
 
     private func configure(_ scrollView: ChatInputScrollView, coordinator: Coordinator) {
+        let appearance = WindowAppearanceSnapshot.appKitAppearance(for: colorScheme)
+        if scrollView.appearance?.name != appearance.name {
+            scrollView.appearance = appearance
+        }
+        if scrollView.editor.appearance?.name != appearance.name {
+            scrollView.editor.appearance = appearance
+        }
+        if scrollView.editor.textColor != textColor {
+            scrollView.editor.textColor = textColor
+        }
+        if scrollView.editor.insertionPointColor != insertionPointColor {
+            scrollView.editor.insertionPointColor = insertionPointColor
+        }
+        scrollView.editor.typingAttributes[.foregroundColor] = textColor
         scrollView.isHidden = !isVisible
         scrollView.editor.isInputActive = isVisible
         scrollView.editor.isEditable = isVisible
@@ -64,6 +83,12 @@ struct ControlCenterChatInput: NSViewRepresentable {
         scrollView.editor.onRecall = { [weak coordinator] direction in coordinator?.parent.onRecall(direction) }
         scrollView.editor.onImageURLs = { [weak coordinator] urls in coordinator?.parent.onImageURLs(urls) }
         scrollView.editor.onImageData = { [weak coordinator] data, name in coordinator?.parent.onImageData(data, name) }
+        scrollView.editor.onFocusChange = { [weak coordinator] focused in
+            guard let coordinator, coordinator.parent.isFocused != focused else { return }
+            DispatchQueue.main.async {
+                coordinator.parent.isFocused = focused
+            }
+        }
         scrollView.onHeightChange = { [weak coordinator] height in
             guard let coordinator, abs(coordinator.parent.measuredHeight - height) > 0.5 else { return }
             coordinator.parent.measuredHeight = height
@@ -146,12 +171,26 @@ final class ChatInputTextView: NSTextView {
     var onRecall: ((Int) -> Void)?
     var onImageURLs: (([URL]) -> Void)?
     var onImageData: ((Data, String) -> Void)?
+    var onFocusChange: ((Bool) -> Void)?
     var focusRequest = 0
     var needsInitialFocus = false
     var isInputActive = false
 
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { onFocusChange?(true) }
+        return accepted
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { onFocusChange?(false) }
+        return resigned
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if window == nil { onFocusChange?(false) }
         if needsInitialFocus, window != nil {
             needsInitialFocus = false
             requestFocus()

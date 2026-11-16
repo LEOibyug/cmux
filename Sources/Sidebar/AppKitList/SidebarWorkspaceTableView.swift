@@ -43,6 +43,10 @@ struct SidebarWorkspaceTableView: NSViewRepresentable {
         container.appearance = WindowAppearanceSnapshot.appKitAppearance(for: colorScheme)
         container.emptyDropIndicatorView.colorScheme = colorScheme
         container.emptyDropIndicatorView.accentColor = context.environment.cmuxAccentColor
+        context.coordinator.updateContainerAppearance(
+            colorScheme: colorScheme,
+            accentColor: context.environment.cmuxAccentColor
+        )
         return container
     }
 
@@ -50,6 +54,10 @@ struct SidebarWorkspaceTableView: NSViewRepresentable {
         nsView.appearance = WindowAppearanceSnapshot.appKitAppearance(for: colorScheme)
         nsView.emptyDropIndicatorView.colorScheme = colorScheme
         nsView.emptyDropIndicatorView.accentColor = context.environment.cmuxAccentColor
+        context.coordinator.updateContainerAppearance(
+            colorScheme: colorScheme,
+            accentColor: context.environment.cmuxAccentColor
+        )
 #if DEBUG
         context.coordinator.reconfigurationProbe = sidebarLazyContractProbe.tableRootViewReconfigure
 #endif

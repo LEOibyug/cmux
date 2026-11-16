@@ -37,6 +37,10 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
     private var workspaceIds: [UUID] = []
     private var selectedScrollTargetWorkspaceId: UUID?
     private var isPresentationActive = true
+    private var hasExplicitContainerAppearance = false
+    private var groupContainerIsDark = true
+    private var groupContainerAccentColor = CmuxAccentColor()
+    private var groupContainerIncreaseContrast = false
     private var structuralUpdateDepth = 0
     private var deferredPumpHeightRowIds: Set<SidebarWorkspaceRenderItemID> = []
     private var deferredStructuralHeightRows = IndexSet()
@@ -949,6 +953,7 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
             scrollSelectedRowToVisibleIfNeeded()
         }
         synchronizeAppKitDropIndicator(actions: actions)
+        synchronizeGroupContainers()
         recomputeHoveredRow()
         enforceHoverOnVisibleCells()
         updateDropTargets()
@@ -2359,6 +2364,7 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
             table.reloadData()
             restoreViewportOrigin(viewportOrigin, in: table)
         }
+        synchronizeGroupContainers()
     }
 
     /// Coalesces a hidden-prune reload while retaining the mounted viewport.
@@ -2402,6 +2408,7 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
                 if !lateIndexes.isEmpty {
                     noteHeightOfRowsWithoutAnimation(table, lateIndexes)
                 }
+                synchronizeGroupContainers()
             }
         }
         update()
@@ -2585,6 +2592,7 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
         let indexes = IndexSet(rows.indices.filter { rowIds.contains(rows[$0].id) })
         guard !indexes.isEmpty else { return }
         noteHeightOfRowsWithoutAnimation(table, indexes)
+        synchronizeGroupContainers()
     }
 
     private func pumpHeightOverride(
@@ -3077,6 +3085,72 @@ final class SidebarWorkspaceTableController: NSObject, NSTableViewDataSource, NS
             y: y,
             width: max(0, container.bounds.width - 16 - leadingIndent),
             height: 2
+        )
+    }
+
+    func updateContainerAppearance(colorScheme: ColorScheme, accentColor: CmuxAccentColor) {
+        let isDark = colorScheme == .dark
+        let increaseContrast = rows.first?.presentationEnvironment.displayAccessibility.increaseContrast
+            ?? DisplayAccessibilityOptions.current.increaseContrast
+        let changed = !hasExplicitContainerAppearance
+            || groupContainerIsDark != isDark
+            || groupContainerAccentColor != accentColor
+            || groupContainerIncreaseContrast != increaseContrast
+        hasExplicitContainerAppearance = true
+        guard changed else { return }
+        groupContainerIsDark = isDark
+        groupContainerAccentColor = accentColor
+        groupContainerIncreaseContrast = increaseContrast
+        synchronizeGroupContainers()
+    }
+
+    private func computeGroupContainerRegions() -> [SidebarGroupContainerRegion] {
+        var regions: [SidebarGroupContainerRegion] = []
+        var index = 0
+        while index < rows.count {
+            let row = rows[index]
+            guard row.isGroupHeader, let groupId = row.groupId else {
+                index += 1
+                continue
+            }
+            var endIndex = index
+            var next = index + 1
+            while next < rows.count,
+                  rows[next].groupId == groupId,
+                  !rows[next].isGroupHeader {
+                endIndex = next
+                next += 1
+            }
+            regions.append(
+                SidebarGroupContainerRegion(
+                    groupId: groupId,
+                    startRow: index,
+                    endRow: endIndex,
+                    tintHex: row.appKitGroupHeaderModel?.tintHex
+                )
+            )
+            index = next
+        }
+        return regions
+    }
+
+    private func synchronizeGroupContainers() {
+        guard let table = containerView?.tableView else { return }
+        if !hasExplicitContainerAppearance {
+            if let env = rows.first?.presentationEnvironment {
+                groupContainerIsDark = env.colorScheme == .dark
+            }
+            if let modelAccent = rows.compactMap({ $0.appKitGroupHeaderModel?.accentColor }).first {
+                groupContainerAccentColor = modelAccent
+            }
+        }
+        groupContainerIncreaseContrast = rows.first?.presentationEnvironment.displayAccessibility.increaseContrast
+            ?? DisplayAccessibilityOptions.current.increaseContrast
+        table.updateGroupContainers(
+            regions: computeGroupContainerRegions(),
+            colorSchemeIsDark: groupContainerIsDark,
+            accentColor: groupContainerAccentColor,
+            increaseContrast: groupContainerIncreaseContrast
         )
     }
 }

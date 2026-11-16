@@ -14,10 +14,15 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
 
     /// Selection fill and edge layer. Internal so tests read its paint directly.
     let backgroundView = NSView()
+    private let headerFillLayer = CAShapeLayer()
+    private let headerDividerLayer = CALayer()
+    private let iconBadgeLayer = CALayer()
     private let pinImageView = NSImageView()
     private let chevronButton = SidebarHeaderGlyphButton()
     private let iconImageView = NSImageView()
     private let nameField = NSTextField(labelWithString: "")
+    private let memberCountField = NSTextField(labelWithString: "")
+    private let memberCountBadge = NSView()
     // Direct-draw badge (shared with workspace rows): NSTextField's
     // intrinsic insets shift single digits off the circle's optical center.
     private let unreadBadgeView = SidebarRowUnreadBadgeView()
@@ -59,6 +64,15 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         // Drop indicators paint into the inter-row gap above/below the cell.
         layer?.masksToBounds = false
 
+        headerFillLayer.zPosition = -3
+        headerDividerLayer.zPosition = -2
+        iconBadgeLayer.zPosition = -1
+        iconBadgeLayer.cornerRadius = 5
+        iconBadgeLayer.cornerCurve = .continuous
+        layer?.insertSublayer(headerFillLayer, at: 0)
+        layer?.insertSublayer(headerDividerLayer, above: headerFillLayer)
+        layer?.insertSublayer(iconBadgeLayer, above: headerDividerLayer)
+
         backgroundView.wantsLayer = true
         backgroundView.layer?.cornerRadius = 4
         backgroundView.layer?.cornerCurve = .continuous
@@ -77,6 +91,13 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         nameField.maximumNumberOfLines = 1
         nameField.cell?.truncatesLastVisibleLine = true
         addSubview(nameField)
+
+        memberCountBadge.wantsLayer = true
+        memberCountBadge.layer?.cornerCurve = .continuous
+        memberCountField.alignment = .center
+        memberCountField.lineBreakMode = .byClipping
+        memberCountBadge.addSubview(memberCountField)
+        addSubview(memberCountBadge)
 
         addSubview(unreadBadgeView)
         addSubview(statusGlyphView)
@@ -165,6 +186,24 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         let percent = model.globalFontMagnificationPercent
         let colorScheme: ColorScheme = model.colorSchemeIsDark ? .dark : .light
         let colorResolver = SidebarAppearanceColorResolver()
+        let hasCustomTint = model.tintHex != nil
+        let categoryTint = model.tintHex.flatMap { NSColor(hex: $0) }
+            ?? model.accentColor.nsColor(for: colorScheme)
+        let labelColor = colorResolver.resolvedColor(.labelColor, for: colorScheme)
+        let headerTitleColor = hasCustomTint
+            ? (categoryTint.blended(withFraction: 0.76, of: labelColor) ?? labelColor)
+            : labelColor
+
+        headerFillLayer.fillColor = categoryTint
+            .withAlphaComponent(hasCustomTint ? (model.colorSchemeIsDark ? 0.16 : 0.10) : (model.colorSchemeIsDark ? 0.10 : 0.06))
+            .cgColor
+        headerDividerLayer.isHidden = !model.hasVisibleMembers
+        headerDividerLayer.backgroundColor = (hasCustomTint ? categoryTint : labelColor)
+            .withAlphaComponent(hasCustomTint ? (model.colorSchemeIsDark ? 0.28 : 0.22) : (model.colorSchemeIsDark ? 0.10 : 0.08))
+            .cgColor
+        iconBadgeLayer.backgroundColor = categoryTint
+            .withAlphaComponent(model.colorSchemeIsDark ? 0.18 : 0.12)
+            .cgColor
 
         pinImageView.isHidden = !model.isPinned
         if model.isPinned {
@@ -180,9 +219,9 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         chevronButton.glyphImage = RenderableSystemSymbol.configuredAppKitImage(
             systemName: model.isCollapsed ? "chevron.right" : "chevron.down",
             pointSize: GlobalFontMagnification.scaledSize(metrics.chevronFontSize, percent: percent),
-            weight: .semibold
+            weight: .bold
         )
-        chevronButton.contentTintColor = colorResolver.resolvedColor(.secondaryLabelColor, for: colorScheme)
+        chevronButton.contentTintColor = categoryTint.withAlphaComponent(0.9)
         chevronButton.setAccessibilityLabel(
             model.isCollapsed
                 ? String(localized: "workspaceGroup.expand.a11y", defaultValue: "Expand group")
@@ -195,17 +234,16 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
             pointSize: GlobalFontMagnification.scaledSize(metrics.iconFontSize, percent: percent),
             weight: .semibold
         )
-        iconImageView.contentTintColor = model.tintHex.flatMap { NSColor(hex: $0) }
-            ?? colorResolver.resolvedColor(.secondaryLabelColor, for: colorScheme)
+        iconImageView.contentTintColor = categoryTint
 
         nameField.stringValue = model.name
         nameField.font = .systemFont(
             ofSize: GlobalFontMagnification.scaledSize(metrics.nameFontSize, percent: percent),
-            weight: .semibold
+            weight: .bold
         )
         nameField.textColor = model.isAnchorActive
-            ? colorResolver.resolvedColor(.labelColor, for: colorScheme)
-            : colorResolver.resolvedColor(.labelColor, for: colorScheme, opacity: 0.9)
+            ? labelColor
+            : headerTitleColor
 
         // In compact status mode unread folds into the glyph (blue), so the
         // count badge stays off even when no member state rolls up.
@@ -241,6 +279,18 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
                 String(localized: "workspaceGroup.unread.a11y", defaultValue: "%lld unread"),
                 model.anchorUnreadCount
             ))
+        }
+        let showsMemberCount = !showsBadge && model.statusGlyph == nil && !model.compactsAgentStatus && model.memberCount > 0
+        memberCountBadge.isHidden = !showsMemberCount
+        if showsMemberCount {
+            memberCountField.stringValue = "\(model.memberCount)"
+            memberCountField.font = .monospacedDigitSystemFont(
+                ofSize: GlobalFontMagnification.scaledSize(metrics.unreadFontSize - 0.5, percent: percent),
+                weight: .semibold
+            )
+            memberCountField.textColor = headerTitleColor.withAlphaComponent(0.85)
+            memberCountBadge.layer?.backgroundColor = categoryTint
+                .withAlphaComponent(model.colorSchemeIsDark ? 0.20 : 0.14).cgColor
         }
 
         plusButton.glyphImage = RenderableSystemSymbol.configuredAppKitImage(
@@ -423,11 +473,48 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         let percent = model.globalFontMagnificationPercent
         let nameFont = NSFont.systemFont(
             ofSize: GlobalFontMagnification.scaledSize(metrics.nameFontSize, percent: percent),
-            weight: .semibold
+            weight: .bold
         )
         let nameLineHeight = ceil(nameFont.ascender - nameFont.descender + nameFont.leading)
-        let content = max(metrics.chevronFrame, metrics.iconFrame, metrics.plusFrame, nameLineHeight)
-        return ceil(content + 10)
+        let iconBadgeHeight = metrics.iconFrame + 4
+        let content = max(metrics.chevronFrame, iconBadgeHeight, metrics.plusFrame, nameLineHeight)
+        return ceil(content + 12)
+    }
+
+    private static func headerBandPath(
+        rect: CGRect,
+        radius: CGFloat,
+        roundBottom: Bool,
+        isFlipped: Bool
+    ) -> CGPath {
+        let path = CGMutablePath()
+        let clampedRadius = min(radius, min(rect.width, rect.height) / 2)
+        if clampedRadius <= 0 || rect.isEmpty {
+            path.addRect(rect)
+            return path
+        }
+        if roundBottom {
+            path.addRoundedRect(in: rect, cornerWidth: clampedRadius, cornerHeight: clampedRadius)
+            return path
+        }
+        let topY = isFlipped ? rect.minY : rect.maxY
+        let bottomY = isFlipped ? rect.maxY : rect.minY
+        let midY = rect.midY
+        path.move(to: CGPoint(x: rect.minX, y: midY))
+        path.addArc(
+            tangent1End: CGPoint(x: rect.minX, y: topY),
+            tangent2End: CGPoint(x: rect.maxX, y: topY),
+            radius: clampedRadius
+        )
+        path.addArc(
+            tangent1End: CGPoint(x: rect.maxX, y: topY),
+            tangent2End: CGPoint(x: rect.maxX, y: bottomY),
+            radius: clampedRadius
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: bottomY))
+        path.addLine(to: CGPoint(x: rect.minX, y: bottomY))
+        path.closeSubpath()
+        return path
     }
 
     override func layout() {
@@ -440,11 +527,39 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         defer { CATransaction.commit() }
         let metrics = SidebarWorkspaceGroupHeaderMetrics(fontScale: model.fontScale)
         let outerPad = SidebarWorkspaceListMetrics.rowOuterHorizontalPadding
-        let bgFrame = NSRect(x: outerPad, y: 0, width: bounds.width - outerPad * 2, height: bounds.height)
+        let bandPad: CGFloat = 4
+        let bandBottomInset: CGFloat = model.hasVisibleMembers ? 1 : 2
+        let bandFrame = NSRect(
+            x: bandPad,
+            y: 1,
+            width: max(0, bounds.width - bandPad * 2),
+            height: max(0, bounds.height - bandBottomInset)
+        )
+        headerFillLayer.frame = bounds
+        headerFillLayer.path = Self.headerBandPath(
+            rect: bandFrame,
+            radius: 7,
+            roundBottom: !model.hasVisibleMembers,
+            isFlipped: layer?.isGeometryFlipped ?? isFlipped
+        )
+        if !headerDividerLayer.isHidden {
+            headerDividerLayer.frame = NSRect(
+                x: bandFrame.minX,
+                y: max(0, bounds.height - 1),
+                width: max(0, bandFrame.width),
+                height: 1
+            )
+        }
+        let bgFrame = NSRect(
+            x: outerPad,
+            y: 2,
+            width: max(0, bounds.width - outerPad * 2),
+            height: max(0, bounds.height - 4)
+        )
         backgroundView.frame = bgFrame
         let contentMaxX = bgFrame.maxX - SidebarWorkspaceListMetrics.rowContentHorizontalPadding
         let midY = bounds.height / 2
-        var x = bgFrame.minX
+        var x = bgFrame.minX + 6
 
         func centered(_ size: CGFloat) -> NSRect {
             NSRect(x: x, y: midY - size / 2, width: size, height: size)
@@ -460,13 +575,31 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         let plusSide = metrics.plusFrame
         plusButton.frame = NSRect(x: contentMaxX - plusSide, y: midY - plusSide / 2, width: plusSide, height: plusSide)
 
-        iconImageView.frame = centered(metrics.iconFrame)
-        x = iconImageView.frame.maxX + 6
+        let iconBadgeSide = metrics.iconFrame + 4
+        iconBadgeLayer.frame = NSRect(
+            x: x,
+            y: midY - iconBadgeSide / 2,
+            width: iconBadgeSide,
+            height: iconBadgeSide
+        )
+        iconImageView.frame = NSRect(
+            x: x + (iconBadgeSide - metrics.iconFrame) / 2,
+            y: midY - metrics.iconFrame / 2,
+            width: metrics.iconFrame,
+            height: metrics.iconFrame
+        )
+        x = iconBadgeLayer.frame.maxX + 6
 
         var badgeSize = NSSize.zero
         if !unreadBadgeView.isHidden {
             let textSize = NSString(string: "\(model.anchorUnreadCount)")
                 .size(withAttributes: [.font: unreadBadgeFont])
+            badgeSize = NSSize(
+                width: ceil(textSize.width) + metrics.unreadHorizontalPadding * 2,
+                height: ceil(textSize.height) + metrics.unreadVerticalPadding * 2
+            )
+        } else if !memberCountBadge.isHidden {
+            let textSize = memberCountField.attributedStringValue.size()
             badgeSize = NSSize(
                 width: ceil(textSize.width) + metrics.unreadHorizontalPadding * 2,
                 height: ceil(textSize.height) + metrics.unreadVerticalPadding * 2
@@ -498,6 +631,22 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
                 height: badgeSize.height
             )
             unreadBadgeView.needsDisplay = true
+        } else if !memberCountBadge.isHidden {
+            let badgeX = x + min(ceil(nameSize.width), nameAvailable) + 6
+            memberCountBadge.frame = NSRect(
+                x: badgeX,
+                y: midY - badgeSize.height / 2,
+                width: badgeSize.width,
+                height: badgeSize.height
+            )
+            memberCountBadge.layer?.cornerRadius = badgeSize.height / 2
+            let textSize = memberCountField.attributedStringValue.size()
+            memberCountField.frame = NSRect(
+                x: 0,
+                y: floor((badgeSize.height - ceil(textSize.height)) / 2),
+                width: badgeSize.width,
+                height: ceil(textSize.height)
+            )
         }
         if !statusGlyphView.isHidden {
             statusGlyphView.frame = NSRect(

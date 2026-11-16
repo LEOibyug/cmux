@@ -10,6 +10,8 @@ struct ControlCenterChatView: View {
     @State private var composerHeight: CGFloat = 48
     @State private var focusRequest = 0
     @State private var confirmsFullAccess = false
+    @State private var isInputFocused = false
+    @Environment(\.controlCenterTheme) private var theme
 
     private var isActive: Bool { coordinator.isRunning || coordinator.activeChatTurnID != nil }
     private var canSend: Bool {
@@ -19,8 +21,6 @@ struct ControlCenterChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
             ZStack {
                 ControlCenterChatMarkdown(
                     turns: coordinator.chatTurns,
@@ -33,6 +33,11 @@ struct ControlCenterChatView: View {
                     standaloneError: coordinator.chatTurns.isEmpty ? coordinator.error : nil,
                     isAwaitingApproval: coordinator.pendingApproval != nil,
                     isVisible: isVisible,
+                    themeBackgroundHex: theme.backgroundHex,
+                    themeForegroundHex: theme.foregroundHex,
+                    themeBorderHex: theme.borderHex,
+                    accentHex: theme.accentHex,
+                    themeColorScheme: theme.colorScheme,
                     onRetry: { coordinator.regenerateChatTurn($0) },
                     onEdit: { coordinator.editChatTurn($0); focusRequest += 1 }
                 )
@@ -44,7 +49,9 @@ struct ControlCenterChatView: View {
             .frame(minHeight: 0, maxHeight: .infinity)
             .layoutPriority(-1)
             .clipped()
-            Divider()
+            Rectangle()
+                .fill(theme.borderColor)
+                .frame(height: 1)
             VStack(alignment: .leading, spacing: 10) {
                 if let approval = coordinator.pendingApproval {
                     approvalView(approval)
@@ -55,11 +62,11 @@ struct ControlCenterChatView: View {
             }
             .frame(maxWidth: 900)
             .padding(.horizontal, 24)
-            .padding(.top, 14)
-            .padding(.bottom, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 14)
             .frame(maxWidth: .infinity)
-            .background(Color(nsColor: .windowBackgroundColor))
         }
+        .background(theme.surfaceBackgroundColor)
         .onChange(of: isVisible) { _, visible in
             if visible { focusRequest += 1 }
         }
@@ -68,116 +75,136 @@ struct ControlCenterChatView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(ControlCenterStrings.text("chatTitle")).font(.headline)
-                Button {
-                    onOpenSection(.connection)
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: coordinator.connection.model.isEmpty ? "network.slash" : "network")
-                        Text(connectionStatus).lineLimit(1).truncationMode(.middle)
-                        Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold))
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .disabled(isActive)
-                .help(ControlCenterStrings.text("chatConnectionHelp"))
-                .accessibilityIdentifier("controlCenter.chatConnection")
-            }
-            Spacer(minLength: 8)
-            Menu {
-                ForEach(ControlCenterSection.allCases.filter { $0 != .chat }) { section in
-                    Button { onOpenSection(section) } label: {
-                        Label(section.title, systemImage: section.symbol)
-                    }
-                }
-            } label: {
-                Label(ControlCenterStrings.text("chatBrowse"), systemImage: "sidebar.left")
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .disabled(isActive)
-            .accessibilityIdentifier("controlCenter.chatBrowse")
-            Button {
-                coordinator.clearChat()
-                focusRequest += 1
-            } label: {
-                Label(ControlCenterStrings.text("chatNew"), systemImage: "square.and.pencil")
-            }
-            .disabled(isActive)
-            .help(ControlCenterStrings.text("chatNewHelp"))
-            .accessibilityIdentifier("controlCenter.chatNew")
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 13)
-    }
-
-    private var connectionStatus: String {
-        guard !coordinator.connection.model.isEmpty else { return ControlCenterStrings.text("chatNotConfigured") }
-        let host = URL(string: coordinator.connection.baseURL)?.host ?? ControlCenterStrings.text("connection")
-        return "\(ControlCenterStrings.text("chatConfigured")) · \(host) · \(coordinator.connection.model)"
-    }
-
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Image(systemName: "bubble.left.and.text.bubble.right")
-                .font(.system(size: 30, weight: .light)).foregroundStyle(.secondary)
-            Text(ControlCenterStrings.text("chatWelcome")).font(.title2.weight(.semibold))
-            Text(ControlCenterStrings.text(coordinator.connection.model.isEmpty ? "chatWelcomeOffline" : "chatWelcomeDetail"))
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            VStack(alignment: .leading, spacing: 9) {
-                suggestion("chatExampleSessions", symbol: "clock")
-                suggestion("chatExampleWorkspace", symbol: "rectangle.split.3x1")
-                suggestion("chatExampleSettings", symbol: "slider.horizontal.3")
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(theme.accentColor.opacity(0.12))
+                        .frame(width: 46, height: 46)
+                    Image(systemName: "bubble.left.and.text.bubble.right")
+                        .font(.system(size: 21, weight: .medium))
+                        .foregroundStyle(theme.accentColor)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(ControlCenterStrings.text("chatWelcome"))
+                        .font(.title2.weight(.semibold))
+                    Text(ControlCenterStrings.text(coordinator.connection.model.isEmpty ? "chatWelcomeOffline" : "chatWelcomeDetail"))
+                        .font(.callout)
+                        .foregroundStyle(theme.secondaryForegroundColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            HStack(spacing: 16) {
-                Button(ControlCenterStrings.text("sessions")) { onOpenSection(.sessions) }
-                Button(ControlCenterStrings.text("favorites")) { onOpenSection(.favorites) }
-                Button(ControlCenterStrings.text("chatSetup")) { onOpenSection(.connection) }
+
+            VStack(alignment: .leading, spacing: 8) {
+                ControlCenterSuggestionButton(
+                    title: ControlCenterStrings.text("chatExampleSessions"),
+                    symbol: "clock",
+                    disabled: isActive
+                ) {
+                    coordinator.chatDraft = ControlCenterStrings.text("chatExampleSessions")
+                    focusRequest += 1
+                }
+                ControlCenterSuggestionButton(
+                    title: ControlCenterStrings.text("chatExampleWorkspace"),
+                    symbol: "rectangle.split.3x1",
+                    disabled: isActive
+                ) {
+                    coordinator.chatDraft = ControlCenterStrings.text("chatExampleWorkspace")
+                    focusRequest += 1
+                }
+                ControlCenterSuggestionButton(
+                    title: ControlCenterStrings.text("chatExampleSettings"),
+                    symbol: "slider.horizontal.3",
+                    disabled: isActive
+                ) {
+                    coordinator.chatDraft = ControlCenterStrings.text("chatExampleSettings")
+                    focusRequest += 1
+                }
             }
-            .buttonStyle(.link)
-            .font(.callout)
-            .disabled(isActive)
-            Text(ControlCenterStrings.text("chatSessionOnly"))
-                .font(.caption).foregroundStyle(.tertiary)
+
+            HStack(spacing: 8) {
+                quickSectionButton(.sessions, title: ControlCenterStrings.text("sessions"))
+                quickSectionButton(.favorites, title: ControlCenterStrings.text("favorites"))
+                quickSectionButton(.collections, title: ControlCenterStrings.text("collections"))
+                quickSectionButton(.connection, title: ControlCenterStrings.text("chatSetup"))
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "lock.shield")
+                    .font(.caption2)
+                Text(ControlCenterStrings.text("chatSessionOnly"))
+                    .font(.caption)
+            }
+            .foregroundStyle(theme.secondaryForegroundColor.opacity(0.75))
         }
-        .frame(maxWidth: 520, alignment: .leading)
-        .padding(32)
+        .frame(maxWidth: 560, alignment: .leading)
+        .padding(28)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(theme.elevatedSurfaceColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(theme.borderColor)
+        )
+        .padding(24)
     }
 
-    private func suggestion(_ key: String, symbol: String) -> some View {
+    private func quickSectionButton(_ section: ControlCenterSection, title: String) -> some View {
         Button {
-            coordinator.chatDraft = ControlCenterStrings.text(key)
-            focusRequest += 1
+            onOpenSection(section)
         } label: {
-            Label(ControlCenterStrings.text(key), systemImage: symbol)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+            HStack(spacing: 5) {
+                Image(systemName: section.symbol)
+                    .font(.system(size: 11, weight: .medium))
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .foregroundStyle(theme.foregroundColor)
+            .background(
+                Capsule()
+                    .fill(theme.inputSurfaceColor)
+            )
+            .overlay(
+                Capsule()
+                    .stroke(theme.borderColor)
+            )
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.primary)
-        .disabled(isActive)
     }
 
     private func approvalView(_ approval: ControlCenterApproval) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Label(ControlCenterStrings.text("chatApprovalNeeded"), systemImage: "hand.raised")
-                .font(.callout.weight(.semibold))
-            Text(approval.title).fontWeight(.medium).textSelection(.enabled)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "hand.raised.fill")
+                    .foregroundStyle(.orange)
+                Text(ControlCenterStrings.text("chatApprovalNeeded"))
+                    .font(.callout.weight(.semibold))
+                Text("·")
+                    .foregroundStyle(theme.secondaryForegroundColor)
+                Text(approval.title)
+                    .font(.callout.weight(.medium))
+                    .textSelection(.enabled)
+                Spacer(minLength: 0)
+            }
             ScrollView {
                 Text(approval.detail)
-                    .font(.system(.callout, design: .monospaced))
+                    .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
             }
-            .frame(maxHeight: 145)
-            HStack {
+            .frame(maxHeight: 150)
+            .background(theme.inputSurfaceColor, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(theme.borderColor))
+            HStack(spacing: 10) {
                 Text(ControlCenterStrings.text("chatApprovalHint"))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption)
+                    .foregroundStyle(theme.secondaryForegroundColor)
                 Spacer()
                 Button(ControlCenterStrings.text("chatReject")) { resolveApproval(false) }
                     .accessibilityIdentifier("controlCenter.chatReject")
@@ -186,19 +213,21 @@ struct ControlCenterChatView: View {
                     .accessibilityIdentifier("controlCenter.chatApprove")
             }
         }
-        .padding(12)
-        .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.accentColor.opacity(0.25)))
+        .padding(14)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(Color.orange.opacity(0.32)))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("controlCenter.chatApproval")
     }
 
     private var fullAccessConfirmation: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(ControlCenterStrings.text("chatFullAccessTitle"), systemImage: "lock.open")
+            Label(ControlCenterStrings.text("chatFullAccessTitle"), systemImage: "lock.open.fill")
                 .font(.callout.weight(.semibold))
+                .foregroundStyle(.orange)
             Text(ControlCenterStrings.text("chatFullAccessDetail"))
-                .font(.callout).foregroundStyle(.secondary)
+                .font(.callout)
+                .foregroundStyle(theme.secondaryForegroundColor)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
@@ -211,118 +240,144 @@ struct ControlCenterChatView: View {
             }
             .disabled(isActive)
         }
-        .padding(12)
-        .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+        .padding(14)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(Color.orange.opacity(0.32)))
         .accessibilityIdentifier("controlCenter.chatFullAccessConfirmation")
     }
 
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if coordinator.chatEditingTurnID != nil {
-                HStack(alignment: .top) {
-                    Label(ControlCenterStrings.text("chatEditingMessage"), systemImage: "pencil")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Spacer(minLength: 4)
-                    Button(ControlCenterStrings.text("cancel")) {
-                        coordinator.cancelChatEdit()
-                        focusRequest += 1
+        VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 0) {
+                if coordinator.chatEditingTurnID != nil {
+                    HStack(spacing: 8) {
+                        Image(systemName: "pencil")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(theme.accentColor)
+                        Text(ControlCenterStrings.text("chatEditingMessage"))
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(theme.secondaryForegroundColor)
+                        Spacer(minLength: 4)
+                        Button(ControlCenterStrings.text("cancel")) {
+                            coordinator.cancelChatEdit()
+                            focusRequest += 1
+                        }
+                        .buttonStyle(.link)
+                        .font(.caption.weight(.medium))
                     }
-                    .buttonStyle(.link)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(theme.accentColor.opacity(0.10))
+                    Rectangle()
+                        .fill(theme.borderColor)
+                        .frame(height: 1)
                 }
-            }
-            modelControls
-            if !coordinator.chatAttachments.isEmpty { attachmentStrip }
-            if coordinator.chatImagesLoading {
-                HStack(spacing: 7) {
-                    ProgressView().controlSize(.small)
-                    Text(ControlCenterStrings.text("chatImagesLoading")).font(.caption).foregroundStyle(.secondary)
+
+                if !coordinator.chatAttachments.isEmpty || coordinator.chatImagesLoading {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !coordinator.chatAttachments.isEmpty {
+                            attachmentStrip
+                        }
+                        if coordinator.chatImagesLoading {
+                            HStack(spacing: 7) {
+                                ProgressView().controlSize(.small)
+                                Text(ControlCenterStrings.text("chatImagesLoading"))
+                                    .font(.caption)
+                                    .foregroundStyle(theme.secondaryForegroundColor)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 10)
+                    .padding(.bottom, 4)
                 }
-            }
-            ZStack(alignment: .topLeading) {
-                if coordinator.chatDraft.isEmpty {
-                    Text(ControlCenterStrings.text("chatPlaceholder"))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 12).padding(.top, 12)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
+
+                ZStack(alignment: .topLeading) {
+                    if coordinator.chatDraft.isEmpty {
+                        Text(ControlCenterStrings.text("chatPlaceholder"))
+                            .foregroundStyle(theme.secondaryForegroundColor.opacity(0.70))
+                            .padding(.horizontal, 13)
+                            .padding(.top, 10)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                    ControlCenterChatInput(
+                        text: $coordinator.chatDraft,
+                        measuredHeight: $composerHeight,
+                        isFocused: $isInputFocused,
+                        focusRequest: focusRequest,
+                        isVisible: isVisible,
+                        canSend: canSend,
+                        historyActive: coordinator.chatHistoryIndex != nil,
+                        colorScheme: theme.colorScheme,
+                        textColor: theme.foregroundNSColor,
+                        insertionPointColor: theme.accentNSColor,
+                        onSend: send,
+                        onRecall: { coordinator.recallChatInput($0) },
+                        onImageURLs: { coordinator.addChatImages($0) },
+                        onImageData: { coordinator.addChatImageData($0, name: $1) }
+                    )
+                    .frame(height: composerHeight)
                 }
-                ControlCenterChatInput(
-                    text: $coordinator.chatDraft,
-                    measuredHeight: $composerHeight,
-                    focusRequest: focusRequest,
-                    isVisible: isVisible,
-                    canSend: canSend,
-                    historyActive: coordinator.chatHistoryIndex != nil,
-                    onSend: send,
-                    onRecall: { coordinator.recallChatInput($0) },
-                    onImageURLs: { coordinator.addChatImages($0) },
-                    onImageData: { coordinator.addChatImageData($0, name: $1) }
-                )
-                .frame(height: composerHeight)
+                .padding(.horizontal, 2)
+
+                Rectangle()
+                    .fill(theme.borderColor.opacity(0.75))
+                    .frame(height: 1)
+
+                composerToolbar
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(theme.foregroundColor.opacity(0.02))
             }
-            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 9))
-            .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color(nsColor: .separatorColor)))
+            .background(theme.elevatedSurfaceColor)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(
+                        isInputFocused ? theme.accentColor.opacity(0.75) : theme.borderColor,
+                        lineWidth: isInputFocused ? 1.5 : 1
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 1)
+
             if let error = coordinator.chatComposerError {
                 Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             if let error = coordinator.chatLogError {
                 Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
-            if coordinator.chatDraft.isEmpty && !isActive {
-                Text(ControlCenterStrings.text("chatCommandsHint"))
-                    .font(.caption2).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack(spacing: 10) {
-                Button(action: chooseImages) {
-                    Image(systemName: "paperclip")
-                        .accessibilityLabel(ControlCenterStrings.text("chatAttachImages"))
-                }
-                .help(ControlCenterStrings.text("chatAttachImages"))
-                .accessibilityIdentifier("controlCenter.chatAttachImages")
-                Picker(ControlCenterStrings.text("chatAccessMode"), selection: Binding(
-                    get: { coordinator.accessMode },
-                    set: { mode in
-                        if mode == .fullAccess && coordinator.accessMode != .fullAccess {
-                            confirmsFullAccess = true
-                        } else {
-                            coordinator.accessMode = mode
-                        }
-                    }
-                )) {
-                    ForEach(ControlCenterAccessMode.allCases, id: \.self) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .fixedSize()
-                .disabled(isActive)
-                .help(ControlCenterStrings.text("chatAccessHelp"))
-                .accessibilityIdentifier("controlCenter.chatAccessMode")
+            HStack(spacing: 8) {
                 Text(ControlCenterStrings.text(coordinator.pendingApproval != nil ? "chatApprovalNeeded" : (isActive ? "chatDraftWhileRunning" : "chatKeyboardHint")))
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                Spacer(minLength: 0)
-                if isActive {
-                    ProgressView().controlSize(.small)
-                    Button { coordinator.cancel(); focusRequest += 1 } label: {
-                        Label(ControlCenterStrings.text("chatStop"), systemImage: "stop.fill")
-                    }
-                    .accessibilityIdentifier("controlCenter.chatStop")
-                } else {
-                    Button(action: send) {
-                        Label(ControlCenterStrings.text("chatSend"), systemImage: "arrow.up")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canSend)
-                    .accessibilityIdentifier("controlCenter.chatSend")
+                    .font(.caption2)
+                    .foregroundStyle(theme.secondaryForegroundColor)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if coordinator.chatDraft.isEmpty && !isActive {
+                    Text(ControlCenterStrings.text("chatCommandsHint"))
+                        .font(.caption2)
+                        .foregroundStyle(theme.secondaryForegroundColor.opacity(0.75))
+                        .lineLimit(1)
                 }
             }
+            .padding(.horizontal, 4)
         }
     }
 
-    private var modelControls: some View {
-        HStack(spacing: 12) {
+    private var composerToolbar: some View {
+        HStack(spacing: 8) {
+            Button(action: chooseImages) {
+                Image(systemName: "paperclip")
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(theme.foregroundColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .accessibilityLabel(ControlCenterStrings.text("chatAttachImages"))
+            }
+            .buttonStyle(.plain)
+            .help(ControlCenterStrings.text("chatAttachImages"))
+            .accessibilityIdentifier("controlCenter.chatAttachImages")
+
             Menu {
                 if !coordinator.connection.model.isEmpty {
                     Button(coordinator.connection.model) { coordinator.selectChatModel(coordinator.connection.model) }
@@ -336,12 +391,20 @@ struct ControlCenterChatView: View {
                     Task { await coordinator.loadModels() }
                 }
             } label: {
-                Label(coordinator.connection.model.isEmpty ? ControlCenterStrings.text("chatModel") : coordinator.connection.model, systemImage: "cpu")
-                    .lineLimit(1).truncationMode(.middle)
+                Label(
+                    coordinator.connection.model.isEmpty ? ControlCenterStrings.text("chatModel") : coordinator.connection.model,
+                    systemImage: "cpu"
+                )
+                .lineLimit(1)
+                .truncationMode(.middle)
             }
             .menuStyle(.borderlessButton)
+            .frame(maxWidth: 220, alignment: .leading)
+            .fixedSize(horizontal: true, vertical: false)
+            .disabled(isActive)
             .help(ControlCenterStrings.text("chatModel"))
             .accessibilityIdentifier("controlCenter.chatModel")
+
             Picker(ControlCenterStrings.text("chatReasoning"), selection: Binding(
                 get: { coordinator.connection.reasoningEffort ?? "auto" },
                 set: { coordinator.selectChatReasoningEffort($0) }
@@ -355,35 +418,91 @@ struct ControlCenterChatView: View {
                 Text(ControlCenterStrings.text("chatReasoningXHigh")).tag("xhigh")
             }
             .pickerStyle(.menu)
+            .labelsHidden()
             .fixedSize()
+            .disabled(isActive)
             .help(ControlCenterStrings.text("chatReasoning"))
             .accessibilityIdentifier("controlCenter.chatReasoning")
+
+            Picker(ControlCenterStrings.text("chatAccessMode"), selection: Binding(
+                get: { coordinator.accessMode },
+                set: { mode in
+                    if mode == .fullAccess && coordinator.accessMode != .fullAccess {
+                        confirmsFullAccess = true
+                    } else {
+                        coordinator.accessMode = mode
+                    }
+                }
+            )) {
+                ForEach(ControlCenterAccessMode.allCases, id: \.self) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .disabled(isActive)
+            .help(ControlCenterStrings.text("chatAccessHelp"))
+            .accessibilityIdentifier("controlCenter.chatAccessMode")
+
+            Spacer(minLength: 4)
+
+            if isActive {
+                ProgressView().controlSize(.small)
+                Button {
+                    coordinator.cancel()
+                    focusRequest += 1
+                } label: {
+                    Label(ControlCenterStrings.text("chatStop"), systemImage: "stop.fill")
+                }
+                .controlSize(.small)
+                .accessibilityIdentifier("controlCenter.chatStop")
+            } else {
+                Button(action: send) {
+                    Label(ControlCenterStrings.text("chatSend"), systemImage: "arrow.up")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(!canSend)
+                .accessibilityIdentifier("controlCenter.chatSend")
+            }
         }
         .font(.caption)
-        .disabled(isActive)
     }
 
     private var attachmentStrip: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 9) {
                 ForEach(coordinator.chatAttachments) { attachment in
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Image(nsImage: attachment.preview)
-                            .resizable().scaledToFill()
-                            .frame(width: 76, height: 60).clipped()
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 78, height: 58)
+                            .clipped()
+                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .stroke(theme.borderColor)
+                            )
                             .overlay(alignment: .topTrailing) {
-                                Button { coordinator.removeChatImage(attachment.id) } label: {
+                                Button {
+                                    coordinator.removeChatImage(attachment.id)
+                                } label: {
                                     Image(systemName: "xmark.circle.fill")
                                         .symbolRenderingMode(.palette)
-                                        .foregroundStyle(.white, Color.black.opacity(0.7))
+                                        .foregroundStyle(.white, Color.black.opacity(0.72))
                                 }
                                 .buttonStyle(.plain)
                                 .padding(3)
                                 .help(ControlCenterStrings.text("chatRemoveImage"))
                                 .accessibilityLabel("\(ControlCenterStrings.text("chatRemoveImage")): \(attachment.name)")
                             }
-                        Text(attachment.name).font(.caption2).lineLimit(1).frame(width: 76, alignment: .leading)
+                        Text(attachment.name)
+                            .font(.caption2)
+                            .foregroundStyle(theme.secondaryForegroundColor)
+                            .lineLimit(1)
+                            .frame(width: 78, alignment: .leading)
                     }
                 }
             }
@@ -419,5 +538,48 @@ struct ControlCenterChatView: View {
     private func resolveApproval(_ allowed: Bool) {
         coordinator.resolveApproval(allowed)
         focusRequest += 1
+    }
+}
+
+private struct ControlCenterSuggestionButton: View {
+    let title: String
+    let symbol: String
+    let disabled: Bool
+    let action: () -> Void
+    @State private var isHovered = false
+    @Environment(\.controlCenterTheme) private var theme
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: symbol)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(theme.accentColor)
+                    .frame(width: 22)
+                Text(title)
+                    .font(.callout)
+                    .foregroundStyle(theme.foregroundColor)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.up.left")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(theme.secondaryForegroundColor)
+                    .opacity(isHovered ? 1 : 0.45)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(isHovered ? theme.accentColor.opacity(0.10) : theme.inputSurfaceColor)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(isHovered ? theme.accentColor.opacity(0.40) : theme.borderColor)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .onHover { isHovered = $0 }
     }
 }

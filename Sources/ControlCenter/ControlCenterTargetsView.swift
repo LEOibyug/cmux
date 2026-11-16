@@ -4,10 +4,11 @@ import CmuxControlCenter
 struct ControlCenterSessionsView: View {
     @ObservedObject var coordinator: ControlCenterCoordinator
     @State private var query = ""
+    @Environment(\.controlCenterTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading) {
-            HStack {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
                 Picker(ControlCenterStrings.text("sessionSource"), selection: $coordinator.sessionSourceID) {
                     if !coordinator.sessionSources.contains(where: { $0.rawValue == "omp" }) {
                         Text("OMP").tag("omp").disabled(true)
@@ -16,33 +17,94 @@ struct ControlCenterSessionsView: View {
                         Text(source.displayName).tag(source.rawValue)
                     }
                 }
-                .frame(maxWidth: 220)
+                .frame(maxWidth: 210)
                 .disabled(coordinator.isRunning)
-                TextField(ControlCenterStrings.text("searchSessions"), text: $query)
-                    .onSubmit { Task { await coordinator.searchSessions(query) } }
-                Button(ControlCenterStrings.text("search")) { Task { await coordinator.searchSessions(query) } }
+
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(theme.secondaryForegroundColor)
+                        .font(.system(size: 12, weight: .medium))
+                    TextField(ControlCenterStrings.text("searchSessions"), text: $query)
+                        .textFieldStyle(.plain)
+                        .onSubmit { Task { await coordinator.searchSessions(query) } }
+                    if !query.isEmpty {
+                        Button {
+                            query = ""
+                            Task { await coordinator.searchSessions("") }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(theme.secondaryForegroundColor)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(theme.inputSurfaceColor, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(theme.borderColor))
+
+                Button(ControlCenterStrings.text("search")) {
+                    Task { await coordinator.searchSessions(query) }
+                }
+                .buttonStyle(.borderedProminent)
             }
             .disabled(coordinator.isRunning)
-            Text(ControlCenterStrings.text("sessionHint")).font(.caption).foregroundStyle(.secondary)
-            if let source = coordinator.sessionResultsSourceID, source != coordinator.sessionSourceID {
-                Text("\(ControlCenterStrings.text("sessionResultsSource")): \(coordinator.sessionSources.first(where: { $0.rawValue == source })?.displayName ?? source)")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            List(coordinator.sessions) { target in
-                HStack {
-                    ControlCenterTargetLabelView(target: target)
-                    Spacer()
-                    let saved = coordinator.savedFavorite(for: target) != nil
-                    Button {
-                        Task { await coordinator.toggleFavorite(target) }
-                    } label: {
-                        Label(ControlCenterStrings.text(saved ? "saved" : "favorite"), systemImage: saved ? "checkmark" : "bookmark")
-                    }
-                    .help(ControlCenterStrings.text(saved ? "removeSaved" : "favorite"))
-                    .disabled(coordinator.isRunning || coordinator.isSavingFavorites)
-                    Button(ControlCenterStrings.text("open")) { Task { await coordinator.open(target) } }
-                        .disabled(coordinator.isRunning)
+
+            HStack(spacing: 8) {
+                Text(ControlCenterStrings.text("sessionHint"))
+                    .font(.caption)
+                    .foregroundStyle(theme.secondaryForegroundColor)
+                if let source = coordinator.sessionResultsSourceID, source != coordinator.sessionSourceID {
+                    Text("· \(ControlCenterStrings.text("sessionResultsSource")): \(coordinator.sessionSources.first(where: { $0.rawValue == source })?.displayName ?? source)")
+                        .font(.caption)
+                        .foregroundStyle(theme.secondaryForegroundColor)
                 }
+                Spacer(minLength: 4)
+                if !coordinator.sessions.isEmpty {
+                    Text("\(coordinator.sessions.count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(theme.secondaryForegroundColor)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(theme.foregroundColor.opacity(0.06), in: Capsule())
+                }
+            }
+
+            if coordinator.sessions.isEmpty {
+                ControlCenterEmptyCardView(
+                    symbol: "clock",
+                    title: ControlCenterStrings.text("sessions"),
+                    subtitle: ControlCenterStrings.text("sessionHint")
+                )
+                Spacer(minLength: 0)
+            } else {
+                List(coordinator.sessions) { target in
+                    HStack(spacing: 12) {
+                        ControlCenterTargetLabelView(target: target)
+                        Spacer(minLength: 8)
+                        let saved = coordinator.savedFavorite(for: target) != nil
+                        Button {
+                            Task { await coordinator.toggleFavorite(target) }
+                        } label: {
+                            Label(ControlCenterStrings.text(saved ? "saved" : "favorite"), systemImage: saved ? "checkmark" : "bookmark")
+                        }
+                        .controlSize(.small)
+                        .help(ControlCenterStrings.text(saved ? "removeSaved" : "favorite"))
+                        .disabled(coordinator.isRunning || coordinator.isSavingFavorites)
+                        Button(ControlCenterStrings.text("open")) {
+                            Task { await coordinator.open(target) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(coordinator.isRunning)
+                    }
+                    .padding(.vertical, 4)
+                }
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
+                .background(theme.elevatedSurfaceColor, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(theme.borderColor))
             }
         }
         .task(id: coordinator.sessionSourceID) { await coordinator.searchSessions(query) }
@@ -51,13 +113,65 @@ struct ControlCenterSessionsView: View {
 
 struct ControlCenterTargetLabelView: View {
     let target: ControlCenterTarget
+    @Environment(\.controlCenterTheme) private var theme
+
+    private var symbol: String {
+        switch target.kind {
+        case .session: return "terminal"
+        case .directory: return "folder"
+        case .file: return "doc.text"
+        case .url: return "globe"
+        case .newSession: return "plus.rectangle"
+        }
+    }
+
+    private var badgeText: String {
+        if target.kind == .session {
+            return SessionAgent(rawValue: target.agentID)?.displayName ?? target.agentID
+        }
+        return ControlCenterStrings.text(target.kind.rawValue)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(target.name).fontWeight(.medium)
-            Text(target.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-            if let session = target.sessionID {
-                Text("\(SessionAgent(rawValue: target.agentID)?.displayName ?? target.agentID) · \(session)")
-                    .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(theme.accentColor.opacity(0.12))
+                    .frame(width: 28, height: 28)
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.accentColor)
+            }
+            .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(target.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? target.path : target.name)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                    Text(badgeText)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(theme.secondaryForegroundColor)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(theme.foregroundColor.opacity(0.06), in: Capsule())
+                }
+                if !target.path.isEmpty {
+                    Text(target.path)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(theme.secondaryForegroundColor)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+                if let session = target.sessionID, !session.isEmpty {
+                    Text("\(SessionAgent(rawValue: target.agentID)?.displayName ?? target.agentID) · \(session)")
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(theme.secondaryForegroundColor.opacity(0.75))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
             }
         }
     }
@@ -66,28 +180,72 @@ struct ControlCenterTargetLabelView: View {
 struct ControlCenterFavoritesView: View {
     @ObservedObject var coordinator: ControlCenterCoordinator
     @State private var editing: ControlCenterTarget?
+    @Environment(\.controlCenterTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading) {
-            Button(ControlCenterStrings.text("addFavorite")) {
-                editing = ControlCenterTarget(name: "", kind: .directory, path: "")
-            }
-            List(coordinator.snapshot.favorites) { target in
-                HStack {
-                    ControlCenterTargetLabelView(target: target)
-                    Spacer()
-                    Button(ControlCenterStrings.text("open")) { Task { await coordinator.open(target) } }.disabled(coordinator.isRunning)
-                    Button(ControlCenterStrings.text("edit")) { editing = target }
-                        .disabled(coordinator.isRunning || coordinator.isSavingFavorites)
-                    Button(ControlCenterStrings.text("remove")) { Task { await coordinator.deleteFavorite(target.id) } }
-                        .disabled(coordinator.isRunning || coordinator.isSavingFavorites)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(ControlCenterStrings.text("favorites"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(theme.secondaryForegroundColor)
+                if !coordinator.snapshot.favorites.isEmpty {
+                    Text("\(coordinator.snapshot.favorites.count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(theme.secondaryForegroundColor)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(theme.foregroundColor.opacity(0.06), in: Capsule())
                 }
+                Spacer()
+                Button {
+                    editing = ControlCenterTarget(name: "", kind: .directory, path: "")
+                } label: {
+                    Label(ControlCenterStrings.text("addFavorite"), systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            if coordinator.snapshot.favorites.isEmpty {
+                ControlCenterEmptyCardView(
+                    symbol: "bookmark",
+                    title: ControlCenterStrings.text("favorites"),
+                    subtitle: ControlCenterStrings.text("offlineHint")
+                )
+                Spacer(minLength: 0)
+            } else {
+                List(coordinator.snapshot.favorites) { target in
+                    HStack(spacing: 12) {
+                        ControlCenterTargetLabelView(target: target)
+                        Spacer(minLength: 8)
+                        Button(ControlCenterStrings.text("open")) {
+                            Task { await coordinator.open(target) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(coordinator.isRunning)
+                        Button(ControlCenterStrings.text("edit")) { editing = target }
+                            .controlSize(.small)
+                            .disabled(coordinator.isRunning || coordinator.isSavingFavorites)
+                        Button(ControlCenterStrings.text("remove")) {
+                            Task { await coordinator.deleteFavorite(target.id) }
+                        }
+                        .controlSize(.small)
+                        .disabled(coordinator.isRunning || coordinator.isSavingFavorites)
+                    }
+                    .padding(.vertical, 4)
+                }
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
+                .background(theme.elevatedSurfaceColor, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(theme.borderColor))
             }
         }
         .sheet(item: $editing) { target in
             ControlCenterTargetEditorView(target: target, sources: coordinator.sessionSources) { updated in
                 Task { await coordinator.saveFavorite(updated) }
             }
+            .controlCenterSheetTheme(theme)
         }
         .task { await coordinator.refreshSessionSources() }
     }
@@ -95,76 +253,171 @@ struct ControlCenterFavoritesView: View {
 
 struct ControlCenterTargetEditorView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.controlCenterTheme) private var theme
     @State var target: ControlCenterTarget
     let sources: [SessionAgent]
     let save: (ControlCenterTarget) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             Text(ControlCenterStrings.text("favorite")).font(.headline)
             Form {
-                TextField(ControlCenterStrings.text("name"), text: $target.name)
-                Picker(ControlCenterStrings.text("kind"), selection: $target.kind) {
-                    ForEach(ControlCenterTarget.Kind.allCases, id: \.self) { kind in
-                        Text(ControlCenterStrings.text(kind.rawValue)).tag(kind)
-                    }
-                }
-                TextField(ControlCenterStrings.text("path"), text: $target.path)
-                if target.kind == .session {
-                    Picker(ControlCenterStrings.text("sessionSource"), selection: $target.agentID) {
-                        if !sources.contains(where: { $0.rawValue == target.agentID }) {
-                            Text(SessionAgent(rawValue: target.agentID)?.displayName ?? target.agentID).tag(target.agentID)
+                Section {
+                    TextField(ControlCenterStrings.text("name"), text: $target.name)
+                    Picker(ControlCenterStrings.text("kind"), selection: $target.kind) {
+                        ForEach(ControlCenterTarget.Kind.allCases, id: \.self) { kind in
+                            Text(ControlCenterStrings.text(kind.rawValue)).tag(kind)
                         }
-                        ForEach(sources) { source in Text(source.displayName).tag(source.rawValue) }
                     }
-                    .onChange(of: target.agentID) { _, _ in
-                        target.sessionID = nil
-                        target.sessionFile = nil
+                    TextField(ControlCenterStrings.text("path"), text: $target.path)
+                }
+                if target.kind == .session {
+                    Section {
+                        Picker(ControlCenterStrings.text("sessionSource"), selection: $target.agentID) {
+                            if !sources.contains(where: { $0.rawValue == target.agentID }) {
+                                Text(SessionAgent(rawValue: target.agentID)?.displayName ?? target.agentID).tag(target.agentID)
+                            }
+                            ForEach(sources) { source in Text(source.displayName).tag(source.rawValue) }
+                        }
+                        .onChange(of: target.agentID) { _, _ in
+                            target.sessionID = nil
+                            target.sessionFile = nil
+                        }
+                        TextField(ControlCenterStrings.text("sessionID"), text: Binding(get: { target.sessionID ?? "" }, set: { target.sessionID = $0 }))
+                        Text(ControlCenterStrings.text("indexedSessionHint")).font(.caption).foregroundStyle(theme.secondaryForegroundColor)
                     }
-                    TextField(ControlCenterStrings.text("sessionID"), text: Binding(get: { target.sessionID ?? "" }, set: { target.sessionID = $0 }))
-                    Text(ControlCenterStrings.text("indexedSessionHint")).font(.caption).foregroundStyle(.secondary)
                 }
             }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
             HStack {
                 Spacer()
                 Button(ControlCenterStrings.text("cancel")) { dismiss() }
                 Button(ControlCenterStrings.text("save")) { save(target); dismiss() }
+                    .buttonStyle(.borderedProminent)
                     .disabled(target.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (target.kind != .session && target.path.isEmpty) || (target.kind == .session && (target.sessionID ?? "").isEmpty))
             }
-        }.padding(24).frame(width: 520)
+        }
+        .padding(20)
+        .frame(width: 520, height: target.kind == .session ? 380 : 280)
     }
 }
 
 struct ControlCenterCollectionsView: View {
     @ObservedObject var coordinator: ControlCenterCoordinator
     @State private var editing: ControlCenterCollection?
+    @Environment(\.controlCenterTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading) {
-            Button(ControlCenterStrings.text("addCollection")) { editing = ControlCenterCollection(name: "", items: []) }
-            List(coordinator.snapshot.collections) { collection in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(collection.name).font(.headline)
-                    ForEach(collection.items) { ControlCenterTargetLabelView(target: $0) }
-                    HStack {
-                        Button(ControlCenterStrings.text("open")) { Task { await coordinator.openCollection(collection) } }.disabled(coordinator.isRunning)
-                        Button(ControlCenterStrings.text("retryFailed")) { Task { await coordinator.openCollection(collection, retryFailedOnly: true) } }.disabled(coordinator.isRunning)
-                        Button(ControlCenterStrings.text("edit")) { editing = collection }
-                        Button(ControlCenterStrings.text("remove")) { Task { await coordinator.deleteCollection(collection.id) } }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(ControlCenterStrings.text("collections"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(theme.secondaryForegroundColor)
+                if !coordinator.snapshot.collections.isEmpty {
+                    Text("\(coordinator.snapshot.collections.count)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(theme.secondaryForegroundColor)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(theme.foregroundColor.opacity(0.06), in: Capsule())
+                }
+                Spacer()
+                Button {
+                    editing = ControlCenterCollection(name: "", items: [])
+                } label: {
+                    Label(ControlCenterStrings.text("addCollection"), systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            if coordinator.snapshot.collections.isEmpty {
+                ControlCenterEmptyCardView(
+                    symbol: "square.stack",
+                    title: ControlCenterStrings.text("collections"),
+                    subtitle: ControlCenterStrings.text("settingsHint")
+                )
+                Spacer(minLength: 0)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(coordinator.snapshot.collections) { collection in
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(alignment: .center, spacing: 8) {
+                                    Image(systemName: "square.stack.3d.up")
+                                        .foregroundStyle(theme.accentColor)
+                                    Text(collection.name)
+                                        .font(.headline)
+                                    Text("\(collection.items.count)")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(theme.secondaryForegroundColor)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 2)
+                                        .background(theme.foregroundColor.opacity(0.06), in: Capsule())
+                                    Spacer(minLength: 8)
+                                    Button(ControlCenterStrings.text("open")) {
+                                        Task { await coordinator.openCollection(collection) }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.small)
+                                    .disabled(coordinator.isRunning)
+                                    Button(ControlCenterStrings.text("retryFailed")) {
+                                        Task { await coordinator.openCollection(collection, retryFailedOnly: true) }
+                                    }
+                                    .controlSize(.small)
+                                    .disabled(coordinator.isRunning)
+                                    Button(ControlCenterStrings.text("edit")) { editing = collection }
+                                        .controlSize(.small)
+                                    Button(ControlCenterStrings.text("remove")) {
+                                        Task { await coordinator.deleteCollection(collection.id) }
+                                    }
+                                    .controlSize(.small)
+                                }
+                                if !collection.items.isEmpty {
+                                    Divider()
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        ForEach(Array(collection.items.enumerated()), id: \.element.id) { index, item in
+                                            HStack(alignment: .top, spacing: 10) {
+                                                Text("\(index + 1)")
+                                                    .font(.system(.caption2, design: .monospaced).weight(.semibold))
+                                                    .foregroundStyle(theme.secondaryForegroundColor)
+                                                    .frame(width: 20, height: 20)
+                                                    .background(theme.foregroundColor.opacity(0.05), in: Circle())
+                                                    .padding(.top, 5)
+                                                ControlCenterTargetLabelView(target: item)
+                                                Spacer(minLength: 0)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(14)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(theme.elevatedSurfaceColor)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(theme.borderColor)
+                            )
+                        }
                     }
-                }.padding(.vertical, 6)
+                    .padding(.vertical, 2)
+                }
             }
         }
         .sheet(item: $editing) { collection in
             ControlCenterCollectionEditorView(collection: collection, favorites: coordinator.snapshot.favorites) { updated in
                 Task { await coordinator.saveCollection(updated) }
             }
+            .controlCenterSheetTheme(theme)
         }
     }
 }
 
 struct ControlCenterCollectionEditorView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.controlCenterTheme) private var theme
     @State var collection: ControlCenterCollection
     let favorites: [ControlCenterTarget]
     let save: (ControlCenterCollection) -> Void
@@ -173,53 +426,106 @@ struct ControlCenterCollectionEditorView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(ControlCenterStrings.text("collections")).font(.headline)
             TextField(ControlCenterStrings.text("name"), text: $collection.name)
-            Text(ControlCenterStrings.text("orderedItems")).font(.subheadline)
+                .textFieldStyle(.roundedBorder)
+            Text(ControlCenterStrings.text("orderedItems"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(theme.secondaryForegroundColor)
             List {
                 ForEach(Array(collection.items.enumerated()), id: \.element.id) { index, item in
-                    HStack {
+                    HStack(spacing: 10) {
+                        Text("\(index + 1)")
+                            .font(.system(.caption2, design: .monospaced).weight(.semibold))
+                            .foregroundStyle(theme.secondaryForegroundColor)
+                            .frame(width: 20, height: 20)
+                            .background(theme.foregroundColor.opacity(0.06), in: Circle())
                         ControlCenterTargetLabelView(target: item)
                         Spacer()
-                        Button(ControlCenterStrings.text("up")) { collection.items.swapAt(index, index - 1) }.disabled(index == 0)
-                        Button(ControlCenterStrings.text("down")) { collection.items.swapAt(index, index + 1) }.disabled(index + 1 == collection.items.count)
+                        Button(ControlCenterStrings.text("up")) { collection.items.swapAt(index, index - 1) }
+                            .controlSize(.small)
+                            .disabled(index == 0)
+                        Button(ControlCenterStrings.text("down")) { collection.items.swapAt(index, index + 1) }
+                            .controlSize(.small)
+                            .disabled(index + 1 == collection.items.count)
                         Button(ControlCenterStrings.text("remove")) { collection.items.remove(at: index) }
+                            .controlSize(.small)
                     }
+                    .padding(.vertical, 2)
                 }
-            }.frame(minHeight: 140)
-            Text(ControlCenterStrings.text("addFromFavorites")).font(.subheadline)
+            }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .background(theme.elevatedSurfaceColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(theme.borderColor))
+            .frame(minHeight: 150)
+
+            Text(ControlCenterStrings.text("addFromFavorites"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(theme.secondaryForegroundColor)
             List(favorites) { favorite in
-                HStack {
+                HStack(spacing: 10) {
                     ControlCenterTargetLabelView(target: favorite)
                     Spacer()
                     Button(ControlCenterStrings.text("add")) { collection.items.append(favorite) }
+                        .controlSize(.small)
                         .disabled(collection.items.contains { $0.id == favorite.id })
                 }
-            }.frame(minHeight: 120)
+                .padding(.vertical, 2)
+            }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .background(theme.elevatedSurfaceColor, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(theme.borderColor))
+            .frame(minHeight: 130)
+
             HStack {
                 Spacer()
                 Button(ControlCenterStrings.text("cancel")) { dismiss() }
                 Button(ControlCenterStrings.text("save")) { save(collection); dismiss() }
+                    .buttonStyle(.borderedProminent)
                     .disabled(collection.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || collection.items.isEmpty)
             }
-        }.padding(24).frame(width: 620, height: 560)
+        }
+        .padding(24)
+        .frame(width: 640, height: 580)
     }
 }
 
 struct ControlCenterWorkspaceView: View {
     @ObservedObject var coordinator: ControlCenterCoordinator
+    @Environment(\.controlCenterTheme) private var theme
     @State private var path = ""
     @State private var name = ""
     @State private var createDirectory = false
 
     var body: some View {
-        Form {
-            Text(ControlCenterStrings.text("workspaceHint")).foregroundStyle(.secondary)
-            TextField(ControlCenterStrings.text("path"), text: $path)
-            TextField(ControlCenterStrings.text("name"), text: $name)
-            Toggle(ControlCenterStrings.text("createDirectory"), isOn: $createDirectory)
-            Button(ControlCenterStrings.text("createWorkspace")) {
-                Task { await coordinator.createWorkspace(path: path, name: name, createDirectory: createDirectory) }
-            }.disabled(path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || coordinator.isRunning)
-            if let operation = coordinator.operation { ControlCenterOperationCardView(operation: operation) }
+        VStack(alignment: .leading, spacing: 14) {
+            Form {
+                Section {
+                    Text(ControlCenterStrings.text("workspaceHint"))
+                        .font(.callout)
+                        .foregroundStyle(theme.secondaryForegroundColor)
+                    TextField(ControlCenterStrings.text("path"), text: $path)
+                    TextField(ControlCenterStrings.text("name"), text: $name)
+                    Toggle(ControlCenterStrings.text("createDirectory"), isOn: $createDirectory)
+                    HStack {
+                        Spacer()
+                        Button(ControlCenterStrings.text("createWorkspace")) {
+                            Task { await coordinator.createWorkspace(path: path, name: name, createDirectory: createDirectory) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || coordinator.isRunning)
+                    }
+                }
+                if let operation = coordinator.operation {
+                    Section {
+                        ControlCenterOperationCardView(operation: operation)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
         }
         .onAppear { if path.isEmpty { path = coordinator.connection.defaultDirectory } }
     }

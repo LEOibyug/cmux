@@ -1,4 +1,5 @@
 import AppKit
+import CmuxAppKitSupportUI
 import CmuxControlCenter
 import SwiftUI
 import WebKit
@@ -14,9 +15,18 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
     let standaloneError: String?
     let isAwaitingApproval: Bool
     let isVisible: Bool
+    var themeBackgroundHex: String = "#1e1e24"
+    var themeForegroundHex: String = "#ececf0"
+    var themeBorderHex: String = "#34343a"
+    var accentHex: String = "#6cb6ff"
+    var themeColorScheme: ColorScheme?
     let onRetry: (UUID) -> Void
     let onEdit: (UUID) -> Void
     @Environment(\.colorScheme) private var colorScheme
+
+    private var effectiveColorScheme: ColorScheme {
+        themeColorScheme ?? colorScheme
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -28,11 +38,22 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.setValue(false, forKey: "drawsBackground")
         webView.underPageBackgroundColor = .clear
+        let scheme = effectiveColorScheme
+        webView.appearance = WindowAppearanceSnapshot.appKitAppearance(for: scheme)
         webView.isHidden = !isVisible
         webView.navigationDelegate = context.coordinator
         webView.setAccessibilityLabel(ControlCenterStrings.text("chatTranscriptLabel"))
         context.coordinator.webView = webView
-        webView.loadHTMLString(Self.shellHTML(dark: colorScheme == .dark), baseURL: nil)
+        webView.loadHTMLString(
+            Self.shellHTML(
+                dark: scheme == .dark,
+                themeBackground: themeBackgroundHex,
+                themeForeground: themeForegroundHex,
+                themeBorder: themeBorderHex,
+                accent: accentHex
+            ),
+            baseURL: nil
+        )
         return webView
     }
 
@@ -43,6 +64,11 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.onRetry = onRetry
         context.coordinator.onEdit = onEdit
+        let scheme = effectiveColorScheme
+        let appearance = WindowAppearanceSnapshot.appKitAppearance(for: scheme)
+        if webView.appearance?.name != appearance.name {
+            webView.appearance = appearance
+        }
         webView.isHidden = !isVisible
         if !isVisible, let window = webView.window,
            let responder = window.firstResponder as? NSView,
@@ -66,7 +92,11 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
                 )
             },
             error: standaloneError,
-            dark: colorScheme == .dark,
+            dark: scheme == .dark,
+            themeBackground: themeBackgroundHex,
+            themeForeground: themeForegroundHex,
+            themeBorder: themeBorderHex,
+            accent: accentHex,
             actionsEnabled: !isRunning && isVisible,
             strings: [
                 "you": ControlCenterStrings.text("chatYou"),
@@ -126,6 +156,10 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
         let turns: [TurnPayload]
         let error: String?
         let dark: Bool
+        let themeBackground: String
+        let themeForeground: String
+        let themeBorder: String
+        let accent: String
         let actionsEnabled: Bool
         let strings: [String: String]
     }
@@ -247,79 +281,131 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
         }
     }
 
-    private static func shellHTML(dark: Bool) -> String {
+    private static func safeHex(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count == 7, trimmed.first == "#" else { return fallback }
+        guard trimmed.dropFirst().allSatisfy({ $0.isHexDigit }) else { return fallback }
+        return trimmed
+    }
+
+    private static func shellHTML(
+        dark: Bool,
+        themeBackground: String,
+        themeForeground: String,
+        themeBorder: String,
+        accent: String
+    ) -> String {
         let assets = MarkdownViewerAssets.shared
         let nonce = UUID().uuidString
+        let bg = safeHex(themeBackground, fallback: dark ? "#1e1e24" : "#f6f7f9")
+        let fg = safeHex(themeForeground, fallback: dark ? "#ececf0" : "#1d1d1f")
+        let border = safeHex(themeBorder, fallback: dark ? "#34343a" : "#d8d8de")
+        let accentColor = safeHex(accent, fallback: dark ? "#6cb6ff" : "#0066cc")
+        let initialStyle = "--theme-bg:\(bg);--fg:\(fg);--line:\(border);--accent:\(accentColor)"
         return """
         <!doctype html>
-        <html class="\(dark ? "dark" : "")"><head><meta charset="utf-8">
+        <html class="\(dark ? "dark" : "")" style="\(initialStyle)"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-\(nonce)'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
         <style>\(assets.lazyAsset(name: "github-markdown", ext: "css"))</style>
         <style id="highlight-light" media="\(dark ? "not all" : "all")">\(assets.lazyAsset(name: "highlight-github", ext: "css"))</style>
         <style id="highlight-dark" media="\(dark ? "all" : "not all")">\(assets.lazyAsset(name: "highlight-github-dark", ext: "css"))</style>
         <style>
-        :root { color-scheme: light; --fg:#202124; --muted:#707078; --line:#dedee3; --user:#f1f1f5; --code:#f5f5f7; --link:#0067c0; --error:#b42318; }
-        :root.dark { color-scheme:dark; --fg:#ececf0; --muted:#a1a1ab; --line:#3a3a40; --user:#292930; --code:#25252b; --link:#75baff; --error:#ff9d94; }
+        :root {
+            color-scheme: light;
+            --theme-bg:#f6f7f9; --accent:#0066cc;
+            --fg:#1d1d1f; --muted:color-mix(in srgb, var(--fg) 56%, var(--theme-bg));
+            --line:color-mix(in srgb, var(--fg) 12%, var(--theme-bg));
+            --user:color-mix(in srgb, var(--accent) 8%, color-mix(in srgb, var(--fg) 4%, var(--theme-bg)));
+            --user-border:color-mix(in srgb, var(--accent) 22%, var(--line));
+            --code:color-mix(in srgb, var(--fg) 4.5%, var(--theme-bg));
+            --link:var(--accent); --error:#b42318; --ok:#157f3b; --warn:#b25000;
+            --badge-bg:color-mix(in srgb, var(--fg) 6%, transparent); --badge-active:color-mix(in srgb, var(--accent) 14%, transparent);
+            --badge-ok:rgba(21,127,59,.11); --badge-warn:rgba(178,80,0,.11); --badge-err:rgba(180,35,24,.10);
+        }
+        :root.dark {
+            color-scheme: dark;
+            --theme-bg:#1e1e24; --accent:#6cb6ff;
+            --fg:#ececf0; --muted:color-mix(in srgb, var(--fg) 62%, var(--theme-bg));
+            --line:color-mix(in srgb, var(--fg) 12%, var(--theme-bg));
+            --user:color-mix(in srgb, var(--accent) 12%, color-mix(in srgb, var(--fg) 6%, var(--theme-bg)));
+            --user-border:color-mix(in srgb, var(--accent) 28%, var(--line));
+            --code:color-mix(in srgb, var(--fg) 5%, var(--theme-bg));
+            --link:var(--accent); --error:#ff948a; --ok:#56d364; --warn:#f0a020;
+            --badge-bg:color-mix(in srgb, var(--fg) 8%, transparent); --badge-active:color-mix(in srgb, var(--accent) 18%, transparent);
+            --badge-ok:rgba(86,211,100,.14); --badge-warn:rgba(240,160,32,.15); --badge-err:rgba(255,148,138,.14);
+        }
         * { box-sizing:border-box; }
         html { background:transparent; overflow-anchor:none; }
-        body { margin:0; background:transparent; color:var(--fg); font:13px -apple-system,BlinkMacSystemFont,sans-serif; }
-        main { max-width:900px; margin:0 auto; padding:28px 24px 36px; }
-        article { margin:0 0 30px; }
-        .user-message { position:relative; display:flex; flex-direction:column; align-items:flex-end; margin:0 0 16px clamp(20px,8vw,88px); padding-bottom:32px; }
-        .turn-user { width:fit-content; max-width:100%; min-width:0; padding:8px 12px; background:var(--user); border-radius:12px; }
-        .turn-assistant { padding:0 1px; }
-        .speaker { margin:0 0 8px; color:var(--muted); font-size:11px; font-weight:600; letter-spacing:.02em; }
-        .turn-actions { position:absolute; right:0; bottom:0; display:flex; gap:4px; opacity:0; pointer-events:none; transition:opacity .12s ease; }
+        body { margin:0; background:transparent; color:var(--fg); font:13px -apple-system,BlinkMacSystemFont,sans-serif; -webkit-font-smoothing:antialiased; }
+        main { max-width:900px; margin:0 auto; padding:22px 24px 32px; }
+        article { margin:0 0 22px; padding-bottom:18px; border-bottom:1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+        article:last-of-type { border-bottom:0; margin-bottom:8px; padding-bottom:4px; }
+        .user-message { position:relative; display:flex; flex-direction:column; align-items:flex-end; gap:3px; margin:0 0 8px clamp(24px,9vw,96px); }
+        .turn-user { width:fit-content; max-width:100%; min-width:0; padding:9px 14px; background:var(--user); border:1px solid var(--user-border); border-radius:14px 14px 4px 14px; }
+        .turn-assistant { padding:0 2px; }
+        .speaker { display:flex; align-items:center; gap:6px; margin:0 0 8px; color:var(--muted); font-size:11px; font-weight:600; letter-spacing:.02em; }
+        .speaker::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--link); opacity:.85; }
+        .turn-actions { display:flex; gap:3px; min-height:24px; opacity:0; pointer-events:none; transition:opacity .12s ease; }
         .user-message:hover .turn-actions,.user-message:focus-within .turn-actions { opacity:1; pointer-events:auto; }
         @media (prefers-reduced-motion:reduce) { .turn-actions { transition:none; } }
-        .turn-actions button { display:grid; place-items:center; width:28px; height:28px; color:var(--muted); border:0; border-radius:6px; background:none; padding:6px; cursor:pointer; }
-        .turn-actions button:hover:not(:disabled) { color:var(--fg); background:var(--line); }
-        .turn-actions svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+        .turn-actions button { display:grid; place-items:center; width:24px; height:24px; color:var(--muted); border:0; border-radius:6px; background:none; padding:4px; cursor:pointer; }
+        .turn-actions button:hover:not(:disabled) { color:var(--fg); background:var(--badge-bg); }
+        .turn-actions svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }
         .turn-actions button:disabled { opacity:.4; cursor:default; }
-        .attachments { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+        .attachments { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
         .attachments:empty { display:none; }
         .turn-user .markdown-body:empty + .attachments { margin-top:0; }
-        .attachments img { width:92px; height:76px; object-fit:cover; border-radius:7px; border:1px solid var(--line); }
-        .entry { margin:0 0 16px; }
-        .tool-card,.reasoning-card { border:1px solid var(--line); border-radius:8px; background:var(--code); padding:10px 12px; }
-        .tool-card summary,.reasoning-card summary { cursor:pointer; font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
-        .tool-card summary { display:flex; align-items:baseline; gap:8px; }
-        .tool-name { color:var(--fg); font-weight:600; flex:1; }
-        .tool-status { font-size:11px; }
-        .tool-status.failed,.tool-status.blocked { color:var(--error); }
-        .tool-arguments { margin-top:10px; color:var(--muted); font-size:11px; }
-        .tool-card pre { white-space:pre-wrap; overflow-wrap:anywhere; font:11px ui-monospace,SFMono-Regular,Menlo,monospace; margin:6px 0 0; max-height:220px; overflow:auto; }
-        .tool-result,.reasoning-text { margin-top:10px; font-size:12px; }
-        .markdown-body { font-family:-apple-system,BlinkMacSystemFont,sans-serif; font-size:14px; line-height:1.65; background:transparent!important; color:var(--fg)!important; overflow-wrap:anywhere; }
+        .attachments img { width:92px; height:72px; object-fit:cover; border-radius:7px; border:1px solid var(--line); }
+        .entry { margin:0 0 10px; }
+        .tool-card,.reasoning-card { border:1px solid var(--line); border-radius:9px; background:var(--code); padding:8px 12px; }
+        .tool-card summary,.reasoning-card summary { cursor:pointer; font-size:12px; color:var(--muted); overflow-wrap:anywhere; user-select:none; }
+        .tool-card summary { display:flex; align-items:center; gap:8px; }
+        .tool-name { color:var(--fg); font-weight:600; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; flex:1; }
+        .tool-status { font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:999px; background:var(--badge-bg); color:var(--muted); white-space:nowrap; }
+        .tool-status.preparing,.tool-status.running { color:var(--link); background:var(--badge-active); }
+        .tool-status.waiting { color:var(--warn); background:var(--badge-warn); }
+        .tool-status.success { color:var(--ok); background:var(--badge-ok); }
+        .tool-status.failed,.tool-status.blocked { color:var(--error); background:var(--badge-err); }
+        .tool-arguments { margin-top:8px; color:var(--muted); font-size:11px; font-weight:500; }
+        .tool-card pre { white-space:pre-wrap; overflow-wrap:anywhere; font:11px ui-monospace,SFMono-Regular,Menlo,monospace; margin:5px 0 0; padding:7px 9px; border-radius:6px; background:var(--badge-bg); max-height:200px; overflow:auto; }
+        .tool-result,.reasoning-text { margin-top:8px; font-size:12.5px; padding-top:8px; border-top:1px solid var(--line); }
+        .tool-result:empty,.reasoning-text:empty { display:none; }
+        .markdown-body { font-family:-apple-system,BlinkMacSystemFont,sans-serif; font-size:13.5px; line-height:1.62; background:transparent!important; color:var(--fg)!important; overflow-wrap:anywhere; }
         .markdown-body > :first-child { margin-top:0!important; }
         .markdown-body > :last-child { margin-bottom:0!important; }
-        .markdown-body h1 { font-size:1.6em; } .markdown-body h2 { font-size:1.35em; } .markdown-body h3 { font-size:1.15em; }
+        .markdown-body h1 { font-size:1.5em; } .markdown-body h2 { font-size:1.3em; } .markdown-body h3 { font-size:1.12em; }
         .markdown-body h1,.markdown-body h2 { border-color:var(--line); }
-        .markdown-body a { color:var(--link); }
-        .markdown-body pre { position:relative; background:var(--code)!important; border:1px solid var(--line); padding:38px 14px 14px; border-radius:8px; }
+        .markdown-body a { color:var(--link); text-decoration:none; }
+        .markdown-body a:hover { text-decoration:underline; }
+        .markdown-body pre { position:relative; background:var(--code)!important; border:1px solid var(--line); padding:12px 70px 12px 14px; border-radius:9px; }
         .markdown-body code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
         .markdown-body pre code { display:block; background:transparent!important; padding:0; white-space:pre; overflow-x:auto; }
         .markdown-body table { display:block; max-width:100%; overflow-x:auto; width:max-content; }
         .markdown-body table tr { background:transparent!important; border-color:var(--line); }
         .markdown-body table th,.markdown-body table td { border-color:var(--line); }
         .markdown-body blockquote { border-color:var(--line); color:var(--muted); }
-        .copy-code { position:absolute; right:8px; top:7px; font:11px -apple-system,sans-serif; color:var(--muted); background:transparent; border:1px solid var(--line); border-radius:5px; padding:3px 7px; cursor:pointer; }
-        .copy-code:hover { color:var(--fg); background:var(--user); } button:focus-visible,summary:focus-visible { outline:2px solid var(--link); outline-offset:3px; }
-        .working { color:var(--muted); font-size:12px; margin-top:12px; }
-        .working::before { content:'•'; margin-right:7px; color:var(--link); }
-        .error { border-left:2px solid var(--error); padding-left:12px; margin-top:14px; color:var(--error); }
-        .receipt { margin-top:17px; border-top:1px solid var(--line); padding-top:12px; }
-        .receipt > summary { color:var(--muted); cursor:pointer; font-size:12px; user-select:none; }
-        .receipt-content { margin:13px 0 0 15px; border-left:1px solid var(--line); padding-left:15px; }
-        .operation-title { font-size:13px; font-weight:600; margin-bottom:12px; }
-        .step { margin:14px 0; }
-        .step-status { font-size:11px; color:var(--muted); margin-bottom:4px; }
-        .step-status.failed,.step-status.blocked { color:var(--error); }
-        .step-title { font-weight:600; font-size:13px; margin-bottom:4px; }
-        .step-detail { font-size:12px; }
+        .copy-code { position:absolute; right:8px; top:8px; font:11px -apple-system,sans-serif; color:var(--muted); background:var(--code); border:1px solid var(--line); border-radius:6px; padding:3px 8px; cursor:pointer; transition:color .12s ease,border-color .12s ease; }
+        .copy-code:hover { color:var(--fg); background:var(--user); }
+        .copy-code.copied { color:var(--ok); border-color:var(--ok); }
+        button:focus-visible,summary:focus-visible { outline:2px solid var(--link); outline-offset:2px; }
+        @keyframes cc-pulse { 0%,100% { opacity:1; } 50% { opacity:.32; } }
+        .working { display:inline-flex; align-items:center; gap:7px; color:var(--muted); font-size:12px; margin-top:10px; padding:4px 10px; border-radius:999px; background:var(--badge-bg); }
+        .working::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--link); animation:cc-pulse 1.4s ease-in-out infinite; }
+        @media (prefers-reduced-motion:reduce) { .working::before { animation:none; } }
+        .error { border:1px solid color-mix(in srgb, var(--error) 35%, transparent); border-left:3px solid var(--error); border-radius:7px; background:var(--badge-err); padding:9px 12px; margin-top:12px; color:var(--error); }
+        .receipt { margin-top:14px; border:1px solid var(--line); border-radius:9px; background:var(--code); padding:8px 12px; }
+        .receipt > summary { color:var(--muted); cursor:pointer; font-size:12px; font-weight:500; user-select:none; }
+        .receipt-content { margin:10px 0 0; border-top:1px solid var(--line); padding-top:10px; }
+        .operation-title { font-size:12.5px; font-weight:600; margin-bottom:8px; }
+        .step { margin:10px 0; padding-left:10px; border-left:2px solid var(--line); }
+        .step-status { display:inline-block; font-size:10.5px; font-weight:600; padding:1px 6px; border-radius:999px; background:var(--badge-bg); color:var(--muted); margin-bottom:3px; }
+        .step-status.success { color:var(--ok); background:var(--badge-ok); }
+        .step-status.failed,.step-status.blocked { color:var(--error); background:var(--badge-err); }
+        .step-title { font-weight:600; font-size:12.5px; margin-bottom:2px; }
+        .step-detail { font-size:12px; color:var(--muted); }
         [hidden] { display:none!important; }
-        @media(max-width:540px) { main { padding:20px 16px 28px; } .turn-user { margin-left:20px; } }
+        @media(max-width:540px) { main { padding:16px 14px 24px; } .user-message { margin-left:16px; } }
         </style>
         <script nonce="\(nonce)">\(assets.lazyAsset(name: "marked.min", ext: "js"))</script>
         <script nonce="\(nonce)">\(assets.lazyAsset(name: "highlight.min", ext: "js"))</script>
@@ -362,6 +448,13 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
                     copy.setAttribute('aria-label', strings.copy);
                     copy.addEventListener('click', () => {
                         window.webkit.messageHandlers.controlCenterChat.postMessage({action:'copy', text:code.textContent});
+                        copy.textContent = '✓ ' + strings.copy;
+                        copy.classList.add('copied');
+                        clearTimeout(copy.cmuxTimer);
+                        copy.cmuxTimer = setTimeout(() => {
+                            copy.textContent = strings.copy;
+                            copy.classList.remove('copied');
+                        }, 1200);
                     });
                     code.parentNode.append(copy);
                 });
@@ -503,6 +596,18 @@ struct ControlCenterChatMarkdown: NSViewRepresentable {
                     const retainedImages = new Set(payload.turns.flatMap(turn => turn.attachments.map(image => image.id)));
                     imageCache.forEach((_, id) => { if (!retainedImages.has(id)) imageCache.delete(id); });
                     document.documentElement.classList.toggle('dark', payload.dark);
+                    if (/^#[0-9a-fA-F]{6}$/.test(payload.themeBackground || '')) {
+                        document.documentElement.style.setProperty('--theme-bg', payload.themeBackground);
+                    }
+                    if (/^#[0-9a-fA-F]{6}$/.test(payload.themeForeground || '')) {
+                        document.documentElement.style.setProperty('--fg', payload.themeForeground);
+                    }
+                    if (/^#[0-9a-fA-F]{6}$/.test(payload.themeBorder || '')) {
+                        document.documentElement.style.setProperty('--line', payload.themeBorder);
+                    }
+                    if (/^#[0-9a-fA-F]{6}$/.test(payload.accent || '')) {
+                        document.documentElement.style.setProperty('--accent', payload.accent);
+                    }
                     document.getElementById('highlight-light').media = payload.dark ? 'not all' : 'all';
                     document.getElementById('highlight-dark').media = payload.dark ? 'all' : 'not all';
                     const retained = new Set(payload.turns.map(turn => turn.id));

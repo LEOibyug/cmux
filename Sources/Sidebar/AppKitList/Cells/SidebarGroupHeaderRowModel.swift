@@ -24,6 +24,8 @@ struct SidebarGroupHeaderRowModel: Equatable, Hashable {
     /// selection is off.
     var anchorActiveEdgeColor: NSColor? = nil
     let memberCount: Int
+    /// True when the group is expanded and currently renders at least one member workspace below this header.
+    var hasVisibleMembers: Bool = false
     var anchorUnreadCount: Int
     var canMarkRead: Bool
     var canMarkUnread: Bool

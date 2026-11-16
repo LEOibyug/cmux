@@ -1792,7 +1792,8 @@ struct ContentView: View {
             if hasMountedControlCenter || sidebarSelectionState.selection == .controlCenter {
                 ControlCenterView(
                     coordinator: .shared,
-                    isVisible: sidebarSelectionState.selection == .controlCenter
+                    isVisible: sidebarSelectionState.selection == .controlCenter,
+                    windowAppearance: appearance
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .opacity(sidebarSelectionState.selection == .controlCenter ? 1 : 0)

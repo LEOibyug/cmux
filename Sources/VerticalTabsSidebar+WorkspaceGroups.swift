@@ -95,6 +95,7 @@ extension VerticalTabsSidebar {
             tabIds: renderContext.sidebarReorderIds,
             indicatorScope: dragState.dropIndicatorScope
         )
+        let hasVisibleMembers = !group.isCollapsed && !memberWorkspaceIds.isEmpty
         let model = SidebarGroupHeaderRowModel(
             groupId: group.id,
             anchorWorkspaceId: group.anchorWorkspaceId,
@@ -108,6 +109,7 @@ extension VerticalTabsSidebar {
             multiSelectionBackgroundStyle: multiSelectionBackgroundStyle,
             anchorActiveEdgeColor: anchorActiveEdgeColor,
             memberCount: memberWorkspaceIds.count,
+            hasVisibleMembers: hasVisibleMembers,
             anchorUnreadCount: anchorUnreadCount,
             canMarkRead: canMarkAnchorRead,
             canMarkUnread: canMarkAnchorUnread,
@@ -153,6 +155,7 @@ extension VerticalTabsSidebar {
                 // changes rebuild this configuration. Reuse the render context's
                 // indexed members instead of rescanning every tab per unread row.
                 var fresh = model
+                fresh.hasVisibleMembers = hasVisibleMembers
                 fresh.anchorUnreadCount = isCollapsed
                     ? memberWorkspaceIds.reduce(0) {
                         $0 + snapshot.unreadCount(forWorkspaceId: $1)
@@ -292,6 +295,7 @@ extension VerticalTabsSidebar {
             multiSelectionBackgroundStyle: multiSelectionBackgroundStyle,
             anchorActiveEdgeColor: anchorActiveEdgeColor,
             memberCount: memberWorkspaceIds.count,
+            hasVisibleMembers: !group.isCollapsed && !memberWorkspaceIds.isEmpty,
             anchorUnreadCount: anchorUnreadCount,
             canMarkRead: canMarkAnchorRead,
             canMarkUnread: canMarkAnchorUnread,
@@ -346,6 +350,7 @@ extension VerticalTabsSidebar {
             multiSelectionBackgroundStyle: snapshot.multiSelectionBackgroundStyle,
             anchorActiveEdgeColor: snapshot.anchorActiveEdgeColor,
             memberCount: snapshot.memberCount,
+            hasVisibleMembers: snapshot.hasVisibleMembers,
             anchorUnreadCount: snapshot.anchorUnreadCount,
             canMarkRead: snapshot.canMarkRead,
             canMarkUnread: snapshot.canMarkUnread,
