@@ -477,7 +477,9 @@ extension ControlCenterCoordinator {
         if call.name == "read_file" {
             let offset = try integer("offset", default: 0)
             let limit = try integer("limit", default: 12_000)
-            let approvedPath = ControlCenterSessionScope.canonicalCwd(path)
+            guard let approvedPath = ControlCenterSessionScope.canonicalCwd(path) else {
+                throw ControlCenterHostError.blocked("Cannot resolve the requested file path.")
+            }
             try await authorizeTool(call)
             try checkCancellation()
             guard connection == approvedConnection, ControlCenterSessionScope.canonicalCwd(path) == approvedPath else {

@@ -207,7 +207,7 @@ extension ControlCenterCoordinator {
             throw ControlCenterHostError.blocked("No private OMP native input channel is installed. Install the cmux OMP integration and restart OMP deliberately; terminal keystrokes are not a safe fallback.")
         }
         let file = directory.appendingPathComponent("\(panel.id.uuidString.lowercased()).json")
-        let descriptor = open(file.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        let descriptor = Darwin.open(file.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
         guard descriptor >= 0 else { throw ControlCenterHostError.blocked("This terminal has no OMP native input channel. Other agents and legacy OMP processes are unsupported.") }
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         guard fstat(descriptor, &status) == 0, status.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
@@ -220,7 +220,7 @@ extension ControlCenterCoordinator {
               endpoint.token.count == 64, UUID(uuidString: endpoint.instance_id) != nil,
               !endpoint.session_id.isEmpty, endpoint.pid > 0,
               let entry = workspaceLiveEntry(workspaceID: workspace.id, panelID: panel.id),
-              entry.snapshot.kind == .omp, entry.snapshot.sessionId == endpoint.session_id,
+              entry.snapshot.kind.rawValue == "omp", entry.snapshot.sessionId == endpoint.session_id,
               let identity = entry.agentProcessIdentities[Int(endpoint.pid)],
               AgentPIDProcessIdentity(pid: endpoint.pid) == identity else {
             throw ControlCenterHostError.blocked("OMP's exact workspace/session/process binding is unverified or changed. No input was sent.")
