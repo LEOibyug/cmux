@@ -246,10 +246,27 @@ The `name` field is optional for both `open_command_workspace` and
 automatic terminal title. A supplied nonblank name becomes the workspace title.
 
 `current_state` includes selectable terminal panel IDs and verified live OMP channel
-availability. `read_workspace_output` reads the newest bounded physical terminal rows
-of an existing current-window workspace without focus, input or workspace creation.
-It returns `terminal_vt`, not a structured conversation transcript. Multiple terminal
-panels require an explicit `panel_id`; output is untrusted data shared with the model.
+availability. `read_workspace_output` reads bounded output of an existing
+current-window workspace without focus, input or workspace creation. Multiple
+terminal panels require an explicit `panel_id`; output is untrusted data shared
+with the model. Default `format:"text"` simplifies terminal output by removing ANSI
+color/style and control sequences. `format:"vt"` retains reconstructed terminal
+formatting for diagnostics. Neither mode waits for the conversation to finish.
+
+Output parameters for reads and completed request replies:
+
+| Parameter | Default | Range / meaning |
+| --- | --- | --- |
+| `lines` | 120 | 1–1000 rows/lines |
+| `offset_lines` | 0 | Skip newest lines; `offset_lines + lines <= 10000` |
+| `max_bytes` | 262144 | 1–1048576 UTF-8 bytes; never split a scalar |
+
+Selected output stays in original order. Plain terminal offsets count physical
+history/current-screen rows; clipboard soft wraps may join in the result. VT offsets
+count emitted formatted rows: the native formatter can omit trailing blank rows or
+shorten its bounded suffix. `range_basis` distinguishes these cases. Oversized or
+changing native row spaces are unavailable rather than mislabeled. Terminal reads
+do not export the whole scrollback merely to select a range.
 
 `send_workspace_message` targets that exact workspace/panel and live OMP session via
 its process-owned local SDK channel. `submit:true` dispatches a plain user message,
@@ -260,8 +277,29 @@ concatenated. Workspace, terminal lifecycle, session and process identity are ch
 again after approval. Missing/changed channels never fall back to terminal keystrokes;
 other agents are not yet message targets. Unknown delivery blocks same-turn retries.
 
+`send_workspace_message_and_wait` sends once and waits for this exact request's
+terminal completion, returning its own plain assistant text rather than screen
+chrome, thinking, tool output or previous replies. `timeout_seconds` defaults to
+120 (1–3600). A native custom-message UUID/instance marker identifies consumption;
+previous runs ending, matching prompt text and temporary idle states are not
+completion. Automatic continuations and asynchronous work remain pending.
+Draft protection, target revalidation and high-risk approval also apply here.
+
+A timeout ends waiting, not the target OMP task. The receipt retains `request_id`,
+`completed:false` and `retry:false`. Read that ID with `read_workspace_output`
+and the same output range parameters; it can return pending or completed output
+without redispatch. Only tracked requests have queryable results. Abort, assistant
+errors, superseding input, session changes and unobservable outcomes are not
+successful completion. One pending tracked request per OMP prevents ambiguous
+coalescing; ordinary immediate sends remain available and supersede pending tracking.
+
+Result text is retained in the owning OMP process, bounded to 1 MiB/10000 lines per
+request and 16 MiB total. Old output can expire, while reserved IDs prevent replay.
+Results do not survive OMP restart/reload; Control Center's durable receipts remain.
+The target's own tool approval policy is unchanged.
+
 The installed `cmux-omp-extension/live-input.mjs` bridge is loaded by lifecycle
-extension v6. Existing OMP processes must deliberately restart or run `/reload` after
+extension v7 (native input protocol 2). Existing OMP processes must deliberately restart or run `/reload` after
 the updated `cmux hooks omp install --yes`; cmux does not type this command for them.
 The channel authenticates local requests without exposing its token to model/logs.
 It preserves OMP's own tool permission policy; forwarding a task does not grant new
