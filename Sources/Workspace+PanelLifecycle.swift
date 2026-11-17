@@ -193,6 +193,13 @@ extension Workspace {
         if let panelId { recordAgentPIDOwnership(key: key, panelId: panelId) } else { removeAgentPIDOwnership(key: key) }
         if let panelId { noteAgentWakeAgentReported(panelId: panelId, statusKey: agentStatusKey(forAgentPIDKey: key)) }
         if previous.pid != pid || previous.panelId != panelId || previous.identity != processIdentity {
+            if let panelId, let processIdentity, agentStatusKey(forAgentPIDKey: key) == "omp" {
+                AppDelegate.shared?.notificationStore?.clearNotifications(
+                    forTabId: id,
+                    surfaceId: panelId,
+                    correlationKey: TerminalController.nativeOMPCompletionKey(processIdentity)
+                )
+            }
             for changedPanelId in (previous.panelId == panelId ? [panelId] : [previous.panelId, panelId]).compactMap({ $0 }) {
                 AgentHibernationController.shared.recordAgentProcessChange(workspaceId: id, panelId: changedPanelId)
             }
@@ -261,6 +268,12 @@ extension Workspace {
             recomputeListeningPorts()
             PortScanner.shared.unregisterAgentWorkspace(workspaceId: id)
         }
+    }
+
+    func hasLiveAgentHookPID(_ process: AgentPIDProcessIdentity, statusKey: String, panelId: UUID) -> Bool {
+        agentPIDKeysByPanelId[panelId]?.contains { key in
+            agentPIDProcessIdentitiesByKey[key] == process && agentStatusKey(forAgentPIDKey: key) == statusKey
+        } == true
     }
 
     private func isRecordedAgentPIDLive(key: String, pid: pid_t) -> Bool {

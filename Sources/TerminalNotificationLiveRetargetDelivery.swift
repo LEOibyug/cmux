@@ -1,3 +1,4 @@
+import CmuxFoundation
 import CmuxNotifications
 import CmuxSettings
 import Foundation
@@ -42,6 +43,29 @@ extension TerminalController {
             // rehome that source-confined claim from an untrusted surface UUID.
             target = (tabId, surfaceId)
         }
+        var deliveryCorrelationKey = correlationKey
+        if !origin.isRemote, agent == nil, subtitle.isEmpty, body == "Complete",
+           let panelId = target.surfaceId, let peer = SocketCommandTaskPolicy.peerProcessID,
+           let parentPID = AgentPIDProcessIdentity.processSnapshot(pid: peer)?.parentPID,
+           let process = AgentPIDProcessIdentity(pid: parentPID) {
+            let workspace = AppDelegate.shared?.workspaceContainingPanel(
+                panelId: panelId, preferredWorkspaceId: target.tabId
+            )?.workspace
+            if workspace?.id == target.tabId,
+               workspace?.hasLiveAgentHookPID(process, statusKey: "omp", panelId: panelId) == true {
+                return nil
+            }
+            // An initial prompt can finish before the managed hook binds its PID.
+            // Keep the native fallback unless that exact process later binds.
+            let ompName: StaticString = "omp"
+            let isOMP = withUnsafeTemporaryAllocation(of: CChar.self, capacity: 64) { buffer in
+                proc_name(parentPID, buffer.baseAddress, UInt32(buffer.count)) == ompName.utf8CodeUnitCount
+                    && memcmp(buffer.baseAddress, ompName.utf8Start, ompName.utf8CodeUnitCount) == 0
+            }
+            if isOMP {
+                deliveryCorrelationKey = Self.nativeOMPCompletionKey(process)
+            }
+        }
         if retargetsToLiveSurfaceOwner, let liveSurfaceId = target.surfaceId {
             // Supersede by canonical surface identity: stale-keyed local
             // entries would retarget to this same pane at drain.
@@ -67,12 +91,16 @@ extension TerminalController {
             body: body,
             replyShape: replyShape,
             retargetsToLiveSurfaceOwner: retargetsToLiveSurfaceOwner,
-            correlationKey: correlationKey,
+            correlationKey: deliveryCorrelationKey,
             agent: agent,
             soundContext: soundContext,
             origin: origin,
             effects: effects
         )
+    }
+
+    static func nativeOMPCompletionKey(_ process: AgentPIDProcessIdentity) -> String {
+        "omp-native-complete:\(process.pid):\(process.startSeconds):\(process.startMicroseconds)"
     }
 }
 
