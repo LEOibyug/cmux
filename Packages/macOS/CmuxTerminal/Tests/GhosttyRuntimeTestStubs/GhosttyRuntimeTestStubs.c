@@ -701,6 +701,27 @@ bool ghostty_surface_read_screen_tail_vt(
     text->text_len = sizeof(value) - 1;
     return true;
 }
+// Unavailable native range capture in SwiftPM's stand-in runtime. Range and
+// encoding behavior is exercised directly, not supplied by mock output.
+bool ghostty_surface_scrollbar(void *surface, void *snapshot) {
+    (void)surface;
+    (void)snapshot;
+    return false;
+}
+bool ghostty_surface_read_screen_clipboard_text(
+    void *surface,
+    uint32_t top,
+    uint32_t bottom,
+    uintptr_t max_bytes,
+    ghostty_text_s *text
+) {
+    (void)surface;
+    (void)top;
+    (void)bottom;
+    (void)max_bytes;
+    (void)text;
+    return false;
+}
 void ghostty_surface_read_text(void) {}
 void ghostty_surface_refresh(void) {}
 bool ghostty_surface_set_render_presented_callback(

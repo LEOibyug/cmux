@@ -336,7 +336,7 @@ extension ControlCenterCoordinator {
             if let path = args["path"]?.stringValue {
                 reasons += ControlCenterOperationRisk.file((path as NSString).expandingTildeInPath, writing: call.name != "read_file")
             }
-        case "send_workspace_message":
+        case "send_workspace_message", "send_workspace_message_and_wait":
             if let text = args["text"]?.stringValue,
                text.range(of: #"(?i)\b(rm\s+-|sudo\s|mkfs\b|chmod\s|chown\s|delete\b|wipe\b|purge\b)|删除|清空|格式化|抹掉|销毁|覆盖|强制推送|重置权限|禁用安全"#, options: .regularExpression) != nil {
                 reasons.append("agentRequest")
@@ -356,7 +356,7 @@ extension ControlCenterCoordinator {
         try await refreshSnapshot()
         let detail = try plannedDetail ?? approvalDetail(call)
         let request = ControlCenterApproval(
-            title: ControlCenterStrings.text("approve." + call.name),
+            title: ControlCenterStrings.text("approve." + (call.name == "send_workspace_message_and_wait" ? "send_workspace_message" : call.name)),
             detail: detail,
             riskReasons: reasons
         )

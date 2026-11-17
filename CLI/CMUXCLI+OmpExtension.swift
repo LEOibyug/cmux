@@ -4,7 +4,7 @@ extension CMUXCLI {
     private static let ompExtensionMarker = "cmux-omp-session-extension-marker"
     private static let ompExtensionFilename = "cmux-omp-session.ts"
     private static let ompExtensionSource = #"""
-// cmux-omp-session-extension-marker v6
+// cmux-omp-session-extension-marker v7
 // Bridges OMP session lifecycle events into cmux's restorable session store.
 // Installed by `cmux hooks omp install` or `cmux hooks setup`.
 // DO NOT EDIT MANUALLY. cmux upgrades this file in place.
@@ -349,7 +349,8 @@ interface CmuxOmpPaneOwnership {
   sessionId: string | null;
   phase?: "starting" | "running" | "idle";
   prompt?: string;
-  input?: { update(ctx: ExtensionContext): void; close(): void };
+  input?: { readonly protocolVersion: number; update(ctx: ExtensionContext): void; close(): void };
+  inputAPI?: ExtensionAPI;
   inputLoading?: Promise<void>;
   inputGeneration?: number;
 }
@@ -376,11 +377,18 @@ export default function cmuxOmpSessionExtension(api: ExtensionAPI) {
   const ensureInput = async (ctx: ExtensionContext) => {
     if (!isOwnerContext(ctx) || isNestedArtifactSession(ctx) || process.env.CMUX_OMP_HOOKS_DISABLED === "1") return;
     const owner = paneOwnership();
+    if (owner.inputLoading) await owner.inputLoading;
+    if (!isOwnerContext(ctx)) return;
+    if (owner.input && (owner.input.protocolVersion !== 2 || owner.inputAPI !== api)) {
+      owner.input.close();
+      owner.input = undefined;
+      owner.inputAPI = undefined;
+      owner.inputGeneration = (owner.inputGeneration ?? 0) + 1;
+    }
     if (owner.input) {
       try { owner.input.update(ctx); } catch (_) { owner.input.close(); owner.input = undefined; }
       return;
     }
-    if (owner.inputLoading) { await owner.inputLoading; return; }
     const generation = owner.inputGeneration ?? 0;
     owner.inputLoading = (async () => {
       try {
@@ -391,11 +399,16 @@ export default function cmuxOmpSessionExtension(api: ExtensionAPI) {
           if (stat.uid !== process.getuid?.() || (stat.mode & 0o022) !== 0 ||
               (candidate === root ? !stat.isDirectory() : !stat.isFile() || stat.nlink !== 1)) return;
         }
-        const bridge = await import(pathToFileURL(entry).href);
+        const entryURL = pathToFileURL(entry);
+        entryURL.searchParams.set("protocol", "2");
+        entryURL.searchParams.set("mtime", String(fs.statSync(entry).mtimeMs));
+        const bridge = await import(entryURL.href);
         if (isOwnerContext(ctx)) {
           const input = await bridge.attachLiveInput(api, ctx);
-          if ((owner.inputGeneration ?? 0) === generation) owner.input = input;
-          else input?.close();
+          if ((owner.inputGeneration ?? 0) === generation) {
+            owner.input = input;
+            owner.inputAPI = api;
+          } else input?.close();
         }
       } catch (_) { /* Lifecycle hooks remain usable without the optional input component. */ }
     })();
@@ -469,6 +482,7 @@ export default function cmuxOmpSessionExtension(api: ExtensionAPI) {
     paneOwnership().inputGeneration = (paneOwnership().inputGeneration ?? 0) + 1;
     paneOwnership().input?.close();
     paneOwnership().input = undefined;
+    paneOwnership().inputAPI = undefined;
     await awaitHookQueueDrain();
   });
 }
