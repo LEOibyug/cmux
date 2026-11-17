@@ -36,6 +36,7 @@ struct ControlCenterApproval: Identifiable {
     let id = UUID()
     let title: String
     let detail: String
+    let riskReasons: [String]
 }
 
 extension ControlCenterCoordinator {
@@ -292,33 +293,78 @@ extension ControlCenterCoordinator {
 
     static func isReadOnlyModelTool(_ name: String) -> Bool {
         switch name {
-        case "read_file", "search_sessions", "refresh_sessions", "list_saved", "current_state", "list_settings", "memory_list", "help": return true
+        case "read_file", "read_workspace_output", "search_sessions", "refresh_sessions", "list_saved", "current_state", "list_settings", "memory_list", "help": return true
         default: return false
         }
     }
 
     func resolveApproval(_ allowed: Bool) {
+        let highRisk = pendingApproval?.riskReasons.isEmpty == false
         let continuation = approvalContinuation
         approvalContinuation = nil
         pendingApproval = nil
+        if !allowed && highRisk { riskConfirmationDeclined = true }
         appendChatLog("tool.approval", payload: .object([
-            "call_id": activeChatToolID.map(ControlCenterJSON.string) ?? .null, "allowed": .bool(allowed)
+            "call_id": activeChatToolID.map(ControlCenterJSON.string) ?? .null, "allowed": .bool(allowed),
+            "high_risk": .bool(highRisk)
         ]))
         setChatToolStatus(allowed ? "running" : "blocked")
         continuation?.resume(returning: allowed)
     }
 
-    func authorizeTool(_ call: ControlCenterToolCall, plannedDetail: String? = nil) async throws {
+    private func operationRiskReasons(_ call: ControlCenterToolCall) throws -> [String] {
+        let args = call.arguments.objectValue ?? [:]
+        var reasons: [String] = []
+        if let value = args["high_risk"] {
+            guard case .bool(let flagged) = value else {
+                throw ControlCenterHostError.blocked("high_risk must be a boolean.")
+            }
+            if flagged { reasons.append("modelIdentified") }
+        }
+        switch call.name {
+        case "bash":
+            let request = try bashArguments(call.arguments)
+            reasons += ControlCenterOperationRisk.shell(request.command, directory: request.directory)
+        case "open_command_workspace":
+            let request = try commandWorkspaceArguments(call.arguments)
+            let arguments = try (args["command"]?.arrayValue ?? []).map { value -> String in
+                guard let text = value.stringValue else { throw ControlCenterCommandError.invalidArguments }
+                return text
+            }
+            reasons += ControlCenterOperationRisk.arguments(arguments, directory: request.directory)
+        case "read_file", "write_file", "edit_file":
+            if let path = args["path"]?.stringValue {
+                reasons += ControlCenterOperationRisk.file((path as NSString).expandingTildeInPath, writing: call.name != "read_file")
+            }
+        case "send_workspace_message":
+            if let text = args["text"]?.stringValue,
+               text.range(of: #"(?i)\b(rm\s+-|sudo\s|mkfs\b|chmod\s|chown\s|delete\b|wipe\b|purge\b)|删除|清空|格式化|抹掉|销毁|覆盖|强制推送|重置权限|禁用安全"#, options: .regularExpression) != nil {
+                reasons.append("agentRequest")
+            }
+        default:
+            break
+        }
+        return reasons
+    }
+
+    func authorizeTool(_ call: ControlCenterToolCall, plannedDetail: String? = nil, riskReasons: [String] = []) async throws {
         try checkCancellation()
-        guard !Self.isReadOnlyModelTool(call.name), accessMode == .ask else { return }
+        let reasons = Array(Set(try operationRiskReasons(call) + riskReasons)).sorted()
+        let highRisk = !reasons.isEmpty
+        guard highRisk || !Self.isReadOnlyModelTool(call.name) && accessMode == .ask else { return }
+        guard !riskConfirmationDeclined else { throw ControlCenterHostError.blocked(ControlCenterStrings.text("riskDeclined")) }
         try await refreshSnapshot()
         let detail = try plannedDetail ?? approvalDetail(call)
         let request = ControlCenterApproval(
             title: ControlCenterStrings.text("approve." + call.name),
-            detail: detail
+            detail: detail,
+            riskReasons: reasons
         )
         setChatToolStatus("waiting")
-        appendChatLog("tool.approval_requested", payload: .object(["call_id": .string(call.id), "detail": .string(detail)]))
+        appendChatLog("tool.approval_requested", payload: .object([
+            "call_id": .string(call.id), "detail": .string(detail),
+            "risk_reasons": .array(reasons.map(ControlCenterJSON.string))
+        ]))
         ControlCenterPresentation.show()
         let approved = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in

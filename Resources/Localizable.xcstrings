@@ -537458,19 +537458,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Approve changes and Bash individually, or use Full Access without per-action approval. File content and tool output are shared with the selected model."
+            "value": "Full Access skips routine approval. High-risk actions always require confirmation. Files and tool output are shared with the selected model."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "逐项批准修改与 Bash，或使用“完全访问”省略批准。文件内容和工具输出会发送给所选模型。"
+            "value": "完全访问可省略普通操作的批准；高风险操作始终需要确认。文件和工具输出会发送给所选模型。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "逐項核准修改與 Bash，或使用「完整存取」省略核准。檔案內容與工具輸出會傳送給所選模型。"
+            "value": "完整存取可省略一般操作的核准；高風險操作一律需要確認。檔案與工具輸出會傳送給所選模型。"
           }
         }
       }
@@ -537504,19 +537504,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Run requested workspace, file, setting and Bash actions without individual approval or a command denylist, using your existing permissions. Files and output are sent to the selected model and saved locally. This does not authorize new goals or external account/security actions. Switch back to Ask Before Changes when idle."
+            "value": "Run routine requested actions without individual approval using your existing permissions. Destructive, security-sensitive and opaque executions still ask for confirmation, then run if approved. Files and output are shared with the selected model and saved locally."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用现有权限执行用户要求的工作区、文件、设置和 Bash 操作，无逐项批准或命令黑名单。文件和输出发送给所选模型并保存在本机；不授权新目标或外部账户／安全操作。空闲时可切回“操作前询问”。"
+            "value": "使用现有权限直接执行用户要求的普通操作。删除、权限与安全变更，以及无法静态判断的脚本仍会弹窗确认，确认后执行。文件和输出发送给所选模型并保存在本机。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用現有權限執行使用者要求的工作區、檔案、設定與 Bash 操作，無逐項核准或命令黑名單。檔案與輸出傳送給所選模型並儲存在這部 Mac；不授權新目標或外部帳戶／安全操作。閒置時可切回「操作前詢問」。"
+            "value": "使用現有權限直接執行使用者要求的一般操作。刪除、權限與安全變更，以及無法靜態判斷的指令碼仍會彈窗確認，確認後執行。檔案與輸出傳送給所選模型並儲存在這部 Mac。"
           }
         }
       }
@@ -537862,6 +537862,397 @@
           "stringUnit": {
             "state": "translated",
             "value": "完整存取"
+          }
+        }
+      }
+    },
+    "controlCenter.riskConfirmationTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm high-risk operation"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确认高风险操作"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認高風險操作"
+          }
+        }
+      }
+    },
+    "controlCenter.riskConfirmationHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve only this action. Full Access does not skip this confirmation."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅确认本次操作；完全访问也不会跳过此次确认。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅確認本次操作；完整存取也不會略過此次確認。"
+          }
+        }
+      }
+    },
+    "controlCenter.riskRun": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm and Run"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确认并执行"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認並執行"
+          }
+        }
+      }
+    },
+    "controlCenter.riskDeclined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The user cancelled a high-risk operation. No further changes will run in this request; wait for a new user instruction."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用户已取消高风险操作；本轮不再执行其他修改，等待新的用户指令。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用者已取消高風險操作；本輪不再執行其他修改，等待新的使用者指令。"
+          }
+        }
+      }
+    },
+    "controlCenter.risk.deletion": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deletes data or discards history."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会删除数据或丢弃历史记录。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "會刪除資料或捨棄歷史記錄。"
+          }
+        }
+      }
+    },
+    "controlCenter.risk.overwrite": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "May overwrite or move existing data."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可能覆盖或移动现有数据。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可能覆寫或移動現有資料。"
+          }
+        }
+      }
+    },
+    "controlCenter.risk.privilege": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests elevated privileges. System authentication remains separate."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请求提升权限；系统身份验证仍需单独完成。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要求提升權限；系統身分驗證仍需另行完成。"
+          }
+        }
+      }
+    },
+    "controlCenter.risk.permissions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes file ownership or access permissions."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会修改文件所有者或访问权限。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "會修改檔案擁有者或存取權限。"
+          }
+        }
+      }
+    },
+    "controlCenter.risk.system": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes system configuration, services or security controls."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会修改系统配置、服务或安全控制。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "會修改系統設定、服務或安全控制。"
+          }
+        }
+      }
+    },
+    "controlCenter.risk.credentials": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "May expose or modify credentials or authentication files."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可能披露或修改密钥、凭据或身份验证文件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可能揭露或修改金鑰、憑證或身分驗證檔案。"
+          }
+        }
+      }
+    },
+    "controlCenter.risk.external": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "May send data, publish changes or modify an external service."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可能对外发送数据、发布更改或修改外部服务。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可能對外傳送資料、發佈變更或修改外部服務。"
+          }
+        }
+      }
+    },
+    "controlCenter.risk.opaqueExecution": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runs a script, interpreter or syntax whose effects cannot be established statically."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会运行无法静态确定其影响的脚本、解释器或命令语法。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "會執行無法靜態確定其影響的指令碼、直譯器或命令語法。"
+          }
+        }
+      }
+    },
+    "controlCenter.risk.modelIdentified": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The model marked this requested action as high risk."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型将本次操作标为高风险。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型將本次操作標為高風險。"
+          }
+        }
+      }
+    },
+    "controlCenter.risk.agentRequest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The message includes potentially destructive or security-sensitive instructions for another agent."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "消息中包含要求其他智能体执行的潜在破坏性或安全敏感指令。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "訊息中包含要求其他智慧代理執行的潛在破壞性或安全敏感指令。"
+          }
+        }
+      }
+    },
+    "controlCenter.approve.read_file": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read file"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取文件"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讀取檔案"
+          }
+        }
+      }
+    },
+    "controlCenter.approve.read_workspace_output": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read workspace output"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读取工作区输出"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讀取工作區輸出"
+          }
+        }
+      }
+    },
+    "controlCenter.approve.send_workspace_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send message to OMP"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向 OMP 发送消息"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向 OMP 傳送訊息"
           }
         }
       }

@@ -11,12 +11,25 @@ struct ControlCenterChatView: View {
     @State private var focusRequest = 0
     @State private var confirmsFullAccess = false
     @State private var isInputFocused = false
+    @State private var displayedRiskApprovalID: UUID?
     @Environment(\.controlCenterTheme) private var theme
 
     private var isActive: Bool { coordinator.isRunning || coordinator.activeChatTurnID != nil }
     private var canSend: Bool {
         isVisible && !isActive && !coordinator.chatImagesLoading
             && (!coordinator.chatDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !coordinator.chatAttachments.isEmpty)
+    }
+
+    private var highRiskApproval: Binding<ControlCenterApproval?> {
+        Binding(
+            get: { coordinator.pendingApproval.flatMap { $0.riskReasons.isEmpty ? nil : $0 } },
+            set: { value in
+                if value == nil, let id = displayedRiskApprovalID,
+                   coordinator.pendingApproval?.id == id {
+                    resolveApproval(false, id: id)
+                }
+            }
+        )
     }
 
     var body: some View {
@@ -53,7 +66,7 @@ struct ControlCenterChatView: View {
                 .fill(theme.borderColor)
                 .frame(height: 1)
             VStack(alignment: .leading, spacing: 10) {
-                if let approval = coordinator.pendingApproval {
+                if let approval = coordinator.pendingApproval, approval.riskReasons.isEmpty {
                     approvalView(approval)
                 } else if confirmsFullAccess {
                     fullAccessConfirmation
@@ -67,6 +80,12 @@ struct ControlCenterChatView: View {
             .frame(maxWidth: .infinity)
         }
         .background(theme.surfaceBackgroundColor)
+        .sheet(item: highRiskApproval) { approval in
+            highRiskConfirmation(approval)
+                .controlCenterSheetTheme(theme)
+                .onAppear { displayedRiskApprovalID = approval.id }
+                .onChange(of: approval.id) { _, id in displayedRiskApprovalID = id }
+        }
         .onChange(of: isVisible) { _, visible in
             if visible { focusRequest += 1 }
         }
@@ -206,9 +225,9 @@ struct ControlCenterChatView: View {
                     .font(.caption)
                     .foregroundStyle(theme.secondaryForegroundColor)
                 Spacer()
-                Button(ControlCenterStrings.text("chatReject")) { resolveApproval(false) }
+                Button(ControlCenterStrings.text("chatReject")) { resolveApproval(false, id: approval.id) }
                     .accessibilityIdentifier("controlCenter.chatReject")
-                Button(ControlCenterStrings.text("chatApprove")) { resolveApproval(true) }
+                Button(ControlCenterStrings.text("chatApprove")) { resolveApproval(true, id: approval.id) }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("controlCenter.chatApprove")
             }
@@ -218,6 +237,46 @@ struct ControlCenterChatView: View {
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(Color.orange.opacity(0.32)))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("controlCenter.chatApproval")
+    }
+
+    private func highRiskConfirmation(_ approval: ControlCenterApproval) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label(ControlCenterStrings.text("riskConfirmationTitle"), systemImage: "exclamationmark.shield.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.orange)
+            Text(approval.title).font(.headline)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(approval.riskReasons, id: \.self) { reason in
+                    Text(ControlCenterStrings.text("risk." + reason))
+                        .font(.callout)
+                }
+            }
+            ScrollView {
+                Text(approval.detail)
+                    .font(.system(.callout, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+            .frame(minHeight: 160, maxHeight: 320)
+            .background(theme.inputSurfaceColor, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.borderColor))
+            HStack(spacing: 12) {
+                Text(ControlCenterStrings.text("riskConfirmationHint"))
+                    .font(.caption)
+                    .foregroundStyle(theme.secondaryForegroundColor)
+                Spacer()
+                Button(ControlCenterStrings.text("cancel")) { resolveApproval(false, id: approval.id) }
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("controlCenter.riskCancel")
+                Button(ControlCenterStrings.text("riskRun"), role: .destructive) { resolveApproval(true, id: approval.id) }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("controlCenter.riskRun")
+            }
+        }
+        .padding(24)
+        .frame(width: 680)
+        .accessibilityIdentifier("controlCenter.riskConfirmation")
     }
 
     private var fullAccessConfirmation: some View {
@@ -535,7 +594,8 @@ struct ControlCenterChatView: View {
         focusRequest += 1
     }
 
-    private func resolveApproval(_ allowed: Bool) {
+    private func resolveApproval(_ allowed: Bool, id: UUID? = nil) {
+        guard id == nil || coordinator.pendingApproval?.id == id else { return }
         coordinator.resolveApproval(allowed)
         focusRequest += 1
     }

@@ -41,7 +41,7 @@ private struct ControlCenterDirectoryArchiveInvocation {
 extension ControlCenterCoordinator {
     func executeDirectoryArchive(_ call: ControlCenterToolCall) async throws -> ControlCenterJSON {
         let args = call.arguments.objectValue ?? [:]
-        guard Set(args.keys).isSubset(of: ["paths", "destination", "exclude_records"]),
+        guard Set(args.keys).isSubset(of: ["paths", "destination", "exclude_records", "high_risk"]),
               let values = args["paths"]?.arrayValue, (1...32).contains(values.count) else {
             throw ControlCenterHostError.blocked("archive_directories requires 1–32 explicit project directory paths and an optional archive parent destination.")
         }

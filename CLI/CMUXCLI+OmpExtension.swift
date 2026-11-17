@@ -4,7 +4,7 @@ extension CMUXCLI {
     private static let ompExtensionMarker = "cmux-omp-session-extension-marker"
     private static let ompExtensionFilename = "cmux-omp-session.ts"
     private static let ompExtensionSource = #"""
-// cmux-omp-session-extension-marker v5
+// cmux-omp-session-extension-marker v6
 // Bridges OMP session lifecycle events into cmux's restorable session store.
 // Installed by `cmux hooks omp install` or `cmux hooks setup`.
 // DO NOT EDIT MANUALLY. cmux upgrades this file in place.
@@ -12,6 +12,8 @@ extension CMUXCLI {
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
+import { pathToFileURL } from "node:url";
 import type { AgentEndEvent, ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 
 function firstString(...values: unknown[]): string | null {
@@ -347,6 +349,9 @@ interface CmuxOmpPaneOwnership {
   sessionId: string | null;
   phase?: "starting" | "running" | "idle";
   prompt?: string;
+  input?: { update(ctx: ExtensionContext): void; close(): void };
+  inputLoading?: Promise<void>;
+  inputGeneration?: number;
 }
 
 const cmuxOmpGlobals = globalThis as typeof globalThis & {
@@ -368,15 +373,44 @@ function isOwnerContext(ctx: ExtensionContext): boolean {
 }
 
 export default function cmuxOmpSessionExtension(api: ExtensionAPI) {
+  const ensureInput = async (ctx: ExtensionContext) => {
+    if (!isOwnerContext(ctx) || isNestedArtifactSession(ctx) || process.env.CMUX_OMP_HOOKS_DISABLED === "1") return;
+    const owner = paneOwnership();
+    if (owner.input) {
+      try { owner.input.update(ctx); } catch (_) { owner.input.close(); owner.input = undefined; }
+      return;
+    }
+    if (owner.inputLoading) { await owner.inputLoading; return; }
+    const generation = owner.inputGeneration ?? 0;
+    owner.inputLoading = (async () => {
+      try {
+        const root = path.join(os.homedir(), ".local/share/cmux-omp-extension");
+        const entry = path.join(root, "live-input.mjs");
+        for (const candidate of [root, entry]) {
+          const stat = fs.lstatSync(candidate);
+          if (stat.uid !== process.getuid?.() || (stat.mode & 0o022) !== 0 ||
+              (candidate === root ? !stat.isDirectory() : !stat.isFile() || stat.nlink !== 1)) return;
+        }
+        const bridge = await import(pathToFileURL(entry).href);
+        if (isOwnerContext(ctx)) {
+          const input = await bridge.attachLiveInput(api, ctx);
+          if ((owner.inputGeneration ?? 0) === generation) owner.input = input;
+          else input?.close();
+        }
+      } catch (_) { /* Lifecycle hooks remain usable without the optional input component. */ }
+    })();
+    try { await owner.inputLoading; } finally { owner.inputLoading = undefined; }
+  };
   api.on("session_start", async (_event, ctx) => {
     // Only the first bootstrap owns the pane. OMP can replay session_start
     // when loading extensions later; replaying it must not revive an idle pane.
     const ownership = paneOwnership();
-    if (ownership.sessionId !== null) return;
+    if (ownership.sessionId !== null) { await ensureInput(ctx); return; }
     ownership.sessionId = contextSessionId(ctx);
     if (!isOwnerContext(ctx)) return;
     ownership.phase = "starting";
     await sendHook("session-start", ctx);
+    await ensureInput(ctx);
   });
 
   // In-process session transitions (/new, fork, resume, handoff) fire only on
@@ -389,11 +423,12 @@ export default function cmuxOmpSessionExtension(api: ExtensionAPI) {
     // OMP's reload() re-emits session_switch for the unchanged session file.
     // A same-id "switch" is not an ownership transition: a spurious
     // session-start would mark an idle pane running with no agent_end coming.
-    if (ownership.sessionId === sessionId) return;
+    if (ownership.sessionId === sessionId) { await ensureInput(ctx); return; }
     ownership.sessionId = sessionId;
     ownership.phase = "starting";
     ownership.prompt = undefined;
     await sendHook("session-start", ctx);
+    await ensureInput(ctx);
   };
   api.on("session_switch", adoptSwitchedSession);
   api.on("session_branch", adoptSwitchedSession);
@@ -431,6 +466,9 @@ export default function cmuxOmpSessionExtension(api: ExtensionAPI) {
     // A subagent session's teardown must not drain (and drop queued
     // prompt-submit entries of) the owner session's hook queue.
     if (!isOwnerContext(ctx)) return;
+    paneOwnership().inputGeneration = (paneOwnership().inputGeneration ?? 0) + 1;
+    paneOwnership().input?.close();
+    paneOwnership().input = undefined;
     await awaitHookQueueDrain();
   });
 }

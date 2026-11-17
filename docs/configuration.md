@@ -219,18 +219,18 @@ scroll position, draft and expanded tool cards. Image data is sent to the render
 once per attachment UUID, not with every token update. Hidden chat input cannot
 take focus or consume terminal shortcuts. Initial renderer colors match the page.
 
-The composer permission selector defaults to **Ask Before Changes**. Read-only
-typed tools and `read_file` do not prompt; model-invoked changes show exact arguments
-and resolved targets. Every Bash script, including inspection, requires approval
-of the script, resolved logical cwd and output disclosure; background commands
-also show their timeout. Reject executes nothing and creates no workspace.
-Stop cancels pending approval and remaining work, not completed effects.
-A changed target requires a new review. **Full Access**, enabled through explicit
-inline confirmation, skips per-action approvals without a command denylist.
-Neither mode elevates OS permissions or authorizes external sending, purchases or account/security changes.
-The mode is saved locally and cannot be changed by a model tool or memory record.
-Direct native buttons are already explicit user actions and do not add this model
-approval step.
+The composer permission selector defaults to **Ask Before Changes**. Ordinary
+read-only tools do not prompt; changes show exact arguments and resolved targets.
+**Full Access** skips routine approvals, not high-risk confirmation. Destructive
+deletion/overwrite, privilege and security changes, credential disclosure, external
+publishing, and opaque scripts/interpreters show a separate confirmation sheet in
+both modes. The model can raise `high_risk:true`; false cannot suppress host checks.
+The sheet includes the risk reasons and exact action; confirmation runs it, rather
+than denying a command category. Static risk detection is not a security sandbox.
+System permissions and authentication remain unchanged. Cancellation executes
+nothing and blocks alternate mutations until the next user request. Stop cancels
+pending approval and remaining work, not completed effects. Changed targets require
+new review; saved history never supplies approval.
 
 Use `open_command_workspace` for a new terminal running a requested command, for
 example `command: ["ssh", "lab-computer"]` and an optional `cwd`. It never reuses
@@ -244,6 +244,28 @@ terminal command, and an uncertain launch is never retried automatically.
 The `name` field is optional for both `open_command_workspace` and
 `create_workspace`. Omit it, send `null`, or leave it blank to retain cmux's
 automatic terminal title. A supplied nonblank name becomes the workspace title.
+
+`current_state` includes selectable terminal panel IDs and verified live OMP channel
+availability. `read_workspace_output` reads the newest bounded physical terminal rows
+of an existing current-window workspace without focus, input or workspace creation.
+It returns `terminal_vt`, not a structured conversation transcript. Multiple terminal
+panels require an explicit `panel_id`; output is untrusted data shared with the model.
+
+`send_workspace_message` targets that exact workspace/panel and live OMP session via
+its process-owned local SDK channel. `submit:true` dispatches a plain user message,
+with `followUp` delivery while busy; `sdk_dispatched` does not mean persisted or
+completed. Slash commands/templates are not expanded. `submit:false` fills an empty
+editor without submitting. Existing OMP or cmux textbox drafts are never erased or
+concatenated. Workspace, terminal lifecycle, session and process identity are checked
+again after approval. Missing/changed channels never fall back to terminal keystrokes;
+other agents are not yet message targets. Unknown delivery blocks same-turn retries.
+
+The installed `cmux-omp-extension/live-input.mjs` bridge is loaded by lifecycle
+extension v6. Existing OMP processes must deliberately restart or run `/reload` after
+the updated `cmux hooks omp install --yes`; cmux does not type this command for them.
+The channel authenticates local requests without exposing its token to model/logs.
+It preserves OMP's own tool permission policy; forwarding a task does not grant new
+permissions. High-risk delegated instructions still require Control Center confirmation.
 
 `open_command_workspace` accepts literal argument arrays; `bash.command` accepts
 actual Bash source, including pipelines, redirection and scripts. Bash is never

@@ -100,6 +100,7 @@ final class ControlCenterCoordinator: ObservableObject {
     var approvalContinuation: CheckedContinuation<Bool, Never>?
     var uncertainSessionIDs: Set<String> = []
     var directoryArchiveMutationBlocked = false
+    var riskConfirmationDeclined = false
     var pendingChatEntries: [ControlCenterChatEntry] = []
     var pendingChatText = ""
     var chatProgressTask: Task<Void, Never>?
@@ -215,6 +216,7 @@ final class ControlCenterCoordinator: ObservableObject {
         guard !isRunning else { error = "An operation is already running."; return }
         uncertainSessionIDs.removeAll(keepingCapacity: true)
         directoryArchiveMutationBlocked = false
+        riskConfirmationDeclined = false
         isRunning = true
         cancelled = false
         error = nil

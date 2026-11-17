@@ -1473,6 +1473,7 @@
 		89B00E98BF48BC25092509CC /* ControlCenterCodexpressConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91838AE8175419D326525341 /* ControlCenterCodexpressConnection.swift */; };
 		03F6F668BB4B21491C0DE16F /* ControlCenterConfigurationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A66BCB2BBA2F4088723AE03C /* ControlCenterConfigurationView.swift */; };
 		EB9F383E771E875661005316 /* ControlCenterCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C997CF69DBDCB6C5BF34605B /* ControlCenterCoordinator.swift */; };
+		C7A5F001C7A5F001C7A5F001 /* ControlCenterWorkspaceIO.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A5F002C7A5F002C7A5F002 /* ControlCenterWorkspaceIO.swift */; };
 		60AD04C3A9556323C1C98E65 /* ControlCenterModelActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02ED35A2727864FBC0089BFB /* ControlCenterModelActions.swift */; };
 		C85134D905E8054C2650FEED /* ControlCenterOMPProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = B54B8EEC982816674F841746 /* ControlCenterOMPProbe.swift */; };
 		6F271462A0CE6AD720900C5C /* ControlCenterPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4257A5D0A6AE53F8141F2C /* ControlCenterPresentation.swift */; };
@@ -5463,6 +5464,7 @@
 		91838AE8175419D326525341 /* ControlCenterCodexpressConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterCodexpressConnection.swift; sourceTree = "<group>"; };
 		A66BCB2BBA2F4088723AE03C /* ControlCenterConfigurationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterConfigurationView.swift; sourceTree = "<group>"; };
 		C997CF69DBDCB6C5BF34605B /* ControlCenterCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterCoordinator.swift; sourceTree = "<group>"; };
+		C7A5F002C7A5F002C7A5F002 /* ControlCenterWorkspaceIO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterWorkspaceIO.swift; sourceTree = "<group>"; };
 		02ED35A2727864FBC0089BFB /* ControlCenterModelActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterModelActions.swift; sourceTree = "<group>"; };
 		B54B8EEC982816674F841746 /* ControlCenterOMPProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterOMPProbe.swift; sourceTree = "<group>"; };
 		5A4257A5D0A6AE53F8141F2C /* ControlCenterPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterPresentation.swift; sourceTree = "<group>"; };
@@ -10729,6 +10731,7 @@
 				41F0B5AB0D71C287C6785ED6 /* ControlCenterActions.swift */,
 				A66BCB2BBA2F4088723AE03C /* ControlCenterConfigurationView.swift */,
 				C997CF69DBDCB6C5BF34605B /* ControlCenterCoordinator.swift */,
+				C7A5F002C7A5F002C7A5F002 /* ControlCenterWorkspaceIO.swift */,
 				02ED35A2727864FBC0089BFB /* ControlCenterModelActions.swift */,
 				B54B8EEC982816674F841746 /* ControlCenterOMPProbe.swift */,
 				29BB572DFB04A27C99D1DADD /* ControlCenterSessionActions.swift */,
@@ -13453,6 +13456,7 @@
 				89B00E98BF48BC25092509CC /* ControlCenterCodexpressConnection.swift in Sources */,
 				03F6F668BB4B21491C0DE16F /* ControlCenterConfigurationView.swift in Sources */,
 				EB9F383E771E875661005316 /* ControlCenterCoordinator.swift in Sources */,
+				C7A5F001C7A5F001C7A5F001 /* ControlCenterWorkspaceIO.swift in Sources */,
 				60AD04C3A9556323C1C98E65 /* ControlCenterModelActions.swift in Sources */,
 				C85134D905E8054C2650FEED /* ControlCenterOMPProbe.swift in Sources */,
 				6F271462A0CE6AD720900C5C /* ControlCenterPresentation.swift in Sources */,
