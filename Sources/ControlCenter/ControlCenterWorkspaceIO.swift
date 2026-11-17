@@ -1,4 +1,5 @@
 import CmuxControlCenter
+import CmuxCore
 import CmuxFoundation
 import CmuxTerminal
 import Darwin
@@ -29,23 +30,18 @@ private struct ControlCenterWorkspaceIOTarget {
 
 extension ControlCenterCoordinator {
     func workspaceIOState(for workspace: Workspace) -> ControlCenterJSON {
-        SharedLiveAgentIndex.shared.scheduleRefreshIfStale()
         let panels = workspace.panels.values.compactMap { $0 as? TerminalPanel }.sorted { $0.id.uuidString < $1.id.uuidString }
         return .object([
             "terminal_panels": .array(panels.prefix(100).map { panel in
                 let endpoint = try? workspaceOMPInputEndpoint(workspace: workspace, panel: panel)
-                let entry = workspaceLiveEntry(workspaceID: workspace.id, panelID: panel.id)
-                let identityVerified = entry.map { entry in
-                    entry.agentProcessIdentities.values.contains { AgentPIDProcessIdentity(pid: $0.pid) == $0 }
-                } ?? false
                 return .object([
                     "panel_id": .string(panel.id.uuidString),
                     "title": .string(String(panel.title.prefix(256))),
                     "output_origin": .string("terminal"),
                     "runtime_available": .bool(workspaceTerminalIsBound(workspace: workspace, panel: panel)),
-                    "agent_kind": identityVerified ? .string(entry!.snapshot.kind.rawValue) : .null,
-                    "session_id": identityVerified ? .string(entry!.snapshot.sessionId) : .null,
-                    "agent_status": .string(identityVerified ? "process_alive" : "unverified"),
+                    "agent_kind": endpoint == nil ? .null : .string("omp"),
+                    "session_id": endpoint.map { .string($0.session_id) } ?? .null,
+                    "agent_status": .string(endpoint == nil ? "unverified" : "process_alive"),
                     "omp_input_channel": .string(endpoint == nil ? "unavailable" : "registered"),
                     "message_delivery": .string("native_sdk_only_no_pty_fallback")
                 ])
@@ -97,7 +93,6 @@ extension ControlCenterCoordinator {
             throw ControlCenterHostError.blocked("submit must be a boolean.")
         }
         let submit = args["submit"]?.boolValue ?? true
-        _ = await SharedLiveAgentIndex.shared.indexRefreshingNow()
         try checkCancellation()
         let target = try workspaceIOTarget(args)
         let approvedRuntime = target.panel.surface.liveSurfaceForGhosttyAccess(reason: "controlCenter.sendWorkspaceMessage")
@@ -116,8 +111,6 @@ extension ControlCenterCoordinator {
             "draft_policy": .string("Reject existing OMP or cmux textbox drafts; never erase or concatenate.")
         ])
         try await authorizeTool(call, plannedDetail: String(decoding: try detail.data(), as: UTF8.self))
-        try checkCancellation()
-        _ = await SharedLiveAgentIndex.shared.indexRefreshingNow()
         try checkCancellation()
         let current = try workspaceIOTarget(args)
         guard current.workspace === target.workspace, current.panel === target.panel,
@@ -195,10 +188,6 @@ extension ControlCenterCoordinator {
             panel.surface.liveSurfaceForGhosttyAccess(reason: "controlCenter.workspaceIO") != nil
     }
 
-    private func workspaceLiveEntry(workspaceID: UUID, panelID: UUID) -> RestorableAgentSessionIndex.Entry? {
-        SharedLiveAgentIndex.shared.index?.exactEntry(workspaceId: workspaceID, panelId: panelID)
-    }
-
     private func workspaceOMPInputEndpoint(workspace: Workspace, panel: TerminalPanel) throws -> ControlCenterOMPInputEndpoint {
         let directory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cmuxterm/omp-live-input", isDirectory: true)
         var status = stat()
@@ -219,10 +208,8 @@ extension ControlCenterCoordinator {
               UUID(uuidString: endpoint.panel_id) == panel.id, endpoint.port > 0, endpoint.port <= 65535,
               endpoint.token.count == 64, UUID(uuidString: endpoint.instance_id) != nil,
               !endpoint.session_id.isEmpty, endpoint.pid > 0,
-              let entry = workspaceLiveEntry(workspaceID: workspace.id, panelID: panel.id),
-              entry.snapshot.kind.rawValue == "omp", entry.snapshot.sessionId == endpoint.session_id,
-              let identity = entry.agentProcessIdentities[Int(endpoint.pid)],
-              AgentPIDProcessIdentity(pid: endpoint.pid) == identity else {
+              let binding = AppDelegate.shared?.liveAgentDeliveryTarget(forAgentPID: endpoint.pid),
+              binding.workspaceId == workspace.id, binding.surfaceId == panel.id else {
             throw ControlCenterHostError.blocked("OMP's exact workspace/session/process binding is unverified or changed. No input was sent.")
         }
         return endpoint
