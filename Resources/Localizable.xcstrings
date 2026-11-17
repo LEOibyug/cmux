@@ -346,6 +346,52 @@
         }
       }
     },
+    "controlCenter.approve.archive_directories": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive project folders and conversations"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "归档项目文件夹及对话"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "封存專案資料夾及對話"
+          }
+        }
+      }
+    },
+    "controlCenter.directoryArchiveDisclosure": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move the exact project folders below and archive every listed OMP conversation with its working directory remapped to the destination. This approves one planned batch only. Partial results are retained; completed moves are not rolled back or retried automatically."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移动下列确切项目文件夹，并归档列出的全部 OMP 对话，将其工作目录映射到目标位置。此次仅批准这一批规划。部分结果将保留；已完成的移动不会回滚或自动重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移動下列確切專案資料夾，並封存列出的全部 OMP 對話，將其工作目錄映射至目標位置。此次僅核准這一批規劃。部分結果將保留；已完成的移動不會回復或自動重試。"
+          }
+        }
+      }
+    },
     "controlCenter.approve.archive_session": {
       "extractionState": "manual",
       "localizations": {

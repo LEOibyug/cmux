@@ -27,7 +27,7 @@ public struct ControlCenterSessionScope: Equatable, Sendable {
 
     // Resolve the closest existing directory before appending missing historical components.
     // A missing segment followed by '..' must not hide a dangling, escaping or cyclic symlink.
-    private static func canonicalCwd(_ cwd: String) -> String? {
+    public static func canonicalCwd(_ cwd: String) -> String? {
         guard cwd.hasPrefix("/"), !cwd.contains("\0") else { return nil }
         if let resolved = realpath(cwd, nil) {
             defer { free(resolved) }

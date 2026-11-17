@@ -308,11 +308,11 @@ extension ControlCenterCoordinator {
         continuation?.resume(returning: allowed)
     }
 
-    func authorizeTool(_ call: ControlCenterToolCall) async throws {
+    func authorizeTool(_ call: ControlCenterToolCall, plannedDetail: String? = nil) async throws {
         try checkCancellation()
         guard !Self.isReadOnlyModelTool(call.name), accessMode == .ask else { return }
         try await refreshSnapshot()
-        let detail = try approvalDetail(call)
+        let detail = try plannedDetail ?? approvalDetail(call)
         let request = ControlCenterApproval(
             title: ControlCenterStrings.text("approve." + call.name),
             detail: detail
@@ -333,7 +333,7 @@ extension ControlCenterCoordinator {
         try checkCancellation()
         guard approved else { throw ControlCenterHostError.blocked(ControlCenterStrings.text("approvalDeclined")) }
         try await refreshSnapshot()
-        guard try approvalDetail(call) == detail else {
+        guard try (plannedDetail ?? approvalDetail(call)) == detail else {
             throw ControlCenterHostError.blocked(ControlCenterStrings.text("approvalChanged"))
         }
     }

@@ -166,6 +166,35 @@ duplicate IDs and changed approval snapshots are refused. Cwd changes migrate th
 native journal/artifacts, not physical project folders; destination directories
 must exist inside the same scope. Trash is reversible; no permanent purge exists.
 
+For physical project archival, ask in chat, for example “Archive `~/Work/ProjectA`
+and `~/Work/ProjectB` into `~/Work/Archived`” when `~/Work` is the configured
+default directory. `archive_directories` accepts `paths` (1–32 explicit absolute
+directory paths, with `~` expansion) and optional `destination` (archive parent,
+default `default_directory/Archived`). No workspace name or user-selected opaque
+session IDs are required. The worker discovers every associated top-level OMP
+conversation by canonical cwd membership, including descendants, historical
+missing subdirectories and normal forks; task-artifact journals remain excluded.
+It first produces a read-only plan. One approval shows exact folder moves,
+conversation IDs, journal paths, cwd remapping, counts and plan digest. Execution
+binds the current connection, registered history source and canonical scope to
+that approval, and the worker rebuilds the digest before mutation. Full Access
+skips only the prompt. Neither planning nor execution changes Connection settings.
+
+Folder archival refuses symlink leaf sources, overlaps, the scope root, escaping
+destinations, existing targets, protected worker/session data, busy ownership and
+cross-filesystem moves. It uses a same-filesystem atomic no-overwrite rename,
+then archives related journals with their cwd mapped under the new folder.
+Native IDs, titles, history, artifacts and images are preserved. A durable batch
+manifest is kept at `ManagedSessions/DirectoryArchives/<requestID>`; normal
+per-session archive/pending manifests remain authoritative for recovery. Exact
+structured per-project/session receipts and request files are retained, including
+partial or unknown outcomes. Started mutations always trigger native-index and
+managed-manifest reconciliation, including remapped cwd. Incomplete/unknown
+results block further mutations in the same model turn; no automatic retry,
+compensation or fabricated rollback occurs. Refresh is read-only and does not
+replay a batch. `archive_session` remains a single-conversation journal archive;
+`restore_session` restores a conversation, not a physically archived project folder.
+
 Mutations require the independently installed `cmux-omp-extension` worker from the
 sibling project of that name. It bundles OMP data SDK/native addon 18.18.0 and uses
 the installed macOS arm64 OMP 18.18.x executable's Bun runtime, without model setup,

@@ -173,7 +173,7 @@ extension ControlCenterCoordinator {
         } catch is CancellationError {} catch { self.error = error.localizedDescription }
     }
 
-    private func managedSessionRoot() throws -> URL {
+    func managedSessionRoot() throws -> URL {
         try dataDirectory().appendingPathComponent("ManagedSessions", isDirectory: true)
     }
 
@@ -269,7 +269,7 @@ extension ControlCenterCoordinator {
         }
     }
 
-    private func managementExtension() throws -> URL {
+    func managementExtension() throws -> URL {
         let path = ("~/.local/share/cmux-omp-extension/worker.mjs" as NSString).expandingTildeInPath
         var status = stat()
         guard lstat(path, &status) == 0, status.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),

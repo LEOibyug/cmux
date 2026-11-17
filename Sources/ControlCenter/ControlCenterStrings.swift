@@ -48,6 +48,8 @@ enum ControlCenterStrings {
         "sessionDirectoryHint": "Moves the conversation journal and artifacts, not project files. The directory must be within the default working directory.",
         "approve.update_session_directory": "Change conversation directory",
         "approve.archive_session": "Archive conversation",
+        "approve.archive_directories": "Archive project folders and conversations",
+        "directoryArchiveDisclosure": "Move the exact project folders below and archive every listed OMP conversation with its working directory remapped to the destination. This approves one planned batch only. Partial results are retained; completed moves are not rolled back or retried automatically.",
         "approve.trash_session": "Move conversation to Trash",
         "approve.restore_session": "Restore conversation",
         "favorite": "Favorite",

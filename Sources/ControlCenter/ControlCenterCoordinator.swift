@@ -99,6 +99,7 @@ final class ControlCenterCoordinator: ObservableObject {
     var openedTargets: [String: UUID] = [:]
     var approvalContinuation: CheckedContinuation<Bool, Never>?
     var uncertainSessionIDs: Set<String> = []
+    var directoryArchiveMutationBlocked = false
     var pendingChatEntries: [ControlCenterChatEntry] = []
     var pendingChatText = ""
     var chatProgressTask: Task<Void, Never>?
@@ -213,6 +214,7 @@ final class ControlCenterCoordinator: ObservableObject {
     func runOperation(title: String, body: @escaping @MainActor () async throws -> Void) async {
         guard !isRunning else { error = "An operation is already running."; return }
         uncertainSessionIDs.removeAll(keepingCapacity: true)
+        directoryArchiveMutationBlocked = false
         isRunning = true
         cancelled = false
         error = nil

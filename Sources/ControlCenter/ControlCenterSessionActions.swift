@@ -133,7 +133,7 @@ extension ControlCenterCoordinator {
         error = nil
     }
 
-    func logicalDirectory(_ raw: String, create: Bool = false) throws -> String {
+    func logicalAbsolutePath(_ raw: String) throws -> String {
         let expanded = (raw.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
         guard expanded.hasPrefix("/"), !expanded.contains("\0") else {
             throw ControlCenterHostError.blocked("Choose an absolute directory path.")
@@ -145,7 +145,11 @@ extension ControlCenterCoordinator {
             if component == ".." { if !names.isEmpty { names.removeLast() }; continue }
             names.append(String(component))
         }
-        let path = "/" + names.joined(separator: "/")
+        return "/" + names.joined(separator: "/")
+    }
+
+    func logicalDirectory(_ raw: String, create: Bool = false) throws -> String {
+        let path = try logicalAbsolutePath(raw)
         let manager = FileManager.default
         let physical = canonicalPath(path)
         if physical.hasPrefix("/Volumes/") {
