@@ -220,14 +220,14 @@ once per attachment UUID, not with every token update. Hidden chat input cannot
 take focus or consume terminal shortcuts. Initial renderer colors match the page.
 
 The composer permission selector defaults to **Ask Before Changes**. Read-only
-typed tools do not prompt; model-invoked local changes show exact arguments and
-resolved targets. Every admitted command, including inspection, requires approval
-of the command, resolved logical cwd and output disclosure; background commands
+typed tools and `read_file` do not prompt; model-invoked changes show exact arguments
+and resolved targets. Every Bash script, including inspection, requires approval
+of the script, resolved logical cwd and output disclosure; background commands
 also show their timeout. Reject executes nothing and creates no workspace.
 Stop cancels pending approval and remaining work, not completed effects.
 A changed target requires a new review. **Full Access**, enabled through explicit
-inline confirmation, skips per-action approvals but never command safety checks.
-Neither mode elevates permissions or grants account/security access.
+inline confirmation, skips per-action approvals without a command denylist.
+Neither mode elevates OS permissions or authorizes external sending, purchases or account/security changes.
 The mode is saved locally and cannot be changed by a model tool or memory record.
 Direct native buttons are already explicit user actions and do not add this model
 approval step.
@@ -245,28 +245,37 @@ The `name` field is optional for both `open_command_workspace` and
 `create_workspace`. Omit it, send `null`, or leave it blank to retain cmux's
 automatic terminal title. A supplied nonblank name becomes the workspace title.
 
-Both command tools accept literal argument arrays, not shell source. The host
-admits only fixed macOS system executables with supported read-only options:
-`ls`, `pwd`, literal `echo`/`printf`, `whoami`, `hostname`, `uname`, `uptime`,
-read-only `date`, plus terminal-only SSH connections. Destructive operations,
-elevation, Shell/script interpreters, download-and-execute and unknown executables
-are refused even in Full Access. SSH remote commands and model-supplied `-o`/`-F`
-options are rejected; `LocalCommand` and `RemoteCommand` are disabled. Existing
-user SSH configuration, including connection routing, remains trusted. This is
-command admission, not an OS sandbox. Unsupported commands can be run manually
-in an ordinary terminal, not retried through another model tool.
+`open_command_workspace` accepts literal argument arrays; `bash.command` accepts
+actual Bash source, including pipelines, redirection and scripts. Bash is never
+classified read-only. It runs `/bin/bash --noprofile --norc -c` with stdin closed,
+the inherited user environment and installed executable search paths (including
+user runtime directories and Homebrew), without injecting model connection keys.
+`cwd` defaults to the Connection directory; missing paths never trigger fallback
+or implicit creation. `timeout_seconds` is 1–300, default 60. Bounded stdout/stderr,
+exit status, signal, timeout and partial cancelled output are retained in receipts
+and sent to the configured model. Stop terminates the owned command group, not
+terminal workspaces. Shell state does not persist. Unknown outcomes are not
+automatically retried or compensated.
 
-For noninteractive inspection, `bash` executes the same admitted arguments through
-`/bin/bash --noprofile --norc -c`, individually shell-quoted, with stdin closed
-(`/dev/null`) and no injected model connection key. `cwd` defaults to the Connection
-directory; existing logical paths and symlinks are preserved, with no creation or
-fallback for missing paths. `timeout_seconds` is an integer from 1–300, default 60.
-stdout and stderr are capped at 32 KiB each while pipes continue draining. Output
-is sent to the configured model and saved in durable receipts with command, cwd,
-exit status, signal, truncation, timeout and partial cancelled output. Nonzero
-exits and timeouts are failures; cancellation is recorded before stopping the
-operation. There are no automatic retries. Stop terminates this owned background
-command group, not command workspaces. Shell state does not persist between calls.
+`read_file` reads an explicit user-accessible path, with byte `offset` and `limit`
+(default 12,000), accurate UTF-8 or base64 encoding, hash and continuation offset.
+Generic paths are not restricted to the typed session default-directory scope.
+`write_file` accepts UTF-8/base64; `edit_file` replaces exact unique UTF-8 text
+unless `replace_all` is explicit. Both plan resolved targets, hashes and previews
+before approval, then revalidate source bytes and symlink binding. Parent directories
+must exist. Original overwritten bytes and metadata are retained privately under
+`ControlCenter/FileBackups`; receipts disclose exact backup paths. The optional
+`expected_sha256` detects stale input. Existing streaming tool UI shows these actions.
+
+Files and tool output are untrusted data, not authorization. Only explicit user
+requests authorize edits, risky operations or generic fallback. A malformed journal
+can be inspected with `read_file`, then explicitly backed up, corrected or quarantined
+with generic tools; never invent historical headers, IDs, cwd or conversation content.
+Archive discovery returns structured issues, warnings and exact opaque record IDs.
+Only an explicit user-selected `exclude_records` list leaves those files untouched;
+approval and receipts retain exclusions and report `user_selected_partial` coverage.
+A trustworthy `preflight_failed` receipt with `mutationStarted:false` permits repair;
+partial or unknown operations retain the same-turn mutation barrier.
 
 Only relevant explicit memories are loaded, with directory scopes covering their
 descendants but not similarly prefixed neighbors. No automatic inferred-habit

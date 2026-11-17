@@ -537360,25 +537360,94 @@
         }
       }
     },
+    "controlCenter.approve.write_file": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write file"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "写入文件"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "寫入檔案"
+          }
+        }
+      }
+    },
+    "controlCenter.approve.edit_file": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit file"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑文件"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "編輯檔案"
+          }
+        }
+      }
+    },
+    "controlCenter.fileApprovalDisclosure": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply this planned file change after rechecking the original. Existing bytes are backed up privately; the receipt includes the exact backup path. File contents and receipts are sent to the selected model and saved locally."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复核原文件后执行下方规划修改。原始字节私密备份，回执包含精确备份路径。文件内容和回执发送给所选模型并保存到本机。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複核原檔案後執行下方規劃修改。原始位元組私密備份，收據包含確切備份路徑。檔案內容與收據傳送給所選模型並儲存在這部 Mac。"
+          }
+        }
+      }
+    },
     "controlCenter.bashApprovalDisclosure": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Run the read-only command below. Its output is sent to the selected model and saved locally."
+            "value": "Run the exact Bash script below with your user permissions. It may change files or external state. Its output is sent to the selected model and saved locally."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "运行下方只读命令，输出发送给所选模型并保存到本机。"
+            "value": "以你的用户权限运行下方完整 Bash 脚本；它可能修改文件或外部状态。输出发送给所选模型并保存到本机。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "執行下方唯讀命令，輸出傳送給所選模型並儲存在這部 Mac。"
+            "value": "以你的使用者權限執行下方完整 Bash 指令稿；它可能修改檔案或外部狀態。輸出傳送給所選模型並儲存在這部 Mac。"
           }
         }
       }
@@ -537389,19 +537458,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Approve actions individually, or use Full Access to run supported actions directly. Command output is shared with the selected model."
+            "value": "Approve changes and Bash individually, or use Full Access without per-action approval. File content and tool output are shared with the selected model."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "选择逐项批准，或使用“完全访问”直接执行支持的操作。命令输出会发送给所选模型。"
+            "value": "逐项批准修改与 Bash，或使用“完全访问”省略批准。文件内容和工具输出会发送给所选模型。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "選擇逐項核准，或使用「完整存取」直接執行支援的操作。命令輸出會傳送給所選模型。"
+            "value": "逐項核准修改與 Bash，或使用「完整存取」省略核准。檔案內容與工具輸出會傳送給所選模型。"
           }
         }
       }
@@ -537435,19 +537504,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Run supported workspace, favorite, preference, setting and command actions without individual approval. Commands use your existing permissions; their output is sent to the selected model and saved locally. Switch back to Ask Before Changes when idle."
+            "value": "Run requested workspace, file, setting and Bash actions without individual approval or a command denylist, using your existing permissions. Files and output are sent to the selected model and saved locally. This does not authorize new goals or external account/security actions. Switch back to Ask Before Changes when idle."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "直接执行支持的工作区、收藏、偏好、设置和命令操作。命令沿用当前权限，输出发送给所选模型并保存到本机。空闲时可切回“操作前询问”。"
+            "value": "使用现有权限执行用户要求的工作区、文件、设置和 Bash 操作，无逐项批准或命令黑名单。文件和输出发送给所选模型并保存在本机；不授权新目标或外部账户／安全操作。空闲时可切回“操作前询问”。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "直接執行支援的工作區、收藏、偏好、設定與命令操作。命令沿用目前權限，輸出傳送給所選模型並儲存在這部 Mac。閒置時可切回「操作前詢問」。"
+            "value": "使用現有權限執行使用者要求的工作區、檔案、設定與 Bash 操作，無逐項核准或命令黑名單。檔案與輸出傳送給所選模型並儲存在這部 Mac；不授權新目標或外部帳戶／安全操作。閒置時可切回「操作前詢問」。"
           }
         }
       }

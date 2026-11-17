@@ -17,6 +17,7 @@ public enum ControlCenterBashError: Error, LocalizedError, Sendable {
     case invalidCommand
     case invalidTimeout
     case invalidDirectory
+    case invalidEnvironment
     case systemCall(operation: String, code: Int32)
 
     public var errorDescription: String? {
@@ -27,6 +28,8 @@ public enum ControlCenterBashError: Error, LocalizedError, Sendable {
             return "Bash timeout must be greater than zero and at most 300 seconds."
         case .invalidDirectory:
             return "Bash working directory must be a local directory URL without NUL bytes."
+        case .invalidEnvironment:
+            return "Bash environment names must be nonempty without '=' or NUL, and values must not contain NUL."
         case .systemCall(let operation, let code):
             return "\(operation) failed: \(String(cString: strerror(code))) (\(code))."
         }
@@ -34,7 +37,7 @@ public enum ControlCenterBashError: Error, LocalizedError, Sendable {
 }
 
 public enum ControlCenterBash {
-    public static func run(command: String, directory: URL, timeout: TimeInterval = 60) async throws -> ControlCenterBashResult {
+    public static func run(command: String, directory: URL, timeout: TimeInterval = 60, environment: [String: String]? = nil) async throws -> ControlCenterBashResult {
         try Task.checkCancellation()
         guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !command.utf8.contains(0), command.utf8.count <= 16 * 1024 else {
@@ -46,13 +49,16 @@ public enum ControlCenterBash {
         guard directory.isFileURL, !directory.path.isEmpty, !directory.path.utf8.contains(0) else {
             throw ControlCenterBashError.invalidDirectory
         }
+        guard environment?.allSatisfy({ !$0.key.isEmpty && !$0.key.contains("=") && !$0.key.utf8.contains(0) && !$0.value.utf8.contains(0) }) ?? true else {
+            throw ControlCenterBashError.invalidEnvironment
+        }
         let cancellation = BashCancellation()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 // Blocking POSIX I/O must not occupy a Swift cooperative executor thread.
                 DispatchQueue.global(qos: .utility).async {
                     do {
-                        continuation.resume(returning: try execute(command: command, directory: directory, timeout: timeout, cancellation: cancellation))
+                        continuation.resume(returning: try execute(command: command, directory: directory, timeout: timeout, environment: environment, cancellation: cancellation))
                     } catch {
                         continuation.resume(throwing: error)
                     }
@@ -63,7 +69,7 @@ public enum ControlCenterBash {
         }
     }
 
-    private static func execute(command: String, directory: URL, timeout: TimeInterval, cancellation: BashCancellation) throws -> ControlCenterBashResult {
+    private static func execute(command: String, directory: URL, timeout: TimeInterval, environment overrides: [String: String]?, cancellation: BashCancellation) throws -> ControlCenterBashResult {
         let started = ProcessInfo.processInfo.systemUptime
         let output = try BashPipe()
         defer { output.close() }
@@ -93,6 +99,7 @@ public enum ControlCenterBash {
         try check(posix_spawnattr_setsigdefault(&attributes, &mask), "Resetting Bash signal dispositions")
 
         var environment = ProcessInfo.processInfo.environment
+        if let overrides { environment.merge(overrides) { _, value in value } }
         environment["PWD"] = directory.path
         var arguments = ["/bin/bash", "--noprofile", "--norc", "-c", command].map { strdup($0) } + [nil]
         var variables = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]

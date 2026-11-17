@@ -28,6 +28,18 @@ struct ControlCenterBashTests {
         #expect(!result.timedOut && !result.cancelled && !result.outputTruncated)
     }
 
+    @Test func mergesExplicitEnvironmentWithoutLosingDirectoryBinding() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let result = try await ControlCenterBash.run(
+            command: "printf '%s\\n' \"$PATH\" \"$CMUX_FILE_TEST\" \"$PWD\"",
+            directory: directory,
+            environment: ["PATH": "/explicit/bin:/usr/bin:/bin", "CMUX_FILE_TEST": "literal $(not executed)", "PWD": "/not-the-directory"]
+        )
+        #expect(result.stdout == "/explicit/bin:/usr/bin:/bin\nliteral $(not executed)\n\(directory.path)\n")
+        #expect(result.exitCode == 0 && !result.cancelled && !result.timedOut)
+    }
+
     @Test func preservesSeparateOutputExitStatusAndTerminationSignal() async throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

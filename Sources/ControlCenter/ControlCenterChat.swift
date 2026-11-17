@@ -292,7 +292,7 @@ extension ControlCenterCoordinator {
 
     static func isReadOnlyModelTool(_ name: String) -> Bool {
         switch name {
-        case "search_sessions", "refresh_sessions", "list_saved", "current_state", "list_settings", "memory_list", "help": return true
+        case "read_file", "search_sessions", "refresh_sessions", "list_saved", "current_state", "list_settings", "memory_list", "help": return true
         default: return false
         }
     }

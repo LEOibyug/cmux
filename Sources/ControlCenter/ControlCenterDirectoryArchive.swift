@@ -3,6 +3,13 @@ import Darwin
 import Foundation
 
 private struct ControlCenterDirectoryArchivePlan: Decodable {
+    struct Record: Decodable {
+        let id: String
+        let path: String
+        let fingerprint: String
+        let kind: String
+        let reason: String
+    }
     struct Session: Decodable {
         let sessionID: String
         let journalPath: String
@@ -19,6 +26,9 @@ private struct ControlCenterDirectoryArchivePlan: Decodable {
     }
     let digest: String
     let directories: [Directory]
+    let warnings: [Record]
+    let exclusions: [Record]
+    let coverage: String
 }
 
 private struct ControlCenterDirectoryArchiveInvocation {
@@ -31,7 +41,7 @@ private struct ControlCenterDirectoryArchiveInvocation {
 extension ControlCenterCoordinator {
     func executeDirectoryArchive(_ call: ControlCenterToolCall) async throws -> ControlCenterJSON {
         let args = call.arguments.objectValue ?? [:]
-        guard Set(args.keys).isSubset(of: ["paths", "destination"]),
+        guard Set(args.keys).isSubset(of: ["paths", "destination", "exclude_records"]),
               let values = args["paths"]?.arrayValue, (1...32).contains(values.count) else {
             throw ControlCenterHostError.blocked("archive_directories requires 1–32 explicit project directory paths and an optional archive parent destination.")
         }
@@ -41,6 +51,17 @@ extension ControlCenterCoordinator {
             }
             return try logicalDirectory(path)
         }
+        let exclusions: [String]
+        if let value = args["exclude_records"] {
+            guard let records = value.arrayValue else { throw ControlCenterHostError.blocked("exclude_records must be an array of exact issue IDs.") }
+            exclusions = try records.map { value in
+                guard let id = value.stringValue, id.count == 64, id.allSatisfy({ $0.isHexDigit }) else {
+                    throw ControlCenterHostError.blocked("exclude_records requires exact current issue IDs explicitly selected by the user.")
+                }
+                return id
+            }
+            guard Set(exclusions).count == exclusions.count else { throw ControlCenterHostError.blocked("exclude_records must not contain duplicate IDs.") }
+        } else { exclusions = [] }
         let scope = try sessionManagementScope()
         let destination: String
         if let value = args["destination"] {
@@ -64,7 +85,8 @@ extension ControlCenterCoordinator {
             "kind": .string("directory_archive"), "paths": .array(paths.map(ControlCenterJSON.string)),
             "destination": .string(destination), "sessionRoot": .string(source.root.path),
             "archiveRoot": .string(archiveRoot.path), "allowedCwdRoot": .string(scope.directory),
-            "expectedCanonicalCwdRoot": .string(scope.canonicalDirectory)
+            "expectedCanonicalCwdRoot": .string(scope.canonicalDirectory),
+            "exclude_records": .array(exclusions.map(ControlCenterJSON.string))
         ]
         // Planning is credentials-free and read-only for project folders and journals.
         let planning = try await invokeDirectoryArchive(request, action: "plan_directory_archive", executable: executable, addon: addon)
@@ -72,6 +94,9 @@ extension ControlCenterCoordinator {
               let planJSON = planned["plan"],
               let plan = try? JSONDecoder().decode(ControlCenterDirectoryArchivePlan.self, from: planJSON.data()),
               !plan.digest.isEmpty, plan.directories.count == paths.count,
+              Set(plan.exclusions.map(\.id)) == Set(exclusions),
+              plan.exclusions.count == exclusions.count,
+              plan.coverage == (exclusions.isEmpty ? "complete" : "user_selected_partial"),
               Set(plan.directories.map { canonicalPath($0.source) }) == Set(paths.map { canonicalPath($0) }),
               plan.directories.allSatisfy({ directory in
                   scope.contains(directory.source) && scope.contains(directory.destination) &&
@@ -136,12 +161,16 @@ extension ControlCenterCoordinator {
                       sessions.count == directory.sessions.count else { return false }
                 return sessions.allSatisfy { $0.objectValue?["ok"]?.boolValue == true && $0.objectValue?["state"]?.stringValue == "archived" }
             }
-        if receipt["ok"]?.boolValue == true, !completeProjects {
+        let matchingCoverage = receipt["coverage"]?.stringValue == plan.coverage &&
+            receipt["exclusions"] == planJSON.objectValue?["exclusions"] &&
+            receipt["warnings"] == planJSON.objectValue?["warnings"]
+        if receipt["ok"]?.boolValue == true, !completeProjects || !matchingCoverage {
             receipt["ok"] = .bool(false)
             receipt["outcome"] = .string("unknown")
-            receipt["error"] = .string("The worker reported success without complete matching project/session receipts. Preserve this receipt and refresh Pending sessions; do not retry automatically.")
+            receipt["error"] = .string("The worker reported success without complete matching project/session, warning and exclusion coverage receipts. Preserve this receipt and refresh Pending sessions; do not retry automatically.")
         }
         let completed = receipt["ok"]?.boolValue == true && receipt["outcome"]?.stringValue != "unknown"
+        let noMutation = receipt["ok"]?.boolValue == false && receipt["outcome"]?.stringValue == "preflight_failed" && receipt["mutationStarted"]?.boolValue == false
         receipt["retry"] = .bool(false)
         receipt["plan_digest"] = .string(plan.digest)
         receipt["plan"] = planJSON
@@ -149,7 +178,7 @@ extension ControlCenterCoordinator {
         if !completed {
             receipt["status"] = .string(receipt["outcome"]?.stringValue == "unknown" ? "unknown" : "incomplete")
             if receipt["error"] == nil { receipt["error"] = .string("Directory archival stopped. Inspect each project/session status; completed moves were not rolled back. No same-turn retry or compensation is allowed.") }
-            uncertainSessionIDs.formUnion(sessionIDs)
+            if !noMutation { uncertainSessionIDs.formUnion(sessionIDs) }
         }
         // An independent task reconciles even if Stop cancelled the invoking model turn.
         let refreshError = await Task { @MainActor () -> String? in
@@ -167,7 +196,7 @@ extension ControlCenterCoordinator {
             return errors.isEmpty ? nil : errors.joined(separator: "\n")
         }.value
         if let refreshError { receipt["index_refresh_error"] = .string(refreshError) }
-        if completed { directoryArchiveMutationBlocked = false }
+        if completed || noMutation { directoryArchiveMutationBlocked = false }
         let result = ControlCenterJSON.object(receipt)
         if !completed { throw ControlCenterSessionManagementFailure(receipt: result) }
         try await record(ControlCenterStep(title: ControlCenterStrings.text("approve.archive_directories"), status: .success,
