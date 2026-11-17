@@ -355,6 +355,8 @@ public enum ControlCenterOperationRisk {
             if components.contains(where: { [".ssh", ".aws", ".azure", ".gnupg", "keychains", ".kube", ".omp", ".codex", ".claude", ".gemini"].contains($0) })
                 || ["/.config/gcloud", "/.config/gh", "/.config/omp", "/.local/share/keyrings"].contains(where: { lower.hasSuffix($0) || lower.contains($0 + "/") })
                 || lower.contains("/.docker/config.json")
+                || lower.contains("/.cmuxterm/omp-live-input/")
+                || lower.hasSuffix("/controlcenter/connection.json")
                 || [".netrc", ".npmrc", ".pypirc", ".git-credentials", "credentials", "credentials.json", "auth.json", "tokens.json", "secrets.json", "id_rsa", "id_ed25519", "id_ecdsa", "authorized_keys", "known_hosts"].contains(name)
                 || name == ".env" || name.hasPrefix(".env.") || name.hasSuffix(".pem") || name.hasSuffix(".key")
                 || lower.hasPrefix("/etc/sudoers.d/") || lower.hasPrefix("/private/etc/sudoers.d/")

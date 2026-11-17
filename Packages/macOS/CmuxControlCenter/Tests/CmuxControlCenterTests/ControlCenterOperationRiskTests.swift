@@ -84,6 +84,8 @@ struct ControlCenterOperationRiskTests {
         #expect(ControlCenterOperationRisk.file(ordinary.path, writing: true) == ["overwrite"])
         #expect(ControlCenterOperationRisk.file(root.appendingPathComponent("new.txt").path, writing: true).isEmpty)
         #expect(ControlCenterOperationRisk.file(root.appendingPathComponent(".ssh/new-key").path, writing: false) == ["credentials"])
+        #expect(ControlCenterOperationRisk.file(root.appendingPathComponent(".cmuxterm/omp-live-input/panel.json").path, writing: false) == ["credentials"])
+        #expect(ControlCenterOperationRisk.file(root.appendingPathComponent("ControlCenter/connection.json").path, writing: false) == ["credentials"])
         #expect(ControlCenterOperationRisk.file("/etc/hosts", writing: false).isEmpty)
         #expect(ControlCenterOperationRisk.file("/etc/hosts", writing: true).contains("system"))
         #expect(ControlCenterOperationRisk.file("/private/etc/sudoers", writing: false).contains("credentials"))
