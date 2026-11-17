@@ -53,7 +53,7 @@ struct ControlCenterOMPLaunch: Sendable {
     }
 }
 
-/// Only fixed, read-only OMP CLI probes use this runner; model text never becomes argv.
+/// Captures fixed OMP CLI invocations; model text never becomes argv.
 final class ControlCenterOMPProbe: @unchecked Sendable {
     private let lock = NSLock()
     private var process: Process?
@@ -72,7 +72,7 @@ final class ControlCenterOMPProbe: @unchecked Sendable {
         }
     }
 
-    func capture(executable: URL, arguments: [String], directory: URL) async throws -> Data {
+    func capture(executable: URL, arguments: [String], directory: URL, environment overrides: [String: String] = [:], timeout: TimeInterval = 10) async throws -> Data {
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 DispatchQueue.global(qos: .userInitiated).async {
@@ -87,6 +87,7 @@ final class ControlCenterOMPProbe: @unchecked Sendable {
                     environment["TMPDIR"] = directory.path
                     environment["TMP"] = directory.path
                     environment["TEMP"] = directory.path
+                    environment.merge(overrides) { _, replacement in replacement }
                     process.environment = environment
                     process.currentDirectoryURL = directory
                     self.lock.lock()
@@ -105,7 +106,7 @@ final class ControlCenterOMPProbe: @unchecked Sendable {
                         return
                     }
                     let deadline = DispatchWorkItem { self.stop() }
-                    DispatchQueue.global().asyncAfter(deadline: .now() + 10, execute: deadline)
+                    DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
                     var output = Data()
                     while true {
                         let chunk = pipe.fileHandleForReading.availableData
@@ -120,9 +121,9 @@ final class ControlCenterOMPProbe: @unchecked Sendable {
                     self.process = nil
                     self.lock.unlock()
                     if stopped {
-                        continuation.resume(throwing: ControlCenterHostError.blocked("OMP probe was cancelled, timed out, or exceeded its output limit. No session was started."))
+                        continuation.resume(throwing: ControlCenterHostError.blocked("OMP stopped, timed out, or exceeded its output limit. An interrupted management operation may have completed partially; refresh Pending sessions before another action."))
                     } else if process.terminationStatus != 0 {
-                        continuation.resume(throwing: ControlCenterHostError.blocked("Installed OMP could not inspect session ownership. Resume is blocked; update or select an OMP executable supporting 'session lease --json'."))
+                        continuation.resume(throwing: ControlCenterHostError.blocked("Installed OMP could not complete the requested native operation. Check the selected executable and cmux-omp-extension installation."))
                     } else {
                         continuation.resume(returning: output)
                     }

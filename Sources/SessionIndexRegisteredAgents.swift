@@ -299,9 +299,9 @@ extension SessionIndexStore {
         )
     }
 
-    nonisolated private static func ompJournalHeader(_ url: URL) -> (id: String, cwd: String)? {
+    nonisolated static func ompJournalHeader(_ url: URL) -> (id: String, cwd: String, parentSession: String?)? {
         var titleSeen = false
-        var header: (id: String, cwd: String)?
+        var header: (id: String, cwd: String, parentSession: String?)?
         _ = SessionIndexJSONLReader(chunkSize: 4096).fromStart(url: url, maxBytes: 512 * 1024, indexedBody: { object, index in
             if index == 0, object["type"] as? String == "title" {
                 titleSeen = true
@@ -309,7 +309,7 @@ extension SessionIndexStore {
             }
             if index == (titleSeen ? 1 : 0), object["type"] as? String == "session",
                let id = object["id"] as? String, let cwd = object["cwd"] as? String {
-                header = (id, cwd)
+                header = (id, cwd, object["parentSession"] as? String)
             }
             return true
         })
@@ -837,15 +837,15 @@ extension SessionIndexStore {
     }
 
     /// Uses the same byte-bounded title-slot/first-user preview as ordinary discovery.
-    nonisolated static func ompIndexedMetadata(url: URL, registration: CmuxVaultAgentRegistration) throws -> (id: String, title: String, cwd: String?, branch: String?)? {
+    nonisolated static func ompIndexedMetadata(url: URL, registration: CmuxVaultAgentRegistration) throws -> (id: String, title: String, cwd: String?, branch: String?, parentSession: String?)? {
         guard FileManager.default.isReadableFile(atPath: url.path) else {
             throw CocoaError(.fileReadUnknown)
         }
+        guard let header = ompJournalHeader(url) else { return nil }
         let metadata = extractRegisteredJSONLMetadata(
             url: url, registration: registration, fallbackCWD: nil, inferCWD: false
         )
-        guard let id = metadata.sessionId, !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        return (id, String(metadata.title.prefix(512)), metadata.cwd, metadata.branch)
+        return (header.id, String(metadata.title.prefix(512)), header.cwd, metadata.branch, header.parentSession)
     }
 
     nonisolated private static func extractRegisteredJSONLMetadata(
@@ -960,7 +960,7 @@ extension SessionIndexStore {
         return nil
     }
 
-    nonisolated private static func fileContains(_ url: URL, needle: String) -> Bool {
+    nonisolated static func fileContains(_ url: URL, needle: String) -> Bool {
         guard !needle.isEmpty,
               let handle = try? FileHandle(forReadingFrom: url) else {
             return false

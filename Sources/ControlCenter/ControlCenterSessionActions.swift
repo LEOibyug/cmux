@@ -1,4 +1,5 @@
 import AppKit
+import CmuxAgentSessionStore
 import CmuxControlCenter
 import Foundation
 
@@ -25,58 +26,111 @@ extension ControlCenterCoordinator {
     }
 
     func searchSessions(_ query: String) async {
-        let source = sessionSourceID
-        let generation = sessionSearchGeneration + 1
-        do { try await findSessions(query, agentID: source, searchContent: source != "omp") }
-        catch is CancellationError {}
-        catch {
-            if sessionSourceID == source, sessionSearchGeneration == generation { self.error = error.localizedDescription }
-        }
+        do {
+            try await findSessions(query, agentID: sessionSourceID, searchContent: sessionSourceID != "omp", state: sessionListState)
+        } catch is CancellationError {} catch { self.error = error.localizedDescription }
     }
 
-    func findSessions(_ query: String, agentID: String, searchContent: Bool = true) async throws {
+    func loadMoreSessions() async {
+        guard sessionHasMore, !isSearchingSessions, let source = sessionResultsSourceID else { return }
+        do {
+            try await findSessions(sessionQuery, agentID: source, searchContent: sessionSearchContent, state: sessionResultsState,
+                                   offset: sessionNextOffset, append: true)
+        } catch is CancellationError {} catch { self.error = error.localizedDescription }
+    }
+
+    func findSessions(
+        _ query: String, agentID: String, searchContent: Bool = false,
+        state: ControlCenterSessionListState = .active, offset: Int = 0, limit: Int = 50, append: Bool = false
+    ) async throws {
         sessionSearchGeneration += 1
         let generation = sessionSearchGeneration
-        sessions = []
-        sessionResultsSourceID = agentID
+        isSearchingSessions = true
+        defer { if generation == sessionSearchGeneration { isSearchingSessions = false } }
+        let scope = try sessionManagementScope()
         let agent = try await sessionSource(agentID)
-        guard generation == sessionSearchGeneration else { throw CancellationError() }
-        let indexedOMP = agentID == "omp" && !searchContent
-        let result: SessionIndexStore.SearchOutcome
-        if indexedOMP {
-            result = await vaultIndex().searchOMPMetadata(query: query, offset: 0, limit: 500)
+        let count = min(max(limit, 1), 100)
+        guard state == .active || !searchContent else {
+            throw ControlCenterHostError.blocked("Transcript search is available for active conversations.")
+        }
+        var targets: [ControlCenterTarget] = []
+        var managed: [OMPManagedSessionRecord] = []
+        var fingerprints: [UUID: String] = [:]
+        var parents: [UUID: String] = [:]
+        var modifiedAt: [UUID: Date] = [:]
+        var journalRoot: String?
+        var nextOffset = offset + count
+        if agentID == "omp" {
+            let source = try await vaultIndex().ompMetadataSource()
+            journalRoot = source.root.path
+            if state == .active {
+                let rows: [OMPSessionMetadataRecord]
+                if searchContent && !query.isEmpty {
+                    rows = try await searchScopedOMPContent(source: source, scope: scope, query: query, offset: offset, limit: count + 1)
+                } else {
+                    let page = try await scopedOMPMetadataPage(source: source, scope: scope, query: query, offset: offset, pageSize: count)
+                    rows = page.rows
+                    nextOffset = page.nextOffset
+                }
+                for row in rows {
+                    let key = source.namespace + ":" + row.journalPath
+                    let id = sessionTargetIDs[key] ?? UUID()
+                    sessionTargetIDs[key] = id
+                    targets.append(ControlCenterTarget(id: id, name: row.title, kind: .session, path: row.cwd ?? "",
+                        sessionID: row.sessionID, sessionFile: row.journalPath, agentID: "omp"))
+                    fingerprints[id] = row.fingerprint
+                    parents[id] = row.parentSession
+                    modifiedAt[id] = row.modifiedAt
+                }
+            } else {
+                let page = try await scopedOMPManagedPage(source: source, scope: scope, query: query,
+                    state: state.managedState, offset: offset, pageSize: count)
+                managed = page.rows
+                nextOffset = page.nextOffset
+            }
+            guard (try await vaultIndex().ompMetadataSource()).namespace == source.namespace else { throw CancellationError() }
         } else {
-            result = await vaultIndex().searchSessions(query: searchContent ? query : "", scope: .agent(agent), offset: 0, limit: 500)
+            guard state == .active else { throw ControlCenterHostError.blocked("Archive management is available for OMP sessions only.") }
+            let outcome = await vaultIndex().searchSessions(query: searchContent ? query : "", scope: .agent(agent), offset: 0, limit: 500)
+            guard outcome.errors.isEmpty else { throw ControlCenterHostError.blocked(outcome.errors.joined(separator: "\n")) }
+            targets = outcome.entries.filter { entry in
+                guard entry.agent.rawValue == agentID, let cwd = entry.cwd, scope.contains(cwd) else { return false }
+                return searchContent || query.isEmpty || [entry.title, cwd, entry.sessionId].contains {
+                    $0.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+                }
+            }.dropFirst(offset).prefix(count + 1).map { entry in
+                let key = agentID + ":" + entry.sessionId + ":" + (entry.fileURL?.path ?? "")
+                let id = sessionTargetIDs[key] ?? UUID()
+                sessionTargetIDs[key] = id
+                return ControlCenterTarget(id: id, name: entry.title, kind: .session, path: entry.cwd ?? "",
+                    sessionID: entry.sessionId, sessionFile: entry.fileURL?.path, agentID: agentID)
+            }
         }
         try Task.checkCancellation()
-        guard generation == sessionSearchGeneration else { throw CancellationError() }
+        guard generation == sessionSearchGeneration, try sessionManagementScope() == scope else { throw CancellationError() }
+        sessionHasMore = state == .active ? targets.count > count : managed.count > count
+        sessionNextOffset = nextOffset
+        if offset == 0 || !append {
+            sessions = Array(targets.prefix(count))
+            managedSessions = Array(managed.prefix(count))
+            sessionFingerprints = fingerprints
+            sessionParents = parents
+            sessionModifiedAt = modifiedAt
+        } else {
+            let existing = Set(sessions.map(\.id))
+            sessions.append(contentsOf: targets.prefix(count).filter { !existing.contains($0.id) })
+            let existingManaged = Set(managedSessions.map(\.id))
+            managedSessions.append(contentsOf: managed.prefix(count).filter { !existingManaged.contains($0.id) })
+            sessionFingerprints.merge(fingerprints) { _, new in new }
+            sessionParents.merge(parents) { _, new in new }
+            sessionModifiedAt.merge(modifiedAt) { _, new in new }
+        }
+        sessionQuery = query
+        sessionSearchContent = searchContent
+        sessionJournalRoot = journalRoot
+        sessionResultsSourceID = agentID
+        sessionResultsState = state
         error = nil
-        let entries = result.entries.filter { entry in
-            guard entry.agent.rawValue == agentID else { return false }
-            if indexedOMP || searchContent || query.isEmpty { return true }
-            return [entry.title, entry.cwd ?? "", entry.sessionId].contains {
-                $0.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-            }
-        }
-        let sessionCounts = Dictionary(grouping: entries, by: \.sessionId).mapValues(\.count)
-        sessions = entries.map { entry in
-            var target = ControlCenterTarget(
-                name: entry.title,
-                kind: .session,
-                path: entry.cwd ?? "",
-                sessionID: entry.sessionId,
-                sessionFile: entry.fileURL?.path,
-                agentID: entry.agent.rawValue
-            )
-            if sessionCounts[entry.sessionId] == 1, let identity = target.sessionIdentity {
-                target.id = sessionTargetIDs[identity] ?? target.id
-                sessionTargetIDs[identity] = target.id
-            }
-            return target
-        }
-        if !result.errors.isEmpty {
-            throw ControlCenterHostError.blocked(result.errors.joined(separator: "\n"))
-        }
     }
 
     func logicalDirectory(_ raw: String, create: Bool = false) throws -> String {
@@ -176,6 +230,9 @@ extension ControlCenterCoordinator {
                 throw ControlCenterHostError.blocked("Choose an exact indexed OMP journal from session history. No session was started.")
             }
             let entry = try await vaultIndex().exactOMPSession(sessionID: id, journal: URL(fileURLWithPath: path))
+            guard let cwd = entry.cwd, try sessionManagementScope().contains(cwd) else {
+                throw ControlCenterHostError.blocked("This conversation is outside the default working directory.")
+            }
             try checkCancellation()
             return entry
         }

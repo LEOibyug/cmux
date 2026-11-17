@@ -1,10 +1,16 @@
 import SwiftUI
 import CmuxControlCenter
+import CmuxAgentSessionStore
 
 struct ControlCenterSessionsView: View {
     @ObservedObject var coordinator: ControlCenterCoordinator
     @State private var query = ""
+    @State private var directoryEdit: SessionDirectoryEdit?
     @Environment(\.controlCenterTheme) private var theme
+
+    private var resultCount: Int {
+        coordinator.sessionResultsState == .active ? coordinator.sessions.count : coordinator.managedSessions.count
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -13,17 +19,11 @@ struct ControlCenterSessionsView: View {
                     if !coordinator.sessionSources.contains(where: { $0.rawValue == "omp" }) {
                         Text("OMP").tag("omp").disabled(true)
                     }
-                    ForEach(coordinator.sessionSources) { source in
-                        Text(source.displayName).tag(source.rawValue)
-                    }
+                    ForEach(coordinator.sessionSources) { source in Text(source.displayName).tag(source.rawValue) }
                 }
-                .frame(maxWidth: 210)
-                .disabled(coordinator.isRunning)
-
+                .frame(maxWidth: 180)
                 HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(theme.secondaryForegroundColor)
-                        .font(.system(size: 12, weight: .medium))
+                    Image(systemName: "magnifyingglass").foregroundStyle(theme.secondaryForegroundColor)
                     TextField(ControlCenterStrings.text("searchSessions"), text: $query)
                         .textFieldStyle(.plain)
                         .onSubmit { Task { await coordinator.searchSessions(query) } }
@@ -31,83 +31,158 @@ struct ControlCenterSessionsView: View {
                         Button {
                             query = ""
                             Task { await coordinator.searchSessions("") }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(theme.secondaryForegroundColor)
-                        }
+                        } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(theme.secondaryForegroundColor) }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(theme.inputSurfaceColor, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(theme.borderColor))
-
-                Button(ControlCenterStrings.text("search")) {
-                    Task { await coordinator.searchSessions(query) }
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(theme.inputSurfaceColor, in: RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(theme.borderColor))
+                Button(ControlCenterStrings.text("search")) { Task { await coordinator.searchSessions(query) } }
+                    .buttonStyle(.borderedProminent)
+                Button { Task { await coordinator.refreshManagedSessions() } } label: {
+                    if coordinator.isRefreshingSessions { ProgressView().controlSize(.small) }
+                    else { Image(systemName: "arrow.clockwise") }
                 }
-                .buttonStyle(.borderedProminent)
+                .help(ControlCenterStrings.text("sessionRefresh"))
+                .disabled(coordinator.isRefreshingSessions || coordinator.sessionSourceID != "omp")
             }
             .disabled(coordinator.isRunning)
 
-            HStack(spacing: 8) {
-                Text(ControlCenterStrings.text("sessionHint"))
-                    .font(.caption)
-                    .foregroundStyle(theme.secondaryForegroundColor)
-                if let source = coordinator.sessionResultsSourceID, source != coordinator.sessionSourceID {
-                    Text("· \(ControlCenterStrings.text("sessionResultsSource")): \(coordinator.sessionSources.first(where: { $0.rawValue == source })?.displayName ?? source)")
-                        .font(.caption)
-                        .foregroundStyle(theme.secondaryForegroundColor)
+            HStack(spacing: 10) {
+                if coordinator.sessionSourceID == "omp" {
+                    Picker(ControlCenterStrings.text("sessions"), selection: $coordinator.sessionListState) {
+                        ForEach(ControlCenterSessionListState.allCases) { state in
+                            Text(ControlCenterStrings.text("sessionState." + state.rawValue)).tag(state)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 400)
+                    .disabled(coordinator.isRunning)
                 }
                 Spacer(minLength: 4)
-                if !coordinator.sessions.isEmpty {
-                    Text("\(coordinator.sessions.count)")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(theme.secondaryForegroundColor)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(theme.foregroundColor.opacity(0.06), in: Capsule())
-                }
+                if coordinator.isSearchingSessions { ProgressView().controlSize(.small) }
+                Text("\(resultCount)").font(.caption.monospacedDigit()).foregroundStyle(theme.secondaryForegroundColor)
+            }
+            Text("\(ControlCenterStrings.text("sessionManagedScope")): \(coordinator.connection.defaultDirectory)")
+                .font(.caption).foregroundStyle(theme.secondaryForegroundColor).textSelection(.enabled)
+            if !coordinator.sessionInventoryWarnings.isEmpty {
+                Label("\(ControlCenterStrings.text("sessionState.pending")): \(coordinator.sessionInventoryWarnings.count)", systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+                    .help(coordinator.sessionInventoryWarnings.joined(separator: "\n"))
             }
 
-            if coordinator.sessions.isEmpty {
-                ControlCenterEmptyCardView(
-                    symbol: "clock",
-                    title: ControlCenterStrings.text("sessions"),
-                    subtitle: ControlCenterStrings.text("sessionHint")
-                )
+            if resultCount == 0 {
+                ControlCenterEmptyCardView(symbol: "tray", title: ControlCenterStrings.text("sessions"),
+                    subtitle: ControlCenterStrings.text("sessionManagedHint"))
                 Spacer(minLength: 0)
             } else {
-                List(coordinator.sessions) { target in
-                    HStack(spacing: 12) {
-                        ControlCenterTargetLabelView(target: target)
-                        Spacer(minLength: 8)
-                        let saved = coordinator.savedFavorite(for: target) != nil
-                        Button {
-                            Task { await coordinator.toggleFavorite(target) }
-                        } label: {
-                            Label(ControlCenterStrings.text(saved ? "saved" : "favorite"), systemImage: saved ? "checkmark" : "bookmark")
-                        }
-                        .controlSize(.small)
-                        .help(ControlCenterStrings.text(saved ? "removeSaved" : "favorite"))
-                        .disabled(coordinator.isRunning || coordinator.isSavingFavorites)
-                        Button(ControlCenterStrings.text("open")) {
-                            Task { await coordinator.open(target) }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .disabled(coordinator.isRunning)
+                List {
+                    if coordinator.sessionResultsState == .active {
+                        ForEach(coordinator.sessions) { target in activeRow(target) }
+                    } else {
+                        ForEach(coordinator.managedSessions) { record in managedRow(record) }
                     }
-                    .padding(.vertical, 4)
+                    if coordinator.sessionHasMore {
+                        Button(ControlCenterStrings.text("sessionLoadMore")) { Task { await coordinator.loadMoreSessions() } }
+                            .frame(maxWidth: .infinity)
+                            .disabled(coordinator.isSearchingSessions || coordinator.isRunning)
+                    }
                 }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
-                .background(theme.elevatedSurfaceColor, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(theme.borderColor))
+                .listStyle(.inset).scrollContentBackground(.hidden)
+                .background(theme.elevatedSurfaceColor, in: RoundedRectangle(cornerRadius: 10))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.borderColor))
             }
         }
-        .task(id: coordinator.sessionSourceID) { await coordinator.searchSessions(query) }
+        .task(id: coordinator.sessionSourceID + coordinator.sessionListState.rawValue + coordinator.connection.defaultDirectory) {
+            await coordinator.searchSessions(query)
+        }
+        .sheet(item: $directoryEdit) { edit in
+            ControlCenterSessionDirectoryEditor(edit: edit) { cwd in
+                directoryEdit = nil
+                Task { await coordinator.manageSession(edit.action, targetID: edit.targetID, cwd: cwd) }
+            }
+            .controlCenterSheetTheme(theme)
+        }
+    }
+
+    private func activeRow(_ target: ControlCenterTarget) -> some View {
+        HStack(spacing: 12) {
+            ControlCenterTargetLabelView(target: target)
+            if coordinator.sessionParents[target.id] != nil {
+                Text(ControlCenterStrings.text("sessionFork")).font(.caption2).foregroundStyle(theme.secondaryForegroundColor)
+            }
+            Spacer(minLength: 8)
+            let saved = coordinator.savedFavorite(for: target) != nil
+            Button { Task { await coordinator.toggleFavorite(target) } } label: {
+                Image(systemName: saved ? "bookmark.fill" : "bookmark")
+            }
+            .help(ControlCenterStrings.text(saved ? "removeSaved" : "favorite"))
+            .disabled(coordinator.isSavingFavorites)
+            if target.agentID == "omp" {
+                Menu {
+                    Button(ControlCenterStrings.text("sessionChangeDirectory")) {
+                        directoryEdit = SessionDirectoryEdit(targetID: target.id, name: target.name, cwd: target.path, action: "update_session_directory")
+                    }
+                    Button(ControlCenterStrings.text("sessionArchive")) {
+                        Task { await coordinator.manageSession("archive_session", targetID: target.id) }
+                    }
+                    Button(ControlCenterStrings.text("sessionTrash")) {
+                        Task { await coordinator.manageSession("trash_session", targetID: target.id) }
+                    }
+                } label: { Image(systemName: "ellipsis") }
+                .menuStyle(.borderlessButton).fixedSize()
+            }
+            Button(ControlCenterStrings.text("open")) { Task { await coordinator.open(target) } }
+                .buttonStyle(.borderedProminent)
+        }
+        .controlSize(.small).disabled(coordinator.isRunning).padding(.vertical, 4)
+    }
+
+    private func managedRow(_ record: OMPManagedSessionRecord) -> some View {
+        HStack(spacing: 12) {
+            ControlCenterTargetLabelView(target: ControlCenterTarget(id: record.id, name: record.title, kind: .session,
+                path: record.cwd, sessionID: record.sessionID, sessionFile: record.journalPath))
+            Spacer(minLength: 8)
+            Button(ControlCenterStrings.text("sessionRestore")) {
+                directoryEdit = SessionDirectoryEdit(targetID: record.id, name: record.title, cwd: record.cwd, action: "restore_session")
+            }
+            .buttonStyle(.borderedProminent).controlSize(.small).disabled(coordinator.isRunning)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct SessionDirectoryEdit: Identifiable {
+    let id = UUID()
+    let targetID: UUID
+    let name: String
+    let cwd: String
+    let action: String
+}
+
+private struct ControlCenterSessionDirectoryEditor: View {
+    let edit: SessionDirectoryEdit
+    let submit: (String) -> Void
+    @State private var cwd = ""
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(ControlCenterStrings.text(edit.action == "restore_session" ? "sessionRestore" : "sessionChangeDirectory")).font(.headline)
+            Text(edit.name).lineLimit(2)
+            TextField(ControlCenterStrings.text("directory"), text: $cwd).textFieldStyle(.roundedBorder)
+            Text(ControlCenterStrings.text("sessionDirectoryHint")).font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button(ControlCenterStrings.text("cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(ControlCenterStrings.text("save")) { submit(cwd) }
+                    .keyboardShortcut(.defaultAction).disabled(cwd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20).frame(width: 480)
+        .onAppear { cwd = edit.cwd }
     }
 }
 

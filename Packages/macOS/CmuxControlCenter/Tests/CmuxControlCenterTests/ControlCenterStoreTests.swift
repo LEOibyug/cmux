@@ -105,6 +105,79 @@ struct ControlCenterStoreTests {
         #expect(try await ControlCenterStore(directory: directory).snapshot().favorites == [claude])
     }
 
+    @Test func managementScopeResolvesAliasesWithoutAdmittingNeighboringOrEscapingDirectories() throws {
+        let root = controlCenterTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let managed = root.appendingPathComponent("managed", isDirectory: true)
+        let project = managed.appendingPathComponent("项目", isDirectory: true)
+        let outside = root.appendingPathComponent("managed-other", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let alias = root.appendingPathComponent("alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: managed)
+        try FileManager.default.createSymbolicLink(at: managed.appendingPathComponent("escape"), withDestinationURL: outside)
+        let scope = try ControlCenterSessionScope(directory: alias.path)
+        #expect(scope.contains(alias.appendingPathComponent("项目").path))
+        #expect(scope.contains(project.path))
+        #expect(!scope.contains(outside.path))
+        #expect(!scope.contains(alias.appendingPathComponent("escape").path))
+        try FileManager.default.moveItem(at: project, to: managed.appendingPathComponent("renamed"))
+        #expect(scope.contains(alias.appendingPathComponent("项目").path))
+        #expect(scope.contains(alias.path + "/项目/deep/missing"))
+        #expect(scope.contains(alias.path + "/missing/../renamed"))
+        #expect(!scope.contains(alias.path + "/escape/missing"))
+        #expect(!scope.contains(alias.path + "/escape/../renamed"))
+        #expect(!scope.contains(alias.path + "/missing/../escape/missing"))
+        let dangling = managed.appendingPathComponent("dangling")
+        try FileManager.default.createSymbolicLink(at: dangling, withDestinationURL: managed.appendingPathComponent("absent"))
+        #expect(!scope.contains(alias.path + "/missing/../dangling/../renamed"))
+        let cycle = managed.appendingPathComponent("cycle")
+        try FileManager.default.createSymbolicLink(at: cycle, withDestinationURL: cycle)
+        let file = managed.appendingPathComponent("file")
+        try Data("not a directory".utf8).write(to: file)
+        for path in [dangling.path, dangling.path + "/missing", cycle.path, cycle.path + "/missing", file.path, file.path + "/missing"] {
+            #expect(!scope.contains(path))
+        }
+        try FileManager.default.removeItem(at: alias)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: outside)
+        #expect(try ControlCenterSessionScope(directory: alias.path) != scope)
+        #expect(!scope.contains(alias.appendingPathComponent("项目").path))
+        #expect(!scope.contains(alias.path + "/项目/deep/missing"))
+    }
+
+    @Test func directoryChangesRetargetOnlyExactSavedCopiesAndKeepCollectionOrder() async throws {
+        let root = controlCenterTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try ControlCenterStore(directory: root)
+        let old = root.appendingPathComponent("old.jsonl").resolvingSymlinksInPath().path
+        let next = root.appendingPathComponent("next.jsonl").path
+        let alias = root.appendingPathComponent("alias")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: root)
+        let original = ControlCenterTarget(name: "Custom bookmark", kind: .session, path: "/old", sessionID: "same-id", sessionFile: alias.appendingPathComponent("old.jsonl").path)
+        let otherCopy = ControlCenterTarget(name: "Other physical copy", kind: .session, path: "/old", sessionID: "same-id", sessionFile: root.appendingPathComponent("other.jsonl").path)
+        let otherAgent = ControlCenterTarget(name: "Other source", kind: .session, path: "/old", sessionID: "same-id", sessionFile: old, agentID: "claude")
+        let folder = ControlCenterTarget(name: "Project", kind: .directory, path: "/old")
+        let collection = ControlCenterCollection(name: "Ordered", items: [folder, original, otherCopy, otherAgent])
+        try await store.saveFavorite(original)
+        try await store.saveFavorite(otherAgent)
+        try await store.saveCollection(collection)
+        let firstMigration = UUID()
+        try await store.updateSessionReferences(migrationID: firstMigration, sessionID: "same-id", previousFile: old, journal: next, cwd: "/new")
+        var updated = original
+        updated.path = "/new"
+        updated.sessionFile = next
+        let snapshot = try await ControlCenterStore(directory: root).snapshot()
+        #expect(snapshot.favorites == [updated, otherAgent])
+        #expect(snapshot.collections == [ControlCenterCollection(id: collection.id, name: collection.name, items: [folder, updated, otherCopy, otherAgent])])
+        try await store.updateSessionReferences(migrationID: UUID(), sessionID: "same-id", previousFile: next, journal: old, cwd: "/old")
+        try await store.updateSessionReferences(migrationID: firstMigration, sessionID: "same-id", previousFile: old, journal: next, cwd: "/new")
+        var returned = original
+        returned.sessionFile = old
+        let afterReplay = try await ControlCenterStore(directory: root).snapshot()
+        #expect(afterReplay.favorites == [returned, otherAgent])
+        #expect(afterReplay.collections == [ControlCenterCollection(id: collection.id, name: collection.name, items: [folder, returned, otherCopy, otherAgent])])
+    }
+
     @Test func connectionIsPrivateAndNeverWrittenIntoDatabase() async throws {
         let directory = controlCenterTestDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

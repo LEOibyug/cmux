@@ -1477,6 +1477,7 @@
 		C85134D905E8054C2650FEED /* ControlCenterOMPProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = B54B8EEC982816674F841746 /* ControlCenterOMPProbe.swift */; };
 		6F271462A0CE6AD720900C5C /* ControlCenterPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4257A5D0A6AE53F8141F2C /* ControlCenterPresentation.swift */; };
 		F7C0E5468840644F6A516E75 /* ControlCenterSessionActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29BB572DFB04A27C99D1DADD /* ControlCenterSessionActions.swift */; };
+		54F8705E9857F7395BCC5557 /* ControlCenterSessionSteward.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8322348C4388ACE7925239 /* ControlCenterSessionSteward.swift */; };
 		E6860424B8475BB8A74DFC83 /* ControlCenterSessionValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28DE3D7E0FC2A3CA3DCF3423 /* ControlCenterSessionValidationTests.swift */; };
 		EC42DE8B3BDF40560FEAB4FD /* ControlCenterSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08CB4148C77D6D1122F8867C /* ControlCenterSettings.swift */; };
 		0F65846CEB44488F790DD0A3 /* ControlCenterStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7372DB2531AC105B1E042A /* ControlCenterStrings.swift */; };
@@ -5465,6 +5466,7 @@
 		B54B8EEC982816674F841746 /* ControlCenterOMPProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterOMPProbe.swift; sourceTree = "<group>"; };
 		5A4257A5D0A6AE53F8141F2C /* ControlCenterPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterPresentation.swift; sourceTree = "<group>"; };
 		29BB572DFB04A27C99D1DADD /* ControlCenterSessionActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterSessionActions.swift; sourceTree = "<group>"; };
+		2A8322348C4388ACE7925239 /* ControlCenterSessionSteward.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterSessionSteward.swift; sourceTree = "<group>"; };
 		28DE3D7E0FC2A3CA3DCF3423 /* ControlCenterSessionValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControlCenterSessionValidationTests.swift"; sourceTree = "<group>"; };
 		08CB4148C77D6D1122F8867C /* ControlCenterSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterSettings.swift; sourceTree = "<group>"; };
 		FA7372DB2531AC105B1E042A /* ControlCenterStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlCenter/ControlCenterStrings.swift; sourceTree = "<group>"; };
@@ -10741,6 +10743,7 @@
 				40CC9DCDA99E5C23ECE3A97A /* ControlCenterChatAttachments.swift */,
 				FD25241C952F64E6D2D97837 /* ControlCenterChatStorage.swift */,
 				05B1E81408BE1D2785522F28 /* SessionIndexStore+OMPMetadata.swift */,
+				2A8322348C4388ACE7925239 /* ControlCenterSessionSteward.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -13451,6 +13454,7 @@
 				C85134D905E8054C2650FEED /* ControlCenterOMPProbe.swift in Sources */,
 				6F271462A0CE6AD720900C5C /* ControlCenterPresentation.swift in Sources */,
 				F7C0E5468840644F6A516E75 /* ControlCenterSessionActions.swift in Sources */,
+				54F8705E9857F7395BCC5557 /* ControlCenterSessionSteward.swift in Sources */,
 				EC42DE8B3BDF40560FEAB4FD /* ControlCenterSettings.swift in Sources */,
 				0F65846CEB44488F790DD0A3 /* ControlCenterStrings.swift in Sources */,
 				E6F26DAE96434558422D6B0D /* ControlCenterTargetsView.swift in Sources */,

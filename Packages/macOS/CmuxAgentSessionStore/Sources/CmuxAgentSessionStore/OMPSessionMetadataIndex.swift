@@ -7,6 +7,7 @@ public enum OMPSessionMetadataIndexError: Error, LocalizedError, Equatable, Send
     case insecureDatabase
     case database(operation: String, code: Int32, message: String)
     case unsupportedSchema(Int32)
+    case invalidManagedSession(field: String)
 
     public var errorDescription: String? {
         switch self {
@@ -18,6 +19,8 @@ public enum OMPSessionMetadataIndexError: Error, LocalizedError, Equatable, Send
             return "OMP metadata index \(operation) failed (SQLite \(code)): \(message)"
         case .unsupportedSchema(let version):
             return "OMP metadata index schema \(version) is newer than this application supports."
+        case .invalidManagedSession(let field):
+            return "Invalid managed OMP session \(field)."
         }
     }
 }
@@ -38,6 +41,40 @@ public actor OMPSessionMetadataIndex {
         try database.records(namespace: namespace, query: "", cwd: nil, offset: 0, limit: nil)
     }
 
+    /// Journal identity only, avoiding materialization of display metadata during reconciliation.
+    public func fingerprints(namespace: String, journalPaths: [String]? = nil) throws -> [String: String] {
+        try database.fingerprints(namespace: namespace, journalPaths: journalPaths)
+    }
+
+    /// Explicit full refresh only: re-resolve cached scope keys without changing logical metadata.
+    public func refreshCanonicalCwds(namespace: String) throws {
+        try database.refreshCanonicalCwds(namespace: namespace)
+    }
+
+    public func saveManagedSession(_ record: OMPManagedSessionRecord) throws {
+        try database.saveManagedSession(record)
+    }
+
+    public func managedSessions(
+        namespace: String,
+        query: String = "",
+        state: OMPManagedSessionState? = nil,
+        offset: Int = 0,
+        limit: Int,
+        canonicalCwdRoot: String? = nil
+    ) throws -> [OMPManagedSessionRecord] {
+        guard limit > 0 else { return [] }
+        return try database.managedSessions(namespace: namespace, query: query, state: state, offset: max(0, offset), limit: limit, canonicalCwdRoot: canonicalCwdRoot)
+    }
+
+    public func managedSession(namespace: String, id: UUID, canonicalCwdRoot: String? = nil) throws -> OMPManagedSessionRecord? {
+        try database.managedSessions(namespace: namespace, id: id, canonicalCwdRoot: canonicalCwdRoot).first
+    }
+
+    public func removeManagedSession(namespace: String, id: UUID) throws {
+        try database.removeManagedSession(namespace: namespace, id: id)
+    }
+
     public func apply(
         namespace: String,
         upserts: [OMPSessionMetadataRecord],
@@ -52,10 +89,11 @@ public actor OMPSessionMetadataIndex {
         query: String,
         cwd: String?,
         offset: Int,
-        limit: Int
+        limit: Int,
+        canonicalCwdRoot: String? = nil
     ) throws -> [OMPSessionMetadataRecord] {
         guard limit > 0 else { return [] }
-        return try database.records(namespace: namespace, query: query, cwd: cwd, offset: max(0, offset), limit: limit)
+        return try database.records(namespace: namespace, query: query, cwd: cwd, offset: max(0, offset), limit: limit, canonicalCwdRoot: canonicalCwdRoot)
     }
 }
 
@@ -120,7 +158,7 @@ private final class OMPMetadataDatabase: @unchecked Sendable {
         let version = sqlite3_column_int(statement, 0)
         sqlite3_finalize(statement)
         guard versionResult == SQLITE_ROW else { throw failure("read schema", code: versionResult) }
-        guard version <= 1 else { throw OMPSessionMetadataIndexError.unsupportedSchema(version) }
+        guard version <= 3 else { throw OMPSessionMetadataIndexError.unsupportedSchema(version) }
         if version == 0 {
             try transaction {
                 try execute("""
@@ -144,6 +182,61 @@ private final class OMPMetadataDatabase: @unchecked Sendable {
                     """)
             }
         }
+        if version < 2 {
+            try transaction {
+                try execute("""
+                    ALTER TABLE omp_metadata ADD COLUMN parent_session TEXT;
+                    CREATE TABLE omp_managed_sessions (
+                        namespace TEXT NOT NULL,
+                        id TEXT NOT NULL,
+                        session_id TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        cwd TEXT NOT NULL,
+                        original_journal_path TEXT NOT NULL,
+                        journal_path TEXT NOT NULL,
+                        archive_directory TEXT NOT NULL,
+                        source_root TEXT NOT NULL,
+                        state TEXT NOT NULL CHECK(state IN ('pending', 'archived', 'trash', 'restored')),
+                        created_at REAL NOT NULL,
+                        parent_session TEXT,
+                        title_search TEXT NOT NULL,
+                        cwd_search TEXT NOT NULL,
+                        session_id_search TEXT NOT NULL,
+                        PRIMARY KEY (namespace, id)
+                    ) WITHOUT ROWID;
+                    CREATE INDEX omp_managed_sessions_recent ON omp_managed_sessions(namespace, created_at DESC, id);
+                    PRAGMA user_version = 2;
+                    """)
+            }
+        }
+        if version < 3 {
+            try transaction {
+                try execute("""
+                    ALTER TABLE omp_metadata ADD COLUMN canonical_cwd TEXT;
+                    ALTER TABLE omp_managed_sessions ADD COLUMN canonical_cwd TEXT;
+                    CREATE INDEX omp_metadata_cwd ON omp_metadata(namespace, canonical_cwd, modified_at DESC);
+                    CREATE INDEX omp_managed_sessions_cwd ON omp_managed_sessions(namespace, canonical_cwd, created_at DESC);
+                    PRAGMA user_version = 3;
+                    """)
+                // One-time backfill reads keys and cwd only, preserving journals and managed inventory.
+                for (table, key) in [("omp_metadata", "journal_path"), ("omp_managed_sessions", "id")] {
+                    let rows = try prepare("SELECT namespace, \(key), cwd FROM \(table);")
+                    defer { sqlite3_finalize(rows) }
+                    let update = try prepare("UPDATE \(table) SET canonical_cwd = ? WHERE namespace = ? AND \(key) = ?;")
+                    defer { sqlite3_finalize(update) }
+                    while true {
+                        let code = sqlite3_step(rows)
+                        if code == SQLITE_DONE { break }
+                        guard code == SQLITE_ROW else { throw failure("backfill canonical cwd", code: code) }
+                        try bind(Self.canonicalCwd(text(rows, 2)), at: 1, to: update)
+                        try bind(text(rows, 0), at: 2, to: update)
+                        try bind(text(rows, 1), at: 3, to: update)
+                        try finish(update)
+                        try check(sqlite3_reset(update), operation: "reset canonical cwd backfill")
+                    }
+                }
+            }
+        }
     }
 
     deinit { sqlite3_close_v2(handle) }
@@ -155,6 +248,28 @@ private final class OMPMetadataDatabase: @unchecked Sendable {
         let result = sqlite3_step(statement)
         guard result == SQLITE_ROW || result == SQLITE_DONE else { throw failure("read initialization", code: result) }
         return result == SQLITE_ROW
+    }
+
+    func refreshCanonicalCwds(namespace: String) throws {
+        try transaction {
+            for (table, key) in [("omp_metadata", "journal_path"), ("omp_managed_sessions", "id")] {
+                let rows = try prepare("SELECT \(key), cwd FROM \(table) NOT INDEXED WHERE namespace = ?;")
+                defer { sqlite3_finalize(rows) }
+                try bind(namespace, at: 1, to: rows)
+                let update = try prepare("UPDATE \(table) SET canonical_cwd = ?1 WHERE namespace = ?2 AND \(key) = ?3 AND canonical_cwd IS NOT ?1;")
+                defer { sqlite3_finalize(update) }
+                try bind(namespace, at: 2, to: update)
+                while true {
+                    let code = sqlite3_step(rows)
+                    if code == SQLITE_DONE { break }
+                    guard code == SQLITE_ROW else { throw failure("read canonical cwd refresh", code: code) }
+                    try bind(Self.canonicalCwd(text(rows, 1)), at: 1, to: update)
+                    try bind(text(rows, 0), at: 3, to: update)
+                    try finish(update)
+                    try check(sqlite3_reset(update), operation: "reset canonical cwd refresh")
+                }
+            }
+        }
     }
 
     func apply(
@@ -179,16 +294,18 @@ private final class OMPMetadataDatabase: @unchecked Sendable {
                 let statement = try prepare("""
                     INSERT INTO omp_metadata (
                         namespace, journal_path, session_id, title, cwd, branch, modified_at, fingerprint,
-                        title_search, cwd_search, session_id_search
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        title_search, cwd_search, session_id_search, parent_session, canonical_cwd
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(namespace, journal_path) DO UPDATE SET
                         session_id = excluded.session_id, title = excluded.title, cwd = excluded.cwd,
                         branch = excluded.branch, modified_at = excluded.modified_at, fingerprint = excluded.fingerprint,
                         title_search = excluded.title_search, cwd_search = excluded.cwd_search,
-                        session_id_search = excluded.session_id_search
+                        session_id_search = excluded.session_id_search, parent_session = excluded.parent_session,
+                        canonical_cwd = excluded.canonical_cwd
                     WHERE session_id IS NOT excluded.session_id OR title IS NOT excluded.title
                         OR cwd IS NOT excluded.cwd OR branch IS NOT excluded.branch
-                        OR modified_at IS NOT excluded.modified_at OR fingerprint IS NOT excluded.fingerprint;
+                        OR modified_at IS NOT excluded.modified_at OR fingerprint IS NOT excluded.fingerprint
+                        OR parent_session IS NOT excluded.parent_session OR canonical_cwd IS NOT excluded.canonical_cwd;
                     """)
                 defer { sqlite3_finalize(statement) }
                 try bind(namespace, at: 1, to: statement)
@@ -204,6 +321,8 @@ private final class OMPMetadataDatabase: @unchecked Sendable {
                     try bind(Self.fold(title), at: 9, to: statement)
                     try bind(Self.fold(record.cwd ?? ""), at: 10, to: statement)
                     try bind(Self.fold(record.sessionID), at: 11, to: statement)
+                    try bind(record.parentSession, at: 12, to: statement)
+                    try bind(Self.canonicalCwd(record.cwd), at: 13, to: statement)
                     try finish(statement)
                     try check(sqlite3_reset(statement), operation: "reset upsert")
                 }
@@ -217,12 +336,13 @@ private final class OMPMetadataDatabase: @unchecked Sendable {
         }
     }
 
-    func records(namespace: String, query: String, cwd: String?, offset: Int, limit: Int?) throws -> [OMPSessionMetadataRecord] {
-        var sql = "SELECT journal_path, session_id, title, cwd, branch, modified_at, fingerprint FROM omp_metadata WHERE namespace = ?1"
+    func records(namespace: String, query: String, cwd: String?, offset: Int, limit: Int?, canonicalCwdRoot: String? = nil) throws -> [OMPSessionMetadataRecord] {
+        var sql = "SELECT journal_path, session_id, title, cwd, branch, modified_at, fingerprint, parent_session FROM omp_metadata WHERE namespace = ?1"
         if cwd != nil { sql += " AND cwd = ?2" }
         if !query.isEmpty {
             sql += " AND (instr(title_search, ?3) > 0 OR instr(cwd_search, ?3) > 0 OR instr(session_id_search, ?3) > 0)"
         }
+        if canonicalCwdRoot != nil { sql += " AND (canonical_cwd = ?6 OR (canonical_cwd >= ?7 AND canonical_cwd < ?8))" }
         sql += " ORDER BY modified_at DESC, session_id ASC, journal_path ASC"
         if limit != nil { sql += " LIMIT ?4 OFFSET ?5" }
         let statement = try prepare(sql)
@@ -230,6 +350,12 @@ private final class OMPMetadataDatabase: @unchecked Sendable {
         try bind(namespace, at: 1, to: statement)
         if let cwd { try bind(cwd, at: 2, to: statement) }
         if !query.isEmpty { try bind(Self.fold(query), at: 3, to: statement) }
+        if let root = canonicalCwdRoot {
+            guard root.hasPrefix("/"), !root.contains("\0") else { return [] }
+            try bind(root, at: 6, to: statement)
+            try bind(root == "/" ? "/" : root + "/", at: 7, to: statement)
+            try bind(root == "/" ? "0" : root + "0", at: 8, to: statement)
+        }
         if let limit {
             try check(sqlite3_bind_int64(statement, 4, Int64(limit)), operation: "bind limit")
             try check(sqlite3_bind_int64(statement, 5, Int64(offset)), operation: "bind offset")
@@ -246,9 +372,209 @@ private final class OMPMetadataDatabase: @unchecked Sendable {
                 cwd: text(statement, 3),
                 branch: text(statement, 4),
                 modifiedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 5)),
-                fingerprint: text(statement, 6) ?? ""
+                fingerprint: text(statement, 6) ?? "",
+                parentSession: text(statement, 7)
             ))
         }
+    }
+
+    func fingerprints(namespace: String, journalPaths: [String]?) throws -> [String: String] {
+        if journalPaths?.isEmpty == true { return [:] }
+        let statement = try prepare("SELECT journal_path, fingerprint FROM omp_metadata WHERE namespace = ?1" + (journalPaths == nil ? ";" : " AND journal_path = ?2;"))
+        defer { sqlite3_finalize(statement) }
+        try bind(namespace, at: 1, to: statement)
+        var result: [String: String] = [:]
+        func readRows() throws {
+            while true {
+                let code = sqlite3_step(statement)
+                if code == SQLITE_DONE { return }
+                guard code == SQLITE_ROW else { throw failure("read fingerprints", code: code) }
+                if let path = text(statement, 0), let fingerprint = text(statement, 1) { result[path] = fingerprint }
+            }
+        }
+        if let journalPaths {
+            for path in Set(journalPaths) {
+                try bind(path, at: 2, to: statement)
+                try readRows()
+                try check(sqlite3_reset(statement), operation: "reset fingerprint lookup")
+            }
+        } else { try readRows() }
+        return result
+    }
+
+    func saveManagedSession(_ record: OMPManagedSessionRecord) throws {
+        try Self.validate(record)
+        let statement = try prepare("""
+            INSERT INTO omp_managed_sessions (
+                namespace, id, session_id, title, cwd, original_journal_path, journal_path,
+                archive_directory, source_root, state, created_at, parent_session,
+                title_search, cwd_search, session_id_search, canonical_cwd
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(namespace, id) DO UPDATE SET
+                session_id = excluded.session_id, title = excluded.title, cwd = excluded.cwd,
+                original_journal_path = excluded.original_journal_path, journal_path = excluded.journal_path,
+                archive_directory = excluded.archive_directory, source_root = excluded.source_root,
+                state = excluded.state, created_at = excluded.created_at, parent_session = excluded.parent_session,
+                title_search = excluded.title_search, cwd_search = excluded.cwd_search,
+                session_id_search = excluded.session_id_search, canonical_cwd = excluded.canonical_cwd;
+            """)
+        defer { sqlite3_finalize(statement) }
+        let values: [String?] = [
+            record.namespace, record.id.uuidString, record.sessionID, record.title, record.cwd,
+            record.originalJournalPath, record.journalPath, record.archiveDirectory, record.sourceRoot,
+            record.state.rawValue
+        ]
+        for (offset, value) in values.enumerated() { try bind(value, at: Int32(offset + 1), to: statement) }
+        try check(sqlite3_bind_double(statement, 11, record.createdAt.timeIntervalSince1970), operation: "bind managed creation time")
+        try bind(record.parentSession, at: 12, to: statement)
+        try bind(Self.fold(record.title), at: 13, to: statement)
+        try bind(Self.fold(record.cwd), at: 14, to: statement)
+        try bind(Self.fold(record.sessionID), at: 15, to: statement)
+        try bind(Self.canonicalCwd(record.cwd), at: 16, to: statement)
+        try finish(statement)
+    }
+
+    func managedSessions(
+        namespace: String,
+        id: UUID? = nil,
+        query: String = "",
+        state: OMPManagedSessionState? = nil,
+        offset: Int = 0,
+        limit: Int = 1,
+        canonicalCwdRoot: String? = nil
+    ) throws -> [OMPManagedSessionRecord] {
+        var sql = """
+            SELECT id, session_id, title, cwd, original_journal_path, journal_path,
+                archive_directory, source_root, state, created_at, parent_session
+            FROM omp_managed_sessions WHERE namespace = ?1
+            """
+        if id != nil { sql += " AND id = ?2" }
+        if state != nil { sql += " AND state = ?3" }
+        if !query.isEmpty {
+            sql += " AND (instr(title_search, ?4) > 0 OR instr(cwd_search, ?4) > 0 OR instr(session_id_search, ?4) > 0)"
+        }
+        if canonicalCwdRoot != nil { sql += " AND (canonical_cwd = ?7 OR (canonical_cwd >= ?8 AND canonical_cwd < ?9))" }
+        sql += " ORDER BY created_at DESC, id ASC LIMIT ?5 OFFSET ?6;"
+        let statement = try prepare(sql)
+        defer { sqlite3_finalize(statement) }
+        try bind(namespace, at: 1, to: statement)
+        if let id { try bind(id.uuidString, at: 2, to: statement) }
+        if let state { try bind(state.rawValue, at: 3, to: statement) }
+        if !query.isEmpty { try bind(Self.fold(query), at: 4, to: statement) }
+        if let root = canonicalCwdRoot {
+            guard root.hasPrefix("/"), !root.contains("\0") else { return [] }
+            try bind(root, at: 7, to: statement)
+            try bind(root == "/" ? "/" : root + "/", at: 8, to: statement)
+            try bind(root == "/" ? "0" : root + "0", at: 9, to: statement)
+        }
+        try check(sqlite3_bind_int64(statement, 5, Int64(limit)), operation: "bind managed limit")
+        try check(sqlite3_bind_int64(statement, 6, Int64(offset)), operation: "bind managed offset")
+        var records: [OMPManagedSessionRecord] = []
+        while true {
+            let code = sqlite3_step(statement)
+            if code == SQLITE_DONE { return records }
+            guard code == SQLITE_ROW else { throw failure("read managed session", code: code) }
+            guard let id = text(statement, 0).flatMap(UUID.init(uuidString:)),
+                  let state = text(statement, 8).flatMap(OMPManagedSessionState.init(rawValue:)) else {
+                throw OMPSessionMetadataIndexError.invalidManagedSession(field: "stored identity or state")
+            }
+            let record = OMPManagedSessionRecord(
+                id: id, namespace: namespace, sessionID: text(statement, 1) ?? "",
+                title: text(statement, 2) ?? "", cwd: text(statement, 3) ?? "",
+                originalJournalPath: text(statement, 4) ?? "", journalPath: text(statement, 5) ?? "",
+                archiveDirectory: text(statement, 6) ?? "", sourceRoot: text(statement, 7) ?? "",
+                state: state, createdAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 9)),
+                parentSession: text(statement, 10)
+            )
+            try Self.validate(record)
+            records.append(record)
+        }
+    }
+
+    func removeManagedSession(namespace: String, id: UUID) throws {
+        let statement = try prepare("DELETE FROM omp_managed_sessions WHERE namespace = ? AND id = ?;")
+        defer { sqlite3_finalize(statement) }
+        try bind(namespace, at: 1, to: statement)
+        try bind(id.uuidString, at: 2, to: statement)
+        try finish(statement)
+    }
+
+    private static func validate(_ record: OMPManagedSessionRecord) throws {
+        for (field, value) in [("namespace", record.namespace), ("sessionID", record.sessionID)] {
+            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !value.contains("\0") else {
+                throw OMPSessionMetadataIndexError.invalidManagedSession(field: field)
+            }
+        }
+        guard !record.sessionID.contains("/"), !record.sessionID.contains("\\"),
+              record.sessionID != ".", record.sessionID != ".." else {
+            throw OMPSessionMetadataIndexError.invalidManagedSession(field: "sessionID")
+        }
+        for (field, path) in [
+            ("cwd", record.cwd), ("originalJournalPath", record.originalJournalPath),
+            ("journalPath", record.journalPath), ("archiveDirectory", record.archiveDirectory),
+            ("sourceRoot", record.sourceRoot)
+        ] {
+            guard path.hasPrefix("/"), !path.contains("\0"),
+                  !path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
+                throw OMPSessionMetadataIndexError.invalidManagedSession(field: field)
+            }
+        }
+        guard record.createdAt.timeIntervalSince1970.isFinite else {
+            throw OMPSessionMetadataIndexError.invalidManagedSession(field: "createdAt")
+        }
+        if let parent = record.parentSession, parent.isEmpty || parent.contains("\0") {
+            throw OMPSessionMetadataIndexError.invalidManagedSession(field: "parentSession")
+        }
+    }
+
+    private static func canonicalCwd(_ cwd: String?) -> String? {
+        guard let cwd, cwd.hasPrefix("/"), !cwd.contains("\0") else { return nil }
+        // Match ControlCenterSessionScope without introducing a dependency between the packages.
+        // Existing symlink failures must not become apparently safe missing lexical paths.
+        if let resolved = realpath(cwd, nil) {
+            defer { free(resolved) }
+            let path = String(cString: resolved)
+            var info = stat()
+            guard stat(path, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR else { return nil }
+            return URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        }
+        guard errno == ENOENT else { return nil }
+        var ancestor = "/"
+        var missing: [Substring] = []
+        for component in cwd.split(separator: "/") {
+            if component == "." { continue }
+            if component == ".." {
+                if !missing.isEmpty {
+                    missing.removeLast()
+                } else if ancestor != "/" {
+                    ancestor = (ancestor as NSString).deletingLastPathComponent
+                }
+                continue
+            }
+            if !missing.isEmpty {
+                missing.append(component)
+                continue
+            }
+            let candidate = (ancestor == "/" ? "" : ancestor) + "/" + component
+            var info = stat()
+            guard lstat(candidate, &info) == 0 else {
+                guard errno == ENOENT else { return nil }
+                missing.append(component)
+                continue
+            }
+            if (info.st_mode & S_IFMT) == S_IFLNK {
+                guard let resolved = realpath(candidate, nil) else { return nil }
+                defer { free(resolved) }
+                ancestor = String(cString: resolved)
+                guard stat(ancestor, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR else { return nil }
+            } else {
+                guard (info.st_mode & S_IFMT) == S_IFDIR else { return nil }
+                ancestor = candidate
+            }
+        }
+        let canonical = URL(fileURLWithPath: ancestor).resolvingSymlinksInPath().path
+        guard !missing.isEmpty else { return canonical }
+        return (canonical == "/" ? "" : canonical) + "/" + missing.joined(separator: "/")
     }
 
     private static func fold(_ value: String) -> String {

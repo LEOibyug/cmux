@@ -9,6 +9,7 @@ public struct OMPSessionMetadataRecord: Codable, Equatable, Sendable {
     public let branch: String?
     public let modifiedAt: Date
     public let fingerprint: String
+    public let parentSession: String?
 
     public init(
         journalPath: String,
@@ -17,7 +18,8 @@ public struct OMPSessionMetadataRecord: Codable, Equatable, Sendable {
         cwd: String? = nil,
         branch: String? = nil,
         modifiedAt: Date,
-        fingerprint: String
+        fingerprint: String,
+        parentSession: String? = nil
     ) {
         self.journalPath = journalPath
         self.sessionID = sessionID
@@ -26,5 +28,6 @@ public struct OMPSessionMetadataRecord: Codable, Equatable, Sendable {
         self.branch = branch
         self.modifiedAt = modifiedAt
         self.fingerprint = fingerprint
+        self.parentSession = parentSession
     }
 }

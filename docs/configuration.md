@@ -142,13 +142,47 @@ Namespaces follow the effective Vault registration and source root; disabled
 history sources stop their watchers. Journal metadata uses the existing bounded
 header/title-slot reader, and task/artifact directories remain excluded.
 
-Control Center's OMP Sessions page and normal model navigation search this entire
-metadata table before the 500-result output limit. Other sources retain their
-recent-500 metadata window. Set `search_content: true` for transcript contents;
-Vault transcript search also retains its existing behavior. The tool result
-declares its search scope. Cached metadata is discovery data: opening a session
-still checks the current exact journal, transfer state, lease and live ownership.
-Searching remains visible as a live tool phase.
+Control Center restricts session discovery and operations to Connection's default
+directory and its descendants, using canonical component boundaries. The default
+directory may be a symlink; escaping child aliases and destinations are excluded.
+The session-storage root is independent of this working-directory boundary.
+OMP metadata search filters the full table before pagination: 50 results by default,
+up to 100 per page, with an absolute `next_offset` cursor. Other sources retain
+their recent-500 metadata window. `search_content: true` streams admitted OMP
+transcripts only when explicitly requested. Opening still revalidates the native
+header, source, exact identity, transfer state, lease and live ownership.
+
+**Browse → Sessions** provides Active, Archived, Trash and Pending lists plus manual
+refresh. `refresh_sessions` reconciles the native index and managed manifests;
+filesystem events remain the normal incremental update path. Manual refresh also
+recanonicalizes unchanged records after directory/symlink changes. Partial manifest
+errors do not hide unrelated recoverable records.
+
+`update_session_directory`, `archive_session`, `trash_session` and `restore_session`
+operate on an opaque exact `target_id` returned by the latest search. Ask Before
+Changes displays native identity, physical paths, scope and fingerprints; Full
+Access omits that prompt, not the ownership/scope checks. Running conversations,
+duplicate IDs and changed approval snapshots are refused. Cwd changes migrate the
+native journal/artifacts, not physical project folders; destination directories
+must exist inside the same scope. Trash is reversible; no permanent purge exists.
+
+Mutations require the independently installed `cmux-omp-extension` worker from the
+sibling project of that name. It bundles OMP data SDK/native addon 18.18.0 and uses
+the installed macOS arm64 OMP 18.18.x executable's Bun runtime, without model setup,
+provider requests, dummy credentials or automatic extension loading. Build and
+install with `sh scripts/run-local.sh run build` and `sh scripts/run-local.sh run
+install-local` in that project. The installed payload under
+`~/.local/share/cmux-omp-extension/` is independent of development directories.
+
+Archive records live under Control Center's `ManagedSessions` directory and contain a
+durable manifest, journal, task artifacts and referenced image bytes. Native ID,
+title, entry lineage and conversation content are retained; native serialization
+may materialize image references as equivalent inline bytes. Journals normalized
+lossily by the pinned SDK are refused before relocation. Successful cwd/restore
+migrations retarget only matching OMP favorites and collection entries, once per
+migration. Interrupted/unknown results preserve recovery paths in Pending and are
+never automatically retried. Refresh reconciles state without replaying operations.
+
 Context/request size and tool-round budgets remain bounded; oversized context is
 reported rather than silently truncated.
 The chat stays mounted across workspace and Browse page switches, preserving

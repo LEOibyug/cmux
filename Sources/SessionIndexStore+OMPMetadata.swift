@@ -69,19 +69,20 @@ actor OMPMetadataCoordinator {
         return next
     }
 
-    func search(source: Source, query: String, cwd: String?, offset: Int, limit: Int) async throws -> [OMPSessionMetadataRecord] {
+    func search(source: Source, query: String, cwd: String?, offset: Int, limit: Int, canonicalCwdRoot: String? = nil) async throws -> [OMPSessionMetadataRecord] {
         let database = try index()
         if try await database.isInitialized(namespace: source.namespace) == false {
             repeat {
                 try await reconcile(source: source)
             } while try await !database.isInitialized(namespace: source.namespace)
-        } else if activated.insert(source.namespace).inserted || (watchers[source.namespace] == nil && jobs[source.namespace] == nil) {
-            // Reopen returns the durable snapshot without awaiting the startup scan.
-            Task { try? await self.reconcile(source: source) }
         }
         try Task.checkCancellation()
-        let records = try await database.search(namespace: source.namespace, query: query, cwd: cwd, offset: offset, limit: limit)
+        let records = try await database.search(namespace: source.namespace, query: query, cwd: cwd, offset: offset, limit: limit, canonicalCwdRoot: canonicalCwdRoot)
         guard source.isCurrent else { return [] }
+        if activated.insert(source.namespace).inserted || (watchers[source.namespace] == nil && jobs[source.namespace] == nil) {
+            // Submit startup work only after the warm query has read the committed snapshot.
+            Task { try? await self.reconcile(source: source) }
+        }
         return records
     }
 
@@ -91,11 +92,59 @@ actor OMPMetadataCoordinator {
             try await job.value
             return
         }
+        try await enqueueReconciliation(source: source)
+    }
+
+    /// Explicit full refresh also resolves cwd aliases whose journal fingerprints did not change.
+    func refresh(source: Source, journals: [String]? = nil) async throws {
+        try await enqueueReconciliation(source: source, journals: journals)
+        if journals == nil {
+            try Task.checkCancellation()
+            guard source.isCurrent else { throw SessionIndexStore.ExactOMPSessionError.configurationChanged }
+            try await index().refreshCanonicalCwds(namespace: source.namespace)
+            guard source.isCurrent else { throw SessionIndexStore.ExactOMPSessionError.configurationChanged }
+        }
+    }
+
+    /// Enqueue full scans before joining incremental work; routine scans never re-resolve every cwd.
+    private func enqueueReconciliation(source: Source, journals: [String]? = nil) async throws {
+        try Task.checkCancellation()
+        guard source.isCurrent else { throw SessionIndexStore.ExactOMPSessionError.configurationChanged }
         activated.insert(source.namespace)
-        pending[source.namespace] = RecursivePathChange(paths: [], requiresFullRescan: true)
-        let job = Task { try await self.drain(source: source) }
-        jobs[source.namespace] = job
-        try await job.value
+        changed(RecursivePathChange(paths: journals ?? [], requiresFullRescan: journals == nil), source: source)
+        if let job = jobs[source.namespace] { try await job.value }
+        try Task.checkCancellation()
+        guard source.isCurrent else { throw SessionIndexStore.ExactOMPSessionError.configurationChanged }
+    }
+
+    func saveManagedSession(source: Source, record: OMPManagedSessionRecord) async throws {
+        guard record.namespace == source.namespace else {
+            throw OMPSessionMetadataIndexError.invalidManagedSession(field: "namespace")
+        }
+        try await index().saveManagedSession(record)
+    }
+
+    func managedSessions(
+        source: Source,
+        query: String = "",
+        state: OMPManagedSessionState? = nil,
+        offset: Int = 0,
+        limit: Int,
+        canonicalCwdRoot: String? = nil
+    ) async throws -> [OMPManagedSessionRecord] {
+        try await index().managedSessions(namespace: source.namespace, query: query, state: state, offset: offset, limit: limit, canonicalCwdRoot: canonicalCwdRoot)
+    }
+
+    func managedSession(source: Source, id: UUID, canonicalCwdRoot: String? = nil) async throws -> OMPManagedSessionRecord? {
+        try await index().managedSession(namespace: source.namespace, id: id, canonicalCwdRoot: canonicalCwdRoot)
+    }
+
+    func removeManagedSession(source: Source, id: UUID) async throws {
+        try await index().removeManagedSession(namespace: source.namespace, id: id)
+    }
+
+    func fingerprints(source: Source, journalPaths: [String]? = nil) async throws -> [String: String] {
+        try await index().fingerprints(namespace: source.namespace, journalPaths: journalPaths)
     }
 
     private func changed(_ change: RecursivePathChange, source: Source) {
@@ -132,11 +181,17 @@ actor OMPMetadataCoordinator {
             }
         }
         let database = try index()
-        if let change = pending.removeValue(forKey: source.namespace) {
-            guard source.isCurrent else { return }
-            let previous = try await database.records(namespace: source.namespace)
+        while let change = pending.removeValue(forKey: source.namespace) {
+            guard source.isCurrent else { throw SessionIndexStore.ExactOMPSessionError.configurationChanged }
+            let planner = Task.detached(priority: .utility) { try Self.scanPlan(source: source, change: change) }
+            let plan = try await withTaskCancellationHandler {
+                try await planner.value
+            } onCancel: {
+                planner.cancel()
+            }
+            let previous = try await database.fingerprints(namespace: source.namespace, journalPaths: plan.full ? nil : plan.urls.map(\.path))
             let worker = Task.detached(priority: .utility) {
-                try Self.scan(source: source, previous: previous, change: change)
+                try Self.scan(source: source, previous: previous, urls: plan.urls, full: plan.full)
             }
             let delta = try await withTaskCancellationHandler {
                 try await worker.value
@@ -144,7 +199,7 @@ actor OMPMetadataCoordinator {
                 worker.cancel()
             }
             try Task.checkCancellation()
-            guard source.isCurrent else { return }
+            guard source.isCurrent else { throw SessionIndexStore.ExactOMPSessionError.configurationChanged }
             try await database.apply(namespace: source.namespace, upserts: delta.upserts, removing: delta.removing, completedScan: delta.completedScan)
         }
     }
@@ -172,8 +227,7 @@ actor OMPMetadataCoordinator {
         return .ignored
     }
 
-    private static func scan(source: Source, previous: [OMPSessionMetadataRecord], change: RecursivePathChange) throws -> Delta {
-        let old = Dictionary(uniqueKeysWithValues: previous.map { ($0.journalPath, $0) })
+    private static func scanPlan(source: Source, change: RecursivePathChange) throws -> (urls: [URL], full: Bool) {
         var full = change.requiresFullRescan
         var urls: [URL] = []
         if !full {
@@ -196,16 +250,20 @@ actor OMPMetadataCoordinator {
                 urls[index] = URL(fileURLWithPath: path).standardizedFileURL
             }
         }
+        return (Array(Set(urls)), full)
+    }
+
+    private static func scan(source: Source, previous: [String: String], urls: [URL], full: Bool) throws -> Delta {
         var result = Delta(completedScan: full)
         let present = Set(urls.map(\.path))
-        if full { result.removing = old.keys.filter { !present.contains($0) } }
+        if full { result.removing = previous.keys.filter { !present.contains($0) } }
         for url in urls {
             try Task.checkCancellation()
             guard let stamp = try stamp(url) else {
-                if old[url.path] != nil { result.removing.append(url.path) }
+                if previous[url.path] != nil { result.removing.append(url.path) }
                 continue
             }
-            guard old[url.path]?.fingerprint != stamp.fingerprint else { continue }
+            guard previous[url.path] != stamp.fingerprint else { continue }
             let metadata = try SessionIndexStore.ompIndexedMetadata(url: url, registration: source.registration)
             // Do not publish a torn read, even when an append/atomic replace races us.
             guard try Self.stamp(url)?.fingerprint == stamp.fingerprint else {
@@ -215,9 +273,9 @@ actor OMPMetadataCoordinator {
                 result.upserts.append(OMPSessionMetadataRecord(
                     journalPath: url.path, sessionID: metadata.id, title: metadata.title,
                     cwd: metadata.cwd, branch: metadata.branch, modifiedAt: stamp.modified,
-                    fingerprint: stamp.fingerprint
+                    fingerprint: stamp.fingerprint, parentSession: metadata.parentSession
                 ))
-            } else if old[url.path] != nil { result.removing.append(url.path) }
+            } else if previous[url.path] != nil { result.removing.append(url.path) }
         }
         try Task.checkCancellation()
         return result
@@ -263,6 +321,34 @@ actor OMPMetadataCoordinator {
 }
 
 extension SessionIndexStore {
+    func ompMetadataSource() async throws -> OMPMetadataCoordinator.Source {
+        let generation = historyConfigurationRevision
+        let registry = await registryProvider(nil)
+        try Task.checkCancellation()
+        guard registry.historyConfigurationIsCurrent, registry.isHistoryEnabled(for: "omp"),
+              let registration = registry.registration(id: "omp") else {
+            throw ExactOMPSessionError.sourceUnavailable
+        }
+        let source = try await Task.detached(priority: .utility) {
+            try OMPMetadataCoordinator.Source(registration: registration)
+        }.value
+        try Task.checkCancellation()
+        guard generation == historyConfigurationRevision, registry.historyConfigurationIsCurrent else {
+            throw ExactOMPSessionError.configurationChanged
+        }
+        return source
+    }
+
+    func refreshOMPMetadata() async throws {
+        let generation = historyConfigurationRevision
+        let source = try await ompMetadataSource()
+        try await OMPMetadataCoordinator.shared.refresh(source: source)
+        let current = try await ompMetadataSource()
+        guard generation == historyConfigurationRevision, current.namespace == source.namespace else {
+            throw ExactOMPSessionError.configurationChanged
+        }
+    }
+
     func searchOMPMetadata(query: String, cwd: String? = nil, offset: Int, limit: Int) async -> SearchOutcome {
         let registry = await registryProvider(cwd)
         guard !Task.isCancelled, registry.historyConfigurationIsCurrent,

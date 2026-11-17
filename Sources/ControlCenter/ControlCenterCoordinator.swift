@@ -1,5 +1,6 @@
 import Combine
 import CmuxControlCenter
+import CmuxAgentSessionStore
 import CmuxSettings
 import CmuxSettingsUI
 import Foundation
@@ -28,12 +29,30 @@ final class ControlCenterCoordinator: ObservableObject {
     @Published var sessions: [ControlCenterTarget] = []
     @Published var sessionSources: [SessionAgent] = []
     @Published var sessionResultsSourceID: String?
+    @Published var managedSessions: [OMPManagedSessionRecord] = []
+    @Published var sessionListState = ControlCenterSessionListState.active
+    @Published var sessionHasMore = false
+    @Published var sessionNextOffset = 0
+    @Published var sessionInventoryWarnings: [String] = []
+    @Published var sessionResultsState = ControlCenterSessionListState.active
+    @Published var isSearchingSessions = false
+    @Published var isRefreshingSessions = false
+    var sessionQuery = ""
+    var sessionSearchContent = false
+    var sessionFingerprints: [UUID: String] = [:]
+    var sessionParents: [UUID: String] = [:]
+    var sessionModifiedAt: [UUID: Date] = [:]
+    var sessionJournalRoot: String?
     @Published var sessionSourceID = "omp" {
         didSet {
             if oldValue != sessionSourceID {
                 sessionSearchGeneration += 1
                 sessions = []
                 sessionResultsSourceID = nil
+                managedSessions = []
+                sessionHasMore = false
+                sessionNextOffset = 0
+                if sessionSourceID != "omp" { sessionListState = .active }
             }
         }
     }
@@ -75,10 +94,11 @@ final class ControlCenterCoordinator: ObservableObject {
     var lastContext: [ControlCenterJSON] = []
     var contextGeneration = 0
     var collectionResults: [UUID: [UUID: ControlCenterStep]] = [:]
-    var sessionTargetIDs: [ControlCenterTarget.SessionIdentity: UUID] = [:]
+    var sessionTargetIDs: [String: UUID] = [:]
     var sessionSearchGeneration = 0
     var openedTargets: [String: UUID] = [:]
     var approvalContinuation: CheckedContinuation<Bool, Never>?
+    var uncertainSessionIDs: Set<String> = []
     var pendingChatEntries: [ControlCenterChatEntry] = []
     var pendingChatText = ""
     var chatProgressTask: Task<Void, Never>?
@@ -192,6 +212,7 @@ final class ControlCenterCoordinator: ObservableObject {
 
     func runOperation(title: String, body: @escaping @MainActor () async throws -> Void) async {
         guard !isRunning else { error = "An operation is already running."; return }
+        uncertainSessionIDs.removeAll(keepingCapacity: true)
         isRunning = true
         cancelled = false
         error = nil

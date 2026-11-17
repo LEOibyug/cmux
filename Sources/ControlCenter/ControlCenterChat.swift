@@ -292,7 +292,7 @@ extension ControlCenterCoordinator {
 
     static func isReadOnlyModelTool(_ name: String) -> Bool {
         switch name {
-        case "search_sessions", "list_saved", "current_state", "list_settings", "memory_list", "help": return true
+        case "search_sessions", "refresh_sessions", "list_saved", "current_state", "list_settings", "memory_list", "help": return true
         default: return false
         }
     }
@@ -340,6 +340,7 @@ extension ControlCenterCoordinator {
 
     private func approvalDetail(_ call: ControlCenterToolCall) throws -> String {
         let args = call.arguments.objectValue ?? [:]
+        if Self.isSessionManagementTool(call.name) { return try sessionManagementApprovalDetail(call) }
         if call.name == "bash" {
             let request = try bashArguments(call.arguments)
             return "\(ControlCenterStrings.text("bashApprovalDisclosure"))\n\ncommand:\n\(request.command)\n\ncwd: \(request.directory)\ntimeout_seconds: \(request.timeout)"

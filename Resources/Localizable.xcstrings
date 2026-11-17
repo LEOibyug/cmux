@@ -1,6 +1,420 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "controlCenter.sessionState.active": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversations"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对话"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "對話"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionState.archived": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archived"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "归档"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "封存"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionState.trash": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trash"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回收站"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "回收筒"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionState.pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待核验"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待核驗"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionRefresh": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan and update conversations"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扫描并更新对话"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "掃描並更新對話"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionManagedScope": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Managed directory"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理目录"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理目錄"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionManagedHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversations in the default working directory and its subdirectories."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅管理默认工作目录及其子目录中的对话。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅管理預設工作目錄及其子目錄中的對話。"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionLoadMore": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load more"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加载更多"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入更多"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionFork": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fork"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分支"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分支"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionChangeDirectory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change working directory"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修改工作目录"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修改工作目錄"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionArchive": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "归档"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "封存"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionTrash": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to Trash"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移入回收站"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移入回收筒"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionRestore": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還原"
+          }
+        }
+      }
+    },
+    "controlCenter.sessionDirectoryHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moves the conversation journal and artifacts, not project files. The directory must be within the default working directory."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅迁移对话记录与附件，不移动项目文件。目标须位于默认工作目录内。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "僅遷移對話記錄與附件，不移動專案檔案。目標須位於預設工作目錄內。"
+          }
+        }
+      }
+    },
+    "controlCenter.approve.update_session_directory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change conversation directory"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修改对话目录"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修改對話目錄"
+          }
+        }
+      }
+    },
+    "controlCenter.approve.archive_session": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive conversation"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "归档对话"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "封存對話"
+          }
+        }
+      }
+    },
+    "controlCenter.approve.trash_session": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move conversation to Trash"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将对话移入回收站"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將對話移入回收筒"
+          }
+        }
+      }
+    },
+    "controlCenter.approve.restore_session": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore conversation"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复对话"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還原對話"
+          }
+        }
+      }
+    },
     "terminalImagePreview.title": {
       "extractionState": "manual",
       "localizations": {

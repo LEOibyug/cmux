@@ -71,6 +71,10 @@ public actor ControlCenterStore {
         try database.remove(id, table: .collections)
     }
 
+    public func updateSessionReferences(migrationID: UUID, sessionID: String, previousFile: String, journal: String, cwd: String) throws {
+        try database.updateSessionReferences(migrationID: migrationID, sessionID: sessionID, previousFile: previousFile, journal: journal, cwd: cwd)
+    }
+
     public func savePreference(_ preference: ControlCenterPreference) throws {
         try database.save(preference, id: preference.id, table: .preferences)
     }
@@ -166,13 +170,14 @@ private final class ControlCenterDatabase: @unchecked Sendable {
         let version = sqlite3_column_int(versionStatement, 0)
         sqlite3_finalize(versionStatement)
         guard versionResult == SQLITE_ROW else { throw ControlCenterStoreError.database(versionResult) }
-        guard version <= 1 else { throw ControlCenterStoreError.unsupportedSchema(version) }
+        guard version <= 2 else { throw ControlCenterStoreError.unsupportedSchema(version) }
         try execute("BEGIN IMMEDIATE;")
         do {
             for table in Table.allCases {
                 try execute("CREATE TABLE IF NOT EXISTS \(table.rawValue) (position INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, payload BLOB NOT NULL);")
             }
-            try execute("PRAGMA user_version = 1;")
+            try execute("CREATE TABLE IF NOT EXISTS session_reference_migrations (id TEXT PRIMARY KEY NOT NULL) WITHOUT ROWID;")
+            try execute("PRAGMA user_version = 2;")
             try execute("COMMIT;")
         } catch {
             sqlite3_exec(handle, "ROLLBACK;", nil, nil, nil)
@@ -216,6 +221,49 @@ private final class ControlCenterDatabase: @unchecked Sendable {
         defer { sqlite3_finalize(statement) }
         try bind(id, to: statement)
         try finish(statement)
+    }
+
+    func updateSessionReferences(migrationID: UUID, sessionID: String, previousFile: String, journal: String, cwd: String) throws {
+        func updated(_ target: ControlCenterTarget) -> ControlCenterTarget {
+            guard target.kind == .session, target.agentID == "omp", target.sessionID == sessionID,
+                  let file = target.sessionFile else { return target }
+            let url = URL(fileURLWithPath: file).standardizedFileURL
+            let identity = url.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).path
+            guard identity == previousFile else { return target }
+            var next = target
+            next.path = cwd
+            next.sessionFile = journal
+            return next
+        }
+        try execute("BEGIN IMMEDIATE;")
+        do {
+            let lookup = try prepare("SELECT 1 FROM session_reference_migrations WHERE id = ?;")
+            defer { sqlite3_finalize(lookup) }
+            try bind(migrationID, to: lookup)
+            let seen = sqlite3_step(lookup)
+            guard seen == SQLITE_ROW || seen == SQLITE_DONE else { throw ControlCenterStoreError.database(seen) }
+            if seen == SQLITE_ROW {
+                try execute("COMMIT;")
+                return
+            }
+            for target: ControlCenterTarget in try records(.favorites) {
+                let next = updated(target)
+                if next != target { try save(next, id: next.id, table: .favorites) }
+            }
+            for collection: ControlCenterCollection in try records(.collections) {
+                var next = collection
+                next.items = collection.items.map(updated)
+                if next != collection { try save(next, id: next.id, table: .collections) }
+            }
+            let remember = try prepare("INSERT INTO session_reference_migrations (id) VALUES (?);")
+            defer { sqlite3_finalize(remember) }
+            try bind(migrationID, to: remember)
+            try finish(remember)
+            try execute("COMMIT;")
+        } catch {
+            sqlite3_exec(handle, "ROLLBACK;", nil, nil, nil)
+            throw error
+        }
     }
 
     private func records<Value: Decodable>(_ table: Table, descending: Bool = false) throws -> [Value] {

@@ -178,6 +178,9 @@ struct ControlCenterConnectionView: View {
             Section {
                 TextField(ControlCenterStrings.text("ompExecutable"), text: $coordinator.connection.ompExecutable)
                 TextField(ControlCenterStrings.text("defaultDirectory"), text: $coordinator.connection.defaultDirectory)
+                Text(ControlCenterStrings.text("sessionManagedHint"))
+                    .font(.caption)
+                    .foregroundStyle(theme.secondaryForegroundColor)
                 Text(ControlCenterStrings.text("executableHint"))
                     .font(.caption)
                     .foregroundStyle(theme.secondaryForegroundColor)

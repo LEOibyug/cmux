@@ -1309,11 +1309,14 @@ final class PiVaultAgentPersistenceTests: XCTestCase {
         let warm = try await reopened.search(source: source, query: "persisted", cwd: nil, offset: 0, limit: 10)
         XCTAssertEqual(warm, [saved])
         do {
-            try await reopened.reconcile(source: source)
+            try await reopened.refresh(source: source)
             XCTFail("Unavailable root must not be committed as an empty scan")
         } catch {}
         let preserved = try await database.records(namespace: source.namespace)
         XCTAssertEqual(preserved, [saved])
+        let stillWarm = try await reopened.search(source: source, query: "persisted", cwd: nil, offset: 0, limit: 1)
+        XCTAssertEqual(stillWarm, [saved])
+        await reopened.stopWatching()
     }
 
     func testOMPMetadataWatcherUpdatesDeletesAndRenamesEligibleJournals() async throws {
@@ -1358,6 +1361,66 @@ final class PiVaultAgentPersistenceTests: XCTestCase {
         _ = try await awaitRecords { $0.isEmpty }
     }
 
+    func testOMPMetadataExplicitTargetedAndFullRefreshWaitForCommittedChanges() async throws {
+        let directory = try ompMetadataTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = directory.appendingPathComponent("sessions")
+        let original = root.appendingPathComponent("bucket/original.jsonl")
+        let removed = root.appendingPathComponent("bucket/removed.jsonl")
+        try writeOMPMetadataJournal(original, id: "original", title: "Before")
+        try writeOMPMetadataJournal(removed, id: "removed", title: "Remove me")
+        var registration = CmuxVaultAgentRegistration.builtInOmp
+        registration.sessionDirectory = root.path
+        let source = try OMPMetadataCoordinator.Source(registration: registration)
+        let coordinator = OMPMetadataCoordinator(databaseURL: directory.appendingPathComponent("private/index.sqlite3"))
+        defer { Task { await coordinator.stopWatching() } }
+        try await coordinator.refresh(source: source)
+        await coordinator.stopWatching()
+        try writeOMPMetadataJournal(original, id: "original", title: "After targeted refresh")
+        try FileManager.default.removeItem(at: removed)
+        try await coordinator.refresh(source: source, journals: [original.path, removed.path])
+        let targeted = try await coordinator.search(source: source, query: "", cwd: nil, offset: 0, limit: 10)
+        XCTAssertEqual(targeted.map(\.title), ["After targeted refresh"])
+        let fingerprints = try await coordinator.fingerprints(source: source, journalPaths: [original.path, removed.path])
+        XCTAssertEqual(Set(fingerprints.keys), [original.path])
+        XCTAssertEqual(fingerprints[original.path], targeted.first?.fingerprint)
+
+        await coordinator.stopWatching()
+        let added = root.appendingPathComponent("new-bucket/new.jsonl")
+        try writeOMPMetadataJournal(added, id: "new", title: "Found by full refresh")
+        // A full request must not merely join an incremental task and return its narrower result.
+        async let delta: Void = coordinator.refresh(source: source, journals: [original.path])
+        async let full: Void = coordinator.refresh(source: source)
+        _ = try await (delta, full)
+        let refreshed = try await coordinator.search(source: source, query: "", cwd: nil, offset: 0, limit: 10)
+        XCTAssertEqual(Set(refreshed.map(\.sessionID)), ["original", "new"])
+        await coordinator.stopWatching()
+    }
+
+    func testOMPMetadataScopeUsesHeaderCwdNotJournalStorageAndRetainsLogicalAlias() async throws {
+        let directory = try ompMetadataTestDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = directory.appendingPathComponent("native-storage")
+        let scope = directory.appendingPathComponent("workspace")
+        let child = scope.appendingPathComponent("project")
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        let logical = directory.appendingPathComponent("logical-project")
+        try FileManager.default.createSymbolicLink(at: logical, withDestinationURL: child)
+        try writeOMPMetadataJournal(root.appendingPathComponent("bucket/inside.jsonl"), id: "inside", title: "Café inside", cwd: logical.path)
+        try writeOMPMetadataJournal(root.appendingPathComponent("bucket/sibling.jsonl"), id: "sibling", title: "Café outside", cwd: scope.path + "-other")
+        var registration = CmuxVaultAgentRegistration.builtInOmp
+        registration.sessionDirectory = root.path
+        let source = try OMPMetadataCoordinator.Source(registration: registration)
+        let coordinator = OMPMetadataCoordinator(databaseURL: directory.appendingPathComponent("private/index.sqlite3"))
+        defer { Task { await coordinator.stopWatching() } }
+        try await coordinator.refresh(source: source)
+        let scoped = try await coordinator.search(source: source, query: "cafe", cwd: nil, offset: 0, limit: 1, canonicalCwdRoot: scope.resolvingSymlinksInPath().path)
+        XCTAssertEqual(scoped.map(\.sessionID), ["inside"])
+        XCTAssertEqual(scoped.first?.cwd, logical.path)
+        XCTAssertEqual(scoped.first?.parentSession, "/old/parent.jsonl")
+        await coordinator.stopWatching()
+    }
+
     private func ompMetadataTestDirectory() throws -> URL {
         let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("tmp/tests/omp-metadata-\(UUID().uuidString)")
@@ -1365,11 +1428,11 @@ final class PiVaultAgentPersistenceTests: XCTestCase {
         return directory
     }
 
-    private func writeOMPMetadataJournal(_ url: URL, id: String, title: String) throws {
+    private func writeOMPMetadataJournal(_ url: URL, id: String, title: String, cwd: String = "/logical/repo") throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let records: [[String: Any]] = [
             ["type": "title", "title": title],
-            ["type": "session", "id": id, "cwd": "/logical/repo", "parentSession": "/old/parent.jsonl"]
+            ["type": "session", "id": id, "cwd": cwd, "parentSession": "/old/parent.jsonl"]
         ]
         let data = try records.reduce(into: Data()) { result, object in
             result.append(try JSONSerialization.data(withJSONObject: object))
