@@ -39,9 +39,6 @@ struct CodexpressSidebarCard: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 3) {
                         if let remote = coordinator.remote {
-                            Text(verbatim: remote.endpoint)
-                                .lineLimit(2).truncationMode(.middle)
-                                .help(remote.instanceID + " · " + remote.endpoint)
                             if let timestamp = remote.fetchedAt {
                                 HStack(spacing: 4) {
                                     if isStale { Text(strings.stale) }
@@ -168,7 +165,7 @@ struct CodexpressSidebarCard: View {
                 .accessibilityLabel(Text(strings.open))
             }
         }
-        .help([coordinator.remote?.endpoint, statusLabel, coordinator.snapshot.map(modeLabel)].compactMap { $0 }.joined(separator: " · "))
+        .help([statusLabel, coordinator.snapshot.map(modeLabel)].compactMap { $0 }.joined(separator: " · "))
     }
 
     private func contentHeight(for sources: [CodexpressSnapshot.Source]) -> CGFloat {
@@ -176,8 +173,8 @@ struct CodexpressSidebarCard: View {
         let separators = CGFloat(max(0, sources.count - 1)) * 7
         let errorHeight: CGFloat = coordinator.connectionError != nil || coordinator.actionError != nil ? 50 : 0
         let fontScale = CGFloat(settings.fontSize) / 11
-        let targetHeight: CGFloat = coordinator.remote == nil ? 0 : 42
-        return min(230, max(36, (rowHeight + separators + targetHeight) * fontScale * CGFloat(magnification) / 100 + errorHeight))
+        let timestampHeight: CGFloat = coordinator.remote.map { $0.fetchedAt != nil || $0.snapshot != nil } == true ? 18 : 0
+        return min(230, max(36, (rowHeight + separators + timestampHeight) * fontScale * CGFloat(magnification) / 100 + errorHeight))
     }
 
     private var statusLabel: String {

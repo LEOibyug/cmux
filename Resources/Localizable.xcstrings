@@ -531713,19 +531713,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remote · read-only"
+            "value": "Remote gateway"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "远端网关（只读）"
+            "value": "远端网关"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "遠端閘道（唯讀）"
+            "value": "遠端閘道"
           }
         }
       }

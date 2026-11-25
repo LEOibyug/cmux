@@ -84,9 +84,9 @@ send a pending operation ID to the new endpoint. Disabling the panel stops perio
 
 For a remote gateway both settings are overridden. The sidebar watches the state directory
 for atomic replacements of `cmux-gateway.json` and only reads that publication (owner-only
-`0700` directory, `0600` regular file, no symlinks). It displays the endpoint and the Mac's
-fetch time, marking samples older than 60 seconds stale. Open Codexpress to refresh from
-the server. No remote management credentials or API calls are
+`0700` directory, `0600` regular file, no symlinks). The card shows source status and the Mac's
+fetch time, marking samples older than 60 seconds stale. The server address is not displayed.
+Open Codexpress to refresh server data. No remote management credentials or API calls are
 used. A missing publication permits legacy local mode, but an unsafe or malformed one,
 an unavailable selection, or a remote target without a snapshot never permits fallback.
 
