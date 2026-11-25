@@ -24,13 +24,13 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
 
     // MARK: - Move to top
 
-    /// Moves one workspace to the top of its pin tier.
+    /// Moves one workspace to the top of its sidebar tier.
     public func moveTabToTop(_ tabId: UUID) {
         moveTabsToTop([tabId])
     }
 
-    /// Moves the given workspaces to the top of their pin tiers, preserving
-    /// their relative order (group members hoist behind their anchors).
+    /// Moves workspaces to the top of their sidebar tiers, preserving their
+    /// relative order (group members hoist behind their anchors).
     public func moveTabsToTop(_ tabIds: Set<UUID>) {
         guard !tabIds.isEmpty else { return }
         let selectedTabs = model.tabs.filter { tabIds.contains($0.id) }
@@ -42,14 +42,9 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
             let topLevelIds = model.sidebarTopLevelWorkspaceIdsIncludingEmptyGroups()
             let selectedTopLevelIds = model.topLevelWorkspaceIds(for: selectedTabs)
             let selectedTopLevelIdSet = Set(selectedTopLevelIds)
-            let pinnedTopLevelIds = model.sidebarTopLevelPinnedWorkspaceIdsIncludingEmptyGroups()
-            let desiredTopLevelIds =
-                selectedTopLevelIds.filter { pinnedTopLevelIds.contains($0) } +
-                topLevelIds.filter { pinnedTopLevelIds.contains($0) && !selectedTopLevelIdSet.contains($0) } +
-                selectedTopLevelIds.filter { !pinnedTopLevelIds.contains($0) } +
-                topLevelIds.filter { !pinnedTopLevelIds.contains($0) && !selectedTopLevelIdSet.contains($0) }
-            model.normalizeWorkspaceGroupRunsPreservingOrder(desiredTopLevelIds)
-            model.syncWorkspaceGroupsOrderToAnchorOrder(preferredTopLevelIds: desiredTopLevelIds)
+            let desiredTopLevelIds = selectedTopLevelIds
+                + topLevelIds.filter { !selectedTopLevelIdSet.contains($0) }
+            model.normalizeWorkspaceGroupContiguity(preservingTopLevelIds: desiredTopLevelIds)
         } else {
             let remainingTabs = model.tabs.filter { !tabIds.contains($0.id) }
             let selectedPinned = selectedTabs.filter { $0.isPinned }
@@ -65,8 +60,8 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
 
     /// Whether ``moveTabToTopForNotification(_:)`` would leave the order
     /// unchanged because the workspace (or, when grouped, its top-level row)
-    /// already sits first in the unpinned tier. Pinned and unknown rows
-    /// return `false`; callers check pinning separately.
+    /// already sits first in its regular group or independent-workspace tier.
+    /// Pinned and unknown rows return `false`; callers check pinning separately.
     public func isAtTopOfUnpinnedTier(_ tabId: UUID) -> Bool {
         guard let tab = model.tabs.first(where: { $0.id == tabId }), !tab.isPinned else { return false }
         if !model.workspaceGroups.isEmpty {
@@ -74,8 +69,8 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
             let pinnedTopLevelIds = model.sidebarTopLevelPinnedWorkspaceIdsIncludingEmptyGroups()
             guard !pinnedTopLevelIds.contains(topLevelId) else { return false }
             let topLevelIds = model.sidebarTopLevelWorkspaceIdsIncludingEmptyGroups()
-            let pinnedCount = topLevelIds.filter { pinnedTopLevelIds.contains($0) }.count
-            guard topLevelIds.firstIndex(of: topLevelId) == pinnedCount else { return false }
+            let tiers = model.sidebarOrderTiers()
+            guard topLevelIds.first(where: { tiers[$0] == tiers[topLevelId] }) == topLevelId else { return false }
             // A group member is on top only when it also leads its group's
             // unpinned members, the slot moveTabToTopForNotification promotes
             // it to (after the anchor and any pinned members).
@@ -91,7 +86,7 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
     /// Moves a workspace to the top of the unpinned tier for a notification
     /// bump; no-ops for pinned rows or rows already at the boundary.
     public func moveTabToTopForNotification(_ tabId: UUID) {
-        guard let tab = model.tabs.first(where: { $0.id == tabId }) else { return }
+        guard let tab = model.tabs.first(where: { $0.id == tabId }), !tab.isPinned else { return }
         let previousOrder = model.tabs.map(\.id)
 
         if !model.workspaceGroups.isEmpty {
@@ -101,17 +96,16 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
             model.moveWorkspaceGroupMembersAfterAnchors(workspaceIds: [tabId])
             var desiredTopLevelIds = model.sidebarTopLevelWorkspaceIdsIncludingEmptyGroups()
             guard let fromIndex = desiredTopLevelIds.firstIndex(of: topLevelId) else { return }
-            let pinnedCount = desiredTopLevelIds.reduce(into: 0) { count, id in
-                if pinnedTopLevelIds.contains(id) {
-                    count += 1
-                }
-            }
-            if fromIndex != pinnedCount {
+            let targetIndex = model.clampedTopLevelReorderIndex(
+                forWorkspaceId: topLevelId,
+                targetIndex: 0,
+                topLevelIds: desiredTopLevelIds
+            )
+            if fromIndex != targetIndex {
                 let movedId = desiredTopLevelIds.remove(at: fromIndex)
-                desiredTopLevelIds.insert(movedId, at: min(pinnedCount, desiredTopLevelIds.count))
+                desiredTopLevelIds.insert(movedId, at: min(targetIndex, desiredTopLevelIds.count))
             }
-            model.normalizeWorkspaceGroupRunsPreservingOrder(desiredTopLevelIds)
-            model.syncWorkspaceGroupsOrderToAnchorOrder(preferredTopLevelIds: desiredTopLevelIds)
+            model.normalizeWorkspaceGroupContiguity(preservingTopLevelIds: desiredTopLevelIds)
         } else {
             guard let index = model.tabs.firstIndex(where: { $0.id == tabId }) else { return }
             let pinnedCount = model.tabs.filter { $0.isPinned }.count
@@ -258,13 +252,20 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
               let groupIndex = rowIds.firstIndex(of: groupId) else { return rowIds }
         let groupsById = Dictionary(uniqueKeysWithValues: model.workspaceGroups.map { ($0.id, $0) })
         let workspacesById = Dictionary(uniqueKeysWithValues: model.tabs.map { ($0.id, $0) })
-        let pinnedCount = rowIds.reduce(into: 0) { count, id in
-            if groupsById[id]?.isPinned ?? workspacesById[id]?.isPinned ?? false {
-                count += 1
-            }
+        let tier = WorkspaceSidebarOrderTier(isGroup: false, isPinned: workspace.isPinned)
+        var lowerBound = 0
+        var sameTierCount = 0
+        for id in rowIds {
+            let group = groupsById[id]
+            let rowTier = WorkspaceSidebarOrderTier(
+                isGroup: group != nil,
+                isPinned: group?.isPinned ?? workspacesById[id]?.isPinned ?? false
+            )
+            if rowTier.rawValue < tier.rawValue { lowerBound += 1 }
+            if rowTier == tier { sameTierCount += 1 }
         }
         let desiredIndex = min(groupIndex + 1, rowIds.count)
-        let insertionIndex = workspace.isPinned ? min(desiredIndex, pinnedCount) : max(desiredIndex, pinnedCount)
+        let insertionIndex = min(max(desiredIndex, lowerBound), lowerBound + sameTierCount)
         rowIds.insert(promotingWorkspaceId, at: insertionIndex)
         return rowIds
     }
@@ -396,8 +397,7 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
         let desiredIds = sidebarBlockDesiredWorkspaceIds(
             movingIds: movingIds,
             remainingIds: remainingIds,
-            referenceWorkspaceId: referenceWorkspaceId,
-            pinnedWorkspaceIds: Set(model.tabs.filter(\.isPinned).map(\.id))
+            referenceWorkspaceId: referenceWorkspaceId
         )
 
         if isDragOperation {
@@ -496,31 +496,11 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
     private func sidebarBlockDesiredWorkspaceIds(
         movingIds: [UUID],
         remainingIds: [UUID],
-        referenceWorkspaceId: UUID?,
-        pinnedWorkspaceIds: Set<UUID>
+        referenceWorkspaceId: UUID?
     ) -> [UUID] {
         var desiredIds = remainingIds
-        for isPinned in [true, false] {
-            let tierIds = movingIds.filter {
-                pinnedWorkspaceIds.contains($0) == isPinned
-            }
-            guard !tierIds.isEmpty else { continue }
-            let referenceIndex = referenceWorkspaceId
-                .flatMap(desiredIds.firstIndex)
-                ?? desiredIds.count
-            let pinnedCount = desiredIds.reduce(into: 0) { count, workspaceId in
-                if pinnedWorkspaceIds.contains(workspaceId) {
-                    count += 1
-                }
-            }
-            let insertionIndex = isPinned
-                ? min(referenceIndex, pinnedCount)
-                : max(referenceIndex, pinnedCount)
-            desiredIds.insert(
-                contentsOf: tierIds,
-                at: min(insertionIndex, desiredIds.count)
-            )
-        }
+        let insertionIndex = referenceWorkspaceId.flatMap(desiredIds.firstIndex) ?? desiredIds.count
+        desiredIds.insert(contentsOf: movingIds, at: insertionIndex)
         return desiredIds
     }
 
@@ -531,13 +511,12 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
         toIndex targetIndex: Int
     ) -> Bool {
         let topLevelIds = model.sidebarTopLevelWorkspaceIdsIncludingEmptyGroups()
-        let pinnedTopLevelIds = model.sidebarTopLevelPinnedWorkspaceIdsIncludingEmptyGroups()
+        guard !topLevelIds.isEmpty else { return false }
         guard let fromIndex = topLevelIds.firstIndex(of: tabId) else { return false }
         let clampedTarget = model.clampedTopLevelReorderIndex(
             forWorkspaceId: tabId,
             targetIndex: targetIndex,
-            topLevelIds: topLevelIds,
-            pinnedTopLevelIds: pinnedTopLevelIds
+            topLevelIds: topLevelIds
         )
         guard fromIndex != clampedTarget else { return true }
 
@@ -546,8 +525,7 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
             let movedId = desiredTopLevelIds.remove(at: fromIndex)
             desiredTopLevelIds.insert(movedId, at: clampedTarget)
         }
-        model.normalizeWorkspaceGroupRunsPreservingOrder(desiredTopLevelIds)
-        model.syncWorkspaceGroupsOrderToAnchorOrder(preferredTopLevelIds: desiredTopLevelIds)
+        model.normalizeWorkspaceGroupContiguity(preservingTopLevelIds: desiredTopLevelIds)
 
         let movedWorkspaceIds: [UUID]
         if let group = model.workspaceGroups.first(where: { $0.anchorWorkspaceId == tabId }) {
@@ -602,10 +580,16 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
     public func workspaceBatchReorderPlan(
         orderedWorkspaceIds: [UUID]
     ) -> Result<[WorkspaceReorderPlanItem], WorkspaceBatchReorderError> {
-        planner.batchReorderPlan(
+        let result = planner.batchReorderPlan(
             orderedWorkspaceIds: orderedWorkspaceIds,
             current: workspaceOrderSnapshots()
         )
+        guard case .success(let plan) = result else { return result }
+        let finalIds = model.sidebarOrderedWorkspaces(preserving: orderedWorkspaceIds).map(\.id)
+        let finalIndexes = Dictionary(uniqueKeysWithValues: finalIds.enumerated().map { ($0.element, $0.offset) })
+        return .success(plan.map {
+            WorkspaceReorderPlanItem(workspaceId: $0.workspaceId, fromIndex: $0.fromIndex, toIndex: finalIndexes[$0.workspaceId]!)
+        })
     }
 
     /// Applies (or dry-runs) a batch reorder, rebuilding `tabs[]` from the
@@ -632,29 +616,10 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
     private func applyWorkspaceBatchReorder(
         orderedWorkspaceIds: [UUID]
     ) {
-        let workspacesById = Dictionary(uniqueKeysWithValues: model.tabs.map { ($0.id, $0) })
-        let finalIds = batchWorkspaceReorderFinalIds(orderedWorkspaceIds: orderedWorkspaceIds)
-        model.tabs = finalIds.compactMap { workspacesById[$0] }
-        // Batch reorder rebuilds tabs from scratch, ignoring group section
-        // ordering — that can split a group across the array or land a
-        // non-anchor in front of its anchor. Renormalize so the contiguous
-        // section + anchor-first invariants hold for socket
-        // workspace.reorder_many / `cmux reorder-workspaces`.
-        if !model.workspaceGroups.isEmpty {
-            // Resync workspaceGroups order to wherever the anchors landed
-            // in the rebuilt tabs[] so later group-slot moves use the same
-            // order the user sees.
-            model.syncWorkspaceGroupsOrderToAnchorOrder()
-            model.normalizeWorkspaceGroupContiguity()
-        }
+        model.normalizeWorkspaceGroupRunsPreservingOrder(orderedWorkspaceIds)
+        model.syncWorkspaceGroupsOrderToAnchorOrder()
     }
 
-    private func batchWorkspaceReorderFinalIds(orderedWorkspaceIds: [UUID]) -> [UUID] {
-        planner.batchReorderFinalIds(
-            orderedWorkspaceIds: orderedWorkspaceIds,
-            current: workspaceOrderSnapshots()
-        )
-    }
 
     private func workspaceOrderSnapshots() -> [WorkspaceOrderSnapshot] {
         model.tabs.map { WorkspaceOrderSnapshot(id: $0.id, isPinned: $0.isPinned) }
@@ -706,28 +671,23 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
         guard !changedIdSet.isEmpty else { return [] }
         let changedIds = orderedTargetIds.filter { changedIdSet.contains($0) }
 
-        if !model.workspaceGroups.isEmpty {
-            for id in changedIds {
-                if let workspace = workspacesById[id] {
-                    reorderTabForPinnedState(workspace)
-                }
-            }
-            host?.workspaceOrderDidChange(movedWorkspaceIds: changedIds)
-            return changedIds
+        // Members stay in place and are repartitioned only within their group.
+        // Independent rows join the same boundaries as individual pin changes.
+        let changedIndependentIds = Set(changedIds.filter { workspacesById[$0]?.groupId == nil })
+        let insertionIds = pinned ? changedIds : Array(changedIds.reversed())
+        let changedWorkspaces = insertionIds.compactMap { id -> Tab? in
+            guard changedIndependentIds.contains(id) else { return nil }
+            return workspacesById[id]
         }
-
-        let changedWorkspaces: [Tab]
-        if pinned {
-            changedWorkspaces = changedIds.compactMap { workspacesById[$0] }
-        } else {
-            // Keep parity with reorderTabForPinnedState: each unpinned item
-            // is inserted at the front of the unpinned segment, so rebuilding a
-            // batch in one pass must reverse the changed input order.
-            changedWorkspaces = changedIds.reversed().compactMap { workspacesById[$0] }
+        var reordered = model.tabs.filter { !changedIndependentIds.contains($0.id) }
+        let tiers = model.sidebarOrderTiers()
+        let tier = WorkspaceSidebarOrderTier(isGroup: false, isPinned: pinned)
+        let insertionIndex = reordered.reduce(into: 0) { count, workspace in
+            let rowTier = tiers[workspace.id] ?? .workspace
+            if rowTier.rawValue < tier.rawValue || (pinned && rowTier == tier) { count += 1 }
         }
-        let remainingPinned = model.tabs.filter { $0.isPinned && !changedIdSet.contains($0.id) }
-        let remainingUnpinned = model.tabs.filter { !$0.isPinned && !changedIdSet.contains($0.id) }
-        model.tabs = remainingPinned + changedWorkspaces + remainingUnpinned
+        reordered.insert(contentsOf: changedWorkspaces, at: insertionIndex)
+        model.tabs = model.sidebarOrderedWorkspaces(preserving: reordered.map(\.id))
         host?.workspaceOrderDidChange(movedWorkspaceIds: changedIds)
         return changedIds
     }
@@ -744,8 +704,14 @@ public final class WorkspaceReorderCoordinator<Tab: WorkspaceTabRepresenting> {
                 return currentTabs
             }
             let movedTab = reordered.remove(at: currentIndex)
-            let pinnedCount = reordered.prefix { model.isGlobalPinnedRow($0) }.count
-            let insertIndex = min(pinnedCount, reordered.count)
+            let tiers = model.sidebarOrderTiers()
+            let tier = WorkspaceSidebarOrderTier(isGroup: false, isPinned: movedTab.isPinned)
+            let insertIndex = reordered.reduce(into: 0) { count, workspace in
+                let rowTier = tiers[workspace.id] ?? .workspace
+                if rowTier.rawValue < tier.rawValue || (movedTab.isPinned && rowTier == tier) {
+                    count += 1
+                }
+            }
             reordered.insert(movedTab, at: insertIndex)
             return reordered
         }

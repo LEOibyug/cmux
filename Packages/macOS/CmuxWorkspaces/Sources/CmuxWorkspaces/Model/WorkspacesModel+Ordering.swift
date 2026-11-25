@@ -4,6 +4,73 @@ public import Foundation
 // tabs/groups storage, lifted one-for-one from the legacy private TabManager
 // helpers. All are pure reads; mutating flows live on the coordinators.
 extension WorkspacesModel {
+    /// Group membership, not a member's own pin, determines its outer tier.
+    func sidebarOrderTiers() -> [UUID: WorkspaceSidebarOrderTier] {
+        let groupsById = Dictionary(uniqueKeysWithValues: workspaceGroups.map { ($0.id, $0) })
+        var tiers: [UUID: WorkspaceSidebarOrderTier] = [:]
+        tiers.reserveCapacity(tabs.count + workspaceGroups.count)
+        for tab in tabs {
+            if let groupId = tab.groupId, let group = groupsById[groupId] {
+                tiers[tab.id] = WorkspaceSidebarOrderTier(isGroup: true, isPinned: group.isPinned)
+            } else {
+                tiers[tab.id] = WorkspaceSidebarOrderTier(isGroup: false, isPinned: tab.isPinned)
+            }
+        }
+        for group in workspaceGroups {
+            tiers[group.anchorWorkspaceId] = WorkspaceSidebarOrderTier(isGroup: true, isPinned: group.isPinned)
+        }
+        return tiers
+    }
+
+    /// Stable, linear partition of top-level rows, including empty headers.
+    func sidebarTierOrderedIds(_ ids: [UUID]) -> [UUID] {
+        let tiers = sidebarOrderTiers()
+        var rowsByTier = Array(repeating: [UUID](), count: WorkspaceSidebarOrderTier.allCases.count)
+        for id in ids {
+            rowsByTier[(tiers[id] ?? .workspace).rawValue].append(id)
+        }
+        return rowsByTier.flatMap { $0 }
+    }
+
+    /// Resolves a full-tab plan without changing membership or letting a member
+    /// move its group into the member's independent-workspace pin tier.
+    func sidebarOrderedWorkspaces(preserving desiredIds: [UUID]) -> [Tab] {
+        let tabsById = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
+        let groupsById = Dictionary(uniqueKeysWithValues: workspaceGroups.map { ($0.id, $0) })
+        var seenIds = Set<UUID>()
+        var ordered: [Tab] = []
+        ordered.reserveCapacity(tabs.count)
+        for id in desiredIds {
+            if let tab = tabsById[id], seenIds.insert(id).inserted {
+                ordered.append(tab)
+            }
+        }
+        for tab in tabs where seenIds.insert(tab.id).inserted {
+            ordered.append(tab)
+        }
+        var membersByGroupId: [UUID: [Tab]] = [:]
+        for tab in ordered {
+            if let groupId = tab.groupId, groupsById[groupId] != nil {
+                membersByGroupId[groupId, default: []].append(tab)
+            }
+        }
+        var emittedGroupIds = Set<UUID>()
+        var rowsByTier = Array(repeating: [Tab](), count: WorkspaceSidebarOrderTier.allCases.count)
+        for tab in ordered {
+            if let groupId = tab.groupId, let group = groupsById[groupId] {
+                guard emittedGroupIds.insert(groupId).inserted else { continue }
+                let tier = WorkspaceSidebarOrderTier(isGroup: true, isPinned: group.isPinned)
+                rowsByTier[tier.rawValue].append(contentsOf: anchorFirst(
+                    membersByGroupId[groupId] ?? [], anchorId: group.anchorWorkspaceId
+                ))
+            } else {
+                let tier = WorkspaceSidebarOrderTier(isGroup: false, isPinned: tab.isPinned)
+                rowsByTier[tier.rawValue].append(tab)
+            }
+        }
+        return rowsByTier.flatMap { $0 }
+    }
+
     /// Whether the workspace anchors any group.
     public func isWorkspaceGroupAnchor(_ workspaceId: UUID) -> Bool {
         workspaceGroups.contains { $0.liveAnchorWorkspaceId == workspaceId }
@@ -51,6 +118,7 @@ extension WorkspacesModel {
                 ids.append(tab.id)
             }
         }
+        ids = sidebarTierOrderedIds(ids)
         if let promotedWorkspaceId,
            !ids.contains(promotedWorkspaceId),
            let tab = tabsById[promotedWorkspaceId],
@@ -94,7 +162,7 @@ extension WorkspacesModel {
         preservingTopLevelIds baseIds: [UUID]
     ) -> [UUID] {
         let emptyGroups = workspaceGroups.filter(\.isEmpty)
-        guard !emptyGroups.isEmpty else { return baseIds }
+        guard !emptyGroups.isEmpty else { return sidebarTierOrderedIds(baseIds) }
 
         let baseIdSet = Set(baseIds)
         var nextPinnedGroup: WorkspaceGroup?
@@ -119,7 +187,8 @@ extension WorkspacesModel {
         var emptyBeforeAnchor: [UUID: [UUID]] = [:]
         var trailingPinned: [UUID] = []
         var trailingUnpinned: [UUID] = []
-        for (index, group) in workspaceGroups.enumerated() where group.isEmpty {
+        for (index, group) in workspaceGroups.enumerated()
+            where group.isEmpty && !baseIdSet.contains(group.anchorWorkspaceId) {
             if let nextGroup = nextLiveSameTierByIndex[index],
                baseIdSet.contains(nextGroup.anchorWorkspaceId) {
                 emptyBeforeAnchor[nextGroup.anchorWorkspaceId, default: []]
@@ -131,11 +200,7 @@ extension WorkspacesModel {
             }
         }
 
-        let groupsByAnchorId = Dictionary(uniqueKeysWithValues: workspaceGroups.map { ($0.anchorWorkspaceId, $0) })
-        let tabsById = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
-        func isPinnedRow(_ id: UUID) -> Bool {
-            groupsByAnchorId[id]?.isPinned ?? tabsById[id]?.isPinned ?? false
-        }
+        let tiers = sidebarOrderTiers()
 
         var ids: [UUID] = []
         ids.reserveCapacity(baseIds.count + emptyGroups.count)
@@ -149,12 +214,18 @@ extension WorkspacesModel {
             }
         }
         if !trailingPinned.isEmpty {
-            let firstUnpinnedIndex = ids.firstIndex { !isPinnedRow($0) } ?? ids.count
+            let firstLaterTierIndex = ids.firstIndex {
+                (tiers[$0] ?? .workspace).rawValue > WorkspaceSidebarOrderTier.pinnedGroup.rawValue
+            } ?? ids.count
             let inserted = trailingPinned.filter { emittedIds.insert($0).inserted }
-            ids.insert(contentsOf: inserted, at: firstUnpinnedIndex)
+            ids.insert(contentsOf: inserted, at: firstLaterTierIndex)
         }
-        ids.append(contentsOf: trailingUnpinned.filter { emittedIds.insert($0).inserted })
-        return ids
+        let firstWorkspaceIndex = ids.firstIndex { tiers[$0] == .workspace } ?? ids.count
+        ids.insert(
+            contentsOf: trailingUnpinned.filter { emittedIds.insert($0).inserted },
+            at: firstWorkspaceIndex
+        )
+        return sidebarTierOrderedIds(ids)
     }
 
     /// Projects a desired full workspace-id order down to top-level row ids,
@@ -227,12 +298,19 @@ extension WorkspacesModel {
         groupsByAnchorId: [UUID: WorkspaceGroup]
     ) -> Int {
         let desiredIndex = min(groupIndex + 1, ids.count)
-        let pinnedCount = ids.reduce(into: 0) { count, id in
-            if topLevelWorkspaceIdIsPinned(id, tabsById: tabsById, groupsByAnchorId: groupsByAnchorId) {
-                count += 1
-            }
+        let tier = WorkspaceSidebarOrderTier(isGroup: false, isPinned: promotedIsPinned)
+        var lowerBound = 0
+        var sameTierCount = 0
+        for id in ids {
+            let group = groupsByAnchorId[id]
+            let rowTier = WorkspaceSidebarOrderTier(
+                isGroup: group != nil,
+                isPinned: group?.isPinned ?? tabsById[id]?.isPinned ?? false
+            )
+            if rowTier.rawValue < tier.rawValue { lowerBound += 1 }
+            if rowTier == tier { sameTierCount += 1 }
         }
-        return promotedIsPinned ? min(desiredIndex, pinnedCount) : max(desiredIndex, pinnedCount)
+        return min(max(desiredIndex, lowerBound), lowerBound + sameTierCount)
     }
 
     private func topLevelWorkspaceIdIsPinned(
@@ -246,26 +324,22 @@ extension WorkspacesModel {
         return tabsById[id]?.isPinned == true
     }
 
-    /// Clamps a requested top-level reorder index into the mover's pin tier.
+    /// Clamps a requested top-level reorder index into the mover's sidebar tier.
     func clampedTopLevelReorderIndex(
         forWorkspaceId workspaceId: UUID,
         targetIndex: Int,
-        topLevelIds: [UUID],
-        promotingWorkspaceId: UUID? = nil,
-        pinnedTopLevelIds overridePinnedTopLevelIds: Set<UUID>? = nil
+        topLevelIds: [UUID]
     ) -> Int {
-        let clamped = max(0, min(targetIndex, max(0, topLevelIds.count - 1)))
-        let pinnedIds = overridePinnedTopLevelIds
-            ?? sidebarTopLevelPinnedWorkspaceIds(promotingWorkspaceId: promotingWorkspaceId)
-        let pinnedCount = topLevelIds.reduce(into: 0) { count, id in
-            if pinnedIds.contains(id) {
-                count += 1
-            }
+        let tiers = sidebarOrderTiers()
+        let tier = tiers[workspaceId] ?? .workspace
+        var lowerBound = 0
+        var sameTierCount = 0
+        for id in topLevelIds {
+            let rowTier = tiers[id] ?? .workspace
+            if rowTier.rawValue < tier.rawValue { lowerBound += 1 }
+            if rowTier == tier { sameTierCount += 1 }
         }
-        if pinnedIds.contains(workspaceId) {
-            return min(clamped, max(0, pinnedCount - 1))
-        }
-        return max(clamped, pinnedCount)
+        return min(max(targetIndex, lowerBound), max(lowerBound, lowerBound + sameTierCount - 1))
     }
 
     /// Helper for `normalizeWorkspaceGroupContiguity`: hoist the anchor to
@@ -282,8 +356,7 @@ extension WorkspacesModel {
         return [anchor] + nonAnchors.filter(\.isPinned) + nonAnchors.filter { !$0.isPinned }
     }
 
-    /// Clamps a requested reorder index for a workspace into its legal range
-    /// (group section for grouped members, pin tier globally).
+    /// Clamps a workspace into its group section or independent-workspace tier.
     func clampedReorderIndex(for workspace: Tab, targetIndex: Int) -> Int {
         let clamped = max(0, min(targetIndex, tabs.count - 1))
         if let groupClamp = clampedGroupedMemberReorderIndex(
@@ -292,13 +365,16 @@ extension WorkspacesModel {
         ) {
             return groupClamp
         }
-        let pinnedCount = leadingGlobalPinnedRowCount()
-        if isGlobalPinnedRow(workspace) {
-            return min(clamped, max(0, pinnedCount - 1))
+        let tiers = sidebarOrderTiers()
+        let tier = WorkspaceSidebarOrderTier(isGroup: false, isPinned: workspace.isPinned)
+        var lowerBound = 0
+        var sameTierCount = 0
+        for tab in tabs {
+            let rowTier = tiers[tab.id] ?? .workspace
+            if rowTier.rawValue < tier.rawValue { lowerBound += 1 }
+            if rowTier == tier { sameTierCount += 1 }
         }
-        // The caller removes the row before inserting, so the last legal
-        // index is tabs.count - 1 even when every row is pinned.
-        return min(max(clamped, pinnedCount), tabs.count - 1)
+        return min(max(clamped, lowerBound), min(lowerBound + sameTierCount - 1, tabs.count - 1))
     }
 
     /// The in-group clamp for any member workspace, including the stored
@@ -331,23 +407,4 @@ extension WorkspacesModel {
         return min(max(clampedTargetIndex, lowerBound), upperBound)
     }
 
-    /// The number of leading rows in `tabs[]` that render as pinned.
-    func leadingGlobalPinnedRowCount() -> Int {
-        var count = 0
-        for tab in tabs {
-            guard isGlobalPinnedRow(tab) else { break }
-            count += 1
-        }
-        return count
-    }
-
-    /// Whether the row renders as pinned: group pin for grouped members,
-    /// workspace pin otherwise.
-    func isGlobalPinnedRow(_ tab: Tab) -> Bool {
-        if let groupId = tab.groupId,
-           let group = workspaceGroups.first(where: { $0.id == groupId }) {
-            return group.isPinned
-        }
-        return tab.isPinned
-    }
 }

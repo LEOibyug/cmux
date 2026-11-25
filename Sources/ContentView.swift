@@ -12121,6 +12121,7 @@ struct VerticalTabsSidebar: View, Equatable {
                     memberWorkspaceIds: renderContext.memberWorkspaceIdsByGroupId[group.id] ?? [],
                     renderContext: renderContext,
                     memberStatusGlyphs: memberStatusGlyphs,
+                    workspaceRowsById: workspaceRowInputsById,
                     unreadSnapshot: unreadSnapshot,
                     notificationIndex: notificationIndex,
                     shouldCollectWorkspaceDropTargets: false
@@ -12143,6 +12144,7 @@ struct VerticalTabsSidebar: View, Equatable {
                     group: group,
                     memberWorkspaceIds: renderContext.memberWorkspaceIdsByGroupId[groupId] ?? [],
                     memberStatusGlyphs: memberStatusGlyphs,
+                    workspaceRowsById: workspaceRowInputsById,
                     renderContext: renderContext
                 )
             case .workspace(let workspaceId):
@@ -14009,6 +14011,7 @@ struct VerticalTabsSidebar: View, Equatable {
                     memberWorkspaceIds: renderContext.memberWorkspaceIdsByGroupId[group.id] ?? [],
                     renderContext: renderContext,
                     memberStatusGlyphs: memberStatusGlyphs,
+                    workspaceRowsById: workspaceRowInputsById,
                     unreadSnapshot: unreadSnapshot,
                     notificationIndex: notificationIndex,
                     shouldCollectWorkspaceDropTargets: shouldCollectWorkspaceDropTargets

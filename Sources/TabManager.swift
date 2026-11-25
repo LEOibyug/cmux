@@ -256,6 +256,8 @@ class TabManager: ObservableObject {
     /// Set by `restoreSessionSnapshot` to suppress side-effects (like auto-
     /// expanding a group on focus) that would mutate restored state mid-restore.
     private var isRestoringSessionSnapshot: Bool = false
+    /// Restore receipts and Dock links use snapshot indices, not sidebar order.
+    private(set) var restoredWorkspaceIdsBySnapshotIndex: [UUID] = []
     @Published private(set) var pendingBackgroundWorkspaceLoadIds: Set<UUID> = []
     @Published private(set) var mountedBackgroundWorkspaceLoadIds: Set<UUID> = []
     @Published private(set) var debugPinnedWorkspaceLoadIds: Set<UUID> = []
@@ -5169,11 +5171,8 @@ class TabManager: ObservableObject {
            !workspaceGroups.contains(where: { $0.id == groupId }) {
             workspace.groupId = nil
         }
-        // When the group DOES still exist, the workspace is about to be
-        // reinserted at its old absolute index, which may now sit inside a
-        // different group section after intervening reorders. Renormalize
-        // so the restored member lands beside its group.
-        let needsNormalize = workspace.groupId != nil && !workspaceGroups.isEmpty
+        // Restoring an old absolute index must not cross sidebar section tiers.
+        let needsNormalize = !workspaceGroups.isEmpty
         if !sourceWorkspaceIdIsAmbiguous {
             ClosedItemHistoryStore.shared.remapPanelWorkspaceIds(
                 from: entry.workspaceId,
@@ -7077,6 +7076,7 @@ extension TabManager {
         // Single atomic assignment of @Published properties so SwiftUI observers
         // never see an intermediate state with empty tabs or nil selection.
         tabs = newTabs
+        restoredWorkspaceIdsBySnapshotIndex = newTabs.map(\.id)
         for workspace in newTabs {
             workspace.terminalStartupRestoreCoordinator.commitPendingRestores()
         }
@@ -7200,6 +7200,7 @@ extension TabManager {
         for (survivor, original) in originalWorkspaceIndices.enumerated() where restoredPanelIdsByWorkspaceIndex.indices.contains(survivor) {
             alignedPanelMaps[original] = restoredPanelIdsByWorkspaceIndex[survivor]
         }
+        workspaces.normalizeWorkspaceGroupContiguity()
         return alignedPanelMaps
     }
 
@@ -7208,7 +7209,7 @@ extension TabManager {
         restoredPanelIdsByWorkspaceIndex: [[UUID: UUID]],
         ambiguousOriginalWorkspaceIds: Set<UUID> = []
     ) {
-        let count = min(originalWorkspaceIds.count, tabs.count)
+        let count = min(originalWorkspaceIds.count, restoredWorkspaceIdsBySnapshotIndex.count)
         guard count > 0 else { return }
         let originalWorkspaceIdCounts = originalWorkspaceIds.reduce(into: [UUID: Int]()) { counts, workspaceId in
             guard let workspaceId else { return }
@@ -7219,7 +7220,7 @@ extension TabManager {
             guard let originalWorkspaceId = originalWorkspaceIds[index],
                   originalWorkspaceIdCounts[originalWorkspaceId] == 1,
                   !ambiguousOriginalWorkspaceIds.contains(originalWorkspaceId),
-                  originalWorkspaceId != tabs[index].id else {
+                  originalWorkspaceId != restoredWorkspaceIdsBySnapshotIndex[index] else {
                 continue
             }
             didRequestHistoryRemap = true
@@ -7228,7 +7229,7 @@ extension TabManager {
                 : [:]
             ClosedItemHistoryStore.shared.remapPanelWorkspaceIds(
                 from: originalWorkspaceId,
-                to: tabs[index].id,
+                to: restoredWorkspaceIdsBySnapshotIndex[index],
                 panelIdMap: panelIdMap
             )
         }
@@ -7243,7 +7244,7 @@ extension TabManager {
         ambiguousOriginalWorkspaceIds: Set<UUID> = []
     ) {
         guard !originalWorkspaceIds.isEmpty else { return }
-        let count = min(originalWorkspaceIds.count, tabs.count)
+        let count = min(originalWorkspaceIds.count, restoredWorkspaceIdsBySnapshotIndex.count)
         guard count > 0 else { return }
         let originalWorkspaceIdCounts = originalWorkspaceIds.reduce(into: [UUID: Int]()) { counts, workspaceId in
             counts[workspaceId, default: 0] += 1
@@ -7261,7 +7262,7 @@ extension TabManager {
                 : [:]
             ClosedItemHistoryStore.shared.remapPanelWorkspaceIds(
                 from: originalWorkspaceId,
-                to: tabs[index].id,
+                to: restoredWorkspaceIdsBySnapshotIndex[index],
                 panelIdMap: panelIdMap
             )
         }

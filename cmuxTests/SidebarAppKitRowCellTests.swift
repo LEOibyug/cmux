@@ -2474,7 +2474,6 @@ struct SidebarPinnedIndicatorColorTests {
             groupId: UUID(),
             anchorWorkspaceId: UUID(),
             name: "Group",
-            iconSymbol: "folder",
             tintHex: nil,
             isCollapsed: false,
             isPinned: true,
@@ -2482,7 +2481,7 @@ struct SidebarPinnedIndicatorColorTests {
             isMultiSelected: false,
             multiSelectionBackgroundStyle: .clear,
             memberCount: 1,
-            anchorUnreadCount: 0,
+            activity: .init(),
             canMarkRead: false,
             canMarkUnread: false,
             hasLatestNotifications: false,
@@ -2547,7 +2546,6 @@ struct SidebarGroupHeaderSelectionEdgeTests {
             groupId: UUID(),
             anchorWorkspaceId: UUID(),
             name: "Group",
-            iconSymbol: "folder",
             tintHex: nil,
             isCollapsed: false,
             isPinned: false,
@@ -2556,7 +2554,7 @@ struct SidebarGroupHeaderSelectionEdgeTests {
             multiSelectionBackgroundStyle: multiSelectionStyle,
             anchorActiveEdgeColor: anchorActiveEdgeColor,
             memberCount: 1,
-            anchorUnreadCount: 0,
+            activity: .init(),
             canMarkRead: false,
             canMarkUnread: false,
             hasLatestNotifications: false,
@@ -2595,14 +2593,13 @@ struct SidebarGroupHeaderSelectionEdgeTests {
 
 @Suite
 @MainActor
-struct SidebarGroupHeaderBadgeColorTests {
-    private static func badgeFill(notificationBadgeColorHex: String?) throws -> CGColor {
+struct SidebarGroupHeaderActivityColorTests {
+    private static func counterColor(notificationBadgeColorHex: String?) throws -> NSColor {
         let cell = SidebarGroupHeaderTableCellView()
         cell.configurePresentation(model: SidebarGroupHeaderRowModel(
             groupId: UUID(),
             anchorWorkspaceId: UUID(),
             name: "Group",
-            iconSymbol: "folder",
             tintHex: nil,
             isCollapsed: false,
             isPinned: false,
@@ -2610,7 +2607,7 @@ struct SidebarGroupHeaderBadgeColorTests {
             isMultiSelected: false,
             multiSelectionBackgroundStyle: .clear,
             memberCount: 1,
-            anchorUnreadCount: 3,
+            activity: .init(unreadCount: 3),
             canMarkRead: true,
             canMarkUnread: false,
             hasLatestNotifications: true,
@@ -2630,23 +2627,23 @@ struct SidebarGroupHeaderBadgeColorTests {
             colorSchemeIsDark: true,
             notificationBadgeColorHex: notificationBadgeColorHex
         ))
-        let badge = try #require(
+        let counter = try #require(
             SidebarAppKitRowCellTests.descendants(of: cell)
-                .compactMap { $0 as? SidebarRowUnreadBadgeView }
-                .first { !$0.isHidden }
+                .compactMap { $0 as? NSTextField }
+                .first { !$0.isHidden && $0.stringValue == "3" }
         )
-        return try #require(badge.layer?.backgroundColor)
+        return try #require(counter.textColor)
     }
 
     @Test
-    func groupBadgeUsesNotificationBadgeColorSetting() throws {
+    func completedCounterUsesNotificationBadgeColorSetting() throws {
         let expected = try #require(NSColor(hex: "#E5484D"))
-        #expect(try Self.badgeFill(notificationBadgeColorHex: "#E5484D") == expected.cgColor)
+        #expect(try Self.counterColor(notificationBadgeColorHex: "#E5484D") == expected)
     }
 
     @Test
-    func groupBadgeFallsBackToCmuxAccentNotSystemAccent() throws {
-        #expect(try Self.badgeFill(notificationBadgeColorHex: nil) == CmuxAccentColor().nsColor(isDark: true).cgColor)
+    func completedCounterDefaultsToGreen() throws {
+        #expect(try Self.counterColor(notificationBadgeColorHex: nil) == .systemGreen)
     }
 
     @Test

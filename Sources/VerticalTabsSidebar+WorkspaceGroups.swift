@@ -8,10 +8,33 @@ import CmuxSettings
 import CmuxWorkspaces
 
 extension VerticalTabsSidebar {
+    private static func workspaceGroupRunningCount(
+        memberWorkspaceIds: [UUID],
+        workspaceRowsById: [UUID: SidebarWorkspaceRowInput]
+    ) -> Int {
+        memberWorkspaceIds.reduce(0) { total, workspaceId in
+            total + (workspaceRowsById[workspaceId]?.workspace.runningAgentCount ?? 0)
+        }
+    }
+
+    private static func workspaceGroupActivity(
+        runningCount: Int,
+        memberWorkspaceIds: [UUID],
+        unreadSnapshot: SidebarUnreadSnapshot
+    ) -> SidebarWorkspaceGroupActivity {
+        SidebarWorkspaceGroupActivity(
+            runningCount: runningCount,
+            unreadCount: memberWorkspaceIds.reduce(0) {
+                $0 + unreadSnapshot.unreadCount(forWorkspaceId: $1)
+            }
+        )
+    }
+
     func sidebarWorkspaceGroupTableConfiguration(
         group: WorkspaceGroup,
         memberWorkspaceIds: [UUID],
         memberStatusGlyphs: [UUID: SidebarCompactStatusGlyph.GroupMember],
+        workspaceRowsById: [UUID: SidebarWorkspaceRowInput],
         renderContext: WorkspaceListRenderContext
     ) -> SidebarWorkspaceTableRowConfiguration {
         let settings = renderContext.tabItemSettings
@@ -24,10 +47,6 @@ extension VerticalTabsSidebar {
         let anchorCwd = liveAnchorId.flatMap { renderContext.workspaceById[$0]?.currentDirectory }
         let resolvedConfig = cmuxConfigStore.resolveWorkspaceGroupConfig(forCwd: anchorCwd)
         let effectiveColor = group.customColor ?? resolvedConfig?.color
-        let effectiveIcon = RenderableSystemSymbol.resolvedWorkspaceGroupIcon(
-            explicit: group.iconSymbol,
-            configured: resolvedConfig?.iconSymbol
-        )
         let multiSelectionBackgroundStyle = sidebarWorkspaceRowBackgroundStyle(
             activeTabIndicatorStyle: settings.activeTabIndicatorStyle,
             isActive: false,
@@ -53,14 +72,15 @@ extension VerticalTabsSidebar {
         // The AppKit controller applies the current unread snapshot after row
         // construction, keeping this root projection outside Observation.
         let unreadSnapshot = SidebarUnreadSnapshot()
-        let anchorUnreadCount: Int = {
-            if group.isCollapsed {
-                return memberWorkspaceIds.reduce(0) { partial, workspaceId in
-                    partial + unreadSnapshot.unreadCount(forWorkspaceId: workspaceId)
-                }
-            }
-            return liveAnchorId.map { unreadSnapshot.unreadCount(forWorkspaceId: $0) } ?? 0
-        }()
+        let runningCount = Self.workspaceGroupRunningCount(
+            memberWorkspaceIds: memberWorkspaceIds,
+            workspaceRowsById: workspaceRowsById
+        )
+        let activity = Self.workspaceGroupActivity(
+            runningCount: runningCount,
+            memberWorkspaceIds: memberWorkspaceIds,
+            unreadSnapshot: unreadSnapshot
+        )
         // The tooltip leads with the notification text only where rows show it.
         let showsNotificationMessage = settings.showsNotificationMessage
         let statusGlyph = SidebarCompactStatusGlyph.groupHeader(
@@ -100,7 +120,6 @@ extension VerticalTabsSidebar {
             groupId: group.id,
             anchorWorkspaceId: group.anchorWorkspaceId,
             name: group.name,
-            iconSymbol: effectiveIcon,
             tintHex: effectiveColor,
             isCollapsed: group.isCollapsed,
             isPinned: group.isPinned,
@@ -109,15 +128,14 @@ extension VerticalTabsSidebar {
             multiSelectionBackgroundStyle: multiSelectionBackgroundStyle,
             anchorActiveEdgeColor: anchorActiveEdgeColor,
             memberCount: memberWorkspaceIds.count,
+            activity: activity,
             hasVisibleMembers: hasVisibleMembers,
-            anchorUnreadCount: anchorUnreadCount,
             canMarkRead: canMarkAnchorRead,
             canMarkUnread: canMarkAnchorUnread,
             hasLatestNotifications: anchorHasLatestNotification,
             canMarkAllRead: canMarkAllRead,
             canMarkAllUnread: canMarkAllUnread,
             statusGlyph: statusGlyph,
-            compactsAgentStatus: settings.compactsAgentStatus,
             shortcutHintText: nil,
             shortcutHintXOffset: settings.sidebarShortcutHintXOffset,
             shortcutHintYOffset: settings.sidebarShortcutHintYOffset,
@@ -148,7 +166,7 @@ extension VerticalTabsSidebar {
             unreadDependencyWorkspaceIds: Set(memberWorkspaceIds)
                 .union(liveAnchorId.map { [$0] } ?? []),
             unreadRebuild: {
-                [model, liveAnchorId,
+                [model, liveAnchorId, runningCount,
                  isCollapsed = group.isCollapsed, memberWorkspaceIds,
                  memberStatusGlyphs, showsNotificationMessage] snapshot in
                 // Membership and collapse are structural row inputs, so their
@@ -156,11 +174,11 @@ extension VerticalTabsSidebar {
                 // indexed members instead of rescanning every tab per unread row.
                 var fresh = model
                 fresh.hasVisibleMembers = hasVisibleMembers
-                fresh.anchorUnreadCount = isCollapsed
-                    ? memberWorkspaceIds.reduce(0) {
-                        $0 + snapshot.unreadCount(forWorkspaceId: $1)
-                    }
-                    : liveAnchorId.map { snapshot.unreadCount(forWorkspaceId: $0) } ?? 0
+                fresh.activity = Self.workspaceGroupActivity(
+                    runningCount: runningCount,
+                    memberWorkspaceIds: memberWorkspaceIds,
+                    unreadSnapshot: snapshot
+                )
                 fresh.canMarkRead = snapshot.canMarkWorkspaceRead(
                     forWorkspaceIds: liveAnchorId.map { [$0] } ?? []
                 )
@@ -193,6 +211,7 @@ extension VerticalTabsSidebar {
         memberWorkspaceIds: [UUID],
         renderContext: WorkspaceListRenderContext,
         memberStatusGlyphs: [UUID: SidebarCompactStatusGlyph.GroupMember],
+        workspaceRowsById: [UUID: SidebarWorkspaceRowInput],
         unreadSnapshot: SidebarUnreadSnapshot,
         notificationIndex: SidebarWorkspaceNotificationIndex,
         shouldCollectWorkspaceDropTargets: Bool
@@ -208,10 +227,6 @@ extension VerticalTabsSidebar {
         let anchorCwd = liveAnchorId.flatMap { renderContext.workspaceById[$0]?.currentDirectory }
         let resolvedConfig = cmuxConfigStore.resolveWorkspaceGroupConfig(forCwd: anchorCwd)
         let effectiveColor = group.customColor ?? resolvedConfig?.color
-        let effectiveIcon = RenderableSystemSymbol.resolvedWorkspaceGroupIcon(
-            explicit: group.iconSymbol,
-            configured: resolvedConfig?.iconSymbol
-        )
         let multiSelectionBackgroundStyle = sidebarWorkspaceRowBackgroundStyle(
             activeTabIndicatorStyle: settings.activeTabIndicatorStyle,
             isActive: false,
@@ -234,14 +249,14 @@ extension VerticalTabsSidebar {
         )
         let cwdContextMenuItems = resolvedConfig?.contextMenuItems ?? []
         let newWorkspacePlacement = resolvedConfig?.newWorkspacePlacement
-        let anchorUnreadCount: Int = {
-            if group.isCollapsed {
-                return memberWorkspaceIds.reduce(0) { partial, workspaceId in
-                    partial + (unreadSummariesByWorkspaceId[workspaceId]?.unreadCount ?? 0)
-                }
-            }
-            return liveAnchorId.flatMap { unreadSummariesByWorkspaceId[$0]?.unreadCount } ?? 0
-        }()
+        let activity = Self.workspaceGroupActivity(
+            runningCount: Self.workspaceGroupRunningCount(
+                memberWorkspaceIds: memberWorkspaceIds,
+                workspaceRowsById: workspaceRowsById
+            ),
+            memberWorkspaceIds: memberWorkspaceIds,
+            unreadSnapshot: unreadSnapshot
+        )
         let statusGlyph = SidebarCompactStatusGlyph.groupHeader(
             isCollapsed: group.isCollapsed,
             anchorId: liveAnchorId,
@@ -286,7 +301,6 @@ extension VerticalTabsSidebar {
             groupId: group.id,
             anchorWorkspaceId: group.anchorWorkspaceId,
             name: group.name,
-            iconSymbol: effectiveIcon,
             tintHex: effectiveColor,
             isCollapsed: group.isCollapsed,
             isPinned: group.isPinned,
@@ -295,15 +309,14 @@ extension VerticalTabsSidebar {
             multiSelectionBackgroundStyle: multiSelectionBackgroundStyle,
             anchorActiveEdgeColor: anchorActiveEdgeColor,
             memberCount: memberWorkspaceIds.count,
+            activity: activity,
             hasVisibleMembers: !group.isCollapsed && !memberWorkspaceIds.isEmpty,
-            anchorUnreadCount: anchorUnreadCount,
             canMarkRead: canMarkAnchorRead,
             canMarkUnread: canMarkAnchorUnread,
             hasLatestNotifications: anchorHasLatestNotification,
             canMarkAllRead: canMarkAllRead,
             canMarkAllUnread: canMarkAllUnread,
             statusGlyph: statusGlyph,
-            compactsAgentStatus: settings.compactsAgentStatus,
             shortcutDigit: nil,
             shortcutModifierSymbol: nil,
             showsShortcutHint: false,
@@ -341,7 +354,6 @@ extension VerticalTabsSidebar {
         let header = SidebarWorkspaceGroupHeaderView(
             groupId: snapshot.groupId,
             name: snapshot.name,
-            iconSymbol: snapshot.iconSymbol,
             tintHex: snapshot.tintHex,
             isCollapsed: snapshot.isCollapsed,
             isPinned: snapshot.isPinned,
@@ -350,15 +362,14 @@ extension VerticalTabsSidebar {
             multiSelectionBackgroundStyle: snapshot.multiSelectionBackgroundStyle,
             anchorActiveEdgeColor: snapshot.anchorActiveEdgeColor,
             memberCount: snapshot.memberCount,
+            activity: snapshot.activity,
             hasVisibleMembers: snapshot.hasVisibleMembers,
-            anchorUnreadCount: snapshot.anchorUnreadCount,
             canMarkRead: snapshot.canMarkRead,
             canMarkUnread: snapshot.canMarkUnread,
             hasLatestNotifications: snapshot.hasLatestNotifications,
             canMarkAllRead: snapshot.canMarkAllRead,
             canMarkAllUnread: snapshot.canMarkAllUnread,
             statusGlyph: snapshot.statusGlyph,
-            compactsAgentStatus: snapshot.compactsAgentStatus,
             shortcutDigit: snapshot.shortcutDigit,
             shortcutModifierSymbol: snapshot.shortcutModifierSymbol,
             showsShortcutHint: snapshot.showsShortcutHint,

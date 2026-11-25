@@ -234,10 +234,119 @@ struct WorkspaceGroupTests {
         #expect(!visibleWorkspaceIds.contains(originalIds[1]))
         #expect(!visibleWorkspaceIds.contains(originalIds[2]))
         #expect(visibleRowIds == [
-            originalIds[0],
             group.id,
+            originalIds[0],
             originalIds[3],
         ])
+    }
+
+    @Test(arguments: [false, true])
+    func restoredRenderItemsKeepFourTiersWithOrWithoutDurableEmptyGroups(includeEmptyGroups: Bool) throws {
+        let manager = makeTabManager()
+        while manager.tabs.count < 10 {
+            manager.addWorkspace(autoWelcomeIfNeeded: false)
+        }
+        let tabs = manager.tabs
+        let regularRootA = tabs[0]
+        let regularAnchorA = tabs[1]
+        let pinnedRootA = tabs[2]
+        let pinnedAnchorA = tabs[3]
+        let regularAnchorB = tabs[4]
+        let pinnedMember = tabs[5]
+        let pinnedAnchorB = tabs[6]
+        let regularRootB = tabs[7]
+        let pinnedRootB = tabs[8]
+        let regularMember = tabs[9]
+        manager.setPinned(pinnedRootA, pinned: true)
+        manager.setPinned(pinnedRootB, pinned: true)
+        manager.setPinned(regularMember, pinned: true)
+
+        func makeGroup(
+            _ name: String,
+            anchor: WorkspaceGroupAnchor,
+            pinned: Bool = false,
+            collapsed: Bool = false
+        ) -> WorkspaceGroup {
+            WorkspaceGroup(
+                id: UUID(),
+                name: name,
+                isCollapsed: collapsed,
+                isPinned: pinned,
+                anchor: anchor,
+                customColor: nil,
+                iconSymbol: nil
+            )
+        }
+
+        let regularA = makeGroup("Regular A", anchor: .workspace(regularAnchorA.id))
+        let regularB = makeGroup("Regular B", anchor: .workspace(regularAnchorB.id))
+        let pinnedA = makeGroup("Pinned A", anchor: .workspace(pinnedAnchorA.id), pinned: true)
+        let pinnedB = makeGroup("Pinned B", anchor: .workspace(pinnedAnchorB.id), pinned: true, collapsed: true)
+        let stale = makeGroup("Missing anchor", anchor: .workspace(UUID()))
+        regularAnchorA.groupId = regularA.id
+        regularMember.groupId = regularA.id
+        regularAnchorB.groupId = regularB.id
+        pinnedAnchorA.groupId = pinnedA.id
+        pinnedMember.groupId = pinnedA.id
+        pinnedAnchorB.groupId = pinnedB.id
+        regularRootA.groupId = stale.id
+
+        let emptyPinnedBefore = makeGroup("Empty pinned before", anchor: .empty(UUID()), pinned: true)
+        let emptyPinnedMiddle = makeGroup("Empty pinned middle", anchor: .empty(UUID()), pinned: true)
+        let emptyPinnedAfter = makeGroup("Empty pinned after", anchor: .empty(UUID()), pinned: true)
+        let emptyRegularBefore = makeGroup("Empty regular before", anchor: .empty(UUID()))
+        let emptyRegularMiddle = makeGroup("Empty regular middle", anchor: .empty(UUID()))
+        let emptyRegularAfter = makeGroup("Empty regular after", anchor: .empty(UUID()))
+        let orderedGroups = includeEmptyGroups
+            ? [
+                emptyRegularBefore, emptyPinnedBefore, regularA, pinnedA,
+                emptyPinnedMiddle, emptyRegularMiddle, regularB, pinnedB,
+                emptyRegularAfter, emptyPinnedAfter, stale,
+            ]
+            : [regularA, pinnedA, regularB, pinnedB, stale]
+        let groupsById = Dictionary(uniqueKeysWithValues: orderedGroups.map { ($0.id, $0) })
+        let membership = SidebarWorkspaceRenderItem.effectiveGroupIdByWorkspaceId(
+            tabs: tabs,
+            groupsById: groupsById
+        )
+        let items = SidebarWorkspaceRenderItem.renderItems(
+            tabs: tabs,
+            groupsById: groupsById,
+            orderedGroups: orderedGroups,
+            effectiveMembership: membership
+        )
+
+        var expected: [SidebarWorkspaceRenderItemID] = []
+        if includeEmptyGroups { expected.append(.group(emptyPinnedBefore.id)) }
+        expected += [.group(pinnedA.id), .workspace(pinnedAnchorA.id), .workspace(pinnedMember.id)]
+        if includeEmptyGroups { expected.append(.group(emptyPinnedMiddle.id)) }
+        expected.append(.group(pinnedB.id))
+        if includeEmptyGroups { expected.append(.group(emptyPinnedAfter.id)) }
+        expected += [.workspace(pinnedRootA.id), .workspace(pinnedRootB.id)]
+        if includeEmptyGroups { expected.append(.group(emptyRegularBefore.id)) }
+        expected += [.group(regularA.id), .workspace(regularAnchorA.id), .workspace(regularMember.id)]
+        if includeEmptyGroups { expected.append(.group(emptyRegularMiddle.id)) }
+        expected += [.group(regularB.id), .workspace(regularAnchorB.id)]
+        if includeEmptyGroups { expected.append(.group(emptyRegularAfter.id)) }
+        expected += [.workspace(regularRootA.id), .workspace(regularRootB.id)]
+
+        #expect(items.map(\.id) == expected)
+        #expect(SidebarWorkspaceRenderItem.numberedWorkspaceIds(from: items) == [
+            pinnedAnchorA.id, pinnedMember.id, pinnedRootA.id, pinnedRootB.id,
+            regularAnchorA.id, regularMember.id, regularAnchorB.id, regularRootA.id, regularRootB.id,
+        ])
+
+        if includeEmptyGroups {
+            let emptyOnlyItems = SidebarWorkspaceRenderItem.renderItems(
+                tabs: [],
+                groupsById: groupsById,
+                orderedGroups: orderedGroups
+            )
+            #expect(emptyOnlyItems.map(\.id) == [
+                .group(emptyPinnedBefore.id), .group(emptyPinnedMiddle.id), .group(emptyPinnedAfter.id),
+                .group(emptyRegularBefore.id), .group(emptyRegularMiddle.id), .group(emptyRegularAfter.id),
+            ])
+        }
     }
 
     @Test func staleGroupReferenceInsideGroupRunRendersAsRootRow() throws {

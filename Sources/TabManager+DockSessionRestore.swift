@@ -48,9 +48,12 @@ extension TabManager {
             snapshot.workspaces.prefix(SessionPersistencePolicy.maxWorkspacesPerWindow),
             selectedWorkspaceIndex: snapshot.selectedWorkspaceIndex
         )
-        return Array(zip(
-            normalizedSnapshots.prefix(SessionPersistencePolicy.maxWorkspacesPerWindow),
-            tabs
-        ))
+        return normalizedSnapshots.enumerated().compactMap { index, snapshot in
+            guard restoredWorkspaceIdsBySnapshotIndex.indices.contains(index),
+                  let workspace = workspaces.tabsById[restoredWorkspaceIdsBySnapshotIndex[index]] else {
+                return nil
+            }
+            return (snapshot, workspace)
+        }
     }
 }

@@ -316,6 +316,7 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
                 placement: placement,
                 referenceWorkspaceId: referenceWorkspaceId
             )
+            model.normalizeWorkspaceGroupContiguity()
         }
         host?.workspaceOrderDidChange(movedWorkspaceIds: [workspaceId])
     }
@@ -362,13 +363,8 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
         return true
     }
 
-    /// Dissolve a group while preserving every member workspace (including its
-    /// anchor) as a regular ungrouped workspace. Nothing is closed. The
-    /// former members KEEP their `tabs[]` positions and their existing relative
-    /// order. We deliberately do not re-normalize here: that would
-    /// push the now-ungrouped members down into the "ungrouped tier at the
-    /// bottom" slot, which makes Ungroup feel like a destructive move
-    /// instead of a flatten-in-place.
+    /// Dissolve a group without closing any workspace. Former members retain
+    /// their relative order within their independent-workspace pin tiers.
     @discardableResult
     public func ungroupWorkspaceGroup(
         groupId: UUID,
@@ -391,6 +387,7 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
             model.assignGroup(workspaceId: id, groupId: nil)
         }
         model.workspaceGroups.removeAll { $0.id == groupId }
+        model.normalizeWorkspaceGroupContiguity()
         host?.workspaceOrderDidChange(movedWorkspaceIds: memberIds)
         return .dissolved(keptWorkspaceCount: memberIds.count)
     }
@@ -481,7 +478,7 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
         setWorkspaceGroupPinned(groupId: groupId, isPinned: !(model.workspaceGroups.first(where: { $0.id == groupId })?.isPinned ?? false))
     }
 
-    /// Sets the group's pinned state and renormalizes the pin tiers.
+    /// Sets the group's pinned state and renormalizes the four sidebar tiers.
     public func setWorkspaceGroupPinned(groupId: UUID, isPinned: Bool) {
         guard let index = model.workspaceGroups.firstIndex(where: { $0.id == groupId }) else { return }
         guard model.workspaceGroups[index].isPinned != isPinned else { return }
@@ -569,57 +566,11 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
     }
 
     private func applyWorkspaceGroupSlotOrderToTabs() {
-        let groupsByAnchorId = Dictionary(uniqueKeysWithValues: model.workspaceGroups.map {
-            ($0.anchorWorkspaceId, $0)
-        })
-        let topLevelIds = model.sidebarTopLevelWorkspaceIdsIncludingEmptyGroups()
-        let tabsById = Dictionary(uniqueKeysWithValues: model.tabs.map { ($0.id, $0) })
-
-        var pinnedTopLevelIds: [UUID] = []
-        var unpinnedTopLevelIds: [UUID] = []
-        pinnedTopLevelIds.reserveCapacity(topLevelIds.count)
-        unpinnedTopLevelIds.reserveCapacity(topLevelIds.count)
-        for id in topLevelIds {
-            let isPinned = groupsByAnchorId[id]?.isPinned ?? (tabsById[id]?.isPinned == true)
-            if isPinned {
-                pinnedTopLevelIds.append(id)
-            } else {
-                unpinnedTopLevelIds.append(id)
-            }
-        }
-        let tieredTopLevelIds = pinnedTopLevelIds + unpinnedTopLevelIds
-
-        var pinnedAnchors: [UUID] = []
-        var unpinnedAnchors: [UUID] = []
-        pinnedAnchors.reserveCapacity(model.workspaceGroups.count)
-        unpinnedAnchors.reserveCapacity(model.workspaceGroups.count)
-        for group in model.workspaceGroups {
-            if group.isPinned {
-                if let anchorId = group.liveAnchorWorkspaceId {
-                    pinnedAnchors.append(anchorId)
-                }
-            } else {
-                if let anchorId = group.liveAnchorWorkspaceId {
-                    unpinnedAnchors.append(anchorId)
-                }
-            }
-        }
-        var pinnedAnchorIndex = 0
-        var unpinnedAnchorIndex = 0
-        let desiredIds = tieredTopLevelIds.map { id -> UUID in
-            guard let group = groupsByAnchorId[id], !group.isEmpty else { return id }
-            if group.isPinned, pinnedAnchorIndex < pinnedAnchors.count {
-                defer { pinnedAnchorIndex += 1 }
-                return pinnedAnchors[pinnedAnchorIndex]
-            }
-            if !group.isPinned, unpinnedAnchorIndex < unpinnedAnchors.count {
-                defer { unpinnedAnchorIndex += 1 }
-                return unpinnedAnchors[unpinnedAnchorIndex]
-            }
-            return id
-        }
-        model.normalizeWorkspaceGroupRunsPreservingOrder(desiredIds)
-        model.syncWorkspaceGroupsOrderToAnchorOrder(preferredTopLevelIds: desiredIds)
+        let groupAnchorIds = model.workspaceGroups.map(\.anchorWorkspaceId)
+        let independentIds = model.tabs.filter { $0.groupId == nil }.map(\.id)
+        model.normalizeWorkspaceGroupContiguity(
+            preservingTopLevelIds: groupAnchorIds + independentIds
+        )
     }
 
     // MARK: - Creation placement
@@ -639,11 +590,8 @@ public final class WorkspaceGroupCoordinator<Tab: WorkspaceTabRepresenting> {
         }
     }
 
-    /// Place a freshly-created group where its first child already was.
-    /// This keeps "New Group from Selection" visually stable while still
-    /// making every affected group contiguous and anchor-first. It
-    /// intentionally preserves top-level order because changing that outer
-    /// position is the jump this creation path is avoiding.
+    /// Place a freshly-created group at its first child's position, clamped
+    /// into the regular-group tier. Existing rows keep their same-tier order.
     private func placeNewWorkspaceGroupAtCreationPosition(
         groupId: UUID,
         anchorId: UUID,

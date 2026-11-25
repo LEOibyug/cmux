@@ -72,6 +72,8 @@ struct SidebarWorkspaceSnapshotBuilder {
         let latestLog: SidebarLogEntry?
         let progress: SidebarProgressState?
         let activeCodingAgentCount: Int
+        /// Group summaries stay live even when per-workspace agent activity is hidden.
+        var runningAgentCount: Int = 0
         let compactGitBranchSummaryText: String?
         let compactDirectoryCandidates: [String]
         let compactBranchDirectoryCandidates: [String]

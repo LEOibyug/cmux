@@ -4,8 +4,8 @@ import SwiftUI
 
 /// Pure-AppKit group header cell for the sidebar workspace table.
 ///
-/// Renders the collapsible group/folder header (pin, chevron, tinted icon,
-/// name, unread capsule, hover-revealed plus button) without any SwiftUI
+/// Renders the collapsible group header (pin, chevron, name,
+/// activity counters, hover-revealed plus button) without any SwiftUI
 /// hosting so scroll, hover, and reconfigure stay off the AttributeGraph.
 /// Layout is manual: subviews are created once and framed in `layout()`.
 @MainActor
@@ -16,18 +16,13 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
     let backgroundView = NSView()
     private let headerFillLayer = CAShapeLayer()
     private let headerDividerLayer = CALayer()
-    private let iconBadgeLayer = CALayer()
     private let pinImageView = NSImageView()
     private let chevronButton = SidebarHeaderGlyphButton()
-    private let iconImageView = NSImageView()
     private let nameField = NSTextField(labelWithString: "")
-    private let memberCountField = NSTextField(labelWithString: "")
-    private let memberCountBadge = NSView()
-    // Direct-draw badge (shared with workspace rows): NSTextField's
-    // intrinsic insets shift single digits off the circle's optical center.
-    private let unreadBadgeView = SidebarRowUnreadBadgeView()
-    private var unreadBadgeFont: NSFont = .systemFont(ofSize: 10, weight: .semibold)
-    /// Compact status mode: replaces the unread badge; see `model.statusGlyph`.
+    private let runningIconView = NSImageView()
+    private let runningCountField = NSTextField(labelWithString: "")
+    private let unreadIconView = NSImageView()
+    private let unreadCountField = NSTextField(labelWithString: "")
     private let statusGlyphView = SidebarCompactStatusGlyphImageView()
     private let plusButton = SidebarHeaderGlyphButton()
     private let topDropIndicator = SidebarReorderIndicatorView()
@@ -66,12 +61,8 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
 
         headerFillLayer.zPosition = -3
         headerDividerLayer.zPosition = -2
-        iconBadgeLayer.zPosition = -1
-        iconBadgeLayer.cornerRadius = 5
-        iconBadgeLayer.cornerCurve = .continuous
         layer?.insertSublayer(headerFillLayer, at: 0)
         layer?.insertSublayer(headerDividerLayer, above: headerFillLayer)
-        layer?.insertSublayer(iconBadgeLayer, above: headerDividerLayer)
 
         backgroundView.wantsLayer = true
         backgroundView.layer?.cornerRadius = 4
@@ -84,22 +75,19 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         chevronButton.onClick = { [weak self] in self?.actions?.onToggleCollapsed() }
         addSubview(chevronButton)
 
-        iconImageView.imageScaling = .scaleProportionallyDown
-        addSubview(iconImageView)
-
         nameField.lineBreakMode = .byTruncatingTail
         nameField.maximumNumberOfLines = 1
         nameField.cell?.truncatesLastVisibleLine = true
         addSubview(nameField)
 
-        memberCountBadge.wantsLayer = true
-        memberCountBadge.layer?.cornerCurve = .continuous
-        memberCountField.alignment = .center
-        memberCountField.lineBreakMode = .byClipping
-        memberCountBadge.addSubview(memberCountField)
-        addSubview(memberCountBadge)
-
-        addSubview(unreadBadgeView)
+        for view in [runningIconView, unreadIconView] {
+            view.imageScaling = .scaleProportionallyDown
+            addSubview(view)
+        }
+        for field in [runningCountField, unreadCountField] {
+            field.lineBreakMode = .byClipping
+            addSubview(field)
+        }
         addSubview(statusGlyphView)
 
         plusButton.onClick = { [weak self] in self?.actions?.onTapPlus() }
@@ -125,6 +113,12 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         model = nil
         isPointerHovering = false
         plusButton.concealImmediately()
+        statusGlyphView.isHidden = true
+        statusGlyphView.frame = .zero
+        for view in [runningIconView, runningCountField, unreadIconView, unreadCountField] {
+            view.isHidden = true
+            view.frame = .zero
+        }
         hintPill.resetForReuse()
     }
 
@@ -201,10 +195,6 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         headerDividerLayer.backgroundColor = (hasCustomTint ? categoryTint : labelColor)
             .withAlphaComponent(hasCustomTint ? (model.colorSchemeIsDark ? 0.28 : 0.22) : (model.colorSchemeIsDark ? 0.10 : 0.08))
             .cgColor
-        iconBadgeLayer.backgroundColor = categoryTint
-            .withAlphaComponent(model.colorSchemeIsDark ? 0.18 : 0.12)
-            .cgColor
-
         pinImageView.isHidden = !model.isPinned
         if model.isPinned {
             pinImageView.image = RenderableSystemSymbol.configuredAppKitImage(
@@ -228,14 +218,6 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
                 : String(localized: "workspaceGroup.collapse.a11y", defaultValue: "Collapse group")
         )
 
-        let iconSymbol = RenderableSystemSymbol.resolvedWorkspaceGroupIcon(explicit: model.iconSymbol, configured: nil)
-        iconImageView.image = RenderableSystemSymbol.configuredAppKitImage(
-            systemName: iconSymbol,
-            pointSize: GlobalFontMagnification.scaledSize(metrics.iconFontSize, percent: percent),
-            weight: .semibold
-        )
-        iconImageView.contentTintColor = categoryTint
-
         nameField.stringValue = model.name
         nameField.font = .systemFont(
             ofSize: GlobalFontMagnification.scaledSize(metrics.nameFontSize, percent: percent),
@@ -245,10 +227,14 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
             ? labelColor
             : headerTitleColor
 
-        // In compact status mode unread folds into the glyph (blue), so the
-        // count badge stays off even when no member state rolls up.
-        statusGlyphView.isHidden = model.statusGlyph == nil
-        if let glyph = model.statusGlyph {
+        let attentionGlyph = model.statusGlyph.flatMap { glyph -> SidebarCompactStatusGlyph? in
+            switch glyph.kind {
+            case .error, .needsInput: return glyph
+            default: return nil
+            }
+        }
+        statusGlyphView.isHidden = attentionGlyph == nil
+        if let glyph = attentionGlyph {
             statusGlyphView.configure(
                 glyph,
                 pointSize: GlobalFontMagnification.scaledSize(metrics.iconFontSize, percent: percent),
@@ -259,39 +245,37 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
                 )
             )
         }
-        let showsBadge = model.statusGlyph == nil && !model.compactsAgentStatus && model.anchorUnreadCount > 0
-        unreadBadgeView.isHidden = !showsBadge
-        if showsBadge {
-            unreadBadgeFont = .systemFont(
-                ofSize: GlobalFontMagnification.scaledSize(metrics.unreadFontSize, percent: percent),
+        let counterFont = NSFont.monospacedDigitSystemFont(
+            ofSize: GlobalFontMagnification.scaledSize(metrics.unreadFontSize, percent: percent),
+            weight: .semibold
+        )
+        func configureCounter(icon: NSImageView, field: NSTextField, count: Int, symbol: String, color: NSColor, help: String) {
+            icon.isHidden = count <= 0
+            field.isHidden = count <= 0
+            icon.image = RenderableSystemSymbol.configuredAppKitImage(
+                systemName: symbol,
+                pointSize: GlobalFontMagnification.scaledSize(metrics.unreadFontSize, percent: percent),
                 weight: .semibold
             )
-            unreadBadgeView.configure(
-                count: model.anchorUnreadCount,
-                fillColor: cmuxNotificationBadgeNSColor(
-                    hex: model.notificationBadgeColorHex,
-                    fallback: model.accentColor.nsColor(for: colorScheme)
-                ),
-                textColor: .white,
-                font: unreadBadgeFont
-            )
-            unreadBadgeView.setAccessibilityLabel(String.localizedStringWithFormat(
-                String(localized: "workspaceGroup.unread.a11y", defaultValue: "%lld unread"),
-                model.anchorUnreadCount
-            ))
+            icon.contentTintColor = color
+            field.font = counterFont
+            field.textColor = color
+            field.stringValue = "\(count)"
+            icon.toolTip = help
+            field.toolTip = help
+            icon.setAccessibilityLabel(help)
+            field.setAccessibilityLabel(help)
         }
-        let showsMemberCount = !showsBadge && model.statusGlyph == nil && !model.compactsAgentStatus && model.memberCount > 0
-        memberCountBadge.isHidden = !showsMemberCount
-        if showsMemberCount {
-            memberCountField.stringValue = "\(model.memberCount)"
-            memberCountField.font = .monospacedDigitSystemFont(
-                ofSize: GlobalFontMagnification.scaledSize(metrics.unreadFontSize - 0.5, percent: percent),
-                weight: .semibold
-            )
-            memberCountField.textColor = headerTitleColor.withAlphaComponent(0.85)
-            memberCountBadge.layer?.backgroundColor = categoryTint
-                .withAlphaComponent(model.colorSchemeIsDark ? 0.20 : 0.14).cgColor
-        }
+        configureCounter(
+            icon: runningIconView, field: runningCountField, count: model.activity.runningCount,
+            symbol: "bolt.fill", color: .systemBlue, help: model.activity.runningHelp
+        )
+        configureCounter(
+            icon: unreadIconView, field: unreadCountField, count: model.activity.unreadCount,
+            symbol: "checkmark.circle.fill",
+            color: cmuxNotificationBadgeNSColor(hex: model.notificationBadgeColorHex, fallback: .systemGreen),
+            help: model.activity.unreadHelp
+        )
 
         plusButton.glyphImage = RenderableSystemSymbol.configuredAppKitImage(
             systemName: "plus",
@@ -476,8 +460,7 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
             weight: .bold
         )
         let nameLineHeight = ceil(nameFont.ascender - nameFont.descender + nameFont.leading)
-        let iconBadgeHeight = metrics.iconFrame + 4
-        let content = max(metrics.chevronFrame, iconBadgeHeight, metrics.plusFrame, nameLineHeight)
+        let content = max(metrics.chevronFrame, metrics.iconFrame, metrics.plusFrame, nameLineHeight)
         return ceil(content + 12)
     }
 
@@ -575,87 +558,37 @@ final class SidebarGroupHeaderTableCellView: NSTableCellView {
         let plusSide = metrics.plusFrame
         plusButton.frame = NSRect(x: contentMaxX - plusSide, y: midY - plusSide / 2, width: plusSide, height: plusSide)
 
-        let iconBadgeSide = metrics.iconFrame + 4
-        iconBadgeLayer.frame = NSRect(
-            x: x,
-            y: midY - iconBadgeSide / 2,
-            width: iconBadgeSide,
-            height: iconBadgeSide
-        )
-        iconImageView.frame = NSRect(
-            x: x + (iconBadgeSide - metrics.iconFrame) / 2,
-            y: midY - metrics.iconFrame / 2,
-            width: metrics.iconFrame,
-            height: metrics.iconFrame
-        )
-        x = iconBadgeLayer.frame.maxX + 6
-
-        var badgeSize = NSSize.zero
-        if !unreadBadgeView.isHidden {
-            let textSize = NSString(string: "\(model.anchorUnreadCount)")
-                .size(withAttributes: [.font: unreadBadgeFont])
-            badgeSize = NSSize(
-                width: ceil(textSize.width) + metrics.unreadHorizontalPadding * 2,
-                height: ceil(textSize.height) + metrics.unreadVerticalPadding * 2
-            )
-        } else if !memberCountBadge.isHidden {
-            let textSize = memberCountField.attributedStringValue.size()
-            badgeSize = NSSize(
-                width: ceil(textSize.width) + metrics.unreadHorizontalPadding * 2,
-                height: ceil(textSize.height) + metrics.unreadVerticalPadding * 2
-            )
-        }
-
-        if !statusGlyphView.isHidden {
-            let side = GlobalFontMagnification.scaledSize(metrics.iconFontSize, percent: model.globalFontMagnificationPercent)
-            badgeSize = NSSize(width: side, height: side)
-        }
-
-        let nameAvailable = max(0, (plusButton.frame.minX - 4) - x
-            - (badgeSize.width > 0 ? badgeSize.width + 6 : 0))
+        let counterSide = GlobalFontMagnification.scaledSize(metrics.unreadFontSize, percent: model.globalFontMagnificationPercent)
+        let glyphSide = GlobalFontMagnification.scaledSize(metrics.iconFontSize, percent: model.globalFontMagnificationPercent)
+        let runningSize = runningIconView.isHidden ? NSSize.zero : runningCountField.attributedStringValue.size()
+        let unreadSize = unreadIconView.isHidden ? NSSize.zero : unreadCountField.attributedStringValue.size()
+        let trailingWidth = (statusGlyphView.isHidden ? 0 : glyphSide + 6)
+            + (runningIconView.isHidden ? 0 : counterSide + 3 + ceil(runningSize.width) + 6)
+            + (unreadIconView.isHidden ? 0 : counterSide + 3 + ceil(unreadSize.width) + 6)
+        let nameAvailable = max(0, plusButton.frame.minX - 4 - x - trailingWidth)
         let nameSize = nameField.attributedStringValue.size()
-        // The field owns ALL remaining width (truncation only when genuinely
-        // out of space); the badge tracks the measured text width instead.
         nameField.frame = NSRect(
             x: x,
             y: midY - ceil(nameSize.height) / 2,
             width: nameAvailable,
             height: ceil(nameSize.height)
         )
-        if !unreadBadgeView.isHidden {
-            let badgeX = x + min(ceil(nameSize.width), nameAvailable) + 6
-            unreadBadgeView.frame = NSRect(
-                x: badgeX,
-                y: midY - badgeSize.height / 2,
-                width: badgeSize.width,
-                height: badgeSize.height
-            )
-            unreadBadgeView.needsDisplay = true
-        } else if !memberCountBadge.isHidden {
-            let badgeX = x + min(ceil(nameSize.width), nameAvailable) + 6
-            memberCountBadge.frame = NSRect(
-                x: badgeX,
-                y: midY - badgeSize.height / 2,
-                width: badgeSize.width,
-                height: badgeSize.height
-            )
-            memberCountBadge.layer?.cornerRadius = badgeSize.height / 2
-            let textSize = memberCountField.attributedStringValue.size()
-            memberCountField.frame = NSRect(
-                x: 0,
-                y: floor((badgeSize.height - ceil(textSize.height)) / 2),
-                width: badgeSize.width,
-                height: ceil(textSize.height)
-            )
+        var trailingX = x + min(ceil(nameSize.width), nameAvailable) + 6
+        func placeCounter(icon: NSImageView, field: NSTextField, size: NSSize) {
+            guard !icon.isHidden else {
+                icon.frame = .zero
+                field.frame = .zero
+                return
+            }
+            icon.frame = NSRect(x: trailingX, y: midY - counterSide / 2, width: counterSide, height: counterSide)
+            field.frame = NSRect(x: icon.frame.maxX + 3, y: midY - ceil(size.height) / 2, width: ceil(size.width), height: ceil(size.height))
+            trailingX = field.frame.maxX + 6
         }
-        if !statusGlyphView.isHidden {
-            statusGlyphView.frame = NSRect(
-                x: x + min(ceil(nameSize.width), nameAvailable) + 6,
-                y: midY - badgeSize.height / 2,
-                width: badgeSize.width,
-                height: badgeSize.height
-            )
-        }
+        placeCounter(icon: runningIconView, field: runningCountField, size: runningSize)
+        placeCounter(icon: unreadIconView, field: unreadCountField, size: unreadSize)
+        statusGlyphView.frame = statusGlyphView.isHidden ? .zero : NSRect(
+            x: trailingX, y: midY - glyphSide / 2, width: glyphSide, height: glyphSide
+        )
 
         let topOffset: CGFloat = model.isFirstRow ? 0 : -(model.rowSpacing / 2)
         topDropIndicator.position(in: bounds, at: topOffset)

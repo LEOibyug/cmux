@@ -2,6 +2,10 @@
 
 Workspace groups organize workspaces into collapsible named sections in the sidebar. Each group has its own header, a `+` button for creating workspaces, and context-menu actions for renaming, pinning, ungrouping, and editing its configuration.
 
+Headers summarize activity across every member: a blue bolt counts working agents, and a green checkmark counts unread messages, including pending completions. Zero counts are hidden. Expanding or collapsing a group does not change these totals; reading member notifications updates the unread total using the normal workspace acknowledgement rules.
+
+The title follows the collapse chevron directly, without a folder icon or reserved icon space.
+
 ## Concepts
 
 ### Anchor workspace
@@ -22,11 +26,13 @@ Creating a new group or adding members to an existing group adopts every explici
 
 ### Pinning
 
-Groups can be pinned independently of individual workspace pins. Pinned top-level rows, whether individual workspaces or groups, stay above unpinned rows. Within each tier, groups and workspaces keep the order you drag them into.
+Groups and independent workspaces can be pinned separately. The sidebar always keeps the four sections below in order. Dragging changes order within a section, not its priority. Pinning a member workspace affects its position inside its group; it does not move the member out of that group.
 
 The sidebar layout, top to bottom:
-1. Pinned top-level rows (workspaces and groups).
-2. Unpinned top-level rows (workspaces and groups).
+1. Pinned groups, including empty pinned groups.
+2. Pinned independent workspaces.
+3. Unpinned groups.
+4. Unpinned independent workspaces.
 
 ### Dragging and selection
 

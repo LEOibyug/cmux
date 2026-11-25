@@ -560,29 +560,47 @@ struct SidebarCompactAgentStatusTests {
     }
 
     @Test
-    func compactGroupHeadersDropTheUnreadCountBadgeEvenWithNothingToRollUp() {
-        func visibleBadgeCount(compacts: Bool) -> Int {
-            let cell = SidebarGroupHeaderTableCellView()
-            cell.configurePresentation(model: Self.makeGroupHeaderModel(compacts: compacts))
-            return SidebarAppKitRowCellTests.descendants(of: cell)
-                .compactMap { $0 as? SidebarRowUnreadBadgeView }
-                .filter { !$0.isHidden }
-                .count
-        }
+    func groupActivityCountersCoexistWithAttentionAndResetWhenReused() throws {
+        let cell = SidebarGroupHeaderTableCellView()
+        var model = Self.makeGroupHeaderModel(name: String(repeating: "Long group name ", count: 10))
+        model.statusGlyph = .init(kind: .needsInput, tooltip: "Needs input")
+        cell.frame = NSRect(x: 0, y: 0, width: 320, height: 40)
+        cell.configurePresentation(model: model)
+        cell.layoutSubtreeIfNeeded()
+        let descendants = SidebarAppKitRowCellTests.descendants(of: cell)
+        let fields = descendants.compactMap { $0 as? NSTextField }
+        let running = try #require(fields.first { !$0.isHidden && $0.stringValue == "2" })
+        let unread = try #require(fields.first { !$0.isHidden && $0.stringValue == "3" })
+        let title = try #require(fields.first { $0.stringValue == model.name })
+        #expect(running.toolTip == model.activity.runningHelp)
+        #expect(unread.toolTip == model.activity.unreadHelp)
+        #expect(running.textColor == .systemBlue)
+        #expect(title.frame.maxX < running.frame.minX)
+        #expect(running.frame.maxX < unread.frame.minX)
+        #expect(unread.frame.maxX < cell.bounds.maxX - 20)
+        let glyph = try #require(descendants.compactMap { $0 as? SidebarCompactStatusGlyphImageView }.first)
+        #expect(!glyph.isHidden)
 
-        // Off: the header still counts its anchor's unread notifications.
-        #expect(visibleBadgeCount(compacts: false) == 1)
-        // On: unread shows as the blue glyph, so no count badge comes back
-        // even for a state that does not roll up.
-        #expect(visibleBadgeCount(compacts: true) == 0)
+        for kind in [SidebarCompactStatusGlyph.Kind.running, .subagents, .waiting, .unseen] {
+            model.statusGlyph = .init(kind: kind, tooltip: "Activity")
+            cell.configurePresentation(model: model)
+            #expect(glyph.isHidden)
+            #expect(!running.isHidden && !unread.isHidden)
+        }
+        cell.prepareForReuse()
+        #expect(running.isHidden && unread.isHidden)
+        model.activity = .init()
+        cell.configurePresentation(model: model)
+        cell.layoutSubtreeIfNeeded()
+        #expect(running.isHidden && unread.isHidden)
+        #expect(running.frame == .zero && unread.frame == .zero)
     }
 
-    private static func makeGroupHeaderModel(compacts: Bool) -> SidebarGroupHeaderRowModel {
-        var model = SidebarGroupHeaderRowModel(
+    private static func makeGroupHeaderModel(name: String = "Group") -> SidebarGroupHeaderRowModel {
+        SidebarGroupHeaderRowModel(
             groupId: UUID(),
             anchorWorkspaceId: UUID(),
-            name: "Group",
-            iconSymbol: "folder",
+            name: name,
             tintHex: nil,
             isCollapsed: false,
             isPinned: false,
@@ -590,7 +608,7 @@ struct SidebarCompactAgentStatusTests {
             isMultiSelected: false,
             multiSelectionBackgroundStyle: .clear,
             memberCount: 2,
-            anchorUnreadCount: 3,
+            activity: .init(runningCount: 2, unreadCount: 3),
             canMarkRead: true,
             canMarkUnread: false,
             hasLatestNotifications: true,
@@ -610,8 +628,6 @@ struct SidebarCompactAgentStatusTests {
             colorSchemeIsDark: true,
             notificationBadgeColorHex: nil
         )
-        model.compactsAgentStatus = compacts
-        return model
     }
 
     // MARK: Factory

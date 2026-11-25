@@ -11,7 +11,6 @@ struct SidebarWorkspaceGroupRowSnapshot {
     let groupId: UUID
     let anchorWorkspaceId: UUID
     let name: String
-    let iconSymbol: String
     let tintHex: String?
     let isCollapsed: Bool
     let isPinned: Bool
@@ -22,16 +21,14 @@ struct SidebarWorkspaceGroupRowSnapshot {
     /// selection is off.
     var anchorActiveEdgeColor: NSColor? = nil
     let memberCount: Int
+    let activity: SidebarWorkspaceGroupActivity
     var hasVisibleMembers: Bool = false
-    let anchorUnreadCount: Int
     let canMarkRead: Bool
     let canMarkUnread: Bool
     let hasLatestNotifications: Bool
     let canMarkAllRead: Bool
     let canMarkAllUnread: Bool
     let statusGlyph: SidebarCompactStatusGlyph?
-    /// Whether `sidebar.compactAgentStatus` is on; see the AppKit row model.
-    var compactsAgentStatus = false
     let shortcutDigit: Int?
     let shortcutModifierSymbol: String?
     let showsShortcutHint: Bool
@@ -48,4 +45,23 @@ struct SidebarWorkspaceGroupRowSnapshot {
     let bottomDropIndicatorVisible: Bool
     let shouldCollectWorkspaceDropTargets: Bool
     let notificationBadgeColorHex: String?
+}
+
+struct SidebarWorkspaceGroupActivity: Equatable, Hashable {
+    var runningCount: Int = 0
+    var unreadCount: Int = 0
+
+    var runningHelp: String {
+        String.localizedStringWithFormat(
+            String(localized: "workspaceGroup.activity.running", defaultValue: "%lld working"),
+            runningCount
+        )
+    }
+
+    var unreadHelp: String {
+        String.localizedStringWithFormat(
+            String(localized: "workspaceGroup.activity.unread", defaultValue: "%lld unread messages"),
+            unreadCount
+        )
+    }
 }

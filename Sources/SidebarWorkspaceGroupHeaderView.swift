@@ -13,7 +13,6 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
     nonisolated static func == (lhs: SidebarWorkspaceGroupHeaderView, rhs: SidebarWorkspaceGroupHeaderView) -> Bool {
         lhs.groupId == rhs.groupId &&
             lhs.name == rhs.name &&
-            lhs.iconSymbol == rhs.iconSymbol &&
             lhs.tintHex == rhs.tintHex &&
             lhs.isCollapsed == rhs.isCollapsed &&
             lhs.isPinned == rhs.isPinned &&
@@ -22,15 +21,14 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
             lhs.multiSelectionBackgroundStyle == rhs.multiSelectionBackgroundStyle &&
             lhs.anchorActiveEdgeColor == rhs.anchorActiveEdgeColor &&
             lhs.memberCount == rhs.memberCount &&
+            lhs.activity == rhs.activity &&
             lhs.hasVisibleMembers == rhs.hasVisibleMembers &&
-            lhs.anchorUnreadCount == rhs.anchorUnreadCount &&
             lhs.canMarkRead == rhs.canMarkRead &&
             lhs.canMarkUnread == rhs.canMarkUnread &&
             lhs.hasLatestNotifications == rhs.hasLatestNotifications &&
             lhs.canMarkAllRead == rhs.canMarkAllRead &&
             lhs.canMarkAllUnread == rhs.canMarkAllUnread &&
             lhs.statusGlyph == rhs.statusGlyph &&
-            lhs.compactsAgentStatus == rhs.compactsAgentStatus &&
             lhs.shortcutDigit == rhs.shortcutDigit &&
             lhs.shortcutModifierSymbol == rhs.shortcutModifierSymbol &&
             lhs.showsShortcutHint == rhs.showsShortcutHint &&
@@ -50,7 +48,6 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
 
     let groupId: UUID
     let name: String
-    let iconSymbol: String
     let tintHex: String?
     let isCollapsed: Bool
     let isPinned: Bool
@@ -61,16 +58,14 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
     /// selection is off.
     var anchorActiveEdgeColor: NSColor? = nil
     let memberCount: Int
+    let activity: SidebarWorkspaceGroupActivity
     var hasVisibleMembers: Bool = false
-    let anchorUnreadCount: Int
     let canMarkRead: Bool
     let canMarkUnread: Bool
     let hasLatestNotifications: Bool
     let canMarkAllRead: Bool
     let canMarkAllUnread: Bool
     let statusGlyph: SidebarCompactStatusGlyph?
-    /// Whether `sidebar.compactAgentStatus` is on; see the AppKit row model.
-    var compactsAgentStatus = false
     let shortcutDigit: Int?
     let shortcutModifierSymbol: String?
     let showsShortcutHint: Bool
@@ -120,10 +115,6 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
         return Color(nsColor: accentColor.nsColor(for: colorScheme))
     }
 
-    private var displayedIconSymbol: String {
-        RenderableSystemSymbol.resolvedWorkspaceGroupIcon(explicit: iconSymbol, configured: nil)
-    }
-
     private var shortcutHintPillText: String? {
         guard showsShortcutHint,
               let shortcutDigit,
@@ -151,6 +142,26 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
 
     private var selectionCornerRadius: CGFloat {
         isMultiSelected && !isAnchorActive ? 6 : 4
+    }
+
+    private func activityCount(_ count: Int, symbol: String, color: Color, help: String) -> some View {
+        HStack(spacing: 3) {
+            CmuxSystemSymbolImage(
+                systemName: symbol,
+                pointSize: metrics.unreadFontSize,
+                weight: .semibold,
+                tint: color,
+                appliesGlobalFontMagnification: true
+            )
+            Text("\(count)")
+                .cmuxFont(size: metrics.unreadFontSize, weight: .semibold)
+                .monospacedDigit()
+        }
+        .foregroundStyle(color)
+        .fixedSize()
+        .safeHelp(help)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(help))
     }
 
     var body: some View {
@@ -188,55 +199,36 @@ struct SidebarWorkspaceGroupHeaderView: View, Equatable {
                 )
 
             HStack(spacing: 6) {
-                CmuxSystemSymbolImage(
-                    systemName: displayedIconSymbol,
-                    pointSize: metrics.iconFontSize,
-                    weight: .semibold,
-                    tint: iconColor,
-                    appliesGlobalFontMagnification: true)
-                    .frame(width: metrics.iconFrame, height: metrics.iconFrame)
-                    .padding(2)
-                    .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(iconColor.opacity(colorScheme == .dark ? 0.18 : 0.12))
-                    )
-                    .accessibilityHidden(true)
                 Text(name)
                     .cmuxFont(size: metrics.nameFontSize, weight: .bold)
                     .foregroundStyle(isAnchorActive ? Color.primary : Color.primary.opacity(0.92))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                // Compact status mode: unread folds into the glyph (blue).
-                if let statusGlyph {
+                if let statusGlyph, statusGlyph.kind == .error || statusGlyph.kind == .needsInput {
                     SidebarCompactStatusGlyphView(
                         glyph: statusGlyph,
                         pointSize: GlobalFontMagnification.scaledSize(metrics.iconFontSize, percent: globalFontMagnificationPercent),
                         color: statusGlyph.color(isActive: false, selected: .labelColor, secondary: .secondaryLabelColor)
                     )
-                } else if anchorUnreadCount > 0, !compactsAgentStatus {
-                    Text("\(anchorUnreadCount)")
-                        .cmuxFont(size: metrics.unreadFontSize, weight: .semibold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, metrics.unreadHorizontalPadding)
-                        .padding(.vertical, metrics.unreadVerticalPadding)
-                        .background(Capsule().fill(Color(nsColor: cmuxNotificationBadgeNSColor(
+                }
+                if activity.runningCount > 0 {
+                    activityCount(
+                        activity.runningCount,
+                        symbol: "bolt.fill",
+                        color: .blue,
+                        help: activity.runningHelp
+                    )
+                }
+                if activity.unreadCount > 0 {
+                    activityCount(
+                        activity.unreadCount,
+                        symbol: "checkmark.circle.fill",
+                        color: Color(nsColor: cmuxNotificationBadgeNSColor(
                             hex: notificationBadgeColorHex,
-                            fallback: accentColor.nsColor(for: colorScheme)
-                        ))))
-                        .accessibilityLabel(Text(String.localizedStringWithFormat(
-                            String(localized: "workspaceGroup.unread.a11y", defaultValue: "%lld unread"),
-                            anchorUnreadCount
-                        )))
-                } else if !compactsAgentStatus, memberCount > 0 {
-                    Text("\(memberCount)")
-                        .cmuxFont(size: max(9, metrics.unreadFontSize - 0.5), weight: .semibold)
-                        .foregroundStyle(Color.primary.opacity(0.75))
-                        .padding(.horizontal, metrics.unreadHorizontalPadding)
-                        .padding(.vertical, metrics.unreadVerticalPadding)
-                        .background(
-                            Capsule().fill(iconColor.opacity(colorScheme == .dark ? 0.20 : 0.14))
-                        )
-                        .accessibilityHidden(true)
+                            fallback: .systemGreen
+                        )),
+                        help: activity.unreadHelp
+                    )
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

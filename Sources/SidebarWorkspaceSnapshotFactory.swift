@@ -133,23 +133,27 @@ struct SidebarWorkspaceSnapshotFactory {
             && !settings.compactsAgentStatus
         var agentEntries: [SidebarStatusEntry] = []
         var metadataEntries: [SidebarStatusEntry] = []
-        if detailVisibility.showsMetadata || showsAgentStatusRows || settings.compactsAgentStatus {
-            // The workspace projection already coalesces native and hook reports.
-            for entry in workspace.sidebarStatusEntriesInDisplayOrder() {
-                // Compact mode has always folded allowed hook keys, even when
-                // their custom icon does not identify a capsule presentation.
-                if AgentStatusPresentation(entry: entry) != nil
-                    || (settings.compactsAgentStatus && AgentHibernationLifecycleStatusKeys.isAllowed(entry.key)) {
-                    agentEntries.append(entry)
-                } else {
-                    metadataEntries.append(entry)
-                }
+        let collectsStatusRows = detailVisibility.showsMetadata || showsAgentStatusRows || settings.compactsAgentStatus
+        var runningReportCount = 0
+        // The workspace projection already coalesces native and hook reports.
+        for entry in workspace.sidebarStatusEntriesInDisplayOrder() {
+            let presentation = AgentStatusPresentation(entry: entry)
+            if presentation?.state == .running || presentation?.state == .waiting {
+                runningReportCount += 1
+            }
+            guard collectsStatusRows else { continue }
+            // Compact mode also folds hook keys with custom icons.
+            if presentation != nil
+                || (settings.compactsAgentStatus && AgentHibernationLifecycleStatusKeys.isAllowed(entry.key)) {
+                agentEntries.append(entry)
+            } else {
+                metadataEntries.append(entry)
             }
         }
-        let activeCodingAgentCount = SidebarAgentActivitySummary.visibleActiveCodingAgentCount(
-            showsAgentActivity: showsAgentActivity,
+        let runningLifecycleCount = SidebarAgentActivitySummary.activeCodingAgentCount(
             statesByPanelId: workspace.agentLifecycleStatesByPanelId
         )
+        let activeCodingAgentCount = showsAgentActivity ? runningLifecycleCount : 0
         let compactStatusGlyph = settings.compactsAgentStatus
             ? SidebarCompactStatusGlyph.resolve(compactStatusInput(
                 agentEntries: agentEntries,
@@ -195,6 +199,7 @@ struct SidebarWorkspaceSnapshotFactory {
             latestLog: detailVisibility.showsLog ? workspace.logEntries.last : nil,
             progress: detailVisibility.showsProgress ? workspace.progress : nil,
             activeCodingAgentCount: activeCodingAgentCount,
+            runningAgentCount: max(runningLifecycleCount, runningReportCount),
             compactGitBranchSummaryText: compactGitBranchSummaryText,
             compactDirectoryCandidates: compactDirectoryCandidates,
             compactBranchDirectoryCandidates: compactBranchDirectoryCandidates,

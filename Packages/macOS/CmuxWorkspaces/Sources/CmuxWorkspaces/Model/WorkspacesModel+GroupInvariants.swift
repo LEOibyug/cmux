@@ -2,8 +2,8 @@ public import Foundation
 
 // Group-section invariant maintenance over the model's own tabs/groups
 // storage, lifted one-for-one from the legacy private TabManager helpers:
-// contiguous group runs, anchor-first member order, pinned tier above
-// unpinned, and the group-anchor lifecycle bound to anchor removal.
+// contiguous group runs, anchor-first member order, four sidebar tiers,
+// and the group-anchor lifecycle bound to anchor removal.
 extension WorkspacesModel {
     /// Sets a workspace's group membership and preserves selected-row visibility.
     func assignGroup(workspaceId: UUID, groupId: UUID?) {
@@ -62,92 +62,59 @@ extension WorkspacesModel {
         }
     }
 
-    /// Rebuild `tabs` by walking a desired top-level workspace order and
-    /// emitting each workspace group as one contiguous run at its first
-    /// encountered member.
+    /// Apply a desired workspace order as contiguous, anchor-first group runs,
+    /// stably partitioned into the four sidebar tiers. Direct mutation callers
+    /// share the same invariant as top-level normalization.
     func normalizeWorkspaceGroupRunsPreservingOrder(_ desiredIds: [UUID]) {
-        // Build membership once so anchor repair and run construction stay
-        // linear even when a window contains many groups and workspaces.
-        var groupedByGroupId: [UUID: [Tab]] = [:]
-        for tab in tabs {
-            guard let groupId = tab.groupId else { continue }
-            groupedByGroupId[groupId, default: []].append(tab)
-        }
-
-        // Repair the anchor phase at the same boundary that repairs group
-        // membership. This covers restore/import paths that assign `groupId`
-        // directly instead of going through `assignGroup`.
-        for index in workspaceGroups.indices {
-            let groupId = workspaceGroups[index].id
-            let members = groupedByGroupId[groupId] ?? []
-            if let liveAnchor = workspaceGroups[index].liveAnchorWorkspaceId,
-               members.contains(where: { $0.id == liveAnchor }) {
-                continue
-            }
-            if let firstMember = members.first {
-                workspaceGroups[index].anchor = .workspace(firstMember.id)
-                workspaceGroups[index].anchorWorkspaceProvenance = .user
-            } else if !workspaceGroups[index].isPinned,
-                      workspaceGroups[index].isEmpty == false {
-                // Unpinned empty groups are not created by normal close paths,
-                // but keeping their identity coherent makes malformed/imported
-                // state deterministic until the caller explicitly removes it.
-                workspaceGroups[index].anchor = .empty(workspaceGroups[index].id)
-            }
-        }
-        let groupsById = Dictionary(uniqueKeysWithValues: workspaceGroups.map { ($0.id, $0) })
-        let knownGroupIds = Set(groupsById.keys)
-        for tab in tabs where tab.groupId.map({ !knownGroupIds.contains($0) }) ?? false {
-            tab.groupId = nil
-        }
-
-        let tabsById = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
-
-        var emittedWorkspaceIds = Set<UUID>()
-        var emittedGroupIds = Set<UUID>()
-        var reordered: [Tab] = []
-        reordered.reserveCapacity(tabs.count)
-
-        func appendWorkspaceOrGroup(for id: UUID) {
-            guard let tab = tabsById[id] else { return }
-            if let groupId = tab.groupId,
-               let group = groupsById[groupId],
-               emittedGroupIds.insert(groupId).inserted {
-                let members = anchorFirst(groupedByGroupId[groupId] ?? [], anchorId: group.anchorWorkspaceId)
-                for member in members where emittedWorkspaceIds.insert(member.id).inserted {
-                    reordered.append(member)
-                }
-            } else if tab.groupId == nil,
-                      emittedWorkspaceIds.insert(tab.id).inserted {
-                reordered.append(tab)
-            }
-        }
-
-        for id in desiredIds {
-            appendWorkspaceOrGroup(for: id)
-        }
-        for tab in tabs where !emittedWorkspaceIds.contains(tab.id) {
-            appendWorkspaceOrGroup(for: tab.id)
-        }
-
-        tabs = reordered
+        let repairedAnchors = repairWorkspaceGroupMembershipAndAnchors()
+        tabs = sidebarOrderedWorkspaces(preserving: desiredIds.map { repairedAnchors[$0] ?? $0 })
     }
 
-    /// Reorder `tabs` so each group stays contiguous and anchor-first while
-    /// preserving top-level row order inside the pinned and unpinned tiers:
-    /// 1. Pinned top-level rows (pinned workspaces and pinned groups).
-    /// 2. Unpinned top-level rows (workspaces and groups).
+    /// Restore/import may set membership directly or retain a stale anchor.
+    /// Repair before projecting rows so a missing anchor cannot move its group.
+    private func repairWorkspaceGroupMembershipAndAnchors() -> [UUID: UUID] {
+        let knownGroupIds = Set(workspaceGroups.map(\.id))
+        var firstMemberIds: [UUID: UUID] = [:]
+        var groupIdsByWorkspaceId: [UUID: UUID] = [:]
+        for tab in tabs {
+            guard let groupId = tab.groupId else { continue }
+            guard knownGroupIds.contains(groupId) else {
+                tab.groupId = nil
+                continue
+            }
+            if firstMemberIds[groupId] == nil { firstMemberIds[groupId] = tab.id }
+            groupIdsByWorkspaceId[tab.id] = groupId
+        }
+        var repairedAnchors: [UUID: UUID] = [:]
+        for index in workspaceGroups.indices {
+            let group = workspaceGroups[index]
+            if let anchorId = group.liveAnchorWorkspaceId,
+               groupIdsByWorkspaceId[anchorId] == group.id { continue }
+            if let firstMemberId = firstMemberIds[group.id] {
+                workspaceGroups[index].anchor = .workspace(firstMemberId)
+                workspaceGroups[index].anchorWorkspaceProvenance = .user
+            } else {
+                workspaceGroups[index].anchor = .empty(group.id)
+                workspaceGroups[index].anchorWorkspaceProvenance = .unknown
+            }
+            let anchorId = workspaceGroups[index].anchorWorkspaceId
+            if anchorId != group.anchorWorkspaceId {
+                repairedAnchors[group.anchorWorkspaceId] = anchorId
+            }
+        }
+        return repairedAnchors
+    }
+
+    /// Reorder `tabs` so groups stay contiguous and anchor-first, preserving
+    /// relative row order within pinned groups, pinned independent workspaces,
+    /// regular groups, and regular independent workspaces, in that order.
     ///
     /// Within each group, members keep their relative order. A group anchor is
     /// the group's top-level row for ordering purposes.
     public func normalizeWorkspaceGroupContiguity(
         preservingTopLevelIds preferredTopLevelIds: [UUID]? = nil
     ) {
-        guard !tabs.isEmpty else { return }
-        let knownGroupIds = Set(workspaceGroups.map(\.id))
-        for tab in tabs where tab.groupId.map({ !knownGroupIds.contains($0) }) ?? false {
-            tab.groupId = nil
-        }
+        let repairedAnchors = repairWorkspaceGroupMembershipAndAnchors()
         let topLevelIds: [UUID]
         if let preferredTopLevelIds {
             // Callers usually compute this order from live tabs only. Reinsert
@@ -155,23 +122,16 @@ extension WorkspacesModel {
             // placeholder cannot be appended to the tail by the group-order
             // reconciliation below.
             topLevelIds = sidebarTopLevelWorkspaceIdsIncludingEmptyGroups(
-                preservingTopLevelIds: preferredTopLevelIds
+                preservingTopLevelIds: preferredTopLevelIds.map { repairedAnchors[$0] ?? $0 }
             )
         } else {
-            topLevelIds = sidebarTopLevelWorkspaceIds()
+            topLevelIds = sidebarTopLevelWorkspaceIdsIncludingEmptyGroups()
         }
-        let pinnedTopLevelIds = preferredTopLevelIds == nil
-            ? sidebarTopLevelPinnedWorkspaceIds()
-            : sidebarTopLevelPinnedWorkspaceIdsIncludingEmptyGroups()
-        let desiredIds = topLevelIds.filter { pinnedTopLevelIds.contains($0) }
-            + topLevelIds.filter { !pinnedTopLevelIds.contains($0) }
         // Always reassign so SwiftUI consumers re-evaluate row modifiers that
         // depend on `Workspace.groupId` even when the array contents are
         // unchanged.
-        normalizeWorkspaceGroupRunsPreservingOrder(desiredIds)
-        syncWorkspaceGroupsOrderToAnchorOrder(
-            preferredTopLevelIds: preferredTopLevelIds == nil ? nil : topLevelIds
-        )
+        tabs = sidebarOrderedWorkspaces(preserving: topLevelIds)
+        syncWorkspaceGroupsOrderToAnchorOrder(preferredTopLevelIds: topLevelIds)
     }
 
     /// Ensure the group containing the newly-selected workspace is expanded, so the
@@ -197,42 +157,20 @@ extension WorkspacesModel {
     /// reorder so later group-slot commands observe the same order the user
     /// sees in the sidebar.
     func syncWorkspaceGroupsOrderToAnchorOrder(preferredTopLevelIds: [UUID]? = nil) {
-        if let preferredTopLevelIds {
-            let groupsByAnchorId = Dictionary(
-                uniqueKeysWithValues: workspaceGroups.map { ($0.anchorWorkspaceId, $0) }
-            )
-            var orderedGroups: [WorkspaceGroup] = []
-            var emittedGroupIds = Set<UUID>()
-            for id in preferredTopLevelIds {
-                guard let group = groupsByAnchorId[id], emittedGroupIds.insert(group.id).inserted else {
-                    continue
-                }
-                orderedGroups.append(group)
-            }
-            orderedGroups.append(contentsOf: workspaceGroups.filter {
-                !emittedGroupIds.contains($0.id)
-            })
-            workspaceGroups = orderedGroups
-            return
+        let topLevelIds = preferredTopLevelIds ?? sidebarTopLevelWorkspaceIdsIncludingEmptyGroups()
+        let groupsByAnchorId = Dictionary(uniqueKeysWithValues: workspaceGroups.map { ($0.anchorWorkspaceId, $0) })
+        var groupsByTier = Array(repeating: [WorkspaceGroup](), count: WorkspaceSidebarOrderTier.allCases.count)
+        var emittedGroupIds = Set<UUID>()
+        func appendGroup(_ group: WorkspaceGroup) {
+            guard emittedGroupIds.insert(group.id).inserted else { return }
+            let tier = WorkspaceSidebarOrderTier(isGroup: true, isPinned: group.isPinned)
+            groupsByTier[tier.rawValue].append(group)
         }
-        let anchorIndex: [UUID: Int] = Dictionary(uniqueKeysWithValues: tabs.enumerated().map { ($1.id, $0) })
-        guard workspaceGroups.contains(where: { $0.liveAnchorWorkspaceId != nil }) else { return }
-        // Empty groups have no tab index. Keep their existing group slots while
-        // projecting live groups into the anchor order, so closing an anchor
-        // does not silently move a surviving header past its group neighbors.
-        let liveGroups = workspaceGroups
-            .filter { $0.liveAnchorWorkspaceId != nil }
-            .sorted { lhs, rhs in
-                let l = lhs.liveAnchorWorkspaceId.flatMap { anchorIndex[$0] } ?? Int.max
-                let r = rhs.liveAnchorWorkspaceId.flatMap { anchorIndex[$0] } ?? Int.max
-                return l < r
-            }
-        var liveIndex = 0
-        workspaceGroups = workspaceGroups.map { group in
-            guard !group.isEmpty, liveGroups.indices.contains(liveIndex) else { return group }
-            defer { liveIndex += 1 }
-            return liveGroups[liveIndex]
+        for id in topLevelIds {
+            if let group = groupsByAnchorId[id] { appendGroup(group) }
         }
+        for group in workspaceGroups { appendGroup(group) }
+        workspaceGroups = groupsByTier.flatMap { $0 }
     }
 
     /// Hoist promoted (non-anchor) members to the front of their group's

@@ -13,7 +13,7 @@ import Testing
 @MainActor
 @Suite("Workspace group numbered selection", .serialized)
 struct WorkspaceGroupNumberedSelectionTests {
-    @Test func controlTwoSelectsTheFirstGroupedWorkspace() throws {
+    @Test func controlOneSelectsTheFirstGroupedWorkspace() throws {
         let appDelegate = try #require(AppDelegate.shared)
         let originalSettingsFileStore = KeyboardShortcutSettings.installIsolatedTestFileStore(
             prefix: "cmux-workspace-group-numbered-selection"
@@ -41,7 +41,6 @@ struct WorkspaceGroupNumberedSelectionTests {
         let groupId = try #require(manager.createWorkspaceGroup(name: "Grouped"))
         manager.addWorkspaceToGroup(workspaceId: memberWorkspace.id, groupId: groupId)
         let group = try #require(manager.workspaceGroups.first { $0.id == groupId })
-        _ = manager.reorderSidebarGroup(groupId: groupId, toIndex: 1)
         let renderItems = SidebarWorkspaceRenderItem.renderItems(
             tabs: manager.tabs,
             groupsById: [groupId: group]
@@ -51,7 +50,7 @@ struct WorkspaceGroupNumberedSelectionTests {
             return workspaceId
         }
 
-        #expect(visibleWorkspaceRowIds == [ungroupedWorkspace.id, group.anchorWorkspaceId, memberWorkspace.id])
+        #expect(visibleWorkspaceRowIds == [group.anchorWorkspaceId, memberWorkspace.id, ungroupedWorkspace.id])
         window.makeKeyAndOrderFront(nil)
         window.displayIfNeeded()
         manager.selectWorkspace(ungroupedWorkspace)
@@ -62,16 +61,16 @@ struct WorkspaceGroupNumberedSelectionTests {
             timestamp: 0,
             windowNumber: window.windowNumber,
             context: nil,
-            characters: "2",
-            charactersIgnoringModifiers: "2",
+            characters: "1",
+            charactersIgnoringModifiers: "1",
             isARepeat: false,
-            keyCode: 19
+            keyCode: 18
         ))
 
         #expect(appDelegate.routableNumberedConfiguredShortcutDigit(
             event: event,
             action: .selectWorkspaceByNumber
-        ) == 2)
+        ) == 1)
         #expect(appDelegate.preferredMainWindowContextForShortcutRouting(event: event)?.tabManager === manager)
         #expect(appDelegate.debugHandleCustomShortcut(event: event))
         #expect(manager.selectedTabId == group.anchorWorkspaceId)

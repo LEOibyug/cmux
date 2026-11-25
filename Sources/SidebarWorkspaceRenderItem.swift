@@ -41,127 +41,75 @@ enum SidebarWorkspaceRenderItem {
         guard !tabs.isEmpty || !groupsById.isEmpty else { return [] }
         let effectiveMembershipByWorkspaceId = effectiveMembership
             ?? effectiveGroupIdByWorkspaceId(tabs: tabs, groupsById: groupsById)
-        var items: [SidebarWorkspaceRenderItem] = []
-        items.reserveCapacity(tabs.count + groupsById.count)
-        var lastEmittedGroupId: UUID? = nil
-        var emittedHeaders: Set<UUID> = []
-        var collapsedByGroupId: [UUID: Bool] = [:]
-        var skipChildrenUntilNextGroup = false
-        for tab in tabs {
-            // Render and row configuration must agree on whether this tab is
-            // actually grouped. A stale group id (or a group whose live anchor
-            // disappeared) is a root row, even if it sits between members of a
-            // valid group in the persisted tab order.
-            let groupId = effectiveMembershipByWorkspaceId[tab.id] ?? nil
-            if groupId != lastEmittedGroupId {
-                lastEmittedGroupId = groupId
-                skipChildrenUntilNextGroup = false
-                if let groupId, let group = groupsById[groupId] {
-                    if !emittedHeaders.contains(groupId) {
-                        items.append(.groupHeader(
-                            groupId: group.id,
-                            anchorWorkspaceId: group.anchorWorkspaceId
-                        ))
-                        emittedHeaders.insert(groupId)
-                        collapsedByGroupId[groupId] = group.isCollapsed
-                    }
-                    // If legacy reorder paths ever leave a group's members in
-                    // two runs, keep honoring the same collapse decision.
-                    skipChildrenUntilNextGroup = collapsedByGroupId[groupId] ?? false
-                }
-            }
-            if groupId == nil || !skipChildrenUntilNextGroup {
-                items.append(.workspace(workspaceId: tab.id))
-            }
-        }
-
-        // Empty pinned groups have no tab row from which a header can be
-        // discovered. Emit them as first-class header-only rows, keeping the
-        // model's group order within each pin tier. Empty unpinned groups are
-        // placed after live rows; they are uncommon (normal close paths remove
-        // them) but remain renderable until an explicit mutation removes them.
+        let memberIdsByGroupId = memberWorkspaceIdsByGroupId(
+            tabs: tabs,
+            groupsById: groupsById,
+            effectiveMembership: effectiveMembershipByWorkspaceId
+        )
         let ordered = orderedGroups
             ?? groupsById.values.sorted { $0.id.uuidString < $1.id.uuidString }
-        let memberGroupIds = Set(effectiveMembershipByWorkspaceId.values.compactMap { $0 })
-        let tabsById = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
-        // Only durable empty groups belong in the header-only projection. A
-        // nonempty group whose anchor went stale is intentionally absent from
-        // the render tree; treating it as empty would create a ghost header.
-        let emptyGroups = ordered.filter {
-            $0.isEmpty && !memberGroupIds.contains($0.id)
-        }
-        guard !emptyGroups.isEmpty else { return items }
-
+        let tierCount = WorkspaceSidebarOrderTier.allCases.count
+        var nextLiveGroupByTier: [UUID?] = Array(repeating: nil, count: tierCount)
         var emptyBeforeGroup: [UUID: [WorkspaceGroup]] = [:]
-        var trailingPinned: [WorkspaceGroup] = []
-        var trailingUnpinned: [WorkspaceGroup] = []
-        var nextLivePinnedGroup: WorkspaceGroup?
-        var nextLiveUnpinnedGroup: WorkspaceGroup?
-        var nextLiveSameTierByIndex: [WorkspaceGroup?] = Array(
-            repeating: nil,
-            count: ordered.count
-        )
-        for index in ordered.indices.reversed() {
-            let group = ordered[index]
-            nextLiveSameTierByIndex[index] = group.isPinned
-                ? nextLivePinnedGroup
-                : nextLiveUnpinnedGroup
-            guard memberGroupIds.contains(group.id) else { continue }
-            if group.isPinned {
-                nextLivePinnedGroup = group
-            } else {
-                nextLiveUnpinnedGroup = group
+        var trailingEmptyByTier: [[WorkspaceGroup]] = Array(repeating: [], count: tierCount)
+        for orderedGroup in ordered.reversed() {
+            guard let group = groupsById[orderedGroup.id] else { continue }
+            let tier = WorkspaceSidebarOrderTier(isGroup: true, isPinned: group.isPinned).rawValue
+            if memberIdsByGroupId[group.id] != nil {
+                nextLiveGroupByTier[tier] = group.id
+            } else if group.isEmpty {
+                // Only durable empty groups get header-only rows. A nonempty
+                // group with a stale anchor must not become a ghost header.
+                if let nextLiveGroupId = nextLiveGroupByTier[tier] {
+                    emptyBeforeGroup[nextLiveGroupId, default: []].append(group)
+                } else {
+                    trailingEmptyByTier[tier].append(group)
+                }
             }
         }
-        for (index, group) in ordered.enumerated() where !memberGroupIds.contains(group.id) {
-            // Preserve the group's authoritative slot within its pin tier.
-            // Crossing tiers would violate the sidebar's pinned-first
-            // invariant, so only a later live group in the same tier is a
-            // valid insertion anchor; otherwise defer to that tier boundary.
-            let nextLiveSameTierGroup = nextLiveSameTierByIndex[index]
-            if let nextLiveSameTierGroup {
-                emptyBeforeGroup[nextLiveSameTierGroup.id, default: []].append(group)
-            } else if group.isPinned {
-                trailingPinned.append(group)
+
+        var itemsByTier: [[SidebarWorkspaceRenderItem]] = Array(repeating: [], count: tierCount)
+        var emittedHeaders: Set<UUID> = []
+        for tab in tabs {
+            // Group blocks follow their first member's position within their
+            // tier, even while restored tabs temporarily contain split runs.
+            // The group's pin state owns the whole block, not its members'.
+            if let groupId = effectiveMembershipByWorkspaceId[tab.id] ?? nil,
+               let group = groupsById[groupId] {
+                guard emittedHeaders.insert(groupId).inserted else { continue }
+                let tier = WorkspaceSidebarOrderTier(isGroup: true, isPinned: group.isPinned).rawValue
+                for emptyGroup in emptyBeforeGroup[groupId, default: []].reversed() {
+                    itemsByTier[tier].append(.groupHeader(
+                        groupId: emptyGroup.id,
+                        anchorWorkspaceId: emptyGroup.anchorWorkspaceId
+                    ))
+                }
+                itemsByTier[tier].append(.groupHeader(
+                    groupId: group.id,
+                    anchorWorkspaceId: group.anchorWorkspaceId
+                ))
+                if !group.isCollapsed {
+                    for workspaceId in memberIdsByGroupId[groupId, default: []] {
+                        itemsByTier[tier].append(.workspace(workspaceId: workspaceId))
+                    }
+                }
             } else {
-                trailingUnpinned.append(group)
+                let tier = WorkspaceSidebarOrderTier(isGroup: false, isPinned: tab.isPinned).rawValue
+                itemsByTier[tier].append(.workspace(workspaceId: tab.id))
             }
         }
 
         var rendered: [SidebarWorkspaceRenderItem] = []
-        rendered.reserveCapacity(items.count + emptyGroups.count)
-        for item in items {
-            if case .groupHeader(let groupId, _) = item,
-               let preceding = emptyBeforeGroup[groupId] {
-                rendered.append(contentsOf: preceding.map {
-                    .groupHeader(groupId: $0.id, anchorWorkspaceId: $0.anchorWorkspaceId)
-                })
+        rendered.reserveCapacity(tabs.count + groupsById.count)
+        for tier in WorkspaceSidebarOrderTier.allCases {
+            rendered.append(contentsOf: itemsByTier[tier.rawValue])
+            for group in trailingEmptyByTier[tier.rawValue].reversed() {
+                rendered.append(.groupHeader(
+                    groupId: group.id,
+                    anchorWorkspaceId: group.anchorWorkspaceId
+                ))
             }
-            rendered.append(item)
         }
-        if !trailingPinned.isEmpty {
-            let firstUnpinnedIndex = rendered.firstIndex { item in
-                switch item {
-                case .groupHeader(let groupId, _):
-                    return groupsById[groupId]?.isPinned == false
-                case .workspace(let workspaceId):
-                    guard let workspace = tabsById[workspaceId] else {
-                        return false
-                    }
-                    if let groupId = effectiveMembershipByWorkspaceId[workspace.id] ?? nil,
-                       let group = groupsById[groupId] {
-                        return !group.isPinned
-                    }
-                    return !workspace.isPinned
-                }
-            } ?? rendered.count
-            rendered.insert(contentsOf: trailingPinned.map {
-                .groupHeader(groupId: $0.id, anchorWorkspaceId: $0.anchorWorkspaceId)
-            }, at: firstUnpinnedIndex)
-        }
-        rendered.append(contentsOf: trailingUnpinned.map {
-            .groupHeader(groupId: $0.id, anchorWorkspaceId: $0.anchorWorkspaceId)
-        })
         return rendered
     }
 

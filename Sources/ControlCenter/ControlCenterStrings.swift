@@ -200,6 +200,7 @@ enum ControlCenterStrings {
         "approve.delete_collection": "Remove launch collection",
         "approve.open_targets": "Open workspaces",
         "approve.create_workspace": "Create OMP workspace",
+        "approve.add_workspaces_to_group": "Add workspaces to existing group",
         "approve.set_setting": "Change cmux setting",
         "approve.undo_setting": "Undo setting change",
         "approve.memory_save": "Save preference",

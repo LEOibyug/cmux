@@ -413,6 +413,17 @@ extension ControlCenterCoordinator {
             let source = args["agent_id"]?.stringValue ?? "omp"
             detail["sessions"] = try toolJSON(sessions.filter { $0.agentID == source && $0.sessionID == id })
         }
+        if call.name == "add_workspaces_to_group" {
+            let manager = try currentManager()
+            let groupID = args["group_id"]?.stringValue.flatMap(UUID.init(uuidString:))
+            if let group = manager.workspaceGroups.first(where: { $0.id == groupID }) {
+                detail["group"] = .object(["id": .string(group.id.uuidString), "name": .string(group.name)])
+            }
+            let workspaceIDs = Set((args["workspace_ids"]?.arrayValue ?? []).compactMap { $0.stringValue.flatMap(UUID.init(uuidString:)) })
+            detail["workspaces"] = .array(manager.tabs.filter { workspaceIDs.contains($0.id) }.map {
+                .object(["id": .string($0.id.uuidString), "title": .string($0.title), "group_id": $0.groupId.map { .string($0.uuidString) } ?? .null])
+            })
+        }
         if call.name == "set_setting", let id = args["id"]?.stringValue,
            let current = try settingsRows().first(where: { $0.id == id }) {
             detail["current_value"] = current.value

@@ -182,7 +182,7 @@ struct WorkspaceCoordinatorTests {
         #expect(reorder.isAtTopOfUnpinnedTier(group.anchorWorkspaceId))
         #expect(reorder.isAtTopOfUnpinnedTier(child1.id))
         #expect(!reorder.isAtTopOfUnpinnedTier(child2.id))
-        #expect(!reorder.isAtTopOfUnpinnedTier(outside.id))
+        #expect(reorder.isAtTopOfUnpinnedTier(outside.id))
         reorder.moveTabToTopForNotification(child2.id)
         #expect(reorder.isAtTopOfUnpinnedTier(child2.id))
         #expect(!reorder.isAtTopOfUnpinnedTier(child1.id))
@@ -878,10 +878,11 @@ struct WorkspaceCoordinatorTests {
     @Test
     func createWorkspaceGroupAdoptsChildrenAndKeepsSectionContiguous() throws {
         let (model, host, groups, _) = makeWorld()
+        let before = CoordinatorStubTab()
         let child1 = CoordinatorStubTab()
         let other = CoordinatorStubTab()
         let child2 = CoordinatorStubTab()
-        model.tabs = [child1, other, child2]
+        model.tabs = [before, child1, other, child2]
 
         let groupId = groups.createWorkspaceGroup(
             name: " ",
@@ -893,9 +894,9 @@ struct WorkspaceCoordinatorTests {
         let anchorId = group.anchorWorkspaceId
         #expect(model.tabs.first(where: { $0.id == child1.id })?.groupId == groupId)
         #expect(model.tabs.first(where: { $0.id == child2.id })?.groupId == groupId)
-        // Section is contiguous and anchor-first at the first child's slot.
+        // The new group occupies its own tier ahead of independent workspaces.
         #expect(anchorId == child1.id)
-        #expect(model.tabs.map(\.id) == [child1.id, child2.id, other.id])
+        #expect(model.tabs.map(\.id) == [child1.id, child2.id, before.id, other.id])
         #expect(host.orderChanges.last == [child1.id, child2.id])
     }
 
@@ -1123,7 +1124,7 @@ struct WorkspaceCoordinatorTests {
         groups.addWorkspaceToGroup(workspaceId: a.id, groupId: targetId)
 
         #expect(model.workspaceGroups.first { $0.id == sourceId } == expectedSource)
-        #expect(model.tabs.map(\.id) == [b.id, c.id, outside.id, targetMember.id, a.id])
+        #expect(model.tabs.map(\.id) == [b.id, c.id, targetMember.id, a.id, outside.id])
         #expect(a.groupId == targetId)
         #expect(model.workspaceGroups.first { $0.id == targetId }?.isCollapsed == false)
         #expect(model.selectedTabId == a.id)
@@ -1156,9 +1157,7 @@ struct WorkspaceCoordinatorTests {
         #expect(anchor.groupId == nil)
         #expect(firstPeer.groupId == sourceId)
         #expect(secondPeer.groupId == sourceId)
-        let expectedWorkspaceIds: [UUID] = isPinned
-            ? [firstPeer.id, secondPeer.id, anchor.id, outside.id]
-            : [anchor.id, firstPeer.id, secondPeer.id, outside.id]
+        let expectedWorkspaceIds = [firstPeer.id, secondPeer.id, anchor.id, outside.id]
         #expect(model.tabs.map(\.id) == expectedWorkspaceIds)
         #expect(model.selectedTabId == anchor.id)
         #expect(host.closedWorkspaceIds.isEmpty)
@@ -1192,7 +1191,7 @@ struct WorkspaceCoordinatorTests {
         }
 
         #expect(model.workspaceGroups.first { $0.id == sourceId } == (isPinned ? expectedSource : nil))
-        #expect(model.tabs.map(\.id) == (removeFromGroup ? [anchor.id, targetMember.id] : [targetMember.id, anchor.id]))
+        #expect(model.tabs.map(\.id) == [targetMember.id, anchor.id])
         #expect(anchor.groupId == (removeFromGroup ? nil : targetId))
         #expect(targetMember.groupId == targetId)
         #expect(host.closedWorkspaceIds.isEmpty)
@@ -1295,19 +1294,27 @@ struct WorkspaceCoordinatorTests {
     }
 
     @Test
-    func ungroupKeepsMemberPositionsAndDropsMembership() throws {
+    func ungroupKeepsWorkspacesAndReturnsMembersToTheirPinTiers() throws {
         let (model, host, groups, _) = makeWorld()
-        _ = host
-        let a = CoordinatorStubTab()
-        model.tabs = [a]
-        let groupId = try #require(groups.createWorkspaceGroup(name: "G"))
-        groups.addWorkspaceToGroup(workspaceId: a.id, groupId: groupId)
-        let orderBefore = model.tabs.map(\.id)
+        let anchor = CoordinatorStubTab()
+        let pinnedMember = CoordinatorStubTab(isPinned: true)
+        let otherMember = CoordinatorStubTab()
+        let outside = CoordinatorStubTab()
+        model.tabs = [anchor, pinnedMember, otherMember, outside]
+        let groupId = try #require(groups.createWorkspaceGroup(
+            name: "Dissolve", childWorkspaceIds: [anchor.id, pinnedMember.id]
+        ))
+        let survivingId = try #require(groups.createWorkspaceGroup(
+            name: "Survive", childWorkspaceIds: [otherMember.id]
+        ))
 
-        groups.ungroupWorkspaceGroup(groupId: groupId)
-        #expect(model.workspaceGroups.isEmpty)
-        #expect(model.tabs.map(\.id) == orderBefore)
-        #expect(model.tabs.allSatisfy { $0.groupId == nil })
+        #expect(groups.ungroupWorkspaceGroup(groupId: groupId) == .dissolved(keptWorkspaceCount: 2))
+        #expect(model.workspaceGroups.map(\.id) == [survivingId])
+        #expect(model.tabs.map(\.id) == [pinnedMember.id, otherMember.id, anchor.id, outside.id])
+        #expect(anchor.groupId == nil)
+        #expect(pinnedMember.groupId == nil)
+        #expect(otherMember.groupId == survivingId)
+        #expect(host.closedWorkspaceIds.isEmpty)
     }
 
     @Test

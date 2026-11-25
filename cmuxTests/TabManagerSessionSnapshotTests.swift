@@ -800,9 +800,13 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         drainMainQueue()
         XCTAssertNil(workspace.panels[closedPanelId])
 
-        let originalWorkspaceIds = manager.sessionSnapshotWorkspaceIds()
-        let snapshot = manager.sessionSnapshot(includeScrollback: false)
-        XCTAssertEqual(originalWorkspaceIds, [workspace.id])
+        let pinnedWorkspace = try XCTUnwrap(manager.addTab(select: false))
+        manager.setPinned(pinnedWorkspace, pinned: true)
+        var snapshot = manager.sessionSnapshot(includeScrollback: false)
+        snapshot.workspaces.reverse()
+        snapshot.selectedWorkspaceIndex = snapshot.workspaces.firstIndex { $0.workspaceId == workspace.id }
+        let originalWorkspaceIds = snapshot.workspaces.compactMap(\.workspaceId)
+        XCTAssertEqual(originalWorkspaceIds, [workspace.id, pinnedWorkspace.id])
 
         let restoredManager = makeTabManager()
         let restoredPanelIdsByWorkspaceIndex = restoredManager.restoreSessionSnapshot(snapshot)
@@ -813,6 +817,8 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
 
         let restoredWorkspace = try XCTUnwrap(restoredManager.selectedWorkspace)
         XCTAssertEqual(restoredWorkspace.id, workspace.id)
+        XCTAssertEqual(restoredManager.tabs.map(\.id), [pinnedWorkspace.id, workspace.id])
+        XCTAssertEqual(restoredManager.restoredSessionWorkspace(originalId: workspace.id, from: snapshot)?.id, workspace.id)
         XCTAssertTrue(restoredManager.reopenMostRecentlyClosedItem())
         XCTAssertTrue(restoredWorkspace.panelCustomTitles.values.contains("Closed Panel"))
     }
