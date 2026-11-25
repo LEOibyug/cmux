@@ -7,6 +7,12 @@ import Observation
 @Observable
 final class CodexpressCoordinator {
     private(set) var snapshot: CodexpressSnapshot?
+    private(set) var gateway: CodexpressGateway = .unavailable
+    private(set) var hasReadGateway = false
+    var remote: CodexpressGateway.Remote? {
+        if hasReadGateway, case .remote(let remote) = gateway { return remote }
+        return nil
+    }
     private(set) var connectionError: CodexpressManagementError?
     private(set) var isUpdating = false
     private(set) var activeSourceIDs: Set<String> = []
@@ -22,17 +28,25 @@ final class CodexpressCoordinator {
     @ObservationIgnored private var observers: [UUID: AsyncStream<Void>.Continuation] = [:]
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var connectionChangesTask: Task<Void, Never>?
+    @ObservationIgnored private var gatewayWatcher: (any DispatchSourceFileSystemObject)?
+    @ObservationIgnored private var latestGatewayRead: UInt64 = 0
+    @ObservationIgnored private var appliedGatewayRead: UInt64 = 0
     @ObservationIgnored private var settings = CodexpressSettingsSnapshot()
     @ObservationIgnored private var refreshOperations: [String: String] = [:]
     @ObservationIgnored private var refreshRetryTimes: [String: Double] = [:]
     @ObservationIgnored private var resetRequestIDs: [String: UUID] = [:]
     @ObservationIgnored private var requestsInFlight: Set<String> = []
-    @ObservationIgnored private var connectionGeneration = UUID()
+    private(set) var connectionGeneration = UUID()
     private(set) var actionsBlockedAfterConnectionChange = false
     @ObservationIgnored private var uncertainSourceIDs: Set<String> = []
 
     /// Drops endpoint-specific state; uncertain old mutations remain blocked for this session.
     func connectionDidChange() {
+        clearConnectionState()
+        restartObservation()
+    }
+
+    private func clearConnectionState() {
         if !activeSourceIDs.isEmpty || !resetRequestIDs.isEmpty || !refreshOperations.isEmpty
             || operationError?.isDefiniteRejection == false {
             actionsBlockedAfterConnectionChange = true
@@ -50,7 +64,6 @@ final class CodexpressCoordinator {
         requestsInFlight.removeAll()
         uncertainSourceIDs.removeAll()
         operationError = actionsBlockedAfterConnectionChange ? .outcomeUnknown : nil
-        restartObservation()
     }
 
     init(
@@ -63,20 +76,15 @@ final class CodexpressCoordinator {
 
     deinit { connectionChangesTask?.cancel() }
 
-    /// Retains one secret-change subscription shared by all sidebar instances.
-    func startObservingConnectionChanges(secretStore: SecretFileStore, key: SecretFileKey) {
+    /// Observe the key ID, not its value. The remote sidebar never opens a secret file.
+    func startObservingConnectionChanges(key: SecretFileKey) {
         guard connectionChangesTask == nil else { return }
-        let changes = secretStore.values(for: key)
+        let changes = NotificationCenter.default.notifications(named: SecretFileStore.didChangeNotification)
+            .compactMap { $0.userInfo?[SecretFileStore.changedKeyIDKey] as? String }
         connectionChangesTask = Task { [weak self] in
-            var isInitialValue = true
-            for await _ in changes {
-                guard !Task.isCancelled else { return }
-                if isInitialValue {
-                    isInitialValue = false
-                    continue
-                }
-                guard let self else { return }
-                if settings.manualConnection { connectionDidChange() }
+            for await id in changes where id == key.id {
+                guard let self, !Task.isCancelled else { return }
+                if gateway.isLocal && settings.manualConnection { connectionDidChange() }
             }
         }
     }
@@ -88,7 +96,7 @@ final class CodexpressCoordinator {
         let connectionChanged = settings.manualConnection != next.manualConnection
             || (next.manualConnection && settings.managementPort != next.managementPort)
         settings = next
-        if connectionChanged {
+        if connectionChanged && gateway.isLocal {
             connectionDidChange()
         } else if cadenceChanged {
             restartObservation()
@@ -110,6 +118,14 @@ final class CodexpressCoordinator {
     private func restartObservation() {
         let previous = observationTask
         previous?.cancel()
+        if !settings.enabled || observers.isEmpty {
+            gatewayWatcher?.cancel()
+            gatewayWatcher = nil
+            appliedGatewayRead = latestGatewayRead
+            hasReadGateway = false
+            snapshot = nil
+            connectionError = nil
+        }
         // Await cancellation before starting another cadence, even if a service
         // call does not return immediately. Multiple sidebar leases never poll twice.
         observationTask = Task { [weak self] in
@@ -118,24 +134,62 @@ final class CodexpressCoordinator {
             while !Task.isCancelled && settings.enabled && !observers.isEmpty {
                 await refreshLocal()
                 guard !Task.isCancelled, settings.enabled else { return }
-                await reconcileActions()
+                if gateway.isLocal { await reconcileActions() }
                 do { try await waitForRefresh(settings.pollIntervalSeconds) }
                 catch { return }
             }
         }
     }
 
+    private func ensureGatewayWatcher() {
+        guard gatewayWatcher == nil, settings.enabled, !observers.isEmpty else { return }
+        gatewayWatcher = service.watchGateway { [weak self] detached in
+            Task { @MainActor [weak self] in
+                guard let self, settings.enabled, !observers.isEmpty else { return }
+                if detached { gatewayWatcher?.cancel(); gatewayWatcher = nil }
+                let previous = gateway
+                if await readGateway(), previous != gateway { await refreshLocal() }
+            }
+        }
+    }
+
+    /// All states other than an authenticated local marker (or its legacy absence) are read-only.
+    private func readGateway() async -> Bool {
+        ensureGatewayWatcher()
+        latestGatewayRead &+= 1
+        let read = latestGatewayRead
+        let next = await service.gateway()
+        guard !Task.isCancelled, settings.enabled, !observers.isEmpty else { return false }
+        guard read > appliedGatewayRead else { return hasReadGateway && gateway.isLocal }
+        appliedGatewayRead = read
+        if next != gateway { clearConnectionState() }
+        if next != gateway || !hasReadGateway {
+            gateway = next
+            hasReadGateway = true
+            snapshot = remote?.snapshot
+        }
+        return next.isLocal
+    }
+
+    func submit(for generation: UUID, _ action: @escaping @MainActor () async -> Void) {
+        Task {
+            guard generation == connectionGeneration, hasReadGateway, gateway.isLocal, await readGateway(),
+                  generation == connectionGeneration else { return }
+            await action()
+        }
+    }
+
     func refreshLocal() async {
-        guard settings.enabled, !Task.isCancelled, !isUpdating else { return }
+        guard settings.enabled, !Task.isCancelled, await readGateway(), !isUpdating else { return }
         let generation = connectionGeneration
         isUpdating = true
         defer {
             if connectionGeneration == generation { isUpdating = false }
         }
         do {
-            let next = try await service.status()
+            let next = try await service.status(for: gateway)
             try Task.checkCancellation()
-            guard connectionGeneration == generation else { return }
+            guard await readGateway(), connectionGeneration == generation else { return }
             for source in next.sources where !source.hasRefreshFailure {
                 if snapshot?.sources.first(where: { $0.id == source.id })?.hasRefreshFailure == true {
                     refreshErrors.removeValue(forKey: source.id)
@@ -147,7 +201,7 @@ final class CodexpressCoordinator {
         } catch is CancellationError {
             return
         } catch {
-            guard connectionGeneration == generation else { return }
+            guard await readGateway(), connectionGeneration == generation else { return }
             let failure = managementError(error)
             if case .connectionChanged = failure { connectionDidChange() }
             connectionError = failure
@@ -179,7 +233,7 @@ final class CodexpressCoordinator {
     }
 
     func requestReset(_ sourceID: String) async {
-        guard settings.enabled, settings.showActions, !actionsBlockedAfterConnectionChange,
+        guard gateway.isLocal, settings.enabled, settings.showActions, !actionsBlockedAfterConnectionChange,
               !activeSourceIDs.contains(sourceID), resetRequestIDs[sourceID] == nil,
               let source = snapshot?.sources.first(where: { $0.id == sourceID }),
               source.enabled, source.kind == "official" else { return }
@@ -202,7 +256,7 @@ final class CodexpressCoordinator {
             }
         }
         do {
-            _ = try await service.perform(.requestReset(sourceID: sourceID, requestID: id))
+            _ = try await service.perform(.requestReset(sourceID: sourceID, requestID: id), for: gateway)
             guard connectionGeneration == generation else { return }
         } catch {
             guard connectionGeneration == generation else { return }
@@ -237,7 +291,7 @@ final class CodexpressCoordinator {
         sourceID: String,
         tracksRefresh: Bool = false
     ) async {
-        guard settings.enabled, settings.showActions, !actionsBlockedAfterConnectionChange,
+        guard gateway.isLocal, settings.enabled, settings.showActions, !actionsBlockedAfterConnectionChange,
               !activeSourceIDs.contains(sourceID),
               snapshot?.sources.contains(where: { $0.id == sourceID }) == true else { return }
         let generation = connectionGeneration
@@ -253,7 +307,7 @@ final class CodexpressCoordinator {
             }
         }
         do {
-            let operation = try await service.perform(action)
+            let operation = try await service.perform(action, for: gateway)
             guard connectionGeneration == generation else { return }
             if tracksRefresh {
                 if let id = operation.id, operation.status == "running" {
@@ -281,7 +335,7 @@ final class CodexpressCoordinator {
         for (sourceID, id) in refreshOperations {
             guard !Task.isCancelled, connectionGeneration == generation else { return }
             do {
-                let operation = try await service.operation(id: id)
+                let operation = try await service.operation(id: id, for: gateway)
                 guard connectionGeneration == generation else { return }
                 if operation.status == "completed" || operation.status == "failed" {
                     refreshOperations.removeValue(forKey: sourceID)
@@ -337,7 +391,7 @@ final class CodexpressCoordinator {
         guard resetRequestIDs[sourceID] == id else { return }
         let generation = connectionGeneration
         do {
-            let request = try await service.resetRequest(id: id)
+            let request = try await service.resetRequest(id: id, for: gateway)
             guard connectionGeneration == generation, resetRequestIDs[sourceID] == id else { return }
             guard request.id.caseInsensitiveCompare(id.uuidString) == .orderedSame,
                   request.sourceID == sourceID else {

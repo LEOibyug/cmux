@@ -120,7 +120,6 @@ struct cmuxApp: App {
             try await codexpressRefreshClock.sleep(for: .seconds(seconds))
         }
         codexpressCoordinator.startObservingConnectionChanges(
-            secretStore: secretStore,
             key: codexpressCatalog.codexpressManagementAPIKey
         )
         self.codexpressCoordinator = codexpressCoordinator

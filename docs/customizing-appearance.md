@@ -75,12 +75,20 @@ The title, agent status, description, branch, directory, and auxiliary font size
 
 The Codexpress controls in the same pane manage panel enablement, local status cadence,
 font size, request counts, quota reset times, action buttons, and management connection.
-Automatic mode reads Codexpress's private local access file; manual mode uses
+When the Mac selects a local gateway, automatic mode reads its private local access file; manual mode uses
 `sidebar.codexpressManagementPort` (1–65535) and a masked API key saved separately in the
 existing owner-only secret store. `sidebar.codexpressManualConnection` selects manual mode;
 the key is never stored in cmux.json or UserDefaults. Missing manual credentials do not fall
 back to auto-discovery. Connection edits apply live, discard stale displayed data, and never
 send a pending operation ID to the new endpoint. Disabling the panel stops periodic reads.
+
+For a remote gateway both settings are overridden. The sidebar watches the state directory
+for atomic replacements of `cmux-gateway.json` and only reads that publication (owner-only
+`0700` directory, `0600` regular file, no symlinks). It displays the endpoint and the Mac's
+fetch time, marking samples older than 60 seconds stale. Open Codexpress to refresh from
+the server. No remote management credentials or API calls are
+used. A missing publication permits legacy local mode, but an unsafe or malformed one,
+an unavailable selection, or a remote target without a snapshot never permits fallback.
 
 ## Themes
 

@@ -5,6 +5,7 @@ import CmuxFoundation
 struct CodexpressSourceRow: View {
     let source: CodexpressSnapshot.Source
     let settings: CodexpressSettingsSnapshot
+    let isReadOnly: Bool
     let isTakingOver: Bool
     let isBusy: Bool
     let canAct: Bool
@@ -49,7 +50,7 @@ struct CodexpressSourceRow: View {
                 Circle()
                     .fill(healthColor)
                     .frame(width: 6, height: 6)
-                    .symbolEffect(.pulse, options: .repeating, isActive: source.activeRequests > 0 && !reduceMotion)
+                    .symbolEffect(.pulse, options: .repeating, isActive: (source.activeRequests ?? 0) > 0 && !isSnapshotStale && !reduceMotion)
                     .accessibilityHidden(true)
                 Text(displayName)
                     .cmuxFont(size: CGFloat(settings.fontSize + 1), weight: .semibold)
@@ -57,10 +58,10 @@ struct CodexpressSourceRow: View {
                     .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 2)
-                if settings.showRequestCounts {
+                if settings.showRequestCounts, let count = source.activeRequests {
                     HStack(spacing: 2) {
                         Image(systemName: "arrow.left.arrow.right")
-                        Text(source.activeRequests, format: .number).monospacedDigit()
+                        Text(count, format: .number).monospacedDigit()
                     }
                     .cmuxFont(size: CGFloat(settings.fontSize - 2))
                     .foregroundStyle(.secondary)
@@ -71,7 +72,7 @@ struct CodexpressSourceRow: View {
                         .cmuxFont(size: CGFloat(settings.fontSize - 2))
                         .foregroundStyle(.orange)
                 }
-                if settings.showActions {
+                if settings.showActions && !isReadOnly {
                     Button(action: isTakingOver ? onCancelTakeover : onTakeOver) {
                         Image(systemName: isTakingOver ? "bolt.circle.fill" : "bolt.fill")
                             .foregroundStyle(isTakingOver ? Color.accentColor : Color.secondary)
@@ -140,7 +141,7 @@ struct CodexpressSourceRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .help(detailsHelp(at: date))
         .contextMenu {
-            if settings.showActions {
+            if settings.showActions && !isReadOnly {
                 Button(strings.refresh, action: onRefresh)
                     .help(refreshHelp)
                     .disabled(!actionsEnabled || refreshCoolingDown)

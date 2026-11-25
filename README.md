@@ -78,7 +78,7 @@
 
 ### Codexpress 来源面板
 
-侧栏底部的可折叠面板通过本机管理 API 读取 [Codexpress](https://github.com/LEOibyug/Codexpress) 网关状态，可同时展示多个来源：
+侧栏底部的可折叠面板跟随本机 [Codexpress](https://github.com/LEOibyug/Codexpress) 选中的网关，可同时展示多个来源。本机模式通过回环管理 API 读取状态：
 
 - 官方账号并排显示实际存在的 `5h`、`week` 额度及重置时间。
 - 七天窗口旁以小字显示 `ref 42.3%`，表示本周期剩余时间百分比，不是费用或新增额度。存在真实短周期时放在周额度下方；否则与周额度同行。按 `(重置时间 − 当前时间) / 七天 × 100%` 本地每分钟倒计，周期开始为 100%，到期保持 0% 等新快照；缺少有效重置时间时仅接受有效的 `ref_cost`，不推测新周期。`ref` 比实际剩余额度高至少 5/10 个百分点时分别显示黄色/红色，真实额度原配色及路由、抢占、计费不变。
@@ -91,6 +91,8 @@
 周期读取使用轻量状态接口，不附带历史用量聚合。供应商刷新失败与本机 API 连接错误分开展示，保留上次余额和额度；按网关返回的下次查询时间暂停重复刷新，到期恢复按钮。来源恢复后清除该来源的刷新错误，不影响其他操作错误或抢占、重置功能。
 
 连接支持自动发现，也支持手动配置管理端口与 API Key，默认端口为 `17867`。API Key 保存在独立的 `0600` 私有文件中，不写入 `cmux.json`、UserDefaults 或仓库。面板仅连接本机回环地址，不修改 Codex、供应商凭据或系统代理，也不会自动启用或重启 Codexpress。
+
+远端模式优先于自动发现和手动连接。侧栏只读 `CODEXPRESS_STATE_DIR`（默认 `~/Library/Application Support/Codexpress`）下由 Mac 原子发布的 `cmux-gateway.json`，显示目标及快照获取时间；超过 60 秒标为陈旧。缺少请求数时不显示计数，不把未知当作 0。侧栏不会连接远端、读取远端令牌或发送抢占、用卡等命令；标题行的刷新只重读缓存，需更新服务器状态时打开 Codexpress。切换中、文件损坏、权限不安全或远端尚无快照时均不会改走本机；只有未发布文件的旧版本沿用原本的本机发现。
 
 ## 维护范围
 
@@ -109,6 +111,8 @@
 验证按功能边界进行：行为修改执行定向构建与隔离 smoke，缺陷修复优先扩展已有行为回归；纯文案、注释不重复构建或回归。不默认运行全量测试，也不增加只检查源码文本、转发或实现细节的测试。
 
 Codexpress 参考进度的独立消费回归不需要 app host 或网关：`./scripts/dev.sh swiftc Sources/Codexpress/CodexpressSnapshot.swift tests/test_codexpress_snapshot_reference.swift -o tmp/codexpress-snapshot-reference-tests && ./tmp/codexpress-snapshot-reference-tests`。原生布局仍需隔离应用 smoke：用独立本机 fixture 管理端点分别提供单周、短周期加周、缺重置/参考值、过期重置及 5/10 点差场景，检查窄侧栏、浅/深色、分钟走时与刷新冷却；不连接真实账号，不点击刷新、抢占或重置卡。仅编译应用可用 `./scripts/reload.sh --tag ref-cost-check --build-only`，不替换或重启当前应用。
+
+远端侧栏的私有文件、原子切换、旧操作拒绝及缺失指标回归（macOS；只使用项目 `tmp/` 下的假数据，不需要 app host、凭据或网络）：`./scripts/dev.sh swiftc Sources/Codexpress/{CodexpressSnapshot,CodexpressManagementClient,CodexpressManagementServing,CodexpressManagementError,CodexpressManagementAction,CodexpressOperation,CodexpressResetRequest,CodexpressSessionDelegate}.swift tests/test_codexpress_gateway_cache.swift -o tmp/codexpress-gateway-cache-tests && ./tmp/codexpress-gateway-cache-tests`。
 
 ## 本地安装与更新
 

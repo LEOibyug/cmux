@@ -5,7 +5,7 @@ struct CodexpressSnapshot: Decodable, Sendable, Equatable {
     let mode: String
     let fixedSourceID: String?
     let connectionMode: String?
-    let inflight: Int
+    let inflight: Int?
     let sources: [Source]
     let manualRoute: ManualRoute?
 
@@ -31,9 +31,10 @@ struct CodexpressSnapshot: Decodable, Sendable, Equatable {
         let name: String
         let kind: String
         let enabled: Bool
+        let showInCmux: Bool
         let priority: Int
-        let health: String
-        let activeRequests: Int
+        let health: String?
+        let activeRequests: Int?
         let cooldownUntil: Double?
         let lastError: String?
         let quota: Quota?
@@ -46,6 +47,7 @@ struct CodexpressSnapshot: Decodable, Sendable, Equatable {
 
         fileprivate enum CodingKeys: String, CodingKey {
             case id, name, kind, enabled, priority, health, quota, credits, balance, admission
+            case showInCmux = "show_in_cmux"
             case activeRequests = "active_requests"
             case cooldownUntil = "cooldown_until"
             case lastError = "last_error"
@@ -105,6 +107,16 @@ struct CodexpressSnapshot: Decodable, Sendable, Equatable {
             case fetchedAt = "fetched_at"
             case failureCount = "failure_count"
             case nextRetryAt = "next_retry_at"
+        }
+
+        init(from decoder: any Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            windows = try values.decodeIfPresent([QuotaWindow].self, forKey: .windows) ?? []
+            fetchedAt = try values.decodeIfPresent(Double.self, forKey: .fetchedAt)
+            stale = try values.decodeIfPresent(Bool.self, forKey: .stale)
+            error = try values.decodeIfPresent(String.self, forKey: .error)
+            failureCount = try values.decodeIfPresent(Int.self, forKey: .failureCount)
+            nextRetryAt = try values.decodeIfPresent(Double.self, forKey: .nextRetryAt)
         }
     }
 
@@ -200,9 +212,10 @@ extension CodexpressSnapshot.Source {
         name = try values.decode(String.self, forKey: .name)
         kind = try values.decode(String.self, forKey: .kind)
         enabled = try values.decode(Bool.self, forKey: .enabled)
+        showInCmux = try values.decodeIfPresent(Bool.self, forKey: .showInCmux) ?? true
         priority = try values.decode(Int.self, forKey: .priority)
-        health = try values.decode(String.self, forKey: .health)
-        activeRequests = try values.decode(Int.self, forKey: .activeRequests)
+        health = try values.decodeIfPresent(String.self, forKey: .health)
+        activeRequests = try values.decodeIfPresent(Int.self, forKey: .activeRequests)
         cooldownUntil = try values.decodeIfPresent(Double.self, forKey: .cooldownUntil)
         lastError = try values.decodeIfPresent(String.self, forKey: .lastError)
         quota = try values.decodeIfPresent(CodexpressSnapshot.Quota.self, forKey: .quota)
@@ -216,5 +229,65 @@ extension CodexpressSnapshot.Source {
             ?? admission?.maxActiveConversations
         capacityActiveConversations = try values.decodeIfPresent(Int.self, forKey: .capacityActiveConversations)
             ?? admission?.capacityActiveConversations
+    }
+}
+
+/// The endpoint is a display label, never a management or model request destination.
+enum CodexpressGateway: Sendable, Equatable {
+    struct Revision: Sendable, Equatable {
+        let device: Int32
+        let inode: UInt64
+        let seconds: Int
+        let nanoseconds: Int
+    }
+
+    struct Remote: Sendable, Equatable {
+        let instanceID: String
+        let endpoint: String
+        let fetchedAt: Date?
+        let snapshot: CodexpressSnapshot?
+
+        func isStale(at date: Date) -> Bool {
+            guard let fetchedAt else { return true }
+            return !(0...60).contains(date.timeIntervalSince(fetchedAt))
+        }
+    }
+
+    case local(Revision?) // nil only for a legacy installation without a publication
+    case remote(Remote)
+    case unavailable
+
+    var isLocal: Bool {
+        if case .local = self { return true }
+        return false
+    }
+
+    init(data: Data, revision: Revision) throws {
+        struct Publication: Decodable {
+            let version: Int
+            let mode: String
+            let instance_id: String?
+            let endpoint: String?
+            let fetched_at: Double?
+            let snapshot: CodexpressSnapshot?
+        }
+        let value = try JSONDecoder().decode(Publication.self, from: data)
+        guard value.version == 1 else { self = .unavailable; return }
+        switch value.mode {
+        case "local" where value.instance_id == nil && value.endpoint == nil && value.snapshot == nil && value.fetched_at == nil:
+            self = .local(revision)
+        case "remote":
+            guard let id = value.instance_id, !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let endpoint = value.endpoint, let url = URLComponents(string: endpoint),
+                  url.scheme?.lowercased() == "https", let host = url.host, !host.isEmpty,
+                  url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+                  url.percentEncodedPath.isEmpty || url.percentEncodedPath == "/" else {
+                self = .unavailable; return
+            }
+            let date = value.fetched_at.flatMap { (0...253402300799).contains($0) ? Date(timeIntervalSince1970: $0) : nil }
+            self = .remote(Remote(instanceID: id, endpoint: endpoint, fetchedAt: date, snapshot: value.snapshot))
+        default:
+            self = .unavailable
+        }
     }
 }

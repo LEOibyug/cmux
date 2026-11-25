@@ -32,6 +32,9 @@ actor CodexpressManagementClient: CodexpressManagementServing {
     private let configurationURL: URL
     private let connectionSelection: @Sendable () async throws -> ConnectionSelection
     private var activeConfiguration: Configuration?
+    private var authorizedGateway: CodexpressGateway?
+    private var cachedPublication: (revision: CodexpressGateway.Revision, value: CodexpressGateway)?
+    private var permitsLegacyAbsence = true
     private let session: URLSession
     private let configurationLimit = 16 * 1_024
     private let responseLimit = 8 * 1_024 * 1_024
@@ -65,8 +68,9 @@ actor CodexpressManagementClient: CodexpressManagementServing {
 
     deinit { session.invalidateAndCancel() }
 
-    func status() async throws -> CodexpressSnapshot {
+    func status(for gateway: CodexpressGateway) async throws -> CodexpressSnapshot {
         try await request(
+            gateway: gateway,
             path: "/v1/status",
             queryItems: [URLQueryItem(name: "include_usage", value: "false")],
             body: nil,
@@ -74,7 +78,7 @@ actor CodexpressManagementClient: CodexpressManagementServing {
         )
     }
 
-    func perform(_ action: CodexpressManagementAction) async throws -> CodexpressOperation {
+    func perform(_ action: CodexpressManagementAction, for gateway: CodexpressGateway) async throws -> CodexpressOperation {
         let path: String
         let payload: Payload
         switch action {
@@ -102,13 +106,13 @@ actor CodexpressManagementClient: CodexpressManagementServing {
             throw CodexpressManagementError.invalidConfiguration
         }
         if case .requestReset(let sourceID, let requestID) = action {
-            let reset = try await request(path: path, body: body, as: CodexpressResetRequest.self)
+            let reset = try await request(gateway: gateway, path: path, body: body, as: CodexpressResetRequest.self)
             guard UUID(uuidString: reset.id) == requestID, reset.sourceID == sourceID else {
                 throw CodexpressManagementError.outcomeUnknown
             }
             return CodexpressOperation(id: reset.id, status: reset.status, result: nil)
         }
-        let operation = try await request(path: path, body: body, as: CodexpressOperation.self)
+        let operation = try await request(gateway: gateway, path: path, body: body, as: CodexpressOperation.self)
         switch action {
         case .refreshBalance, .refreshQuota:
             guard let id = operation.id, UUID(uuidString: id) != nil, operation.status != nil else {
@@ -124,11 +128,12 @@ actor CodexpressManagementClient: CodexpressManagementServing {
         return operation
     }
 
-    func operation(id: String) async throws -> CodexpressOperation {
+    func operation(id: String, for gateway: CodexpressGateway) async throws -> CodexpressOperation {
         guard let uuid = UUID(uuidString: id) else {
             throw CodexpressManagementError.invalidResponse
         }
         let operation = try await request(
+            gateway: gateway,
             path: "/v1/operations/\(uuid.uuidString.lowercased())",
             body: nil,
             as: CodexpressOperation.self
@@ -140,8 +145,9 @@ actor CodexpressManagementClient: CodexpressManagementServing {
         return operation
     }
 
-    func resetRequest(id: UUID) async throws -> CodexpressResetRequest {
+    func resetRequest(id: UUID, for gateway: CodexpressGateway) async throws -> CodexpressResetRequest {
         let reset = try await request(
+            gateway: gateway,
             path: "/v1/credits/reset-requests/\(id.uuidString.lowercased())",
             body: nil,
             as: CodexpressResetRequest.self
@@ -153,19 +159,20 @@ actor CodexpressManagementClient: CodexpressManagementServing {
     }
 
     private func request<Response: Decodable & Sendable>(
+        gateway expectedGateway: CodexpressGateway,
         path: String,
         queryItems: [URLQueryItem] = [],
         body: Data?,
         as type: Response.Type
     ) async throws -> Response {
         try Task.checkCancellation()
-        let settings = try await selectedConfiguration()
+        let settings = try await selectedConfiguration(for: expectedGateway)
         let isStatus = path == "/v1/status" && body == nil
         if let activeConfiguration, activeConfiguration != settings {
             self.activeConfiguration = nil
             throw CodexpressManagementError.connectionChanged
         }
-        guard isStatus || activeConfiguration == settings else {
+        guard isStatus || (activeConfiguration == settings && authorizedGateway == expectedGateway) else {
             throw CodexpressManagementError.connectionChanged
         }
         var components = URLComponents()
@@ -191,6 +198,7 @@ actor CodexpressManagementClient: CodexpressManagementServing {
             request.setValue(String(body.count), forHTTPHeaderField: "Content-Length")
         }
         try Task.checkCancellation()
+        try requireLocal(expectedGateway)
         do {
             let (bytes, response) = try await session.bytes(for: request)
             guard let http = response as? HTTPURLResponse, http.url == url else {
@@ -215,12 +223,21 @@ actor CodexpressManagementClient: CodexpressManagementServing {
                 data.append(byte)
             }
             let decoded = try JSONDecoder().decode(type, from: data)
-            let currentSettings = try await selectedConfiguration()
+            let currentSettings: Configuration
+            do {
+                currentSettings = try await selectedConfiguration(for: expectedGateway)
+            } catch where body != nil {
+                // The POST was submitted; a changed selection cannot prove it was rejected.
+                throw CodexpressManagementError.outcomeUnknown
+            }
             guard currentSettings == settings else {
                 activeConfiguration = nil
                 throw body == nil ? CodexpressManagementError.connectionChanged : CodexpressManagementError.outcomeUnknown
             }
-            if isStatus { activeConfiguration = settings }
+            if isStatus {
+                activeConfiguration = settings
+                authorizedGateway = expectedGateway
+            }
             return decoded
         } catch {
             if body != nil {
@@ -236,8 +253,14 @@ actor CodexpressManagementClient: CodexpressManagementServing {
         }
     }
 
-    private func selectedConfiguration() async throws -> Configuration {
+    private func requireLocal(_ expected: CodexpressGateway) throws {
+        guard expected.isLocal, gateway() == expected else { throw CodexpressManagementError.connectionChanged }
+    }
+
+    private func selectedConfiguration(for expected: CodexpressGateway) async throws -> Configuration {
+        try requireLocal(expected)
         let selection = try await connectionSelection()
+        try requireLocal(expected)
         switch selection {
         case .automatic:
             return try readConfiguration()
@@ -252,35 +275,90 @@ actor CodexpressManagementClient: CodexpressManagementServing {
     }
 
     private func readConfiguration() throws -> Configuration {
-        let path = configurationURL.path
-        guard configurationURL.isFileURL,
-              configurationURL.host == nil || configurationURL.host == "" || configurationURL.host == "localhost",
-              configurationURL.query == nil, configurationURL.fragment == nil,
-              path.hasPrefix("/"), !path.utf8.contains(0),
-              configurationURL.lastPathComponent == "control-access.json" else {
+        guard configurationURL.lastPathComponent == "control-access.json" else {
             throw CodexpressManagementError.invalidConfiguration
         }
+        let data = try withPrivateFile(named: "control-access.json") { fd, metadata in
+            try readData(fd, metadata: metadata, limit: configurationLimit)
+        }
+        guard let settings = try? JSONDecoder().decode(Configuration.self, from: data),
+              settings.port > 0, (16...256).contains(settings.key.utf8.count),
+              settings.key.utf8.allSatisfy({ (0x21...0x7E).contains($0) }) else {
+            throw CodexpressManagementError.invalidConfiguration
+        }
+        guard settings.enabled else { throw CodexpressManagementError.disabled }
+        return settings
+    }
+
+    func gateway() -> CodexpressGateway {
+        let value: CodexpressGateway
+        do {
+            value = try withPrivateFile(named: "cmux-gateway.json") { fd, metadata in
+                let revision = CodexpressGateway.Revision(device: metadata.st_dev, inode: metadata.st_ino,
+                    seconds: metadata.st_ctimespec.tv_sec, nanoseconds: metadata.st_ctimespec.tv_nsec)
+                if let cachedPublication, cachedPublication.revision == revision { return cachedPublication.value }
+                let data = try readData(fd, metadata: metadata, limit: responseLimit)
+                let publication = try CodexpressGateway(data: data, revision: revision)
+                cachedPublication = (revision, publication)
+                return publication
+            }
+            permitsLegacyAbsence = false
+        } catch CodexpressManagementError.notConfigured {
+            value = permitsLegacyAbsence ? .local(nil) : .unavailable
+        } catch {
+            permitsLegacyAbsence = false
+            value = .unavailable
+        }
+        if authorizedGateway != value { activeConfiguration = nil; authorizedGateway = nil }
+        return value
+    }
+
+    // Watch the containing directory: publication uses rename, replacing the previous inode.
+    nonisolated func watchGateway(_ changed: @escaping @Sendable (Bool) -> Void) -> (any DispatchSourceFileSystemObject)? {
+        guard let fd = try? openStateDirectory() else { return nil }
+        let detached: DispatchSource.FileSystemEvent = [.delete, .rename, .revoke]
+        let watcher = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .attrib, detached], queue: .main)
+        watcher.setEventHandler { changed(!watcher.data.intersection(detached).isEmpty) }
+        watcher.setCancelHandler { Darwin.close(fd) }
+        watcher.activate()
+        return watcher
+    }
+
+    private nonisolated func openStateDirectory() throws -> Int32 {
+        let directoryURL = configurationURL.deletingLastPathComponent()
+        let path = directoryURL.path
         let parts = path.split(separator: "/")
-        guard !parts.contains("."), !parts.contains(".."), let name = parts.last else {
+        guard directoryURL.isFileURL, (directoryURL.host ?? "").isEmpty || directoryURL.host == "localhost",
+              directoryURL.query == nil, directoryURL.fragment == nil, path.hasPrefix("/"), !path.utf8.contains(0),
+              !parts.isEmpty, !parts.contains("."), !parts.contains("..") else {
             throw CodexpressManagementError.invalidConfiguration
         }
         var directory = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
         guard directory >= 0 else { throw CodexpressManagementError.unavailable }
-        defer { Darwin.close(directory) }
-        for part in parts.dropLast() {
+        for part in parts {
             let next = Darwin.openat(directory, String(part), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-            guard next >= 0 else { throw Self.configurationReadError(errno) }
+            guard next >= 0 else {
+                let failure = Self.configurationReadError(errno)
+                Darwin.close(directory)
+                throw failure
+            }
             Darwin.close(directory)
             directory = next
         }
+        return directory
+    }
+
+    private func withPrivateFile<T>(named name: String, _ body: (Int32, stat) throws -> T) throws -> T {
+        let directory = try openStateDirectory()
+        defer { Darwin.close(directory) }
         var parent = stat()
         guard fstat(directory, &parent) == 0, parent.st_uid == geteuid(),
-              parent.st_mode & mode_t(0o077) == 0 else {
+              parent.st_mode & mode_t(0o7777) == mode_t(0o700) else {
             throw CodexpressManagementError.insecureConfiguration
         }
         try requireNoExtendedACL(directory)
         let descriptor = Darwin.openat(
-            directory, String(name), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC
+            directory, name, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC
         )
         guard descriptor >= 0 else { throw Self.configurationReadError(errno) }
         defer { Darwin.close(descriptor) }
@@ -288,10 +366,14 @@ actor CodexpressManagementClient: CodexpressManagementServing {
         guard fstat(descriptor, &before) == 0 else { throw CodexpressManagementError.unavailable }
         try requirePrivateFile(before)
         try requireNoExtendedACL(descriptor)
-        guard before.st_size > 0, before.st_size <= Int64(configurationLimit) else {
+        return try body(descriptor, before)
+    }
+
+    private func readData(_ descriptor: Int32, metadata before: stat, limit: Int) throws -> Data {
+        guard before.st_size > 0, before.st_size <= Int64(limit) else {
             throw CodexpressManagementError.invalidConfiguration
         }
-        var bytes = [UInt8](repeating: 0, count: Int(before.st_size) + 1)
+        var bytes = Data(count: Int(before.st_size))
         var count = 0
         while count < bytes.count {
             let received = bytes.withUnsafeMutableBytes { buffer in
@@ -313,13 +395,7 @@ actor CodexpressManagementClient: CodexpressManagementServing {
               before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec else {
             throw CodexpressManagementError.invalidConfiguration
         }
-        guard let settings = try? JSONDecoder().decode(Configuration.self, from: Data(bytes.prefix(count))),
-              settings.port > 0, (16...256).contains(settings.key.utf8.count),
-              settings.key.utf8.allSatisfy({ (0x21...0x7E).contains($0) }) else {
-            throw CodexpressManagementError.invalidConfiguration
-        }
-        guard settings.enabled else { throw CodexpressManagementError.disabled }
-        return settings
+        return bytes
     }
 
     private func requirePrivateFile(_ metadata: stat) throws {

@@ -3,6 +3,10 @@ import Foundation
 /// Localized copy shared by the native Codexpress footer and its immutable rows.
 struct CodexpressPanelStrings {
     var title: String { String(localized: "codexpress.panel.title", defaultValue: "Codexpress") }
+    var remoteTitle: String { String(localized: "codexpress.panel.remoteTitle", defaultValue: "Remote · read-only") }
+    var cacheUnavailable: String { String(localized: "codexpress.panel.cacheUnavailable", defaultValue: "Gateway selection unavailable. Open Codexpress to check the connection.") }
+    var noRemoteSnapshot: String { String(localized: "codexpress.panel.noRemoteSnapshot", defaultValue: "No cached remote status yet. Open Codexpress to refresh it.") }
+    var snapshotTimeUnknown: String { String(localized: "codexpress.panel.snapshotTimeUnknown", defaultValue: "Snapshot time unknown") }
     var expand: String { String(localized: "codexpress.panel.expand", defaultValue: "Expand Codexpress") }
     var collapse: String { String(localized: "codexpress.panel.collapse", defaultValue: "Collapse Codexpress") }
     var open: String { String(localized: "codexpress.panel.open", defaultValue: "Open Codexpress") }

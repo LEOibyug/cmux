@@ -531707,6 +531707,98 @@
         }
       }
     },
+    "codexpress.panel.remoteTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote · read-only"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "远端网关（只读）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "遠端閘道（唯讀）"
+          }
+        }
+      }
+    },
+    "codexpress.panel.cacheUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway selection unavailable. Open Codexpress to check the connection."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取当前网关。请打开 Codexpress 检查连接。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無法讀取目前的閘道。請開啟 Codexpress 檢查連線。"
+          }
+        }
+      }
+    },
+    "codexpress.panel.noRemoteSnapshot": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No cached remote status yet. Open Codexpress to refresh it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚无远端状态快照。请打开 Codexpress 刷新。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚無遠端狀態快照。請開啟 Codexpress 重新整理。"
+          }
+        }
+      }
+    },
+    "codexpress.panel.snapshotTimeUnknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snapshot time unknown"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快照时间未知"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快照時間未知"
+          }
+        }
+      }
+    },
     "codexpress.panel.cached": {
       "extractionState": "manual",
       "localizations": {

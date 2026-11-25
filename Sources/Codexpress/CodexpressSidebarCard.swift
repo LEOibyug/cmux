@@ -13,7 +13,15 @@ struct CodexpressSidebarCard: View {
 
     var body: some View {
         Group {
-            if settings.enabled { card }
+            if settings.enabled {
+                if let remote = coordinator.remote {
+                    TimelineView(.periodic(from: .now, by: 30)) { clock in
+                        card(isStale: remote.isStale(at: clock.date))
+                    }
+                } else {
+                    card(isStale: coordinator.connectionError != nil)
+                }
+            }
         }
         .onChange(of: settings) { _, next in coordinator.applySettings(next) }
         .task {
@@ -22,13 +30,28 @@ struct CodexpressSidebarCard: View {
         }
     }
 
-    private var card: some View {
+    private func card(isStale: Bool) -> some View {
         let sources = coordinator.snapshot.map { orderedSources($0.sources) } ?? []
+        let generation = coordinator.connectionGeneration
         return VStack(alignment: .leading, spacing: 7) {
-            header
+            header(isStale: isStale)
             if isExpanded {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 3) {
+                        if let remote = coordinator.remote {
+                            Text(verbatim: remote.endpoint)
+                                .lineLimit(2).truncationMode(.middle)
+                                .help(remote.instanceID + " · " + remote.endpoint)
+                            if let timestamp = remote.fetchedAt {
+                                HStack(spacing: 4) {
+                                    if isStale { Text(strings.stale) }
+                                    Text(timestamp, format: .dateTime.year().month().day().hour().minute().second())
+                                }
+                                .foregroundStyle(isStale ? Color.orange : .secondary)
+                            } else if remote.snapshot != nil {
+                                Text(strings.snapshotTimeUnknown).foregroundStyle(.orange)
+                            }
+                        }
                         if let error = coordinator.connectionError {
                             Text(strings.message(for: error))
                                 .foregroundStyle(.secondary)
@@ -37,7 +60,7 @@ struct CodexpressSidebarCard: View {
                                 Text(strings.cached).foregroundStyle(.orange)
                             }
                         }
-                        if let error = coordinator.actionError {
+                        if coordinator.hasReadGateway, coordinator.gateway.isLocal, let error = coordinator.actionError {
                             HStack(alignment: .top, spacing: 6) {
                                 Text(strings.message(for: error))
                                     .foregroundStyle(.orange)
@@ -63,20 +86,21 @@ struct CodexpressSidebarCard: View {
                                 CodexpressSourceRow(
                                     source: source,
                                     settings: settings,
+                                    isReadOnly: !coordinator.gateway.isLocal,
                                     isTakingOver: snapshot.manualRoute?.sourceID == source.id,
                                     isBusy: coordinator.activeSourceIDs.contains(source.id),
                                     canAct: snapshot.running && !coordinator.actionsBlockedAfterConnectionChange,
-                                    isSnapshotStale: coordinator.connectionError != nil,
+                                    isSnapshotStale: isStale,
                                     resetRequest: coordinator.resetRequests[source.id],
-                                    onTakeOver: { Task { await coordinator.takeOver(source.id) } },
-                                    onCancelTakeover: { Task { await coordinator.cancelTakeover() } },
-                                    onRecover: { Task { await coordinator.recover(source.id) } },
-                                    onRefresh: { Task { await coordinator.refresh(source) } },
-                                    onRequestReset: { Task { await coordinator.requestReset(source.id) } }
+                                    onTakeOver: { coordinator.submit(for: generation) { await coordinator.takeOver(source.id) } },
+                                    onCancelTakeover: { coordinator.submit(for: generation) { await coordinator.cancelTakeover() } },
+                                    onRecover: { coordinator.submit(for: generation) { await coordinator.recover(source.id) } },
+                                    onRefresh: { coordinator.submit(for: generation) { await coordinator.refresh(source) } },
+                                    onRequestReset: { coordinator.submit(for: generation) { await coordinator.requestReset(source.id) } }
                                 )
                             }
                         } else if coordinator.connectionError == nil {
-                            Text(strings.connecting).foregroundStyle(.secondary)
+                            Text(statusLabel).foregroundStyle(.secondary)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -97,7 +121,7 @@ struct CodexpressSidebarCard: View {
         .accessibilityIdentifier("CodexpressSidebarCard")
     }
 
-    private var header: some View {
+    private func header(isStale: Bool) -> some View {
         HStack(spacing: 6) {
             Button {
                 isExpanded.toggle()
@@ -106,10 +130,10 @@ struct CodexpressSidebarCard: View {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .cmuxFont(size: CGFloat(settings.fontSize - 1), weight: .semibold)
                     Circle()
-                        .fill(statusColor)
+                        .fill(isStale ? .orange : statusColor)
                         .frame(width: 7, height: 7)
                         .accessibilityHidden(true)
-                    Text(strings.title)
+                    Text(coordinator.remote != nil ? strings.remoteTitle : strings.title)
                         .cmuxFont(size: CGFloat(settings.fontSize + 2), weight: .semibold)
                         .lineLimit(1)
                     Spacer(minLength: 0)
@@ -120,7 +144,7 @@ struct CodexpressSidebarCard: View {
             .help(isExpanded ? strings.collapse : strings.expand)
             .accessibilityLabel(Text(isExpanded ? strings.collapse : strings.expand))
             .accessibilityValue(Text(statusLabel))
-            if settings.showActions {
+            if settings.showActions && coordinator.gateway.isLocal {
                 Button {
                     Task { await coordinator.refreshLocal() }
                 } label: {
@@ -132,6 +156,8 @@ struct CodexpressSidebarCard: View {
                 .disabled(coordinator.isUpdating)
                 .help(strings.refresh)
                 .accessibilityLabel(Text(strings.refresh))
+            }
+            if settings.showActions {
                 Button(action: openCodexpress) {
                     Image(systemName: "arrow.up.forward.app")
                         .frame(width: 18, height: 18)
@@ -142,7 +168,7 @@ struct CodexpressSidebarCard: View {
                 .accessibilityLabel(Text(strings.open))
             }
         }
-        .help(coordinator.snapshot.map { statusLabel + " · " + modeLabel($0) } ?? statusLabel)
+        .help([coordinator.remote?.endpoint, statusLabel, coordinator.snapshot.map(modeLabel)].compactMap { $0 }.joined(separator: " · "))
     }
 
     private func contentHeight(for sources: [CodexpressSnapshot.Source]) -> CGFloat {
@@ -150,11 +176,15 @@ struct CodexpressSidebarCard: View {
         let separators = CGFloat(max(0, sources.count - 1)) * 7
         let errorHeight: CGFloat = coordinator.connectionError != nil || coordinator.actionError != nil ? 50 : 0
         let fontScale = CGFloat(settings.fontSize) / 11
-        return min(230, max(36, (rowHeight + separators) * fontScale * CGFloat(magnification) / 100 + errorHeight))
+        let targetHeight: CGFloat = coordinator.remote == nil ? 0 : 42
+        return min(230, max(36, (rowHeight + separators + targetHeight) * fontScale * CGFloat(magnification) / 100 + errorHeight))
     }
 
     private var statusLabel: String {
+        guard coordinator.hasReadGateway else { return strings.connecting }
         if let error = coordinator.connectionError { return strings.message(for: error) }
+        if case .unavailable = coordinator.gateway { return strings.cacheUnavailable }
+        if let remote = coordinator.remote, remote.snapshot == nil { return strings.noRemoteSnapshot }
         if coordinator.isUpdating { return strings.syncing }
         guard let snapshot = coordinator.snapshot else { return strings.connecting }
         return snapshot.running ? strings.running : strings.stopped
@@ -176,7 +206,7 @@ struct CodexpressSidebarCard: View {
     }
 
     private func orderedSources(_ sources: [CodexpressSnapshot.Source]) -> [CodexpressSnapshot.Source] {
-        sources.filter(\.enabled).sorted {
+        sources.filter { $0.enabled && $0.showInCmux }.sorted {
             if $0.priority != $1.priority { return $0.priority < $1.priority }
             return $0.id < $1.id
         }
